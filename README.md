@@ -1,62 +1,76 @@
-# aussie
+# Aussie API Gateway
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+<p align="center">
+  <img src="static/img/aussie.svg" alt="Aussie Logo" width="150">
+</p>
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
 
-## Running the application in dev mode
+Aussie is an experimental API Gateway built with Quarkus, designed for exploring modern gateway patterns and proxy architectures.
 
-You can run your application in dev mode that enables live coding using:
+## Project Structure
 
-```shell script
+```
+aussie/
+├── api/          # Quarkus REST API (Java 21)
+├── cli/          # Command-line interface (Go)
+└── demo/         # Demo application (Next.js)
+```
+
+## API
+
+The core API gateway built with [Quarkus](https://quarkus.io/), the Supersonic Subatomic Java Framework.
+
+### Running in dev mode
+
+```shell
+cd api
 ./gradlew quarkusDev
 ```
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+> **Note:** Quarkus Dev UI is available at http://localhost:8080/q/dev/
 
-## Packaging and running the application
+### Building
 
-The application can be packaged using:
-
-```shell script
+```shell
+cd api
 ./gradlew build
 ```
 
-It produces the `quarkus-run.jar` file in the `build/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `build/quarkus-app/lib/` directory.
+### Native executable
 
-The application is now runnable using `java -jar build/quarkus-app/quarkus-run.jar`.
-
-If you want to build an _über-jar_, execute the following command:
-
-```shell script
-./gradlew build -Dquarkus.package.jar.type=uber-jar
-```
-
-The application, packaged as an _über-jar_, is now runnable using `java -jar build/*-runner.jar`.
-
-## Creating a native executable
-
-You can create a native executable using:
-
-```shell script
+```shell
+cd api
 ./gradlew build -Dquarkus.native.enabled=true
 ```
 
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
+## CLI
 
-```shell script
-./gradlew build -Dquarkus.native.enabled=true -Dquarkus.native.container-build=true
+A Go-based command-line interface for interacting with the Aussie API gateway.
+
+### Building
+
+```shell
+cd cli
+go build -o aussie .
 ```
 
-You can then execute your native executable with: `./build/aussie-1.0.0-SNAPSHOT-runner`
+### Usage
 
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/gradle-tooling>.
+```shell
+./aussie --help
+./aussie version
+```
 
-## Provided Code
+## Demo
 
-### REST
+A Next.js application for testing and demonstrating the Aussie API gateway capabilities.
 
-Easily start your REST Web Services
+### Running
 
-[Related guide section...](https://quarkus.io/guides/getting-started-reactive#reactive-jax-rs-resources)
+```shell
+cd demo
+npm install
+npm run dev
+```
+
+The demo app will be available at http://localhost:3000
