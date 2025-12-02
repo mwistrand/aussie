@@ -42,3 +42,7 @@ nb-configuration.xml
 
 # Private files
 **/private_/
+
+# CLI output
+
+cli/aussie

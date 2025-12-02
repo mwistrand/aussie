@@ -10,8 +10,15 @@ var rootCmd = &cobra.Command{
 	Long: `Aussie CLI is a command line tool for interacting with
 and managing the Aussie API gateway.
 
-Use this CLI to configure routes, manage upstreams,
-and monitor your API gateway.`,
+Use this CLI to register services, manage routes, and monitor your API gateway.
+
+Configuration is loaded from (in order of precedence):
+  1. Command-line flags
+  2. Local .aussierc file (current directory)
+  3. Global ~/.aussie config file
+
+Example config file (.aussierc or ~/.aussie):
+  host = "http://localhost:8080"`,
 }
 
 func Execute() error {
@@ -19,6 +26,5 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringP("config", "c", "", "config file (default is $HOME/.aussie.yaml)")
-	rootCmd.PersistentFlags().StringP("server", "s", "http://localhost:8080", "Aussie API server URL")
+	rootCmd.PersistentFlags().StringP("server", "s", "", "Aussie API server URL (overrides config file)")
 }

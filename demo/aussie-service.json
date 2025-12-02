@@ -1,0 +1,22 @@
+{
+  "serviceId": "demo-service",
+  "displayName": "Demo Service",
+  "baseUrl": "http://localhost:3000",
+  "endpoints": [
+    {
+      "path": "/api/health",
+      "methods": ["GET"],
+      "visibility": "PUBLIC"
+    },
+    {
+      "path": "/api/users",
+      "methods": ["GET", "POST"],
+      "visibility": "PUBLIC"
+    },
+    {
+      "path": "/api/admin/stats",
+      "methods": ["GET", "POST"],
+      "visibility": "PRIVATE"
+    }
+  ]
+}
