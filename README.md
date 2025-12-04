@@ -22,20 +22,20 @@ Aussie provides both a CLI and REST API for registering your services. Once regi
   "serviceId": "user-service",
   "displayName": "User Service",
   "baseUrl": "http://localhost:3001",
-  "endpoints": [
+  "routePrefix": "/users",
+  "defaultVisibility": "PRIVATE",
+  "visibilityRules": [
     {
-      "path": "/api/users",
-      "methods": ["GET", "POST"],
+      "pattern": "/api/users",
+      "methods": ["GET"],
       "visibility": "PUBLIC"
     },
     {
-      "path": "/api/users/{id}",
-      "methods": ["GET", "PUT", "DELETE"],
+      "pattern": "/api/users/**",
       "visibility": "PUBLIC"
     },
     {
-      "path": "/api/admin/users",
-      "methods": ["GET", "POST", "DELETE"],
+      "pattern": "/api/admin/**",
       "visibility": "PRIVATE"
     }
   ]
@@ -73,10 +73,10 @@ curl -X POST http://localhost:8080/admin/services \
     "serviceId": "user-service",
     "displayName": "User Service",
     "baseUrl": "http://localhost:3001",
-    "endpoints": [
+    "defaultVisibility": "PRIVATE",
+    "visibilityRules": [
       {
-        "path": "/api/users",
-        "methods": ["GET", "POST"],
+        "pattern": "/api/users/**",
         "visibility": "PUBLIC"
       }
     ]
@@ -126,9 +126,11 @@ Or restrict per-service by including `accessConfig` in your registration:
 ```json
 {
   "serviceId": "admin-service",
+  "displayName": "Admin Service",
   "baseUrl": "http://localhost:3002",
-  "endpoints": [
-    { "path": "/api/admin", "methods": ["GET"], "visibility": "PRIVATE" }
+  "defaultVisibility": "PRIVATE",
+  "visibilityRules": [
+    { "pattern": "/api/admin/**", "visibility": "PRIVATE" }
   ],
   "accessConfig": {
     "allowedIps": ["10.0.0.0/8"],
@@ -256,7 +258,45 @@ go build -o aussie .
 
 # Register with a specific server
 ./aussie register -f service.json -s http://aussie.example.com:8080
+
+# Validate a service configuration file
+./aussie service validate -f service.json
+
+# Preview visibility settings for a registered service
+./aussie service preview my-service
 ```
+
+#### Service Validation
+
+Validate your service configuration before registering:
+
+```shell
+./aussie service validate -f my-service.json
+```
+
+This checks:
+- Required fields (`serviceId`, `displayName`, `baseUrl`)
+- Valid URL format for `baseUrl`
+- Valid service ID (alphanumeric, hyphens, underscores only)
+- Valid visibility values (`PUBLIC` or `PRIVATE`)
+- Valid HTTP methods in visibility rules
+- Route prefix starts with `/`
+- Pattern paths start with `/`
+
+#### Service Preview
+
+View the visibility configuration for a registered service:
+
+```shell
+./aussie service preview user-service
+```
+
+This displays:
+- Service information (ID, base URL, route prefix)
+- Default visibility setting
+- Visibility rules with patterns and methods
+- Access control configuration (allowed IPs, domains, subdomains)
+- Summary of public vs private endpoints
 
 ### Configuration
 
