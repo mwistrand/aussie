@@ -5,8 +5,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.ws.rs.container.ContainerRequestContext;
 
+import aussie.core.model.GatewayRequest;
 import aussie.core.port.out.ForwardedHeaderBuilder;
 
 /**
@@ -19,7 +19,7 @@ import aussie.core.port.out.ForwardedHeaderBuilder;
 public class XForwardedHeaderBuilder implements ForwardedHeaderBuilder {
 
     @Override
-    public Map<String, String> buildHeaders(ContainerRequestContext originalRequest, URI targetUri) {
+    public Map<String, String> buildHeaders(GatewayRequest originalRequest, URI targetUri) {
         Map<String, String> headers = new HashMap<>();
 
         // X-Forwarded-For - client IP (append to existing if present)
@@ -48,7 +48,7 @@ public class XForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         return headers;
     }
 
-    private String extractClientIp(ContainerRequestContext request) {
+    private String extractClientIp(GatewayRequest request) {
         // Check existing X-Forwarded-For
         var xForwardedFor = request.getHeaderString("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
@@ -56,15 +56,15 @@ public class XForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         }
 
         // Fall back to request URI host
-        var uriInfo = request.getUriInfo();
-        if (uriInfo != null && uriInfo.getRequestUri() != null) {
-            return uriInfo.getRequestUri().getHost();
+        var requestUri = request.requestUri();
+        if (requestUri != null) {
+            return requestUri.getHost();
         }
 
         return null;
     }
 
-    private String extractProtocol(ContainerRequestContext request) {
+    private String extractProtocol(GatewayRequest request) {
         // Check existing X-Forwarded-Proto
         var xForwardedProto = request.getHeaderString("X-Forwarded-Proto");
         if (xForwardedProto != null && !xForwardedProto.isEmpty()) {
@@ -72,9 +72,9 @@ public class XForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         }
 
         // Fall back to request URI scheme
-        var uriInfo = request.getUriInfo();
-        if (uriInfo != null && uriInfo.getRequestUri() != null) {
-            return uriInfo.getRequestUri().getScheme();
+        var requestUri = request.requestUri();
+        if (requestUri != null) {
+            return requestUri.getScheme();
         }
 
         return "http";

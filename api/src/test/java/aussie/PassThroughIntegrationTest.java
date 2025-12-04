@@ -239,7 +239,7 @@ class PassThroughIntegrationTest {
         @Test
         @DisplayName("Should not conflict with gateway path")
         void shouldNotConflictWithGatewayPath() {
-            given().when().get("/gateway/some/path").then().statusCode(404).body(containsString("No route found"));
+            given().when().get("/gateway/some/path").then().statusCode(404).body(containsString("Not found"));
         }
     }
 

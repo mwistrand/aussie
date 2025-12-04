@@ -3,7 +3,7 @@ package aussie.core.port.out;
 import java.net.URI;
 import java.util.Map;
 
-import jakarta.ws.rs.container.ContainerRequestContext;
+import aussie.core.model.GatewayRequest;
 
 public interface ForwardedHeaderBuilder {
 
@@ -14,5 +14,5 @@ public interface ForwardedHeaderBuilder {
      * @param targetUri the target URI being forwarded to
      * @return map of header names to header values
      */
-    Map<String, String> buildHeaders(ContainerRequestContext originalRequest, URI targetUri);
+    Map<String, String> buildHeaders(GatewayRequest originalRequest, URI targetUri);
 }

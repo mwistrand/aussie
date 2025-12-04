@@ -1,8 +1,7 @@
 package aussie.adapter.in.rest;
 
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.List;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -21,27 +20,19 @@ import jakarta.ws.rs.core.Response;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.EndpointConfig;
-import aussie.core.model.EndpointVisibility;
-import aussie.core.model.ProxyResponse;
-import aussie.core.model.RouteMatch;
-import aussie.core.model.ServiceRegistration;
-import aussie.core.port.out.ProxyClient;
-import aussie.core.service.ServiceRegistry;
+import aussie.core.model.GatewayRequest;
+import aussie.core.model.GatewayResult;
+import aussie.core.port.in.PassThroughUseCase;
 
 @Path("/{serviceId}")
 @ApplicationScoped
 public class PassThroughResource {
 
-    private static final Set<String> RESERVED_PATHS = Set.of("admin", "gateway", "q");
-
-    private final ServiceRegistry serviceRegistry;
-    private final ProxyClient proxyClient;
+    private final PassThroughUseCase passThroughUseCase;
 
     @Inject
-    public PassThroughResource(ServiceRegistry serviceRegistry, ProxyClient proxyClient) {
-        this.serviceRegistry = serviceRegistry;
-        this.proxyClient = proxyClient;
+    public PassThroughResource(PassThroughUseCase passThroughUseCase) {
+        this.passThroughUseCase = passThroughUseCase;
     }
 
     @GET
@@ -112,56 +103,51 @@ public class PassThroughResource {
 
     private Uni<Response> proxyRequest(
             String serviceId, String path, ContainerRequestContext requestContext, byte[] body) {
-        if (RESERVED_PATHS.contains(serviceId.toLowerCase())) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.NOT_FOUND)
-                            .entity("Not found")
-                            .build());
-        }
-
-        var serviceOpt = serviceRegistry.getService(serviceId);
-        if (serviceOpt.isEmpty()) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.NOT_FOUND)
-                            .entity("Service not found: " + serviceId)
-                            .build());
-        }
-
-        var service = serviceOpt.get();
         var targetPath = path.isEmpty() ? "/" : "/" + path;
-        var routeMatch = createPassThroughRouteMatch(service, targetPath);
-
-        return proxyClient
-                .forward(requestContext, routeMatch, body)
-                .map(this::buildResponse)
-                .onFailure()
-                .recoverWithItem(this::buildErrorResponse);
+        var gatewayRequest = toGatewayRequest(targetPath, requestContext, body);
+        return passThroughUseCase.forward(serviceId, gatewayRequest).map(this::toResponse);
     }
 
-    private RouteMatch createPassThroughRouteMatch(ServiceRegistration service, String targetPath) {
-        var catchAllEndpoint = new EndpointConfig("/**", Set.of("*"), EndpointVisibility.PUBLIC, Optional.empty());
-        return new RouteMatch(service, catchAllEndpoint, targetPath, Map.of());
+    private GatewayRequest toGatewayRequest(String path, ContainerRequestContext requestContext, byte[] body) {
+        var headers = new HashMap<String, List<String>>();
+        for (var entry : requestContext.getHeaders().entrySet()) {
+            headers.put(entry.getKey(), List.copyOf(entry.getValue()));
+        }
+
+        return new GatewayRequest(
+                requestContext.getMethod(),
+                path,
+                headers,
+                requestContext.getUriInfo().getRequestUri(),
+                body);
     }
 
-    private Response buildResponse(ProxyResponse proxyResponse) {
-        var responseBuilder = Response.status(proxyResponse.statusCode());
-
-        for (var entry : proxyResponse.headers().entrySet()) {
-            for (var value : entry.getValue()) {
-                responseBuilder.header(entry.getKey(), value);
+    private Response toResponse(GatewayResult result) {
+        return switch (result) {
+            case GatewayResult.Success success -> {
+                var responseBuilder = Response.status(success.statusCode());
+                for (var entry : success.headers().entrySet()) {
+                    for (var value : entry.getValue()) {
+                        responseBuilder.header(entry.getKey(), value);
+                    }
+                }
+                if (success.body().length > 0) {
+                    responseBuilder.entity(success.body());
+                }
+                yield responseBuilder.build();
             }
-        }
-
-        if (proxyResponse.body().length > 0) {
-            responseBuilder.entity(proxyResponse.body());
-        }
-
-        return responseBuilder.build();
-    }
-
-    private Response buildErrorResponse(Throwable error) {
-        return Response.status(Response.Status.BAD_GATEWAY)
-                .entity("Error forwarding request: " + error.getMessage())
-                .build();
+            case GatewayResult.ServiceNotFound notFound -> Response.status(Response.Status.NOT_FOUND)
+                    .entity("Service not found: " + notFound.serviceId())
+                    .build();
+            case GatewayResult.ReservedPath reserved -> Response.status(Response.Status.NOT_FOUND)
+                    .entity("Not found")
+                    .build();
+            case GatewayResult.RouteNotFound notFound -> Response.status(Response.Status.NOT_FOUND)
+                    .entity("No route found for path: " + notFound.path())
+                    .build();
+            case GatewayResult.Error error -> Response.status(Response.Status.BAD_GATEWAY)
+                    .entity("Error forwarding request: " + error.message())
+                    .build();
+        };
     }
 }

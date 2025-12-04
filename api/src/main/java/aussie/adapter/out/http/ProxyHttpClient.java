@@ -5,12 +5,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.container.ContainerRequestContext;
 
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpMethod;
@@ -20,31 +18,26 @@ import io.vertx.mutiny.ext.web.client.HttpRequest;
 import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
 
+import aussie.core.model.PreparedProxyRequest;
 import aussie.core.model.ProxyResponse;
-import aussie.core.model.RouteMatch;
 import aussie.core.port.out.ProxyClient;
+import aussie.core.service.ProxyRequestPreparer;
 
+/**
+ * HTTP adapter for forwarding prepared proxy requests using Vert.x WebClient.
+ * All header preparation logic is handled by {@link ProxyRequestPreparer} in core.
+ */
 @ApplicationScoped
 public class ProxyHttpClient implements ProxyClient {
 
-    private static final Set<String> HOP_BY_HOP_HEADERS = Set.of(
-            "connection",
-            "keep-alive",
-            "proxy-authenticate",
-            "proxy-authorization",
-            "te",
-            "trailer",
-            "transfer-encoding",
-            "upgrade");
-
     private final Vertx vertx;
-    private final ForwardedHeaderBuilderFactory headerBuilderFactory;
+    private final ProxyRequestPreparer requestPreparer;
     private WebClient webClient;
 
     @Inject
-    public ProxyHttpClient(Vertx vertx, ForwardedHeaderBuilderFactory headerBuilderFactory) {
+    public ProxyHttpClient(Vertx vertx, ProxyRequestPreparer requestPreparer) {
         this.vertx = vertx;
-        this.headerBuilderFactory = headerBuilderFactory;
+        this.requestPreparer = requestPreparer;
     }
 
     @PostConstruct
@@ -53,15 +46,14 @@ public class ProxyHttpClient implements ProxyClient {
     }
 
     @Override
-    public Uni<ProxyResponse> forward(ContainerRequestContext originalRequest, RouteMatch route, byte[] body) {
-        var targetUri = route.targetUri();
-        var method = HttpMethod.valueOf(originalRequest.getMethod());
+    public Uni<ProxyResponse> forward(PreparedProxyRequest preparedRequest) {
+        var targetUri = preparedRequest.targetUri();
+        var method = HttpMethod.valueOf(preparedRequest.method());
 
         var request = createRequest(method, targetUri);
-        copyHeaders(originalRequest, request, targetUri);
-        addForwardingHeaders(originalRequest, request, targetUri);
+        applyHeaders(preparedRequest, request);
 
-        return executeRequest(request, body);
+        return executeRequest(request, preparedRequest.body());
     }
 
     private HttpRequest<Buffer> createRequest(HttpMethod method, URI targetUri) {
@@ -78,47 +70,11 @@ public class ProxyHttpClient implements ProxyClient {
         return webClient.request(method, port, targetUri.getHost(), path);
     }
 
-    private void copyHeaders(ContainerRequestContext originalRequest, HttpRequest<Buffer> proxyRequest, URI targetUri) {
-        for (var entry : originalRequest.getHeaders().entrySet()) {
-            var headerName = entry.getKey();
-            var lowerName = headerName.toLowerCase();
-
-            // Skip hop-by-hop headers
-            if (HOP_BY_HOP_HEADERS.contains(lowerName)) {
-                continue;
-            }
-
-            // Skip Host header (will be set for target)
-            if ("host".equals(lowerName)) {
-                continue;
-            }
-
-            // Skip Content-Length as it will be set by the client
-            if ("content-length".equals(lowerName)) {
-                continue;
-            }
-
+    private void applyHeaders(PreparedProxyRequest preparedRequest, HttpRequest<Buffer> httpRequest) {
+        for (var entry : preparedRequest.headers().entrySet()) {
             for (var value : entry.getValue()) {
-                proxyRequest.putHeader(headerName, value);
+                httpRequest.putHeader(entry.getKey(), value);
             }
-        }
-
-        // Set Host header for target
-        var port = targetUri.getPort();
-        var host = targetUri.getHost();
-        if (port != -1 && port != 80 && port != 443) {
-            host += ":" + port;
-        }
-        proxyRequest.putHeader("Host", host);
-    }
-
-    private void addForwardingHeaders(
-            ContainerRequestContext originalRequest, HttpRequest<Buffer> proxyRequest, URI targetUri) {
-        var headerBuilder = headerBuilderFactory.getBuilder();
-        var forwardingHeaders = headerBuilder.buildHeaders(originalRequest, targetUri);
-
-        for (var entry : forwardingHeaders.entrySet()) {
-            proxyRequest.putHeader(entry.getKey(), entry.getValue());
         }
     }
 
@@ -134,18 +90,13 @@ public class ProxyHttpClient implements ProxyClient {
         Map<String, List<String>> headers = new HashMap<>();
 
         for (var name : response.headers().names()) {
-            var lowerName = name.toLowerCase();
-            // Skip hop-by-hop headers in response
-            if (HOP_BY_HOP_HEADERS.contains(lowerName)) {
-                continue;
-            }
-
             headers.computeIfAbsent(name, k -> new ArrayList<>())
                     .addAll(response.headers().getAll(name));
         }
 
+        var filteredHeaders = requestPreparer.filterResponseHeaders(headers);
         var responseBody = response.body() != null ? response.body().getBytes() : new byte[0];
 
-        return new ProxyResponse(response.statusCode(), headers, responseBody);
+        return new ProxyResponse(response.statusCode(), filteredHeaders, responseBody);
     }
 }

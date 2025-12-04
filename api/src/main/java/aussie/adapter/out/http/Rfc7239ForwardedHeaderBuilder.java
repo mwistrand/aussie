@@ -5,8 +5,8 @@ import java.util.ArrayList;
 import java.util.Map;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.ws.rs.container.ContainerRequestContext;
 
+import aussie.core.model.GatewayRequest;
 import aussie.core.port.out.ForwardedHeaderBuilder;
 
 /**
@@ -17,7 +17,7 @@ import aussie.core.port.out.ForwardedHeaderBuilder;
 public class Rfc7239ForwardedHeaderBuilder implements ForwardedHeaderBuilder {
 
     @Override
-    public Map<String, String> buildHeaders(ContainerRequestContext originalRequest, URI targetUri) {
+    public Map<String, String> buildHeaders(GatewayRequest originalRequest, URI targetUri) {
         var parts = new ArrayList<String>();
 
         // for - client IP address
@@ -51,7 +51,7 @@ public class Rfc7239ForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         return Map.of("Forwarded", newForwarded);
     }
 
-    private String extractClientIp(ContainerRequestContext request) {
+    private String extractClientIp(GatewayRequest request) {
         // First check if there's already a Forwarded header with 'for'
         var forwarded = request.getHeaderString("Forwarded");
         if (forwarded != null) {
@@ -68,15 +68,15 @@ public class Rfc7239ForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         }
 
         // Fall back to request URI host (in real impl, would get from socket)
-        var uriInfo = request.getUriInfo();
-        if (uriInfo != null && uriInfo.getRequestUri() != null) {
-            return uriInfo.getRequestUri().getHost();
+        var requestUri = request.requestUri();
+        if (requestUri != null) {
+            return requestUri.getHost();
         }
 
         return null;
     }
 
-    private String extractProtocol(ContainerRequestContext request) {
+    private String extractProtocol(GatewayRequest request) {
         // Check existing Forwarded header
         var forwarded = request.getHeaderString("Forwarded");
         if (forwarded != null) {
@@ -93,9 +93,9 @@ public class Rfc7239ForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         }
 
         // Fall back to request URI scheme
-        var uriInfo = request.getUriInfo();
-        if (uriInfo != null && uriInfo.getRequestUri() != null) {
-            return uriInfo.getRequestUri().getScheme();
+        var requestUri = request.requestUri();
+        if (requestUri != null) {
+            return requestUri.getScheme();
         }
 
         return "http";

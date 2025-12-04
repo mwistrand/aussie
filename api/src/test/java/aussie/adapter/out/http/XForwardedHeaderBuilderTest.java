@@ -8,15 +8,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import jakarta.ws.rs.container.ContainerRequestContext;
-import jakarta.ws.rs.core.MultivaluedHashMap;
-import jakarta.ws.rs.core.MultivaluedMap;
-import jakarta.ws.rs.core.UriInfo;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+
+import aussie.core.model.GatewayRequest;
 
 @DisplayName("XForwardedHeaderBuilder")
 class XForwardedHeaderBuilderTest {
@@ -28,6 +25,24 @@ class XForwardedHeaderBuilderTest {
         builder = new XForwardedHeaderBuilder();
     }
 
+    private GatewayRequest createRequest(Map<String, String> headers, URI requestUri) {
+        Map<String, List<String>> headerMap = new HashMap<>();
+        headers.forEach((k, v) -> headerMap.put(k, List.of(v)));
+        return new GatewayRequest("GET", "/api/test", headerMap, requestUri, null);
+    }
+
+    private GatewayRequest createRequest(Map<String, String> headers) {
+        return createRequest(headers, null);
+    }
+
+    private GatewayRequest createRequest(URI requestUri) {
+        return createRequest(Map.of(), requestUri);
+    }
+
+    private GatewayRequest createEmptyRequest() {
+        return new GatewayRequest("GET", "/api/test", Map.of(), null, null);
+    }
+
     @Nested
     @DisplayName("X-Forwarded-For Header")
     class XForwardedForTests {
@@ -35,8 +50,7 @@ class XForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should create X-Forwarded-For from request URI host")
         void shouldCreateXForwardedForFromRequestUri() {
-            var request =
-                    new TestContainerRequestContext().withRequestUri(URI.create("http://192.168.1.100:8080/api/test"));
+            var request = createRequest(URI.create("http://192.168.1.100:8080/api/test"));
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
@@ -47,9 +61,9 @@ class XForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should append to existing X-Forwarded-For chain")
         void shouldAppendToExistingChain() {
-            var request = new TestContainerRequestContext()
-                    .withHeader("X-Forwarded-For", "203.0.113.50, 192.168.1.1")
-                    .withRequestUri(URI.create("http://10.0.0.1:8080/api/test"));
+            var request = createRequest(
+                    Map.of("X-Forwarded-For", "203.0.113.50, 192.168.1.1"),
+                    URI.create("http://10.0.0.1:8080/api/test"));
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
@@ -61,8 +75,7 @@ class XForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should extract first IP from existing chain for new entry")
         void shouldExtractFirstIpFromChain() {
-            var request =
-                    new TestContainerRequestContext().withHeader("X-Forwarded-For", "  203.0.113.50  , 192.168.1.1");
+            var request = createRequest(Map.of("X-Forwarded-For", "  203.0.113.50  , 192.168.1.1"));
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
@@ -78,7 +91,7 @@ class XForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should set X-Forwarded-Host from Host header")
         void shouldSetXForwardedHostFromHostHeader() {
-            var request = new TestContainerRequestContext().withHeader("Host", "api.example.com");
+            var request = createRequest(Map.of("Host", "api.example.com"));
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
@@ -89,7 +102,7 @@ class XForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should preserve port in X-Forwarded-Host")
         void shouldPreservePortInXForwardedHost() {
-            var request = new TestContainerRequestContext().withHeader("Host", "api.example.com:8443");
+            var request = createRequest(Map.of("Host", "api.example.com:8443"));
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
@@ -99,7 +112,7 @@ class XForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should not set X-Forwarded-Host when Host header is missing")
         void shouldNotSetWhenHostMissing() {
-            var request = new TestContainerRequestContext();
+            var request = createEmptyRequest();
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
@@ -114,7 +127,7 @@ class XForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should set X-Forwarded-Proto from existing header")
         void shouldSetXForwardedProtoFromExistingHeader() {
-            var request = new TestContainerRequestContext().withHeader("X-Forwarded-Proto", "https");
+            var request = createRequest(Map.of("X-Forwarded-Proto", "https"));
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
@@ -124,8 +137,7 @@ class XForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should fall back to request URI scheme")
         void shouldFallBackToRequestUriScheme() {
-            var request =
-                    new TestContainerRequestContext().withRequestUri(URI.create("https://localhost:8443/api/test"));
+            var request = createRequest(URI.create("https://localhost:8443/api/test"));
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
@@ -135,7 +147,7 @@ class XForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should default to http when no info available")
         void shouldDefaultToHttp() {
-            var request = new TestContainerRequestContext();
+            var request = createEmptyRequest();
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
@@ -150,268 +162,17 @@ class XForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should set all three X-Forwarded headers")
         void shouldSetAllThreeHeaders() {
-            var request = new TestContainerRequestContext()
-                    .withHeader("Host", "api.example.com")
-                    .withHeader("X-Forwarded-Proto", "https")
-                    .withRequestUri(URI.create("http://192.168.1.100:8080/api/test"));
+            Map<String, List<String>> headerMap = new HashMap<>();
+            headerMap.put("Host", List.of("api.example.com"));
+            headerMap.put("X-Forwarded-Proto", List.of("https"));
+            var request = new GatewayRequest(
+                    "GET", "/api/test", headerMap, URI.create("http://192.168.1.100:8080/api/test"), null);
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
             assertTrue(headers.containsKey("X-Forwarded-For"));
             assertTrue(headers.containsKey("X-Forwarded-Host"));
             assertTrue(headers.containsKey("X-Forwarded-Proto"));
-        }
-    }
-
-    /**
-     * Simple test implementation of ContainerRequestContext.
-     */
-    private static class TestContainerRequestContext implements ContainerRequestContext {
-        private final Map<String, String> headers = new HashMap<>();
-        private URI requestUri;
-
-        TestContainerRequestContext withHeader(String name, String value) {
-            headers.put(name, value);
-            return this;
-        }
-
-        TestContainerRequestContext withRequestUri(URI uri) {
-            this.requestUri = uri;
-            return this;
-        }
-
-        @Override
-        public String getHeaderString(String name) {
-            return headers.get(name);
-        }
-
-        @Override
-        public UriInfo getUriInfo() {
-            if (requestUri == null) {
-                return null;
-            }
-            return new TestUriInfo(requestUri);
-        }
-
-        // Minimal implementation
-        @Override
-        public Object getProperty(String name) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public java.util.Collection<String> getPropertyNames() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void setProperty(String name, Object object) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void removeProperty(String name) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public jakarta.ws.rs.core.Request getRequest() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public String getMethod() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void setMethod(String method) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public MultivaluedMap<String, String> getHeaders() {
-            MultivaluedMap<String, String> map = new MultivaluedHashMap<>();
-            headers.forEach(map::putSingle);
-            return map;
-        }
-
-        @Override
-        public java.util.Date getDate() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public java.util.Locale getLanguage() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public int getLength() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public jakarta.ws.rs.core.MediaType getMediaType() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public List<jakarta.ws.rs.core.MediaType> getAcceptableMediaTypes() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public List<java.util.Locale> getAcceptableLanguages() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public Map<String, jakarta.ws.rs.core.Cookie> getCookies() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean hasEntity() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public java.io.InputStream getEntityStream() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void setEntityStream(java.io.InputStream input) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public jakarta.ws.rs.core.SecurityContext getSecurityContext() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void setSecurityContext(jakarta.ws.rs.core.SecurityContext context) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void abortWith(jakarta.ws.rs.core.Response response) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void setRequestUri(URI requestUri) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void setRequestUri(URI baseUri, URI requestUri) {
-            throw new UnsupportedOperationException();
-        }
-    }
-
-    private static class TestUriInfo implements UriInfo {
-        private final URI requestUri;
-
-        TestUriInfo(URI requestUri) {
-            this.requestUri = requestUri;
-        }
-
-        @Override
-        public URI getRequestUri() {
-            return requestUri;
-        }
-
-        @Override
-        public String getPath() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public String getPath(boolean decode) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public List<jakarta.ws.rs.core.PathSegment> getPathSegments() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public List<jakarta.ws.rs.core.PathSegment> getPathSegments(boolean decode) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public jakarta.ws.rs.core.UriBuilder getRequestUriBuilder() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public URI getAbsolutePath() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public jakarta.ws.rs.core.UriBuilder getAbsolutePathBuilder() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public URI getBaseUri() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public jakarta.ws.rs.core.UriBuilder getBaseUriBuilder() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public MultivaluedMap<String, String> getPathParameters() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public MultivaluedMap<String, String> getPathParameters(boolean decode) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public MultivaluedMap<String, String> getQueryParameters() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public MultivaluedMap<String, String> getQueryParameters(boolean decode) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public List<String> getMatchedURIs() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public List<String> getMatchedURIs(boolean decode) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public List<Object> getMatchedResources() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public URI resolve(URI uri) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public URI relativize(URI uri) {
-            throw new UnsupportedOperationException();
         }
     }
 }

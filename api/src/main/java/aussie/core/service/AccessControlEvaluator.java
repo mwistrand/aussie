@@ -7,6 +7,7 @@ import java.util.Optional;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import aussie.core.model.AccessControlConfig;
 import aussie.core.model.EndpointConfig;
 import aussie.core.model.EndpointVisibility;
 import aussie.core.model.ServiceAccessConfig;

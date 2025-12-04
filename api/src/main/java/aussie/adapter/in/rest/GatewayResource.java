@@ -1,5 +1,8 @@
 package aussie.adapter.in.rest;
 
+import java.util.HashMap;
+import java.util.List;
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.DELETE;
@@ -17,21 +20,19 @@ import jakarta.ws.rs.core.Response;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.ProxyResponse;
-import aussie.core.port.out.ProxyClient;
-import aussie.core.service.ServiceRegistry;
+import aussie.core.model.GatewayRequest;
+import aussie.core.model.GatewayResult;
+import aussie.core.port.in.GatewayUseCase;
 
 @Path("/gateway")
 @ApplicationScoped
 public class GatewayResource {
 
-    private final ServiceRegistry serviceRegistry;
-    private final ProxyClient proxyClient;
+    private final GatewayUseCase gatewayUseCase;
 
     @Inject
-    public GatewayResource(ServiceRegistry serviceRegistry, ProxyClient proxyClient) {
-        this.serviceRegistry = serviceRegistry;
-        this.proxyClient = proxyClient;
+    public GatewayResource(GatewayUseCase gatewayUseCase) {
+        this.gatewayUseCase = gatewayUseCase;
     }
 
     @GET
@@ -80,42 +81,50 @@ public class GatewayResource {
     }
 
     private Uni<Response> proxyRequest(String path, ContainerRequestContext requestContext, byte[] body) {
-        var method = requestContext.getMethod();
-        var routeMatch = serviceRegistry.findRoute("/" + path, method);
-
-        if (routeMatch.isEmpty()) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.NOT_FOUND)
-                            .entity("No route found for path: /" + path)
-                            .build());
-        }
-
-        return proxyClient
-                .forward(requestContext, routeMatch.get(), body)
-                .map(this::buildResponse)
-                .onFailure()
-                .recoverWithItem(this::buildErrorResponse);
+        var gatewayRequest = toGatewayRequest("/" + path, requestContext, body);
+        return gatewayUseCase.forward(gatewayRequest).map(this::toResponse);
     }
 
-    private Response buildResponse(ProxyResponse proxyResponse) {
-        var responseBuilder = Response.status(proxyResponse.statusCode());
+    private GatewayRequest toGatewayRequest(String path, ContainerRequestContext requestContext, byte[] body) {
+        var headers = new HashMap<String, List<String>>();
+        for (var entry : requestContext.getHeaders().entrySet()) {
+            headers.put(entry.getKey(), List.copyOf(entry.getValue()));
+        }
 
-        for (var entry : proxyResponse.headers().entrySet()) {
-            for (var value : entry.getValue()) {
-                responseBuilder.header(entry.getKey(), value);
+        return new GatewayRequest(
+                requestContext.getMethod(),
+                path,
+                headers,
+                requestContext.getUriInfo().getRequestUri(),
+                body);
+    }
+
+    private Response toResponse(GatewayResult result) {
+        return switch (result) {
+            case GatewayResult.Success success -> {
+                var responseBuilder = Response.status(success.statusCode());
+                for (var entry : success.headers().entrySet()) {
+                    for (var value : entry.getValue()) {
+                        responseBuilder.header(entry.getKey(), value);
+                    }
+                }
+                if (success.body().length > 0) {
+                    responseBuilder.entity(success.body());
+                }
+                yield responseBuilder.build();
             }
-        }
-
-        if (proxyResponse.body().length > 0) {
-            responseBuilder.entity(proxyResponse.body());
-        }
-
-        return responseBuilder.build();
-    }
-
-    private Response buildErrorResponse(Throwable error) {
-        return Response.status(Response.Status.BAD_GATEWAY)
-                .entity("Error forwarding request: " + error.getMessage())
-                .build();
+            case GatewayResult.RouteNotFound notFound -> Response.status(Response.Status.NOT_FOUND)
+                    .entity("Not found")
+                    .build();
+            case GatewayResult.ServiceNotFound notFound -> Response.status(Response.Status.NOT_FOUND)
+                    .entity("Not found")
+                    .build();
+            case GatewayResult.ReservedPath reserved -> Response.status(Response.Status.NOT_FOUND)
+                    .entity("Not found")
+                    .build();
+            case GatewayResult.Error error -> Response.status(Response.Status.BAD_GATEWAY)
+                    .entity("Error forwarding request: " + error.message())
+                    .build();
+        };
     }
 }

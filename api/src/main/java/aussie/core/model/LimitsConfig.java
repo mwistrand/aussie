@@ -1,4 +1,4 @@
-package aussie.core.service;
+package aussie.core.model;
 
 import io.smallrye.config.WithDefault;
 

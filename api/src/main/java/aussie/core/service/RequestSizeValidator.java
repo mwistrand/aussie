@@ -7,6 +7,7 @@ import java.util.Map;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import aussie.core.model.LimitsConfig;
 import aussie.core.model.ValidationResult;
 
 @ApplicationScoped

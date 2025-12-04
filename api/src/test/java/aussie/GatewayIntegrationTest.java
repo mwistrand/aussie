@@ -182,7 +182,7 @@ class GatewayIntegrationTest {
                     .get("/gateway/nonexistent/path")
                     .then()
                     .statusCode(404)
-                    .body(org.hamcrest.Matchers.containsString("No route found"));
+                    .body(org.hamcrest.Matchers.containsString("Not found"));
         }
 
         @Test
