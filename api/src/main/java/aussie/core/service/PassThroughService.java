@@ -32,13 +32,18 @@ public class PassThroughService implements PassThroughUseCase {
     private final ServiceRegistry serviceRegistry;
     private final ProxyRequestPreparer requestPreparer;
     private final ProxyClient proxyClient;
+    private final VisibilityResolver visibilityResolver;
 
     @Inject
     public PassThroughService(
-            ServiceRegistry serviceRegistry, ProxyRequestPreparer requestPreparer, ProxyClient proxyClient) {
+            ServiceRegistry serviceRegistry,
+            ProxyRequestPreparer requestPreparer,
+            ProxyClient proxyClient,
+            VisibilityResolver visibilityResolver) {
         this.serviceRegistry = serviceRegistry;
         this.requestPreparer = requestPreparer;
         this.proxyClient = proxyClient;
+        this.visibilityResolver = visibilityResolver;
     }
 
     @Override
@@ -53,7 +58,8 @@ public class PassThroughService implements PassThroughUseCase {
         }
 
         var service = serviceOpt.get();
-        var routeMatch = createPassThroughRouteMatch(service, request.path());
+        var visibility = visibilityResolver.resolve(request.path(), request.method(), service);
+        var routeMatch = createPassThroughRouteMatch(service, request.path(), visibility);
         var preparedRequest = requestPreparer.prepare(request, routeMatch);
 
         return proxyClient
@@ -63,8 +69,9 @@ public class PassThroughService implements PassThroughUseCase {
                 .recoverWithItem(error -> new GatewayResult.Error(error.getMessage()));
     }
 
-    private RouteMatch createPassThroughRouteMatch(ServiceRegistration service, String targetPath) {
-        var catchAllEndpoint = new EndpointConfig("/**", Set.of("*"), EndpointVisibility.PUBLIC, Optional.empty());
+    private RouteMatch createPassThroughRouteMatch(
+            ServiceRegistration service, String targetPath, EndpointVisibility visibility) {
+        var catchAllEndpoint = new EndpointConfig("/**", Set.of("*"), visibility, Optional.empty());
         return new RouteMatch(service, catchAllEndpoint, targetPath, Map.of());
     }
 }

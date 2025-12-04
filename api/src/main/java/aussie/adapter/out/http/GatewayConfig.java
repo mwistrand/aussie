@@ -13,4 +13,6 @@ public interface GatewayConfig {
     LimitsConfig limits();
 
     AccessControlConfig accessControl();
+
+    SecurityConfig security();
 }

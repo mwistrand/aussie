@@ -97,10 +97,19 @@ class ServiceRegistrationTest {
         @DisplayName("Should create record directly")
         void shouldCreateRecordDirectly() {
             var service = new ServiceRegistration(
-                    "my-service", "My Service", URI.create("http://localhost:8080"), List.of(), Optional.empty());
+                    "my-service",
+                    "My Service",
+                    URI.create("http://localhost:8080"),
+                    null, // routePrefix - defaults to /my-service
+                    null, // defaultVisibility - defaults to PRIVATE
+                    null, // visibilityRules - defaults to empty list
+                    List.of(),
+                    Optional.empty());
 
             assertNotNull(service);
             assertEquals("my-service", service.serviceId());
+            assertEquals("/my-service", service.routePrefix());
+            assertEquals(EndpointVisibility.PRIVATE, service.defaultVisibility());
         }
 
         @Test

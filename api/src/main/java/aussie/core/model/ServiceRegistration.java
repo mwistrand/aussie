@@ -8,6 +8,9 @@ public record ServiceRegistration(
         String serviceId,
         String displayName,
         URI baseUrl,
+        String routePrefix,
+        EndpointVisibility defaultVisibility,
+        List<VisibilityRule> visibilityRules,
         List<EndpointConfig> endpoints,
         Optional<ServiceAccessConfig> accessConfig) {
     public ServiceRegistration {
@@ -19,6 +22,15 @@ public record ServiceRegistration(
         }
         if (baseUrl == null) {
             throw new IllegalArgumentException("Base URL cannot be null");
+        }
+        if (routePrefix == null || routePrefix.isBlank()) {
+            routePrefix = "/" + serviceId;
+        }
+        if (defaultVisibility == null) {
+            defaultVisibility = EndpointVisibility.PRIVATE;
+        }
+        if (visibilityRules == null) {
+            visibilityRules = List.of();
         }
         if (endpoints == null) {
             endpoints = List.of();
@@ -36,6 +48,9 @@ public record ServiceRegistration(
         private final String serviceId;
         private String displayName;
         private URI baseUrl;
+        private String routePrefix;
+        private EndpointVisibility defaultVisibility;
+        private List<VisibilityRule> visibilityRules = List.of();
         private List<EndpointConfig> endpoints = List.of();
         private ServiceAccessConfig accessConfig;
 
@@ -58,6 +73,21 @@ public record ServiceRegistration(
             return this;
         }
 
+        public Builder routePrefix(String routePrefix) {
+            this.routePrefix = routePrefix;
+            return this;
+        }
+
+        public Builder defaultVisibility(EndpointVisibility defaultVisibility) {
+            this.defaultVisibility = defaultVisibility;
+            return this;
+        }
+
+        public Builder visibilityRules(List<VisibilityRule> visibilityRules) {
+            this.visibilityRules = visibilityRules;
+            return this;
+        }
+
         public Builder endpoints(List<EndpointConfig> endpoints) {
             this.endpoints = endpoints;
             return this;
@@ -73,6 +103,9 @@ public record ServiceRegistration(
                     serviceId,
                     displayName != null ? displayName : serviceId,
                     baseUrl,
+                    routePrefix,
+                    defaultVisibility,
+                    visibilityRules,
                     endpoints,
                     Optional.ofNullable(accessConfig));
         }

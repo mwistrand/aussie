@@ -115,8 +115,8 @@ class AccessControlIntegrationTest {
                     .when()
                     .get("/gateway/api/private")
                     .then()
-                    .statusCode(403)
-                    .body(containsString("Access denied"));
+                    .statusCode(404)
+                    .body(containsString("Not found"));
         }
 
         @Test
@@ -183,7 +183,7 @@ class AccessControlIntegrationTest {
                     .when()
                     .get("/gateway/api/private")
                     .then()
-                    .statusCode(403);
+                    .statusCode(404);
         }
     }
 
@@ -218,7 +218,7 @@ class AccessControlIntegrationTest {
                     .when()
                     .get("/gateway/api/private")
                     .then()
-                    .statusCode(403);
+                    .statusCode(404);
         }
     }
 

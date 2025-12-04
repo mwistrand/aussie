@@ -29,6 +29,7 @@ class PassThroughServiceTest {
     private ServiceRegistry serviceRegistry;
     private ProxyRequestPreparer requestPreparer;
     private TestProxyClient proxyClient;
+    private VisibilityResolver visibilityResolver;
     private PassThroughService passThroughService;
 
     @BeforeEach
@@ -36,7 +37,8 @@ class PassThroughServiceTest {
         serviceRegistry = new ServiceRegistry();
         requestPreparer = new ProxyRequestPreparer(() -> (req, uri) -> Map.of());
         proxyClient = new TestProxyClient();
-        passThroughService = new PassThroughService(serviceRegistry, requestPreparer, proxyClient);
+        visibilityResolver = new VisibilityResolver(new GlobPatternMatcher());
+        passThroughService = new PassThroughService(serviceRegistry, requestPreparer, proxyClient, visibilityResolver);
     }
 
     private GatewayRequest createRequest(String method, String path) {

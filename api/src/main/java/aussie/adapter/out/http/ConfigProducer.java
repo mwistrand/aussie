@@ -5,6 +5,7 @@ import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
 
 import aussie.core.model.AccessControlConfig;
+import aussie.core.model.GatewaySecurityConfig;
 import aussie.core.model.LimitsConfig;
 
 /**
@@ -31,5 +32,11 @@ public class ConfigProducer {
     @ApplicationScoped
     public AccessControlConfig accessControlConfig() {
         return gatewayConfig.accessControl();
+    }
+
+    @Produces
+    @ApplicationScoped
+    public GatewaySecurityConfig gatewaySecurityConfig() {
+        return gatewayConfig.security();
     }
 }

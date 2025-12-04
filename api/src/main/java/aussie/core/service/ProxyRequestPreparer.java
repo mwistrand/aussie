@@ -59,6 +59,7 @@ public class ProxyRequestPreparer {
         copyFilteredHeaders(request, headers);
         setHostHeader(headers, targetUri);
         addForwardingHeaders(request, targetUri, headers);
+        addViaHeader(request, headers);
 
         return headers;
     }
@@ -106,6 +107,22 @@ public class ProxyRequestPreparer {
         for (var entry : forwardingHeaders.entrySet()) {
             headers.put(entry.getKey(), List.of(entry.getValue()));
         }
+    }
+
+    /**
+     * Adds the Via header per RFC 7230 to indicate the request passed through this proxy.
+     */
+    private void addViaHeader(GatewayRequest request, Map<String, List<String>> headers) {
+        var requestHost = request.requestUri() != null ? request.requestUri().getHost() : "aussie";
+        var viaValue = "1.1 " + (requestHost != null ? requestHost : "aussie") + " (Aussie)";
+
+        // Check for existing Via header and append
+        var existingVia = headers.get("Via");
+        if (existingVia != null && !existingVia.isEmpty()) {
+            viaValue = existingVia.get(0) + ", " + viaValue;
+        }
+
+        headers.put("Via", List.of(viaValue));
     }
 
     /**

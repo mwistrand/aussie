@@ -14,11 +14,11 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 
 import aussie.core.model.EndpointConfig;
-import aussie.core.model.EndpointVisibility;
 import aussie.core.model.RouteMatch;
 import aussie.core.service.AccessControlEvaluator;
 import aussie.core.service.ServiceRegistry;
 import aussie.core.service.SourceIdentifierExtractor;
+import aussie.core.service.VisibilityResolver;
 
 @Provider
 @Priority(Priorities.AUTHORIZATION)
@@ -29,15 +29,18 @@ public class AccessControlFilter implements ContainerRequestFilter {
     private final ServiceRegistry serviceRegistry;
     private final SourceIdentifierExtractor sourceExtractor;
     private final AccessControlEvaluator accessEvaluator;
+    private final VisibilityResolver visibilityResolver;
 
     @Inject
     public AccessControlFilter(
             ServiceRegistry serviceRegistry,
             SourceIdentifierExtractor sourceExtractor,
-            AccessControlEvaluator accessEvaluator) {
+            AccessControlEvaluator accessEvaluator,
+            VisibilityResolver visibilityResolver) {
         this.serviceRegistry = serviceRegistry;
         this.sourceExtractor = sourceExtractor;
         this.accessEvaluator = accessEvaluator;
+        this.visibilityResolver = visibilityResolver;
     }
 
     @Override
@@ -102,9 +105,8 @@ public class AccessControlFilter implements ContainerRequestFilter {
             return;
         }
 
-        // For pass-through, create a synthetic route match
-        // Use service's default visibility (PUBLIC if no specific access config)
-        var visibility = service.accessConfig().isPresent() ? EndpointVisibility.PRIVATE : EndpointVisibility.PUBLIC;
+        // For pass-through, resolve visibility using the VisibilityResolver
+        var visibility = visibilityResolver.resolve(remainingPath, method, service);
 
         var syntheticEndpoint = new EndpointConfig("/**", Set.of("*"), visibility, Optional.empty());
         var syntheticRoute = new RouteMatch(service, syntheticEndpoint, remainingPath, Map.of());
@@ -114,12 +116,12 @@ public class AccessControlFilter implements ContainerRequestFilter {
 
     private void checkAccessControl(ContainerRequestContext requestContext, RouteMatch route) {
         var source = sourceExtractor.extract(requestContext);
-        var isAllowed = accessEvaluator.isAllowed(
+        var isPublic = accessEvaluator.isAllowed(
                 source, route.endpoint(), route.service().accessConfig());
 
-        if (!isAllowed) {
-            requestContext.abortWith(Response.status(Response.Status.FORBIDDEN)
-                    .entity("Access denied: source not authorized for private endpoint")
+        if (!isPublic) {
+            requestContext.abortWith(Response.status(Response.Status.NOT_FOUND)
+                    .entity("Not found")
                     .build());
         }
     }

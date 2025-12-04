@@ -275,6 +275,7 @@ class PassThroughIntegrationTest {
             var service = ServiceRegistration.builder("unreachable-service")
                     .displayName("Unreachable Service")
                     .baseUrl("http://localhost:59999")
+                    .defaultVisibility(EndpointVisibility.PUBLIC)
                     .endpoints(List.of())
                     .build();
             serviceRegistry.register(service);
@@ -328,8 +329,8 @@ class PassThroughIntegrationTest {
                     .when()
                     .get("/restricted-service/api/secret")
                     .then()
-                    .statusCode(403)
-                    .body(containsString("Access denied"));
+                    .statusCode(404)
+                    .body(containsString("Not found"));
         }
 
         @Test
@@ -382,6 +383,7 @@ class PassThroughIntegrationTest {
             var service = ServiceRegistration.builder("mixed-service")
                     .displayName("Mixed Service")
                     .baseUrl("http://localhost:" + backendServer.port())
+                    .defaultVisibility(EndpointVisibility.PUBLIC)
                     .endpoints(List.of(endpoint))
                     .build();
             serviceRegistry.register(service);
@@ -406,6 +408,7 @@ class PassThroughIntegrationTest {
         var service = ServiceRegistration.builder(serviceId)
                 .displayName(serviceId)
                 .baseUrl("http://localhost:" + backendServer.port())
+                .defaultVisibility(EndpointVisibility.PUBLIC)
                 .endpoints(List.of())
                 .build();
         serviceRegistry.register(service);
