@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Build:** `./gradlew build`
 - **Dev mode (live reload):** `./gradlew quarkusDev` (Dev UI at http://localhost:8080/q/dev/)
 - **Run tests:** `./gradlew test`
-- **Single test class:** `./gradlew test --tests "aussie.GreetingResourceTest"`
-- **Single test method:** `./gradlew test --tests "aussie.GreetingResourceTest.testMethodName"`
+- **Single test class:** `./gradlew test --tests "aussie.AdminResourceTest"`
+- **Single test method:** `./gradlew test --tests "aussie.AdminResourceTest.testMethodName"`
 - **Native build:** `./gradlew build -Dquarkus.native.enabled=true`
 - **Uber-jar:** `./gradlew build -Dquarkus.package.jar.type=uber-jar`
 

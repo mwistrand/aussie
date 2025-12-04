@@ -8,8 +8,8 @@
 
 - **Test / Lint**
   - All tests: `./gradlew test`
-  - Single test class: `./gradlew test --tests "aussie.GreetingResourceTest"`
-  - Single test method: `./gradlew test --tests "aussie.GreetingResourceTest.testMethodName"`
+  - Single test class: `./gradlew test --tests "aussie.AdminResourceTest"`
+  - Single test method: `./gradlew test --tests "aussie.AdminResourceTest.testMethodName"`
   - Quick health check: `./gradlew check` (runs basic verification tasks)
 
 - **Code style / conventions**

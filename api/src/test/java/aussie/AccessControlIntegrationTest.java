@@ -19,11 +19,11 @@ import org.junit.jupiter.api.Test;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 
-import aussie.routing.ServiceRegistry;
-import aussie.routing.model.EndpointConfig;
-import aussie.routing.model.EndpointVisibility;
-import aussie.routing.model.ServiceAccessConfig;
-import aussie.routing.model.ServiceRegistration;
+import aussie.core.model.EndpointConfig;
+import aussie.core.model.EndpointVisibility;
+import aussie.core.model.ServiceAccessConfig;
+import aussie.core.model.ServiceRegistration;
+import aussie.core.service.ServiceRegistry;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 
