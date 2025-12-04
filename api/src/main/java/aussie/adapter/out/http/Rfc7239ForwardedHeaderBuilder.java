@@ -4,9 +4,10 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Map;
 
-import aussie.core.port.out.ForwardedHeaderBuilder;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.container.ContainerRequestContext;
+
+import aussie.core.port.out.ForwardedHeaderBuilder;
 
 /**
  * Builds RFC 7239 compliant Forwarded header.
@@ -127,8 +128,12 @@ public class Rfc7239ForwardedHeaderBuilder implements ForwardedHeaderBuilder {
 
     private String quoteIfNeeded(String value) {
         // Quote values containing special characters per RFC 7239
-        if (value.contains(":") || value.contains("[") || value.contains("]") ||
-            value.contains(";") || value.contains(",") || value.contains(" ")) {
+        if (value.contains(":")
+                || value.contains("[")
+                || value.contains("]")
+                || value.contains(";")
+                || value.contains(",")
+                || value.contains(" ")) {
             return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
         }
         return value;

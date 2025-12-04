@@ -4,9 +4,10 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 
-import aussie.core.port.out.ForwardedHeaderBuilder;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.container.ContainerRequestContext;
+
+import aussie.core.port.out.ForwardedHeaderBuilder;
 
 /**
  * Builds legacy X-Forwarded-* headers.

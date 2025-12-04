@@ -41,8 +41,7 @@ class RouteMatchTest {
         void shouldThrowWhenServiceNull() {
             var endpoint = createTestEndpoint();
 
-            assertThrows(IllegalArgumentException.class, () ->
-                new RouteMatch(null, endpoint, "/api/users", Map.of()));
+            assertThrows(IllegalArgumentException.class, () -> new RouteMatch(null, endpoint, "/api/users", Map.of()));
         }
 
         @Test
@@ -50,8 +49,7 @@ class RouteMatchTest {
         void shouldThrowWhenEndpointNull() {
             var service = createTestService();
 
-            assertThrows(IllegalArgumentException.class, () ->
-                new RouteMatch(service, null, "/api/users", Map.of()));
+            assertThrows(IllegalArgumentException.class, () -> new RouteMatch(service, null, "/api/users", Map.of()));
         }
 
         @Test
@@ -86,9 +84,9 @@ class RouteMatchTest {
         @DisplayName("Should build target URI from base URL and path")
         void shouldBuildTargetUri() {
             var service = ServiceRegistration.builder("test")
-                .baseUrl("http://backend:8080")
-                .endpoints(List.of())
-                .build();
+                    .baseUrl("http://backend:8080")
+                    .endpoints(List.of())
+                    .build();
             var endpoint = createTestEndpoint();
 
             var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
@@ -100,9 +98,9 @@ class RouteMatchTest {
         @DisplayName("Should handle base URL with trailing slash")
         void shouldHandleTrailingSlash() {
             var service = ServiceRegistration.builder("test")
-                .baseUrl("http://backend:8080/")
-                .endpoints(List.of())
-                .build();
+                    .baseUrl("http://backend:8080/")
+                    .endpoints(List.of())
+                    .build();
             var endpoint = createTestEndpoint();
 
             var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
@@ -114,9 +112,9 @@ class RouteMatchTest {
         @DisplayName("Should handle path without leading slash")
         void shouldHandlePathWithoutLeadingSlash() {
             var service = ServiceRegistration.builder("test")
-                .baseUrl("http://backend:8080")
-                .endpoints(List.of())
-                .build();
+                    .baseUrl("http://backend:8080")
+                    .endpoints(List.of())
+                    .build();
             var endpoint = createTestEndpoint();
 
             var routeMatch = new RouteMatch(service, endpoint, "api/users", Map.of());
@@ -128,9 +126,9 @@ class RouteMatchTest {
         @DisplayName("Should handle root path")
         void shouldHandleRootPath() {
             var service = ServiceRegistration.builder("test")
-                .baseUrl("http://backend:8080")
-                .endpoints(List.of())
-                .build();
+                    .baseUrl("http://backend:8080")
+                    .endpoints(List.of())
+                    .build();
             var endpoint = createTestEndpoint();
 
             var routeMatch = new RouteMatch(service, endpoint, "/", Map.of());
@@ -141,9 +139,9 @@ class RouteMatchTest {
 
     private ServiceRegistration createTestService() {
         return ServiceRegistration.builder("test-service")
-            .baseUrl("http://localhost:8080")
-            .endpoints(List.of())
-            .build();
+                .baseUrl("http://localhost:8080")
+                .endpoints(List.of())
+                .build();
     }
 
     private EndpointConfig createTestEndpoint() {

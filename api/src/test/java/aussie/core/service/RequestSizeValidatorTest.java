@@ -119,7 +119,8 @@ class RequestSizeValidatorTest {
             assertTrue(validator.validateHeaderSize("X-Test", "abc").isValid());
 
             // "X-Test: abcdefghijklmno" = 25 bytes, should fail
-            assertFalse(validator.validateHeaderSize("X-Test", "abcdefghijklmno").isValid());
+            assertFalse(
+                    validator.validateHeaderSize("X-Test", "abcdefghijklmno").isValid());
         }
     }
 

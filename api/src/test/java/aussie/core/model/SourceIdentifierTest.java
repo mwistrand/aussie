@@ -21,10 +21,7 @@ class SourceIdentifierTest {
         @DisplayName("Should create with all fields")
         void shouldCreateWithAllFields() {
             var source = new SourceIdentifier(
-                "192.168.1.100",
-                Optional.of("api.example.com"),
-                Optional.of("203.0.113.50, 192.168.1.1")
-            );
+                    "192.168.1.100", Optional.of("api.example.com"), Optional.of("203.0.113.50, 192.168.1.1"));
 
             assertEquals("192.168.1.100", source.ipAddress());
             assertTrue(source.host().isPresent());

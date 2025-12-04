@@ -26,9 +26,9 @@ class ServiceRegistrationTest {
         @DisplayName("Should build with minimal required fields")
         void shouldBuildWithMinimalFields() {
             var service = ServiceRegistration.builder("my-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of())
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of())
+                    .build();
 
             assertEquals("my-service", service.serviceId());
             assertEquals("my-service", service.displayName()); // defaults to serviceId
@@ -41,18 +41,15 @@ class ServiceRegistrationTest {
         @DisplayName("Should build with all fields")
         void shouldBuildWithAllFields() {
             var endpoint = new EndpointConfig("/api/test", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
-            var accessConfig = new ServiceAccessConfig(
-                Optional.of(List.of("10.0.0.0/8")),
-                Optional.empty(),
-                Optional.empty()
-            );
+            var accessConfig =
+                    new ServiceAccessConfig(Optional.of(List.of("10.0.0.0/8")), Optional.empty(), Optional.empty());
 
             var service = ServiceRegistration.builder("my-service")
-                .displayName("My Service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .accessConfig(accessConfig)
-                .build();
+                    .displayName("My Service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .accessConfig(accessConfig)
+                    .build();
 
             assertEquals("my-service", service.serviceId());
             assertEquals("My Service", service.displayName());
@@ -63,24 +60,20 @@ class ServiceRegistrationTest {
         @Test
         @DisplayName("Should throw when serviceId is null")
         void shouldThrowWhenServiceIdNull() {
-            assertThrows(IllegalArgumentException.class, () ->
-                ServiceRegistration.builder(null)
+            assertThrows(IllegalArgumentException.class, () -> ServiceRegistration.builder(null)
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of())
-                    .build()
-            );
+                    .build());
         }
 
         @Test
         @DisplayName("Should throw when baseUrl is null")
         void shouldThrowWhenBaseUrlNull() {
             // URI.create(null) throws NullPointerException
-            assertThrows(NullPointerException.class, () ->
-                ServiceRegistration.builder("my-service")
+            assertThrows(NullPointerException.class, () -> ServiceRegistration.builder("my-service")
                     .baseUrl((String) null)
                     .endpoints(List.of())
-                    .build()
-            );
+                    .build());
         }
 
         @Test
@@ -88,9 +81,9 @@ class ServiceRegistrationTest {
         void shouldAcceptUriForBaseUrl() {
             var uri = URI.create("http://localhost:8080");
             var service = ServiceRegistration.builder("my-service")
-                .baseUrl(uri)
-                .endpoints(List.of())
-                .build();
+                    .baseUrl(uri)
+                    .endpoints(List.of())
+                    .build();
 
             assertEquals(uri, service.baseUrl());
         }
@@ -104,12 +97,7 @@ class ServiceRegistrationTest {
         @DisplayName("Should create record directly")
         void shouldCreateRecordDirectly() {
             var service = new ServiceRegistration(
-                "my-service",
-                "My Service",
-                URI.create("http://localhost:8080"),
-                List.of(),
-                Optional.empty()
-            );
+                    "my-service", "My Service", URI.create("http://localhost:8080"), List.of(), Optional.empty());
 
             assertNotNull(service);
             assertEquals("my-service", service.serviceId());
@@ -119,14 +107,14 @@ class ServiceRegistrationTest {
         @DisplayName("Should have value-based equality")
         void shouldHaveValueBasedEquality() {
             var service1 = ServiceRegistration.builder("my-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of())
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of())
+                    .build();
 
             var service2 = ServiceRegistration.builder("my-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of())
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of())
+                    .build();
 
             assertEquals(service1, service2);
             assertEquals(service1.hashCode(), service2.hashCode());

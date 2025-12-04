@@ -4,9 +4,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
-import aussie.core.model.ValidationResult;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+
+import aussie.core.model.ValidationResult;
 
 @ApplicationScoped
 public class RequestSizeValidator {
@@ -22,8 +23,7 @@ public class RequestSizeValidator {
         var maxSize = config.maxBodySize();
         if (contentLength > maxSize) {
             return ValidationResult.payloadTooLarge(
-                String.format("Request body size %d exceeds maximum allowed size %d", contentLength, maxSize)
-            );
+                    String.format("Request body size %d exceeds maximum allowed size %d", contentLength, maxSize));
         }
         return ValidationResult.valid();
     }
@@ -37,9 +37,8 @@ public class RequestSizeValidator {
         var headerSize = (headerName + ": " + headerValue).getBytes(StandardCharsets.UTF_8).length;
 
         if (headerSize > maxSize) {
-            return ValidationResult.headerTooLarge(
-                String.format("Header '%s' size %d exceeds maximum allowed size %d", headerName, headerSize, maxSize)
-            );
+            return ValidationResult.headerTooLarge(String.format(
+                    "Header '%s' size %d exceeds maximum allowed size %d", headerName, headerSize, maxSize));
         }
         return ValidationResult.valid();
     }
@@ -57,8 +56,7 @@ public class RequestSizeValidator {
 
         if (totalSize > maxSize) {
             return ValidationResult.headerTooLarge(
-                String.format("Total headers size %d exceeds maximum allowed size %d", totalSize, maxSize)
-            );
+                    String.format("Total headers size %d exceeds maximum allowed size %d", totalSize, maxSize));
         }
         return ValidationResult.valid();
     }

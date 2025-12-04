@@ -2,11 +2,7 @@ package aussie.core.model;
 
 import java.util.Optional;
 
-public record SourceIdentifier(
-    String ipAddress,
-    Optional<String> host,
-    Optional<String> forwardedFor
-) {
+public record SourceIdentifier(String ipAddress, Optional<String> host, Optional<String> forwardedFor) {
     public SourceIdentifier {
         if (ipAddress == null) {
             ipAddress = "unknown";

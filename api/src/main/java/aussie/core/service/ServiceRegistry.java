@@ -8,10 +8,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import jakarta.enterprise.context.ApplicationScoped;
+
 import aussie.core.model.EndpointConfig;
 import aussie.core.model.RouteMatch;
 import aussie.core.model.ServiceRegistration;
-import jakarta.enterprise.context.ApplicationScoped;
 
 @ApplicationScoped
 public class ServiceRegistry {
@@ -51,24 +52,20 @@ public class ServiceRegistry {
         var upperMethod = method.toUpperCase();
 
         for (var route : compiledRoutes.values()) {
-            if (!route.endpoint().methods().contains(upperMethod) &&
-                !route.endpoint().methods().contains("*")) {
+            if (!route.endpoint().methods().contains(upperMethod)
+                    && !route.endpoint().methods().contains("*")) {
                 continue;
             }
 
             var matcher = route.pattern().matcher(normalizedPath);
             if (matcher.matches()) {
                 var pathVariables = extractPathVariables(route.endpoint().path(), matcher);
-                var targetPath = route.endpoint().pathRewrite()
-                    .map(rewrite -> applyPathRewrite(rewrite, pathVariables, normalizedPath))
-                    .orElse(normalizedPath);
+                var targetPath = route.endpoint()
+                        .pathRewrite()
+                        .map(rewrite -> applyPathRewrite(rewrite, pathVariables, normalizedPath))
+                        .orElse(normalizedPath);
 
-                return Optional.of(new RouteMatch(
-                    route.service(),
-                    route.endpoint(),
-                    targetPath,
-                    pathVariables
-                ));
+                return Optional.of(new RouteMatch(route.service(), route.endpoint(), targetPath, pathVariables));
             }
         }
 
@@ -92,9 +89,9 @@ public class ServiceRegistry {
     private Pattern compilePathPattern(String pathTemplate) {
         // Convert path template with {param} placeholders to regex
         var regex = pathTemplate
-            .replaceAll("\\{([^/]+)\\}", "(?<$1>[^/]+)")
-            .replaceAll("\\*\\*", ".*")
-            .replaceAll("(?<!\\.)\\*", "[^/]*");
+                .replaceAll("\\{([^/]+)\\}", "(?<$1>[^/]+)")
+                .replaceAll("\\*\\*", ".*")
+                .replaceAll("(?<!\\.)\\*", "[^/]*");
 
         return Pattern.compile("^" + regex + "$");
     }
@@ -127,9 +124,5 @@ public class ServiceRegistry {
         return result;
     }
 
-    private record CompiledRoute(
-        ServiceRegistration service,
-        EndpointConfig endpoint,
-        Pattern pattern
-    ) {}
+    private record CompiledRoute(ServiceRegistration service, EndpointConfig endpoint, Pattern pattern) {}
 }

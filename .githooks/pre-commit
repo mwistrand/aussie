@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Pre-commit hook to format staged files
+# - Java files in api/ are formatted with Spotless (Palantir style)
+# - Go files in cli/ are formatted with go fmt
+
+set -e
+
+# Get the root of the git repository
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# Check for staged Java files in api/
+STAGED_JAVA_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^api/.*\.java$' || true)
+
+if [ -n "$STAGED_JAVA_FILES" ]; then
+    echo "Formatting staged Java files with Spotless..."
+
+    # Run spotlessApply on staged files only
+    cd "$REPO_ROOT/api"
+
+    # Create a temporary file list for spotless
+    TEMP_FILE=$(mktemp)
+    echo "$STAGED_JAVA_FILES" | sed 's|^api/||' > "$TEMP_FILE"
+
+    # Apply spotless formatting
+    ./gradlew spotlessApply -q
+
+    # Re-add the formatted files to staging
+    cd "$REPO_ROOT"
+    echo "$STAGED_JAVA_FILES" | xargs git add
+
+    rm "$TEMP_FILE"
+    echo "Java formatting complete."
+fi
+
+# Check for staged Go files in cli/
+STAGED_GO_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^cli/.*\.go$' || true)
+
+if [ -n "$STAGED_GO_FILES" ]; then
+    echo "Formatting staged Go files with go fmt..."
+
+    cd "$REPO_ROOT"
+
+    # Format each staged Go file
+    for file in $STAGED_GO_FILES; do
+        if [ -f "$file" ]; then
+            go fmt "./$file"
+            git add "$file"
+        fi
+    done
+
+    echo "Go formatting complete."
+fi
+
+exit 0

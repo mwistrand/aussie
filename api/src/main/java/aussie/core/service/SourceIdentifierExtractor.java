@@ -2,9 +2,10 @@ package aussie.core.service;
 
 import java.util.Optional;
 
-import aussie.core.model.SourceIdentifier;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.container.ContainerRequestContext;
+
+import aussie.core.model.SourceIdentifier;
 
 @ApplicationScoped
 public class SourceIdentifierExtractor {

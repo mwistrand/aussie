@@ -104,9 +104,9 @@ class ServiceRegistryTest {
         void shouldMatchExactPath() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             var result = registry.findRoute("/api/users", "GET");
@@ -117,11 +117,12 @@ class ServiceRegistryTest {
         @Test
         @DisplayName("Should match path with path variables")
         void shouldMatchPathWithVariables() {
-            var endpoint = new EndpointConfig("/api/users/{userId}", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var endpoint = new EndpointConfig(
+                    "/api/users/{userId}", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             var result = registry.findRoute("/api/users/123", "GET");
@@ -132,11 +133,12 @@ class ServiceRegistryTest {
         @Test
         @DisplayName("Should match path with multiple path variables")
         void shouldMatchPathWithMultipleVariables() {
-            var endpoint = new EndpointConfig("/api/users/{userId}/posts/{postId}", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var endpoint = new EndpointConfig(
+                    "/api/users/{userId}/posts/{postId}", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             var result = registry.findRoute("/api/users/123/posts/456", "GET");
@@ -150,9 +152,9 @@ class ServiceRegistryTest {
         void shouldMatchWildcardPath() {
             var endpoint = new EndpointConfig("/api/**", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("api-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             assertTrue(registry.findRoute("/api/users", "GET").isPresent());
@@ -163,11 +165,12 @@ class ServiceRegistryTest {
         @Test
         @DisplayName("Should match single segment wildcard with *")
         void shouldMatchSingleSegmentWildcard() {
-            var endpoint = new EndpointConfig("/api/*/info", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/*/info", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("api-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             assertTrue(registry.findRoute("/api/users/info", "GET").isPresent());
@@ -180,9 +183,9 @@ class ServiceRegistryTest {
         void shouldNotMatchWrongMethod() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             var result = registry.findRoute("/api/users", "POST");
@@ -194,9 +197,9 @@ class ServiceRegistryTest {
         void shouldMatchAnyMethodWithWildcard() {
             var endpoint = new EndpointConfig("/api/data", Set.of("*"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("data-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             assertTrue(registry.findRoute("/api/data", "GET").isPresent());
@@ -209,9 +212,9 @@ class ServiceRegistryTest {
         void shouldMatchCaseInsensitiveMethods() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             assertTrue(registry.findRoute("/api/users", "get").isPresent());
@@ -224,9 +227,9 @@ class ServiceRegistryTest {
         void shouldReturnEmptyForUnmatchedPath() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             var result = registry.findRoute("/api/products", "GET");
@@ -238,9 +241,9 @@ class ServiceRegistryTest {
         void shouldNormalizePathsWithoutLeadingSlash() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             var result = registry.findRoute("api/users", "GET");
@@ -252,9 +255,9 @@ class ServiceRegistryTest {
         void shouldHandleNullPath() {
             var endpoint = new EndpointConfig("/", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("root-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             var result = registry.findRoute(null, "GET");
@@ -266,9 +269,9 @@ class ServiceRegistryTest {
         void shouldHandleEmptyPath() {
             var endpoint = new EndpointConfig("/", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("root-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             var result = registry.findRoute("", "GET");
@@ -284,15 +287,11 @@ class ServiceRegistryTest {
         @DisplayName("Should apply path rewrite")
         void shouldApplyPathRewrite() {
             var endpoint = new EndpointConfig(
-                "/api/v1/users/{userId}",
-                Set.of("GET"),
-                EndpointVisibility.PUBLIC,
-                Optional.of("/users/{userId}")
-            );
+                    "/api/v1/users/{userId}", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.of("/users/{userId}"));
             var service = ServiceRegistration.builder("user-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             var result = registry.findRoute("/api/v1/users/123", "GET");
@@ -304,15 +303,14 @@ class ServiceRegistryTest {
         @DisplayName("Should apply path rewrite with multiple variables")
         void shouldApplyPathRewriteWithMultipleVariables() {
             var endpoint = new EndpointConfig(
-                "/api/v2/{org}/users/{userId}",
-                Set.of("GET"),
-                EndpointVisibility.PUBLIC,
-                Optional.of("/orgs/{org}/members/{userId}")
-            );
+                    "/api/v2/{org}/users/{userId}",
+                    Set.of("GET"),
+                    EndpointVisibility.PUBLIC,
+                    Optional.of("/orgs/{org}/members/{userId}"));
             var service = ServiceRegistration.builder("user-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             var result = registry.findRoute("/api/v2/acme/users/456", "GET");
@@ -330,9 +328,9 @@ class ServiceRegistryTest {
         void shouldRemoveRoutesOnUnregister() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                .baseUrl("http://localhost:8080")
-                .endpoints(List.of(endpoint))
-                .build();
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
             registry.register(service);
 
             assertTrue(registry.findRoute("/api/users", "GET").isPresent());
@@ -345,8 +343,8 @@ class ServiceRegistryTest {
 
     private ServiceRegistration createService(String serviceId, String baseUrl) {
         return ServiceRegistration.builder(serviceId)
-            .baseUrl(baseUrl)
-            .endpoints(List.of())
-            .build();
+                .baseUrl(baseUrl)
+                .endpoints(List.of())
+                .build();
     }
 }

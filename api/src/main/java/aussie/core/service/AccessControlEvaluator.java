@@ -4,12 +4,13 @@ import java.net.InetAddress;
 import java.util.List;
 import java.util.Optional;
 
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+
 import aussie.core.model.EndpointConfig;
 import aussie.core.model.EndpointVisibility;
 import aussie.core.model.ServiceAccessConfig;
 import aussie.core.model.SourceIdentifier;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 
 @ApplicationScoped
 public class AccessControlEvaluator {
@@ -22,9 +23,7 @@ public class AccessControlEvaluator {
     }
 
     public boolean isAllowed(
-            SourceIdentifier source,
-            EndpointConfig endpoint,
-            Optional<ServiceAccessConfig> serviceConfig) {
+            SourceIdentifier source, EndpointConfig endpoint, Optional<ServiceAccessConfig> serviceConfig) {
 
         // Public endpoints are always accessible
         if (endpoint.visibility() == EndpointVisibility.PUBLIC) {
@@ -56,14 +55,16 @@ public class AccessControlEvaluator {
         // Check domains
         if (source.host().isPresent()) {
             if (accessConfig.allowedDomains().isPresent()) {
-                if (matchesDomain(source.host().get(), accessConfig.allowedDomains().get())) {
+                if (matchesDomain(
+                        source.host().get(), accessConfig.allowedDomains().get())) {
                     return true;
                 }
             }
 
             // Check subdomains
             if (accessConfig.allowedSubdomains().isPresent()) {
-                if (matchesSubdomain(source.host().get(), accessConfig.allowedSubdomains().get())) {
+                if (matchesSubdomain(
+                        source.host().get(), accessConfig.allowedSubdomains().get())) {
                     return true;
                 }
             }
@@ -90,7 +91,8 @@ public class AccessControlEvaluator {
 
             // Check subdomains
             if (config.allowedSubdomains().isPresent()) {
-                if (matchesSubdomain(source.host().get(), config.allowedSubdomains().get())) {
+                if (matchesSubdomain(
+                        source.host().get(), config.allowedSubdomains().get())) {
                     return true;
                 }
             }

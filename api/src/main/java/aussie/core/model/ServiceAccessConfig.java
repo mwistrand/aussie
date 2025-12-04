@@ -8,10 +8,9 @@ import java.util.Optional;
  * to a subset of the globally configured allowed sources.
  */
 public record ServiceAccessConfig(
-    Optional<List<String>> allowedIps,
-    Optional<List<String>> allowedDomains,
-    Optional<List<String>> allowedSubdomains
-) {
+        Optional<List<String>> allowedIps,
+        Optional<List<String>> allowedDomains,
+        Optional<List<String>> allowedSubdomains) {
     public ServiceAccessConfig {
         if (allowedIps == null) {
             allowedIps = Optional.empty();

@@ -2,9 +2,6 @@ package aussie.adapter.in.rest;
 
 import java.util.List;
 
-import aussie.adapter.in.dto.ServiceRegistrationRequest;
-import aussie.adapter.in.dto.ServiceRegistrationResponse;
-import aussie.core.service.ServiceRegistry;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -16,6 +13,10 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+
+import aussie.adapter.in.dto.ServiceRegistrationRequest;
+import aussie.adapter.in.dto.ServiceRegistrationResponse;
+import aussie.core.service.ServiceRegistry;
 
 @Path("/admin/services")
 @ApplicationScoped
@@ -34,20 +35,20 @@ public class AdminResource {
     public Response registerService(ServiceRegistrationRequest request) {
         if (request == null || request.serviceId() == null || request.baseUrl() == null) {
             return Response.status(Response.Status.BAD_REQUEST)
-                .entity("{\"error\": \"serviceId and baseUrl are required\"}")
-                .build();
+                    .entity("{\"error\": \"serviceId and baseUrl are required\"}")
+                    .build();
         }
 
         try {
             var service = request.toModel();
             serviceRegistry.register(service);
             return Response.status(Response.Status.CREATED)
-                .entity(ServiceRegistrationResponse.fromModel(service))
-                .build();
+                    .entity(ServiceRegistrationResponse.fromModel(service))
+                    .build();
         } catch (IllegalArgumentException e) {
             return Response.status(Response.Status.BAD_REQUEST)
-                .entity("{\"error\": \"" + e.getMessage() + "\"}")
-                .build();
+                    .entity("{\"error\": \"" + e.getMessage() + "\"}")
+                    .build();
         }
     }
 
@@ -57,8 +58,8 @@ public class AdminResource {
         var existing = serviceRegistry.getService(serviceId);
         if (existing.isEmpty()) {
             return Response.status(Response.Status.NOT_FOUND)
-                .entity("{\"error\": \"Service not found: " + serviceId + "\"}")
-                .build();
+                    .entity("{\"error\": \"Service not found: " + serviceId + "\"}")
+                    .build();
         }
 
         serviceRegistry.unregister(serviceId);
@@ -68,17 +69,19 @@ public class AdminResource {
     @GET
     public List<ServiceRegistrationResponse> listServices() {
         return serviceRegistry.getAllServices().stream()
-            .map(ServiceRegistrationResponse::fromModel)
-            .toList();
+                .map(ServiceRegistrationResponse::fromModel)
+                .toList();
     }
 
     @GET
     @Path("/{serviceId}")
     public Response getService(@PathParam("serviceId") String serviceId) {
-        return serviceRegistry.getService(serviceId)
-            .map(service -> Response.ok(ServiceRegistrationResponse.fromModel(service)).build())
-            .orElse(Response.status(Response.Status.NOT_FOUND)
-                .entity("{\"error\": \"Service not found: " + serviceId + "\"}")
-                .build());
+        return serviceRegistry
+                .getService(serviceId)
+                .map(service -> Response.ok(ServiceRegistrationResponse.fromModel(service))
+                        .build())
+                .orElse(Response.status(Response.Status.NOT_FOUND)
+                        .entity("{\"error\": \"Service not found: " + serviceId + "\"}")
+                        .build());
     }
 }

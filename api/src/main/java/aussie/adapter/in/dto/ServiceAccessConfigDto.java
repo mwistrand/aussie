@@ -6,23 +6,18 @@ import java.util.Optional;
 import aussie.core.model.ServiceAccessConfig;
 
 public record ServiceAccessConfigDto(
-    List<String> allowedIps,
-    List<String> allowedDomains,
-    List<String> allowedSubdomains
-) {
+        List<String> allowedIps, List<String> allowedDomains, List<String> allowedSubdomains) {
     public ServiceAccessConfig toModel() {
         return new ServiceAccessConfig(
-            Optional.ofNullable(allowedIps),
-            Optional.ofNullable(allowedDomains),
-            Optional.ofNullable(allowedSubdomains)
-        );
+                Optional.ofNullable(allowedIps),
+                Optional.ofNullable(allowedDomains),
+                Optional.ofNullable(allowedSubdomains));
     }
 
     public static ServiceAccessConfigDto fromModel(ServiceAccessConfig model) {
         return new ServiceAccessConfigDto(
-            model.allowedIps().orElse(null),
-            model.allowedDomains().orElse(null),
-            model.allowedSubdomains().orElse(null)
-        );
+                model.allowedIps().orElse(null),
+                model.allowedDomains().orElse(null),
+                model.allowedSubdomains().orElse(null));
     }
 }

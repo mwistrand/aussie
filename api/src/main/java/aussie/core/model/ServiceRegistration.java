@@ -5,12 +5,11 @@ import java.util.List;
 import java.util.Optional;
 
 public record ServiceRegistration(
-    String serviceId,
-    String displayName,
-    URI baseUrl,
-    List<EndpointConfig> endpoints,
-    Optional<ServiceAccessConfig> accessConfig
-) {
+        String serviceId,
+        String displayName,
+        URI baseUrl,
+        List<EndpointConfig> endpoints,
+        Optional<ServiceAccessConfig> accessConfig) {
     public ServiceRegistration {
         if (serviceId == null || serviceId.isBlank()) {
             throw new IllegalArgumentException("Service ID cannot be null or blank");
@@ -71,12 +70,11 @@ public record ServiceRegistration(
 
         public ServiceRegistration build() {
             return new ServiceRegistration(
-                serviceId,
-                displayName != null ? displayName : serviceId,
-                baseUrl,
-                endpoints,
-                Optional.ofNullable(accessConfig)
-            );
+                    serviceId,
+                    displayName != null ? displayName : serviceId,
+                    baseUrl,
+                    endpoints,
+                    Optional.ofNullable(accessConfig));
         }
     }
 }

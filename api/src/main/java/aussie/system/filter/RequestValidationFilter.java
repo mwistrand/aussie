@@ -6,8 +6,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import aussie.core.model.ValidationResult;
-import aussie.core.service.RequestSizeValidator;
 import jakarta.annotation.Priority;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Priorities;
@@ -15,6 +13,9 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
+
+import aussie.core.model.ValidationResult;
+import aussie.core.service.RequestSizeValidator;
 
 @Provider
 @Priority(Priorities.AUTHENTICATION - 100)
@@ -35,11 +36,9 @@ public class RequestValidationFilter implements ContainerRequestFilter {
         var result = validator.validateRequest(contentLength, headers);
 
         if (result instanceof ValidationResult.Invalid invalid) {
-            requestContext.abortWith(
-                Response.status(invalid.suggestedStatusCode())
+            requestContext.abortWith(Response.status(invalid.suggestedStatusCode())
                     .entity(invalid.reason())
-                    .build()
-            );
+                    .build());
         }
     }
 

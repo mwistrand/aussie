@@ -1,5 +1,7 @@
 package aussie;
 
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
@@ -9,8 +11,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-
-import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 @DisplayName("Hexagonal Architecture Rules")
 class HexagonalArchitectureTest {
@@ -32,8 +32,11 @@ class HexagonalArchitectureTest {
         @DisplayName("Core should not depend on adapter")
         void coreShouldNotDependOnAdapter() {
             ArchRule rule = noClasses()
-                    .that().resideInAPackage("aussie.core..")
-                    .should().dependOnClassesThat().resideInAPackage("aussie.adapter..");
+                    .that()
+                    .resideInAPackage("aussie.core..")
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAPackage("aussie.adapter..");
 
             rule.check(importedClasses);
         }
@@ -42,8 +45,11 @@ class HexagonalArchitectureTest {
         @DisplayName("Core should not depend on system")
         void coreShouldNotDependOnSystem() {
             ArchRule rule = noClasses()
-                    .that().resideInAPackage("aussie.core..")
-                    .should().dependOnClassesThat().resideInAPackage("aussie.system..");
+                    .that()
+                    .resideInAPackage("aussie.core..")
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAPackage("aussie.system..");
 
             rule.check(importedClasses);
         }
@@ -57,8 +63,11 @@ class HexagonalArchitectureTest {
         @DisplayName("Adapter should not depend on system")
         void adapterShouldNotDependOnSystem() {
             ArchRule rule = noClasses()
-                    .that().resideInAPackage("aussie.adapter..")
-                    .should().dependOnClassesThat().resideInAPackage("aussie.system..");
+                    .that()
+                    .resideInAPackage("aussie.adapter..")
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAPackage("aussie.system..");
 
             rule.check(importedClasses);
         }
@@ -87,8 +96,11 @@ class HexagonalArchitectureTest {
             }
 
             ArchRule rule = noClasses()
-                    .that().resideInAPackage("aussie.common..")
-                    .should().dependOnClassesThat().resideInAPackage("aussie.core..");
+                    .that()
+                    .resideInAPackage("aussie.common..")
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAPackage("aussie.core..");
 
             rule.check(importedClasses);
         }
@@ -102,8 +114,11 @@ class HexagonalArchitectureTest {
             }
 
             ArchRule rule = noClasses()
-                    .that().resideInAPackage("aussie.common..")
-                    .should().dependOnClassesThat().resideInAPackage("aussie.adapter..");
+                    .that()
+                    .resideInAPackage("aussie.common..")
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAPackage("aussie.adapter..");
 
             rule.check(importedClasses);
         }
@@ -117,8 +132,11 @@ class HexagonalArchitectureTest {
             }
 
             ArchRule rule = noClasses()
-                    .that().resideInAPackage("aussie.common..")
-                    .should().dependOnClassesThat().resideInAPackage("aussie.system..");
+                    .that()
+                    .resideInAPackage("aussie.common..")
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAPackage("aussie.system..");
 
             rule.check(importedClasses);
         }
@@ -132,8 +150,10 @@ class HexagonalArchitectureTest {
         @DisplayName("Outbound ports should only contain interfaces")
         void outboundPortsShouldBeInterfaces() {
             ArchRule rule = ArchRuleDefinition.classes()
-                    .that().resideInAPackage("aussie.core.port.out..")
-                    .should().beInterfaces();
+                    .that()
+                    .resideInAPackage("aussie.core.port.out..")
+                    .should()
+                    .beInterfaces();
 
             rule.check(importedClasses);
         }
@@ -147,8 +167,11 @@ class HexagonalArchitectureTest {
         @DisplayName("Models should not depend on services")
         void modelsShouldNotDependOnServices() {
             ArchRule rule = noClasses()
-                    .that().resideInAPackage("aussie.core.model..")
-                    .should().dependOnClassesThat().resideInAPackage("aussie.core.service..");
+                    .that()
+                    .resideInAPackage("aussie.core.model..")
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAPackage("aussie.core.service..");
 
             rule.check(importedClasses);
         }
@@ -157,8 +180,11 @@ class HexagonalArchitectureTest {
         @DisplayName("Models should not depend on ports")
         void modelsShouldNotDependOnPorts() {
             ArchRule rule = noClasses()
-                    .that().resideInAPackage("aussie.core.model..")
-                    .should().dependOnClassesThat().resideInAPackage("aussie.core.port..");
+                    .that()
+                    .resideInAPackage("aussie.core.model..")
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAPackage("aussie.core.port..");
 
             rule.check(importedClasses);
         }

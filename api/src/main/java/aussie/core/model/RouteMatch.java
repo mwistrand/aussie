@@ -4,11 +4,7 @@ import java.net.URI;
 import java.util.Map;
 
 public record RouteMatch(
-    ServiceRegistration service,
-    EndpointConfig endpoint,
-    String targetPath,
-    Map<String, String> pathVariables
-) {
+        ServiceRegistration service, EndpointConfig endpoint, String targetPath, Map<String, String> pathVariables) {
     public RouteMatch {
         if (service == null) {
             throw new IllegalArgumentException("Service cannot be null");

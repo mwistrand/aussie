@@ -37,7 +37,8 @@ class AccessControlEvaluatorTest {
         @DisplayName("Should always allow access to public endpoints")
         void shouldAllowPublicEndpoints() {
             var source = SourceIdentifier.of("192.168.1.1");
-            var endpoint = new EndpointConfig("/api/public", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/public", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
 
             assertTrue(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -46,7 +47,8 @@ class AccessControlEvaluatorTest {
         @DisplayName("Should allow public endpoints even without matching IP")
         void shouldAllowPublicEndpointsRegardlessOfIp() {
             var source = SourceIdentifier.of("203.0.113.50"); // External IP
-            var endpoint = new EndpointConfig("/api/public", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/public", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
 
             assertTrue(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -61,7 +63,8 @@ class AccessControlEvaluatorTest {
         void shouldAllowExactIpMatch() {
             config.setAllowedIps(List.of("192.168.1.100"));
             var source = SourceIdentifier.of("192.168.1.100");
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertTrue(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -71,7 +74,8 @@ class AccessControlEvaluatorTest {
         void shouldDenyNonMatchingIp() {
             config.setAllowedIps(List.of("192.168.1.100"));
             var source = SourceIdentifier.of("192.168.1.101");
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertFalse(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -81,7 +85,8 @@ class AccessControlEvaluatorTest {
         void shouldAllowCidrMatch() {
             config.setAllowedIps(List.of("10.0.0.0/8"));
             var source = SourceIdentifier.of("10.1.2.3");
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertTrue(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -91,7 +96,8 @@ class AccessControlEvaluatorTest {
         void shouldDenyIpOutsideCidrRange() {
             config.setAllowedIps(List.of("10.0.0.0/8"));
             var source = SourceIdentifier.of("192.168.1.1");
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertFalse(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -100,7 +106,8 @@ class AccessControlEvaluatorTest {
         @DisplayName("Should handle /24 CIDR notation")
         void shouldHandle24CidrNotation() {
             config.setAllowedIps(List.of("192.168.1.0/24"));
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertTrue(evaluator.isAllowed(SourceIdentifier.of("192.168.1.1"), endpoint, Optional.empty()));
             assertTrue(evaluator.isAllowed(SourceIdentifier.of("192.168.1.254"), endpoint, Optional.empty()));
@@ -111,7 +118,8 @@ class AccessControlEvaluatorTest {
         @DisplayName("Should handle /16 CIDR notation")
         void shouldHandle16CidrNotation() {
             config.setAllowedIps(List.of("172.16.0.0/16"));
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertTrue(evaluator.isAllowed(SourceIdentifier.of("172.16.0.1"), endpoint, Optional.empty()));
             assertTrue(evaluator.isAllowed(SourceIdentifier.of("172.16.255.255"), endpoint, Optional.empty()));
@@ -123,7 +131,8 @@ class AccessControlEvaluatorTest {
         void shouldAllowLocalhost() {
             config.setAllowedIps(List.of("127.0.0.1"));
             var source = SourceIdentifier.of("127.0.0.1");
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertTrue(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -132,7 +141,8 @@ class AccessControlEvaluatorTest {
         @DisplayName("Should support multiple IP patterns")
         void shouldSupportMultipleIpPatterns() {
             config.setAllowedIps(List.of("192.168.1.0/24", "10.0.0.0/8", "172.16.0.1"));
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertTrue(evaluator.isAllowed(SourceIdentifier.of("192.168.1.50"), endpoint, Optional.empty()));
             assertTrue(evaluator.isAllowed(SourceIdentifier.of("10.255.0.1"), endpoint, Optional.empty()));
@@ -150,7 +160,8 @@ class AccessControlEvaluatorTest {
         void shouldAllowExactDomainMatch() {
             config.setAllowedDomains(List.of("internal.example.com"));
             var source = SourceIdentifier.of("192.168.1.1", "internal.example.com");
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertTrue(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -160,7 +171,8 @@ class AccessControlEvaluatorTest {
         void shouldDenyNonMatchingDomain() {
             config.setAllowedDomains(List.of("internal.example.com"));
             var source = SourceIdentifier.of("192.168.1.1", "external.example.com");
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertFalse(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -170,7 +182,8 @@ class AccessControlEvaluatorTest {
         void shouldMatchDomainsCaseInsensitively() {
             config.setAllowedDomains(List.of("Internal.Example.COM"));
             var source = SourceIdentifier.of("192.168.1.1", "internal.example.com");
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertTrue(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -185,7 +198,8 @@ class AccessControlEvaluatorTest {
         void shouldAllowWildcardSubdomainMatch() {
             config.setAllowedSubdomains(List.of("*.internal.example.com"));
             var source = SourceIdentifier.of("192.168.1.1", "api.internal.example.com");
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertTrue(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -195,7 +209,8 @@ class AccessControlEvaluatorTest {
         void shouldAllowNestedSubdomains() {
             config.setAllowedSubdomains(List.of("*.internal.example.com"));
             var source = SourceIdentifier.of("192.168.1.1", "deep.nested.internal.example.com");
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertTrue(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -205,7 +220,8 @@ class AccessControlEvaluatorTest {
         void shouldNotMatchRootDomainWithWildcard() {
             config.setAllowedSubdomains(List.of("*.internal.example.com"));
             var source = SourceIdentifier.of("192.168.1.1", "internal.example.com");
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertFalse(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -215,7 +231,8 @@ class AccessControlEvaluatorTest {
         void shouldMatchSubdomainsCaseInsensitively() {
             config.setAllowedSubdomains(List.of("*.Internal.Example.COM"));
             var source = SourceIdentifier.of("192.168.1.1", "api.internal.example.com");
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertTrue(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -232,27 +249,17 @@ class AccessControlEvaluatorTest {
             config.setAllowedIps(List.of("10.0.0.0/8"));
 
             // Service config only allows 172.16.0.0/12
-            var serviceConfig = new ServiceAccessConfig(
-                Optional.of(List.of("172.16.0.0/12")),
-                Optional.empty(),
-                Optional.empty()
-            );
+            var serviceConfig =
+                    new ServiceAccessConfig(Optional.of(List.of("172.16.0.0/12")), Optional.empty(), Optional.empty());
 
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             // Should deny 10.x.x.x (allowed by global but not by service)
-            assertFalse(evaluator.isAllowed(
-                SourceIdentifier.of("10.0.0.1"),
-                endpoint,
-                Optional.of(serviceConfig)
-            ));
+            assertFalse(evaluator.isAllowed(SourceIdentifier.of("10.0.0.1"), endpoint, Optional.of(serviceConfig)));
 
             // Should allow 172.16.x.x (allowed by service)
-            assertTrue(evaluator.isAllowed(
-                SourceIdentifier.of("172.16.1.1"),
-                endpoint,
-                Optional.of(serviceConfig)
-            ));
+            assertTrue(evaluator.isAllowed(SourceIdentifier.of("172.16.1.1"), endpoint, Optional.of(serviceConfig)));
         }
 
         @Test
@@ -261,19 +268,12 @@ class AccessControlEvaluatorTest {
             config.setAllowedIps(List.of("10.0.0.0/8"));
 
             // Service config with no restrictions
-            var serviceConfig = new ServiceAccessConfig(
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty()
-            );
+            var serviceConfig = new ServiceAccessConfig(Optional.empty(), Optional.empty(), Optional.empty());
 
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
-            assertTrue(evaluator.isAllowed(
-                SourceIdentifier.of("10.0.0.1"),
-                endpoint,
-                Optional.of(serviceConfig)
-            ));
+            assertTrue(evaluator.isAllowed(SourceIdentifier.of("10.0.0.1"), endpoint, Optional.of(serviceConfig)));
         }
     }
 
@@ -286,7 +286,8 @@ class AccessControlEvaluatorTest {
         void shouldDenyWhenNoConfigMatches() {
             // No config set
             var source = SourceIdentifier.of("192.168.1.1");
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             assertFalse(evaluator.isAllowed(source, endpoint, Optional.empty()));
         }
@@ -295,7 +296,8 @@ class AccessControlEvaluatorTest {
         @DisplayName("Should handle invalid CIDR notation gracefully")
         void shouldHandleInvalidCidrGracefully() {
             config.setAllowedIps(List.of("invalid/cidr", "10.0.0.0/8"));
-            var endpoint = new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
+            var endpoint =
+                    new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
 
             // Should still match valid pattern
             assertTrue(evaluator.isAllowed(SourceIdentifier.of("10.0.0.1"), endpoint, Optional.empty()));

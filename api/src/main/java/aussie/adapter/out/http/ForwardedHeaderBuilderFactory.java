@@ -1,8 +1,9 @@
 package aussie.adapter.out.http;
 
-import aussie.core.port.out.ForwardedHeaderBuilder;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+
+import aussie.core.port.out.ForwardedHeaderBuilder;
 
 @ApplicationScoped
 public class ForwardedHeaderBuilderFactory {

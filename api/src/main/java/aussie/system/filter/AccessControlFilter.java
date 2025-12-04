@@ -5,12 +5,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import aussie.core.model.EndpointConfig;
-import aussie.core.model.EndpointVisibility;
-import aussie.core.model.RouteMatch;
-import aussie.core.service.AccessControlEvaluator;
-import aussie.core.service.ServiceRegistry;
-import aussie.core.service.SourceIdentifierExtractor;
 import jakarta.annotation.Priority;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Priorities;
@@ -18,6 +12,13 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
+
+import aussie.core.model.EndpointConfig;
+import aussie.core.model.EndpointVisibility;
+import aussie.core.model.RouteMatch;
+import aussie.core.service.AccessControlEvaluator;
+import aussie.core.service.ServiceRegistry;
+import aussie.core.service.SourceIdentifierExtractor;
 
 @Provider
 @Priority(Priorities.AUTHORIZATION)
@@ -103,9 +104,7 @@ public class AccessControlFilter implements ContainerRequestFilter {
 
         // For pass-through, create a synthetic route match
         // Use service's default visibility (PUBLIC if no specific access config)
-        var visibility = service.accessConfig().isPresent()
-            ? EndpointVisibility.PRIVATE
-            : EndpointVisibility.PUBLIC;
+        var visibility = service.accessConfig().isPresent() ? EndpointVisibility.PRIVATE : EndpointVisibility.PUBLIC;
 
         var syntheticEndpoint = new EndpointConfig("/**", Set.of("*"), visibility, Optional.empty());
         var syntheticRoute = new RouteMatch(service, syntheticEndpoint, remainingPath, Map.of());
@@ -116,17 +115,12 @@ public class AccessControlFilter implements ContainerRequestFilter {
     private void checkAccessControl(ContainerRequestContext requestContext, RouteMatch route) {
         var source = sourceExtractor.extract(requestContext);
         var isAllowed = accessEvaluator.isAllowed(
-            source,
-            route.endpoint(),
-            route.service().accessConfig()
-        );
+                source, route.endpoint(), route.service().accessConfig());
 
         if (!isAllowed) {
-            requestContext.abortWith(
-                Response.status(Response.Status.FORBIDDEN)
+            requestContext.abortWith(Response.status(Response.Status.FORBIDDEN)
                     .entity("Access denied: source not authorized for private endpoint")
-                    .build()
-            );
+                    .build());
         }
     }
 }

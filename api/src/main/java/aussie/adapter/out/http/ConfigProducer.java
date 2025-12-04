@@ -1,10 +1,11 @@
 package aussie.adapter.out.http;
 
-import aussie.core.service.AccessControlConfig;
-import aussie.core.service.LimitsConfig;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
+
+import aussie.core.service.AccessControlConfig;
+import aussie.core.service.LimitsConfig;
 
 /**
  * Produces configuration beans for injection into core services.
