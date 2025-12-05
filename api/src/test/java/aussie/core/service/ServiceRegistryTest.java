@@ -2,9 +2,11 @@ package aussie.core.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -14,18 +16,28 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import aussie.adapter.out.storage.NoOpConfigurationCache;
+import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
 import aussie.core.model.EndpointConfig;
 import aussie.core.model.EndpointVisibility;
+import aussie.core.model.GatewaySecurityConfig;
+import aussie.core.model.RegistrationResult;
 import aussie.core.model.ServiceRegistration;
 
 @DisplayName("ServiceRegistry")
 class ServiceRegistryTest {
 
+    private static final Duration TIMEOUT = Duration.ofSeconds(5);
     private ServiceRegistry registry;
+
+    // Permissive security config for testing
+    private static final GatewaySecurityConfig PERMISSIVE_CONFIG = () -> true;
 
     @BeforeEach
     void setUp() {
-        registry = new ServiceRegistry();
+        var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG);
+        registry = new ServiceRegistry(
+                new InMemoryServiceRegistrationRepository(), NoOpConfigurationCache.INSTANCE, validator);
     }
 
     @Nested
@@ -36,11 +48,12 @@ class ServiceRegistryTest {
         @DisplayName("Should register a service")
         void shouldRegisterService() {
             var service = createService("test-service", "http://localhost:8080");
-            registry.register(service);
+            var result = registry.register(service).await().atMost(TIMEOUT);
 
-            var result = registry.getService("test-service");
-            assertTrue(result.isPresent());
-            assertEquals("test-service", result.get().serviceId());
+            assertInstanceOf(RegistrationResult.Success.class, result);
+            var retrieved = registry.getService("test-service").await().atMost(TIMEOUT);
+            assertTrue(retrieved.isPresent());
+            assertEquals("test-service", retrieved.get().serviceId());
         }
 
         @Test
@@ -49,10 +62,10 @@ class ServiceRegistryTest {
             var service1 = createService("test-service", "http://localhost:8080");
             var service2 = createService("test-service", "http://localhost:9090");
 
-            registry.register(service1);
-            registry.register(service2);
+            registry.register(service1).await().atMost(TIMEOUT);
+            registry.register(service2).await().atMost(TIMEOUT);
 
-            var result = registry.getService("test-service");
+            var result = registry.getService("test-service").await().atMost(TIMEOUT);
             assertTrue(result.isPresent());
             assertEquals(URI.create("http://localhost:9090"), result.get().baseUrl());
         }
@@ -61,36 +74,43 @@ class ServiceRegistryTest {
         @DisplayName("Should unregister a service")
         void shouldUnregisterService() {
             var service = createService("test-service", "http://localhost:8080");
-            registry.register(service);
-            registry.unregister("test-service");
+            registry.register(service).await().atMost(TIMEOUT);
+            registry.unregister("test-service").await().atMost(TIMEOUT);
 
-            var result = registry.getService("test-service");
+            var result = registry.getService("test-service").await().atMost(TIMEOUT);
             assertFalse(result.isPresent());
         }
 
         @Test
         @DisplayName("Should handle unregistering non-existent service")
         void shouldHandleUnregisteringNonExistent() {
-            registry.unregister("non-existent");
+            registry.unregister("non-existent").await().atMost(TIMEOUT);
             // Should not throw
-            assertFalse(registry.getService("non-existent").isPresent());
+            assertFalse(
+                    registry.getService("non-existent").await().atMost(TIMEOUT).isPresent());
         }
 
         @Test
         @DisplayName("Should list all registered services")
         void shouldListAllServices() {
-            registry.register(createService("service-1", "http://localhost:8081"));
-            registry.register(createService("service-2", "http://localhost:8082"));
-            registry.register(createService("service-3", "http://localhost:8083"));
+            registry.register(createService("service-1", "http://localhost:8081"))
+                    .await()
+                    .atMost(TIMEOUT);
+            registry.register(createService("service-2", "http://localhost:8082"))
+                    .await()
+                    .atMost(TIMEOUT);
+            registry.register(createService("service-3", "http://localhost:8083"))
+                    .await()
+                    .atMost(TIMEOUT);
 
-            var services = registry.getAllServices();
+            var services = registry.getAllServices().await().atMost(TIMEOUT);
             assertEquals(3, services.size());
         }
 
         @Test
         @DisplayName("Should return empty list when no services registered")
         void shouldReturnEmptyListWhenNoServices() {
-            var services = registry.getAllServices();
+            var services = registry.getAllServices().await().atMost(TIMEOUT);
             assertTrue(services.isEmpty());
         }
     }
@@ -107,7 +127,7 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             var result = registry.findRoute("/api/users", "GET");
             assertTrue(result.isPresent());
@@ -123,7 +143,7 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             var result = registry.findRoute("/api/users/123", "GET");
             assertTrue(result.isPresent());
@@ -139,7 +159,7 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             var result = registry.findRoute("/api/users/123/posts/456", "GET");
             assertTrue(result.isPresent());
@@ -155,7 +175,7 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             assertTrue(registry.findRoute("/api/users", "GET").isPresent());
             assertTrue(registry.findRoute("/api/users/123/posts", "GET").isPresent());
@@ -171,7 +191,7 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             assertTrue(registry.findRoute("/api/users/info", "GET").isPresent());
             assertTrue(registry.findRoute("/api/products/info", "GET").isPresent());
@@ -186,7 +206,7 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             var result = registry.findRoute("/api/users", "POST");
             assertFalse(result.isPresent());
@@ -200,7 +220,7 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             assertTrue(registry.findRoute("/api/data", "GET").isPresent());
             assertTrue(registry.findRoute("/api/data", "POST").isPresent());
@@ -215,7 +235,7 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             assertTrue(registry.findRoute("/api/users", "get").isPresent());
             assertTrue(registry.findRoute("/api/users", "Get").isPresent());
@@ -230,7 +250,7 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             var result = registry.findRoute("/api/products", "GET");
             assertFalse(result.isPresent());
@@ -244,7 +264,7 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             var result = registry.findRoute("api/users", "GET");
             assertTrue(result.isPresent());
@@ -258,7 +278,7 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             var result = registry.findRoute(null, "GET");
             assertTrue(result.isPresent());
@@ -272,7 +292,7 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             var result = registry.findRoute("", "GET");
             assertTrue(result.isPresent());
@@ -292,7 +312,7 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             var result = registry.findRoute("/api/v1/users/123", "GET");
             assertTrue(result.isPresent());
@@ -311,7 +331,7 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             var result = registry.findRoute("/api/v2/acme/users/456", "GET");
             assertTrue(result.isPresent());
@@ -331,11 +351,11 @@ class ServiceRegistryTest {
                     .baseUrl("http://localhost:8080")
                     .endpoints(List.of(endpoint))
                     .build();
-            registry.register(service);
+            registry.register(service).await().atMost(TIMEOUT);
 
             assertTrue(registry.findRoute("/api/users", "GET").isPresent());
 
-            registry.unregister("user-service");
+            registry.unregister("user-service").await().atMost(TIMEOUT);
 
             assertFalse(registry.findRoute("/api/users", "GET").isPresent());
         }

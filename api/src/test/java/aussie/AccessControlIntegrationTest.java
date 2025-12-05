@@ -53,7 +53,12 @@ class AccessControlIntegrationTest {
         if (backendServer != null) {
             backendServer.stop();
         }
-        serviceRegistry.getAllServices().forEach(s -> serviceRegistry.unregister(s.serviceId()));
+        serviceRegistry
+                .getAllServices()
+                .await()
+                .atMost(java.time.Duration.ofSeconds(5))
+                .forEach(
+                        s -> serviceRegistry.unregister(s.serviceId()).await().atMost(java.time.Duration.ofSeconds(5)));
     }
 
     @Nested
@@ -169,7 +174,7 @@ class AccessControlIntegrationTest {
                     .endpoints(List.of(endpoint))
                     .accessConfig(accessConfig)
                     .build();
-            serviceRegistry.register(service);
+            serviceRegistry.register(service).await().atMost(java.time.Duration.ofSeconds(5));
 
             // Should allow 172.16.x.x (in the service's allowed range)
             given().header("X-Forwarded-For", "172.16.1.1")
@@ -204,7 +209,7 @@ class AccessControlIntegrationTest {
                     .baseUrl("http://localhost:" + backendServer.port())
                     .endpoints(List.of(publicEndpoint, privateEndpoint))
                     .build();
-            serviceRegistry.register(service);
+            serviceRegistry.register(service).await().atMost(java.time.Duration.ofSeconds(5));
 
             // Public endpoint should be accessible
             given().header("X-Forwarded-For", "203.0.113.50")
@@ -228,6 +233,6 @@ class AccessControlIntegrationTest {
                 .baseUrl("http://localhost:" + backendServer.port())
                 .endpoints(List.of(endpoints))
                 .build();
-        serviceRegistry.register(service);
+        serviceRegistry.register(service).await().atMost(java.time.Duration.ofSeconds(5));
     }
 }

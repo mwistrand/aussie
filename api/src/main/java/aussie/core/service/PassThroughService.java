@@ -52,21 +52,22 @@ public class PassThroughService implements PassThroughUseCase {
             return Uni.createFrom().item(new GatewayResult.ReservedPath(serviceId));
         }
 
-        var serviceOpt = serviceRegistry.getService(serviceId);
-        if (serviceOpt.isEmpty()) {
-            return Uni.createFrom().item(new GatewayResult.ServiceNotFound(serviceId));
-        }
+        return serviceRegistry.getService(serviceId).flatMap(serviceOpt -> {
+            if (serviceOpt.isEmpty()) {
+                return Uni.createFrom().item(new GatewayResult.ServiceNotFound(serviceId));
+            }
 
-        var service = serviceOpt.get();
-        var visibility = visibilityResolver.resolve(request.path(), request.method(), service);
-        var routeMatch = createPassThroughRouteMatch(service, request.path(), visibility);
-        var preparedRequest = requestPreparer.prepare(request, routeMatch);
+            var service = serviceOpt.get();
+            var visibility = visibilityResolver.resolve(request.path(), request.method(), service);
+            var routeMatch = createPassThroughRouteMatch(service, request.path(), visibility);
+            var preparedRequest = requestPreparer.prepare(request, routeMatch);
 
-        return proxyClient
-                .forward(preparedRequest)
-                .map(response -> (GatewayResult) GatewayResult.Success.from(response))
-                .onFailure()
-                .recoverWithItem(error -> new GatewayResult.Error(error.getMessage()));
+            return proxyClient
+                    .forward(preparedRequest)
+                    .map(response -> (GatewayResult) GatewayResult.Success.from(response))
+                    .onFailure()
+                    .recoverWithItem(error -> new GatewayResult.Error(error.getMessage()));
+        });
     }
 
     private RouteMatch createPassThroughRouteMatch(

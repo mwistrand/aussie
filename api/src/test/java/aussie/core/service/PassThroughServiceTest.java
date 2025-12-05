@@ -16,8 +16,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import aussie.adapter.out.storage.NoOpConfigurationCache;
+import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
 import aussie.core.model.GatewayRequest;
 import aussie.core.model.GatewayResult;
+import aussie.core.model.GatewaySecurityConfig;
 import aussie.core.model.PreparedProxyRequest;
 import aussie.core.model.ProxyResponse;
 import aussie.core.model.ServiceRegistration;
@@ -26,15 +29,21 @@ import aussie.core.port.out.ProxyClient;
 @DisplayName("PassThroughService")
 class PassThroughServiceTest {
 
+    private static final java.time.Duration TIMEOUT = java.time.Duration.ofSeconds(5);
     private ServiceRegistry serviceRegistry;
     private ProxyRequestPreparer requestPreparer;
     private TestProxyClient proxyClient;
     private VisibilityResolver visibilityResolver;
     private PassThroughService passThroughService;
 
+    // Permissive security config for testing
+    private static final GatewaySecurityConfig PERMISSIVE_CONFIG = () -> true;
+
     @BeforeEach
     void setUp() {
-        serviceRegistry = new ServiceRegistry();
+        var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG);
+        serviceRegistry = new ServiceRegistry(
+                new InMemoryServiceRegistrationRepository(), NoOpConfigurationCache.INSTANCE, validator);
         requestPreparer = new ProxyRequestPreparer(() -> (req, uri) -> Map.of());
         proxyClient = new TestProxyClient();
         visibilityResolver = new VisibilityResolver(new GlobPatternMatcher());
@@ -47,7 +56,7 @@ class PassThroughServiceTest {
 
     private void registerService(String serviceId, String baseUrl) {
         var service = ServiceRegistration.builder(serviceId).baseUrl(baseUrl).build();
-        serviceRegistry.register(service);
+        serviceRegistry.register(service).await().atMost(TIMEOUT);
     }
 
     @Nested

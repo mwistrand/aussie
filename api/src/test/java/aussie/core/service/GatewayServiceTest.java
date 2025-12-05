@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -16,10 +17,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import aussie.adapter.out.storage.NoOpConfigurationCache;
+import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
 import aussie.core.model.EndpointConfig;
 import aussie.core.model.EndpointVisibility;
 import aussie.core.model.GatewayRequest;
 import aussie.core.model.GatewayResult;
+import aussie.core.model.GatewaySecurityConfig;
 import aussie.core.model.PreparedProxyRequest;
 import aussie.core.model.ProxyResponse;
 import aussie.core.model.ServiceRegistration;
@@ -28,14 +32,20 @@ import aussie.core.port.out.ProxyClient;
 @DisplayName("GatewayService")
 class GatewayServiceTest {
 
+    private static final Duration TIMEOUT = Duration.ofSeconds(5);
     private ServiceRegistry serviceRegistry;
     private ProxyRequestPreparer requestPreparer;
     private TestProxyClient proxyClient;
     private GatewayService gatewayService;
 
+    // Permissive security config for testing
+    private static final GatewaySecurityConfig PERMISSIVE_CONFIG = () -> true;
+
     @BeforeEach
     void setUp() {
-        serviceRegistry = new ServiceRegistry();
+        var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG);
+        serviceRegistry = new ServiceRegistry(
+                new InMemoryServiceRegistrationRepository(), NoOpConfigurationCache.INSTANCE, validator);
         requestPreparer = new ProxyRequestPreparer(() -> (req, uri) -> Map.of());
         proxyClient = new TestProxyClient();
         gatewayService = new GatewayService(serviceRegistry, requestPreparer, proxyClient);
@@ -51,7 +61,7 @@ class GatewayServiceTest {
                 .baseUrl(baseUrl)
                 .endpoints(List.of(endpoint))
                 .build();
-        serviceRegistry.register(service);
+        serviceRegistry.register(service).await().atMost(TIMEOUT);
     }
 
     @Nested
@@ -150,7 +160,7 @@ class GatewayServiceTest {
                     .baseUrl("http://backend:9090")
                     .endpoints(List.of(endpoint))
                     .build();
-            serviceRegistry.register(service);
+            serviceRegistry.register(service).await().atMost(TIMEOUT);
             proxyClient.setResponse(new ProxyResponse(200, Map.of(), new byte[0]));
 
             var getResult = gatewayService
@@ -185,7 +195,7 @@ class GatewayServiceTest {
                     .baseUrl("http://backend:9090")
                     .endpoints(List.of(endpoint))
                     .build();
-            serviceRegistry.register(service);
+            serviceRegistry.register(service).await().atMost(TIMEOUT);
             proxyClient.setResponse(new ProxyResponse(200, Map.of(), new byte[0]));
 
             var request = createRequest("GET", "/api/users/123");
@@ -204,7 +214,7 @@ class GatewayServiceTest {
                     .baseUrl("http://backend:9090")
                     .endpoints(List.of(endpoint))
                     .build();
-            serviceRegistry.register(service);
+            serviceRegistry.register(service).await().atMost(TIMEOUT);
             proxyClient.setResponse(new ProxyResponse(200, Map.of(), new byte[0]));
 
             var request = createRequest("GET", "/api/users/123/orders/456");

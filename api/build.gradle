@@ -16,6 +16,17 @@ dependencies {
     implementation 'io.quarkus:quarkus-rest-jackson'
     implementation 'io.quarkus:quarkus-vertx'
     implementation 'io.smallrye.reactive:smallrye-mutiny-vertx-web-client'
+
+    // Cassandra driver (standalone)
+    implementation 'org.apache.cassandra:java-driver-core:4.18.1'
+    implementation 'org.apache.cassandra:java-driver-query-builder:4.18.1'
+
+    // Redis support (Quarkus extension)
+    implementation 'io.quarkus:quarkus-redis-client'
+
+    // Health checks
+    implementation 'io.quarkus:quarkus-smallrye-health'
+
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.rest-assured:rest-assured'
     testImplementation 'org.wiremock:wiremock:3.3.1'

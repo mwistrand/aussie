@@ -15,12 +15,19 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import io.smallrye.mutiny.Uni;
+
 import aussie.adapter.in.dto.ServiceRegistrationRequest;
 import aussie.adapter.in.dto.ServiceRegistrationResponse;
-import aussie.core.model.ValidationResult;
-import aussie.core.service.ServiceRegistrationValidator;
+import aussie.core.model.RegistrationResult;
 import aussie.core.service.ServiceRegistry;
 
+/**
+ * REST resource for service administration.
+ *
+ * <p>This adapter handles HTTP-specific concerns (request/response mapping, status codes)
+ * and delegates all business logic and validation to the service layer.
+ */
 @Path("/admin/services")
 @ApplicationScoped
 @Produces(MediaType.APPLICATION_JSON)
@@ -28,74 +35,73 @@ import aussie.core.service.ServiceRegistry;
 public class AdminResource {
 
     private final ServiceRegistry serviceRegistry;
-    private final ServiceRegistrationValidator registrationValidator;
 
     @Inject
-    public AdminResource(ServiceRegistry serviceRegistry, ServiceRegistrationValidator registrationValidator) {
+    public AdminResource(ServiceRegistry serviceRegistry) {
         this.serviceRegistry = serviceRegistry;
-        this.registrationValidator = registrationValidator;
     }
 
     @POST
-    public Response registerService(ServiceRegistrationRequest request) {
+    public Uni<Response> registerService(ServiceRegistrationRequest request) {
+        // Minimal adapter-level validation to prevent NPE during DTO conversion
         if (request == null || request.serviceId() == null || request.baseUrl() == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", "serviceId and baseUrl are required"))
-                    .build();
+            return Uni.createFrom()
+                    .item(Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "serviceId and baseUrl are required"))
+                            .build());
         }
 
         try {
             var service = request.toModel();
 
-            // Validate against gateway policies
-            var validationResult = registrationValidator.validate(service);
-            if (validationResult instanceof ValidationResult.Invalid invalid) {
-                return Response.status(invalid.suggestedStatusCode())
-                        .entity(Map.of("error", invalid.reason()))
+            // Delegate to service for business validation and persistence
+            return serviceRegistry.register(service).map(result -> switch (result) {
+                case RegistrationResult.Success s -> Response.status(Response.Status.CREATED)
+                        .entity(ServiceRegistrationResponse.fromModel(s.registration()))
                         .build();
-            }
-
-            serviceRegistry.register(service);
-            return Response.status(Response.Status.CREATED)
-                    .entity(ServiceRegistrationResponse.fromModel(service))
-                    .build();
+                case RegistrationResult.Failure f -> Response.status(f.statusCode())
+                        .entity(Map.of("error", f.reason()))
+                        .build();
+            });
         } catch (IllegalArgumentException e) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", e.getMessage()))
-                    .build();
+            return Uni.createFrom()
+                    .item(Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", e.getMessage()))
+                            .build());
         }
     }
 
     @DELETE
     @Path("/{serviceId}")
-    public Response unregisterService(@PathParam("serviceId") String serviceId) {
-        var existing = serviceRegistry.getService(serviceId);
-        if (existing.isEmpty()) {
-            return Response.status(Response.Status.NOT_FOUND)
-                    .entity(Map.of("error", "Service not found: " + serviceId))
-                    .build();
-        }
+    public Uni<Response> unregisterService(@PathParam("serviceId") String serviceId) {
+        return serviceRegistry.getService(serviceId).flatMap(existing -> {
+            if (existing.isEmpty()) {
+                return Uni.createFrom()
+                        .item(Response.status(Response.Status.NOT_FOUND)
+                                .entity(Map.of("error", "Service not found: " + serviceId))
+                                .build());
+            }
 
-        serviceRegistry.unregister(serviceId);
-        return Response.noContent().build();
+            return serviceRegistry.unregister(serviceId).map(deleted -> Response.noContent()
+                    .build());
+        });
     }
 
     @GET
-    public List<ServiceRegistrationResponse> listServices() {
-        return serviceRegistry.getAllServices().stream()
+    public Uni<List<ServiceRegistrationResponse>> listServices() {
+        return serviceRegistry.getAllServices().map(services -> services.stream()
                 .map(ServiceRegistrationResponse::fromModel)
-                .toList();
+                .toList());
     }
 
     @GET
     @Path("/{serviceId}")
-    public Response getService(@PathParam("serviceId") String serviceId) {
-        return serviceRegistry
-                .getService(serviceId)
+    public Uni<Response> getService(@PathParam("serviceId") String serviceId) {
+        return serviceRegistry.getService(serviceId).map(serviceOpt -> serviceOpt
                 .map(service -> Response.ok(ServiceRegistrationResponse.fromModel(service))
                         .build())
                 .orElse(Response.status(Response.Status.NOT_FOUND)
                         .entity(Map.of("error", "Service not found: " + serviceId))
-                        .build());
+                        .build()));
     }
 }

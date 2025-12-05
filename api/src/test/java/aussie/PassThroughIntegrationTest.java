@@ -58,7 +58,12 @@ class PassThroughIntegrationTest {
         if (backendServer != null) {
             backendServer.stop();
         }
-        serviceRegistry.getAllServices().forEach(s -> serviceRegistry.unregister(s.serviceId()));
+        serviceRegistry
+                .getAllServices()
+                .await()
+                .atMost(java.time.Duration.ofSeconds(5))
+                .forEach(
+                        s -> serviceRegistry.unregister(s.serviceId()).await().atMost(java.time.Duration.ofSeconds(5)));
     }
 
     @Nested
@@ -278,7 +283,7 @@ class PassThroughIntegrationTest {
                     .defaultVisibility(EndpointVisibility.PUBLIC)
                     .endpoints(List.of())
                     .build();
-            serviceRegistry.register(service);
+            serviceRegistry.register(service).await().atMost(java.time.Duration.ofSeconds(5));
 
             given().when()
                     .get("/unreachable-service/api/health")
@@ -323,7 +328,7 @@ class PassThroughIntegrationTest {
                     .endpoints(List.of())
                     .accessConfig(accessConfig)
                     .build();
-            serviceRegistry.register(service);
+            serviceRegistry.register(service).await().atMost(java.time.Duration.ofSeconds(5));
 
             given().header("X-Forwarded-For", "203.0.113.50")
                     .when()
@@ -348,7 +353,7 @@ class PassThroughIntegrationTest {
                     .endpoints(List.of())
                     .accessConfig(accessConfig)
                     .build();
-            serviceRegistry.register(service);
+            serviceRegistry.register(service).await().atMost(java.time.Duration.ofSeconds(5));
 
             given().header("X-Forwarded-For", "172.16.1.1")
                     .when()
@@ -386,7 +391,7 @@ class PassThroughIntegrationTest {
                     .defaultVisibility(EndpointVisibility.PUBLIC)
                     .endpoints(List.of(endpoint))
                     .build();
-            serviceRegistry.register(service);
+            serviceRegistry.register(service).await().atMost(java.time.Duration.ofSeconds(5));
 
             given().when()
                     .get("/mixed-service/api/health")
@@ -411,6 +416,6 @@ class PassThroughIntegrationTest {
                 .defaultVisibility(EndpointVisibility.PUBLIC)
                 .endpoints(List.of())
                 .build();
-        serviceRegistry.register(service);
+        serviceRegistry.register(service).await().atMost(java.time.Duration.ofSeconds(5));
     }
 }

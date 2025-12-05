@@ -24,7 +24,12 @@ class AdminResourceTest {
 
     @AfterEach
     void tearDown() {
-        serviceRegistry.getAllServices().forEach(s -> serviceRegistry.unregister(s.serviceId()));
+        serviceRegistry
+                .getAllServices()
+                .await()
+                .atMost(java.time.Duration.ofSeconds(5))
+                .forEach(
+                        s -> serviceRegistry.unregister(s.serviceId()).await().atMost(java.time.Duration.ofSeconds(5)));
     }
 
     @Nested

@@ -1,7 +1,7 @@
 {
   "serviceId": "demo-service",
   "displayName": "Demo Service",
-  "baseUrl": "http://localhost:3000",
+  "baseUrl": "http://demo:3000",
   "defaultVisibility": "PRIVATE",
   "visibilityRules": [
     {

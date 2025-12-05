@@ -52,7 +52,12 @@ class GatewayIntegrationTest {
             backendServer.stop();
         }
         // Clear all registered services
-        serviceRegistry.getAllServices().forEach(s -> serviceRegistry.unregister(s.serviceId()));
+        serviceRegistry
+                .getAllServices()
+                .await()
+                .atMost(java.time.Duration.ofSeconds(5))
+                .forEach(
+                        s -> serviceRegistry.unregister(s.serviceId()).await().atMost(java.time.Duration.ofSeconds(5)));
     }
 
     @Nested
@@ -233,6 +238,6 @@ class GatewayIntegrationTest {
                 .baseUrl("http://localhost:" + backendServer.port())
                 .endpoints(List.of(endpoint))
                 .build();
-        serviceRegistry.register(service);
+        serviceRegistry.register(service).await().atMost(java.time.Duration.ofSeconds(5));
     }
 }

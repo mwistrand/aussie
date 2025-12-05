@@ -24,6 +24,9 @@ public class ServiceRegistrationValidator {
     /**
      * Validates a service registration against gateway security policies.
      *
+     * <p>Note: Basic field validation (null checks, format validation) is handled by
+     * the domain model constructors. This validator only checks policy-level constraints.
+     *
      * @param registration the service registration to validate
      * @return ValidationResult.valid() if valid, or ValidationResult.Invalid with reason if not
      */
@@ -37,12 +40,8 @@ public class ServiceRegistrationValidator {
                     403);
         }
 
-        // Validate visibility rules patterns
-        for (var rule : registration.visibilityRules()) {
-            if (rule.pattern() == null || rule.pattern().isBlank()) {
-                return ValidationResult.invalid("Visibility rule pattern cannot be empty", 400);
-            }
-        }
+        // Note: VisibilityRule self-validates in constructor (pattern cannot be null/blank)
+        // Future policy checks can be added here
 
         return ValidationResult.valid();
     }

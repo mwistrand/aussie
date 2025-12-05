@@ -45,13 +45,19 @@ Aussie provides both a CLI and REST API for registering your services. Once regi
 2. Register the service:
 
 ```bash
-aussie register -f my-service.json
+# Start the gateway in dev mode
+cd api
+./gradlew quarkusDev
+
+# Register the service via CLI
+cd ../cli
+./aussie register -f ../my-service.json
 ```
 
 To use a different Aussie server:
 
 ```bash
-aussie register -f my-service.json -s http://aussie.example.com:8080
+./aussie register -f ../my-service.json -s http://aussie.example.com:8080
 ```
 
 #### Using the REST API
@@ -233,98 +239,224 @@ cd api
 ./gradlew build -Dquarkus.native.enabled=true
 ```
 
-## CLI
+---
 
-A Go-based command-line interface for interacting with the Aussie API gateway.
+# Aussie API Details
 
-### Building
+Aussie is a lightweight API gateway for microservices. It provides two routing strategies to fit different architectural needs.
 
-```shell
-cd cli
-go build -o aussie .
-```
+## Quick Start
 
-### Commands
-
-```shell
-# Show help
-./aussie --help
-
-# Show version
-./aussie version
+```bash
+# Start the gateway in dev mode
+cd api
+./gradlew quarkusDev
 
 # Register a service
-./aussie register -f service.json
-
-# Register with a specific server
-./aussie register -f service.json -s http://aussie.example.com:8080
-
-# Validate a service configuration file
-./aussie service validate -f service.json
-
-# Preview visibility settings for a registered service
-./aussie service preview my-service
+curl -X POST http://localhost:8080/admin/services \
+  -H "Content-Type: application/json" \
+  -d '{
+    "serviceId": "user-service",
+    "baseUrl": "http://localhost:3001",
+    "endpoints": [
+      {"path": "/api/users", "methods": ["GET", "POST"], "visibility": "PUBLIC"},
+      {"path": "/api/users/{id}", "methods": ["GET", "PUT", "DELETE"], "visibility": "PUBLIC"}
+    ]
+  }'
 ```
 
-#### Service Validation
+## Routing Strategies
 
-Validate your service configuration before registering:
+Aussie provides two ways to route traffic to your services:
 
-```shell
-./aussie service validate -f my-service.json
+### 1. Pass-Through Routing (`/{serviceId}/{path}`)
+
+Routes requests directly to a service by its ID. The service ID is part of the URL.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Client Request                                                 │
+│  GET /user-service/api/users/123                               │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Aussie Gateway                                                 │
+│  1. Extract serviceId: "user-service"                          │
+│  2. Look up service by ID                                       │
+│  3. Forward: GET http://user-service-host/api/users/123        │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-This checks:
-- Required fields (`serviceId`, `displayName`, `baseUrl`)
-- Valid URL format for `baseUrl`
-- Valid service ID (alphanumeric, hyphens, underscores only)
-- Valid visibility values (`PUBLIC` or `PRIVATE`)
-- Valid HTTP methods in visibility rules
-- Route prefix starts with `/`
-- Pattern paths start with `/`
+**When to use:**
+- Service discovery pattern where clients know which service to call
+- Simple setups where each service has its own namespace
+- Microservices that need direct, unambiguous routing
 
-#### Service Preview
+**Example:**
+```bash
+# Register the service
+curl -X POST http://localhost:8080/admin/services \
+  -H "Content-Type: application/json" \
+  -d '{"serviceId": "user-service", "baseUrl": "http://localhost:3001"}'
 
-View the visibility configuration for a registered service:
-
-```shell
-./aussie service preview user-service
+# Access via pass-through (serviceId in URL)
+curl http://localhost:8080/user-service/api/users
+curl http://localhost:8080/user-service/api/users/123
+curl -X POST http://localhost:8080/user-service/api/users -d '{"name": "Alice"}'
 ```
 
-This displays:
-- Service information (ID, base URL, route prefix)
-- Default visibility setting
-- Visibility rules with patterns and methods
-- Access control configuration (allowed IPs, domains, subdomains)
-- Summary of public vs private endpoints
+**Characteristics:**
+- No endpoint registration required (just the service)
+- All paths are forwarded to the service
+- Visibility rules applied per service configuration
+- Service ID is visible in the URL
 
-### Configuration
+---
 
-The CLI loads configuration from (in order of precedence):
+### 2. Gateway Routing (`/gateway/{path}`)
 
-1. Command-line flags (`-s` / `--server`)
-2. Local `.aussierc` file (in current directory)
-3. Global `~/.aussie` config file
+Routes requests based on registered endpoint patterns. Multiple services can share a single URL namespace.
 
-Create a config file to avoid specifying the server each time:
-
-```toml
-# .aussierc (project-local) or ~/.aussie (global)
-host = "http://localhost:8080"
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Client Request                                                 │
+│  GET /gateway/api/users/123                                    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Aussie Gateway                                                 │
+│  1. Match path "/api/users/123" against registered endpoints   │
+│  2. Find matching route: /api/users/{id} → user-service        │
+│  3. Forward: GET http://user-service-host/api/users/123        │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-This works on all platforms (Linux, macOS, Windows).
+**When to use:**
+- API gateway pattern where clients don't know about backend services
+- Multiple services need to share a unified API namespace
+- You need path rewriting (e.g., `/v2/users` → `/users`)
+- Fine-grained routing control per endpoint
 
-## Demo
+**Example:**
+```bash
+# Register services with explicit endpoints
+curl -X POST http://localhost:8080/admin/services \
+  -H "Content-Type: application/json" \
+  -d '{
+    "serviceId": "user-service",
+    "baseUrl": "http://localhost:3001",
+    "endpoints": [
+      {"path": "/api/users", "methods": ["GET", "POST"], "visibility": "PUBLIC"},
+      {"path": "/api/users/{id}", "methods": ["GET", "PUT", "DELETE"], "visibility": "PUBLIC"}
+    ]
+  }'
 
-A Next.js application for testing and demonstrating the Aussie API gateway capabilities.
+curl -X POST http://localhost:8080/admin/services \
+  -H "Content-Type: application/json" \
+  -d '{
+    "serviceId": "order-service",
+    "baseUrl": "http://localhost:3002",
+    "endpoints": [
+      {"path": "/api/orders", "methods": ["GET", "POST"], "visibility": "PUBLIC"},
+      {"path": "/api/orders/{id}", "methods": ["GET"], "visibility": "PUBLIC"}
+    ]
+  }'
 
-### Running
-
-```shell
-cd demo
-npm install
-npm run dev
+# Access via gateway (unified namespace, no serviceId in URL)
+curl http://localhost:8080/gateway/api/users        # → user-service
+curl http://localhost:8080/gateway/api/users/123    # → user-service
+curl http://localhost:8080/gateway/api/orders       # → order-service
+curl http://localhost:8080/gateway/api/orders/456   # → order-service
 ```
 
-The demo app will be available at http://localhost:3000
+**Characteristics:**
+- Requires explicit endpoint registration
+- Supports path variables (`{id}`) and wildcards (`**`)
+- Supports path rewriting
+- Multiple services can handle different paths
+- Service topology hidden from clients
+
+---
+
+## Comparison
+
+| Feature | Pass-Through (`/{serviceId}/...`) | Gateway (`/gateway/...`) |
+|---------|-----------------------------------|--------------------------|
+| Service in URL | Yes | No |
+| Endpoint registration required | No | Yes |
+| Path pattern matching | No | Yes |
+| Path rewriting | No | Yes |
+| Multiple services, one namespace | No | Yes |
+| Setup complexity | Low | Medium |
+
+## Endpoint Configuration
+
+When registering a service, you can configure endpoints for gateway routing:
+
+```json
+{
+  "serviceId": "user-service",
+  "baseUrl": "http://localhost:3001",
+  "defaultVisibility": "PRIVATE",
+  "endpoints": [
+    {
+      "path": "/api/users",
+      "methods": ["GET", "POST"],
+      "visibility": "PUBLIC"
+    },
+    {
+      "path": "/api/users/{id}",
+      "methods": ["GET", "PUT", "DELETE"],
+      "visibility": "PUBLIC",
+      "pathRewrite": "/users/{id}"
+    },
+    {
+      "path": "/api/admin/**",
+      "methods": ["*"],
+      "visibility": "PRIVATE"
+    }
+  ],
+  "accessConfig": {
+    "allowedIps": ["10.0.0.0/8"],
+    "allowedDomains": ["internal.example.com"]
+  }
+}
+```
+
+### Path Patterns
+
+- **Exact**: `/api/users` - matches only `/api/users`
+- **Variables**: `/api/users/{id}` - matches `/api/users/123`, captures `id=123`
+- **Single wildcard**: `/api/*/info` - matches `/api/users/info`, `/api/orders/info`
+- **Multi wildcard**: `/api/**` - matches `/api/anything/here/deeply/nested`
+
+### Visibility
+
+- **PUBLIC**: Accessible from any source
+- **PRIVATE**: Restricted by `accessConfig` (IP/domain allowlists)
+
+## Admin API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/services` | GET | List all registered services |
+| `/admin/services` | POST | Register a new service |
+| `/admin/services/{id}` | GET | Get a specific service |
+| `/admin/services/{id}` | DELETE | Unregister a service |
+
+## Development
+
+```bash
+# Run in dev mode with live reload
+cd api
+./gradlew quarkusDev
+
+# Run tests
+./gradlew test
+
+# Build
+./gradlew build
+```
+

@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import jakarta.annotation.Priority;
 import jakarta.inject.Inject;
@@ -13,8 +16,11 @@ import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 
+import org.jboss.logging.Logger;
+
 import aussie.core.model.EndpointConfig;
 import aussie.core.model.RouteMatch;
+import aussie.core.model.ServiceRegistration;
 import aussie.core.service.AccessControlEvaluator;
 import aussie.core.service.ServiceRegistry;
 import aussie.core.service.SourceIdentifierExtractor;
@@ -24,7 +30,9 @@ import aussie.core.service.VisibilityResolver;
 @Priority(Priorities.AUTHORIZATION)
 public class AccessControlFilter implements ContainerRequestFilter {
 
+    private static final Logger LOG = Logger.getLogger(AccessControlFilter.class);
     private static final Set<String> RESERVED_PATHS = Set.of("admin", "gateway", "q");
+    private static final long LOOKUP_TIMEOUT_SECONDS = 5;
 
     private final ServiceRegistry serviceRegistry;
     private final SourceIdentifierExtractor sourceExtractor;
@@ -91,7 +99,18 @@ public class AccessControlFilter implements ContainerRequestFilter {
             return;
         }
 
-        var serviceOpt = serviceRegistry.getService(serviceId);
+        // Get service asynchronously and wait for result
+        Optional<ServiceRegistration> serviceOpt;
+        try {
+            serviceOpt = serviceRegistry
+                    .getService(serviceId)
+                    .subscribeAsCompletionStage()
+                    .get(LOOKUP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            LOG.warnf("Failed to lookup service %s: %s", serviceId, e.getMessage());
+            return;
+        }
+
         if (serviceOpt.isEmpty()) {
             return;
         }
