@@ -101,7 +101,7 @@ class ApiKeyAuthProviderTest {
         @DisplayName("should succeed with valid API key")
         void shouldSucceedWithValidApiKey() {
             var createResult = apiKeyService.create(
-                    "test-key", null, Set.of(Permissions.ADMIN_READ, Permissions.ADMIN_WRITE), null);
+                    "test-key", null, Set.of(Permissions.ADMIN_READ, Permissions.ADMIN_WRITE), null, "test");
 
             var headers = new MultivaluedHashMap<String, String>();
             headers.putSingle("Authorization", "Bearer " + createResult.plaintextKey());
@@ -118,7 +118,7 @@ class ApiKeyAuthProviderTest {
         @Test
         @DisplayName("should fail with revoked API key")
         void shouldFailWithRevokedApiKey() {
-            var createResult = apiKeyService.create("revoked-key", null, Set.of(), null);
+            var createResult = apiKeyService.create("revoked-key", null, Set.of(), null, "test");
             apiKeyService.revoke(createResult.keyId());
 
             var headers = new MultivaluedHashMap<String, String>();

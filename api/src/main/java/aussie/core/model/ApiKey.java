@@ -14,6 +14,7 @@ import java.util.Set;
  * @param name        display name (e.g., "user-service-prod")
  * @param description optional description of this key's purpose
  * @param permissions set of permission strings granted to this key
+ * @param createdBy   identifier of the principal who created this key (e.g., key ID or "bootstrap")
  * @param createdAt   when the key was created
  * @param expiresAt   when the key expires (null = never)
  * @param revoked     whether the key has been revoked
@@ -24,6 +25,7 @@ public record ApiKey(
         String name,
         String description,
         Set<String> permissions,
+        String createdBy,
         Instant createdAt,
         Instant expiresAt,
         boolean revoked) {
@@ -43,6 +45,9 @@ public record ApiKey(
         }
         if (permissions == null) {
             permissions = Set.of();
+        }
+        if (createdBy == null) {
+            createdBy = "unknown";
         }
         if (createdAt == null) {
             createdAt = Instant.now();
@@ -64,7 +69,7 @@ public record ApiKey(
      * @return a new ApiKey with "[REDACTED]" as the keyHash
      */
     public ApiKey redacted() {
-        return new ApiKey(id, "[REDACTED]", name, description, permissions, createdAt, expiresAt, revoked);
+        return new ApiKey(id, "[REDACTED]", name, description, permissions, createdBy, createdAt, expiresAt, revoked);
     }
 
     /**
@@ -73,7 +78,7 @@ public record ApiKey(
      * @return a new ApiKey with revoked=true
      */
     public ApiKey revoke() {
-        return new ApiKey(id, keyHash, name, description, permissions, createdAt, expiresAt, true);
+        return new ApiKey(id, keyHash, name, description, permissions, createdBy, createdAt, expiresAt, true);
     }
 
     public static Builder builder(String id, String keyHash) {
@@ -86,6 +91,7 @@ public record ApiKey(
         private String name;
         private String description;
         private Set<String> permissions = Set.of();
+        private String createdBy;
         private Instant createdAt = Instant.now();
         private Instant expiresAt;
         private boolean revoked;
@@ -110,6 +116,11 @@ public record ApiKey(
             return this;
         }
 
+        public Builder createdBy(String createdBy) {
+            this.createdBy = createdBy;
+            return this;
+        }
+
         public Builder createdAt(Instant createdAt) {
             this.createdAt = createdAt;
             return this;
@@ -126,7 +137,7 @@ public record ApiKey(
         }
 
         public ApiKey build() {
-            return new ApiKey(id, keyHash, name, description, permissions, createdAt, expiresAt, revoked);
+            return new ApiKey(id, keyHash, name, description, permissions, createdBy, createdAt, expiresAt, revoked);
         }
     }
 }

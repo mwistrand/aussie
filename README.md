@@ -290,24 +290,43 @@ curl http://localhost:8080/admin/services \
 
 #### Using the CLI with Authentication
 
-The CLI supports authentication via environment variable or command flag:
+The recommended approach is to use `auth login` to configure your credentials:
 
 ```bash
-# Set your API key as an environment variable
-export AUSSIE_API_KEY="aussie_xxxxxxxxxxxx"
+# Login interactively
+./aussie auth login
 
-# Register a service (uses AUSSIE_API_KEY)
+# Or login with your API key directly
+./aussie auth login --key aussie_xxxxxxxxxxxx
+
+# Check your authentication status
+./aussie auth status
+
+# Now all commands will use your stored credentials
 ./aussie register -f my-service.json
+./aussie keys list
+```
 
-# Or pass the key directly
-./aussie register -f my-service.json --api-key aussie_xxxxxxxxxxxx
+Credentials are stored in `~/.aussie` and used automatically for subsequent commands.
+
+#### Checking Credentials
+
+Use the `/admin/whoami` endpoint or CLI to verify your credentials:
+
+```bash
+# Via CLI
+./aussie auth status
+
+# Via curl
+curl http://localhost:8080/admin/whoami \
+  -H "Authorization: Bearer aussie_xxxxxxxxxxxx"
 ```
 
 #### Obtaining an API Key
 
 Contact your platform team to obtain an API key with appropriate permissions:
-- **Read-only access**: For viewing registered services
-- **Read/write access**: For registering and managing services
+- **Read-only access** (`admin:read`): For viewing registered services
+- **Read/write access** (`admin:read`, `admin:write`): For registering and managing services
 
 ### Bootstrap Mode (First-Time Setup)
 
@@ -553,6 +572,271 @@ aussie/
 ├── cli/          # Command-line interface (Go)
 └── demo/         # Demo application (Next.js)
 ```
+
+---
+
+## CLI
+
+The Aussie CLI provides commands for managing authentication, API keys, and service registrations.
+
+### Building the CLI
+
+```bash
+cd cli
+go build -o aussie
+```
+
+### Configuration
+
+The CLI uses configuration files to store settings like the server URL and API key.
+
+**Configuration locations (in order of precedence):**
+1. Local `.aussierc` file in the current directory
+2. Global `~/.aussie` file in your home directory
+3. Default values
+
+**Configuration format (TOML):**
+
+```toml
+host = "http://localhost:8080"
+api_key = "your-api-key"
+```
+
+### Authentication Commands
+
+Manage your CLI credentials for accessing the Aussie API.
+
+#### `auth login`
+
+Configure your API key credentials interactively or via flags.
+
+```bash
+# Interactive login (prompts for server and API key)
+./aussie auth login
+
+# Login with API key flag
+./aussie auth login --key your-api-key
+
+# Login with both server and key
+./aussie auth login --server https://aussie.example.com --key your-api-key
+```
+
+The command validates your credentials by calling `/admin/whoami` before saving.
+
+**Flags:**
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--server` | `-s` | API server URL |
+| `--key` | `-k` | API key |
+
+#### `auth status`
+
+Check your current authentication status.
+
+```bash
+./aussie auth status
+```
+
+**Output:**
+```
+Server: http://localhost:8080
+Status: Authenticated
+Key ID: abc123
+Name:   my-api-key
+Permissions: admin:read, admin:write
+Expires: 2025-06-06T10:30:00Z
+```
+
+#### `auth logout`
+
+Remove stored credentials from your configuration.
+
+```bash
+./aussie auth logout
+```
+
+### API Key Management Commands
+
+Manage API keys for the Aussie gateway. Requires authentication.
+
+#### `keys create`
+
+Create a new API key.
+
+```bash
+# Create a key with a name
+./aussie keys create --name my-service-key
+
+# Create with TTL (days until expiration)
+./aussie keys create --name ci-pipeline --ttl 7
+
+# Create with specific permissions
+./aussie keys create --name read-only --permissions admin:read
+
+# Create with description
+./aussie keys create --name prod-key --description "Production deployment key" --ttl 90
+```
+
+**Flags:**
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--name` | `-n` | (required) | Name for the API key |
+| `--description` | `-d` | | Description of the key's purpose |
+| `--ttl` | `-t` | 0 | TTL in days (0 = no expiration) |
+| `--permissions` | `-p` | `*` | Permissions (comma-separated) |
+
+**Output:**
+```
+API key created successfully!
+
+Key ID:      abc123
+Name:        my-service-key
+Permissions: *
+Expires:     2025-06-06
+Created By:  def456
+
+API Key (save this - it won't be shown again):
+  aussie_xxxxxxxxxxxxxxxxxxxx
+```
+
+> **Important:** The plaintext key is only shown once. Save it immediately.
+
+#### `keys list`
+
+List all API keys.
+
+```bash
+./aussie keys list
+```
+
+**Output:**
+```
+ID        NAME              PERMISSIONS    CREATED BY   EXPIRES      STATUS
+--        ----              -----------    ----------   -------      ------
+abc123    my-service-key    *              bootstrap    2025-06-06   active
+def456    ci-key            2 permissions  abc123       2025-03-06   active
+ghi789    old-key           *              bootstrap    2025-01-01   revoked
+```
+
+#### `keys revoke`
+
+Revoke an API key by its ID.
+
+```bash
+./aussie keys revoke <key-id>
+
+# Example
+./aussie keys revoke abc123
+```
+
+**Output:**
+```
+API key abc123 has been revoked.
+```
+
+### Service Commands
+
+Manage service registrations.
+
+#### `register`
+
+Register a service with the gateway.
+
+```bash
+# Register from a JSON file
+./aussie register -f my-service.json
+
+# Register with a specific server
+./aussie register -f my-service.json -s https://aussie.example.com
+```
+
+**Flags:**
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--file` | `-f` | Path to service configuration JSON file (required) |
+| `--server` | `-s` | Override server URL |
+
+#### `service validate`
+
+Validate a service configuration file without registering it.
+
+```bash
+./aussie service validate -f my-service.json
+```
+
+This checks:
+- Required fields (`serviceId`, `displayName`, `baseUrl`)
+- Field types and formats
+- Visibility rules and endpoint configurations
+- Optional fields like `routePrefix`, `defaultVisibility`, and `accessConfig`
+
+**Output (success):**
+```
+✓ Service configuration is valid
+
+Service ID:     user-service
+Display Name:   User Service
+Base URL:       http://localhost:3001
+Route Prefix:   /users
+Visibility:     2 PUBLIC, 1 PRIVATE rules
+```
+
+**Output (error):**
+```
+✗ Validation failed
+
+Errors:
+  - serviceId is required
+  - baseUrl must be a valid URL
+```
+
+#### `service preview`
+
+Preview visibility settings for a registered service.
+
+```bash
+./aussie service preview <service-id>
+
+# Example
+./aussie service preview user-service
+```
+
+**Output:**
+```
+Service: user-service (User Service)
+Base URL: http://localhost:3001
+Default Visibility: PRIVATE
+
+Visibility Rules:
+  PUBLIC   /api/users         GET
+  PUBLIC   /api/users/**      *
+  PRIVATE  /api/admin/**      *
+```
+
+### CLI Command Reference
+
+| Command | Description |
+|---------|-------------|
+| `auth login` | Configure API key credentials |
+| `auth logout` | Remove stored credentials |
+| `auth status` | Show current authentication status |
+| `keys create` | Create a new API key |
+| `keys list` | List all API keys |
+| `keys revoke <id>` | Revoke an API key |
+| `register -f <file>` | Register a service |
+| `service validate -f <file>` | Validate a service configuration |
+| `service preview <id>` | Preview service visibility settings |
+
+### Global Flags
+
+These flags are available for all commands:
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--server` | `-s` | Override the server URL |
+| `--help` | `-h` | Show help for the command |
+
+---
 
 ## API
 

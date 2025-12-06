@@ -185,6 +185,7 @@ public class ApiKeyEncryptionService {
                 apiKey.name(),
                 apiKey.description() != null ? apiKey.description() : "",
                 String.join(",", apiKey.permissions()),
+                apiKey.createdBy() != null ? apiKey.createdBy() : "",
                 apiKey.createdAt().toString(),
                 apiKey.expiresAt() != null ? apiKey.expiresAt().toString() : "",
                 String.valueOf(apiKey.revoked()));
@@ -192,6 +193,9 @@ public class ApiKeyEncryptionService {
 
     /**
      * Deserialize a string to an ApiKey.
+     *
+     * <p>Supports backward compatibility with older format (8 fields) and
+     * new format (9 fields with createdBy).
      */
     private ApiKey deserialize(String data) {
         String[] parts = data.split(FIELD_SEPARATOR, -1);
@@ -199,16 +203,26 @@ public class ApiKeyEncryptionService {
             throw new IllegalArgumentException("Invalid serialized ApiKey format");
         }
 
-        Set<String> permissions = parts[4].isEmpty() ? Set.of() : Set.of(parts[4].split(","));
-        Instant expiresAt = parts[6].isEmpty() ? null : Instant.parse(parts[6]);
+        // Handle backward compatibility: old format has 8 fields, new has 9
+        boolean hasCreatedBy = parts.length >= 9;
+        int permissionsIdx = 4;
+        int createdByIdx = hasCreatedBy ? 5 : -1;
+        int createdAtIdx = hasCreatedBy ? 6 : 5;
+        int expiresAtIdx = hasCreatedBy ? 7 : 6;
+        int revokedIdx = hasCreatedBy ? 8 : 7;
+
+        Set<String> permissions = parts[permissionsIdx].isEmpty() ? Set.of() : Set.of(parts[permissionsIdx].split(","));
+        String createdBy = hasCreatedBy && !parts[createdByIdx].isEmpty() ? parts[createdByIdx] : null;
+        Instant expiresAt = parts[expiresAtIdx].isEmpty() ? null : Instant.parse(parts[expiresAtIdx]);
 
         return ApiKey.builder(parts[0], parts[1])
                 .name(parts[2])
                 .description(parts[3])
                 .permissions(permissions)
-                .createdAt(Instant.parse(parts[5]))
+                .createdBy(createdBy)
+                .createdAt(Instant.parse(parts[createdAtIdx]))
                 .expiresAt(expiresAt)
-                .revoked(Boolean.parseBoolean(parts[7]))
+                .revoked(Boolean.parseBoolean(parts[revokedIdx]))
                 .build();
     }
 

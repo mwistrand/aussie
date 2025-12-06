@@ -3,14 +3,14 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 
 	"github.com/pelletier/go-toml/v2"
 )
 
 // Config represents the Aussie CLI configuration
 type Config struct {
-	Host string `toml:"host"`
+	Host   string `toml:"host"`
+	ApiKey string `toml:"api_key,omitempty"`
 }
 
 // DefaultConfig returns a config with default values
@@ -18,6 +18,11 @@ func DefaultConfig() *Config {
 	return &Config{
 		Host: "http://localhost:8080",
 	}
+}
+
+// IsAuthenticated returns true if an API key is configured
+func (c *Config) IsAuthenticated() bool {
+	return c.ApiKey != ""
 }
 
 // Load loads configuration from files, with the following precedence:
@@ -54,23 +59,14 @@ func LocalConfigPath() string {
 }
 
 // GlobalConfigPath returns the path to the global config file
-// This works across all platforms (Unix, macOS, Windows)
+// Uses ~/.aussie on all platforms for consistency
 func GlobalConfigPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
 
-	// On Windows, use .aussie in the user's home directory
-	// On Unix/macOS, use .aussie in the home directory
-	filename := ".aussie"
-	if runtime.GOOS == "windows" {
-		// On Windows, we could also use AppData, but .aussie in home is simpler
-		// and matches the Unix convention
-		filename = ".aussie"
-	}
-
-	return filepath.Join(home, filename), nil
+	return filepath.Join(home, ".aussie"), nil
 }
 
 // LoadFromFile loads configuration from a specific file
@@ -87,4 +83,25 @@ func LoadFromFile(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// Save saves the configuration to the global config file
+func (c *Config) Save() error {
+	path, err := GlobalConfigPath()
+	if err != nil {
+		return err
+	}
+
+	data, err := toml.Marshal(c)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(path, data, 0600)
+}
+
+// ClearApiKey removes the API key from the configuration and saves it
+func (c *Config) ClearApiKey() error {
+	c.ApiKey = ""
+	return c.Save()
 }

@@ -45,7 +45,8 @@ public class ApiKeyService implements ApiKeyManagement {
     }
 
     @Override
-    public ApiKeyCreateResult create(String name, String description, Set<String> permissions, Duration ttl) {
+    public ApiKeyCreateResult create(
+            String name, String description, Set<String> permissions, Duration ttl, String createdBy) {
         // Validate TTL against configured maximum
         validateTtl(ttl);
 
@@ -59,6 +60,7 @@ public class ApiKeyService implements ApiKeyManagement {
                 .name(name)
                 .description(description)
                 .permissions(permissions != null ? permissions : Set.of())
+                .createdBy(createdBy)
                 .createdAt(Instant.now())
                 .expiresAt(expiresAt)
                 .revoked(false)
@@ -106,7 +108,12 @@ public class ApiKeyService implements ApiKeyManagement {
 
     @Override
     public ApiKeyCreateResult createWithKey(
-            String name, String description, Set<String> permissions, Duration ttl, String plaintextKey) {
+            String name,
+            String description,
+            Set<String> permissions,
+            Duration ttl,
+            String plaintextKey,
+            String createdBy) {
         // Validate the provided key
         if (plaintextKey == null || plaintextKey.isBlank()) {
             throw new IllegalArgumentException("Plaintext key cannot be null or blank");
@@ -127,6 +134,7 @@ public class ApiKeyService implements ApiKeyManagement {
                 .name(name)
                 .description(description)
                 .permissions(permissions != null ? permissions : Set.of())
+                .createdBy(createdBy)
                 .createdAt(Instant.now())
                 .expiresAt(expiresAt)
                 .revoked(false)

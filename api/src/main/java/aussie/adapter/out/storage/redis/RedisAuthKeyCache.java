@@ -87,6 +87,7 @@ public class RedisAuthKeyCache implements AuthKeyCache {
                 apiKey.name(),
                 apiKey.description() != null ? apiKey.description() : "",
                 String.join(",", apiKey.permissions()),
+                apiKey.createdBy() != null ? apiKey.createdBy() : "",
                 apiKey.createdAt().toString(),
                 apiKey.expiresAt() != null ? apiKey.expiresAt().toString() : "",
                 String.valueOf(apiKey.revoked()));
@@ -94,6 +95,9 @@ public class RedisAuthKeyCache implements AuthKeyCache {
 
     /**
      * Deserialize an ApiKey from cache.
+     *
+     * <p>Supports backward compatibility with older format (7 fields) and
+     * new format (8 fields with createdBy).
      *
      * @param cached The cached string representation
      * @param keyHash The key hash (used as cache key)
@@ -104,16 +108,26 @@ public class RedisAuthKeyCache implements AuthKeyCache {
             throw new IllegalArgumentException("Invalid cached ApiKey format");
         }
 
-        Set<String> permissions = parts[3].isEmpty() ? Set.of() : Set.of(parts[3].split(","));
-        Instant expiresAt = parts[5].isEmpty() ? null : Instant.parse(parts[5]);
+        // Handle backward compatibility: old format has 7 fields, new has 8
+        boolean hasCreatedBy = parts.length >= 8;
+        int permissionsIdx = 3;
+        int createdByIdx = hasCreatedBy ? 4 : -1;
+        int createdAtIdx = hasCreatedBy ? 5 : 4;
+        int expiresAtIdx = hasCreatedBy ? 6 : 5;
+        int revokedIdx = hasCreatedBy ? 7 : 6;
+
+        Set<String> permissions = parts[permissionsIdx].isEmpty() ? Set.of() : Set.of(parts[permissionsIdx].split(","));
+        String createdBy = hasCreatedBy && !parts[createdByIdx].isEmpty() ? parts[createdByIdx] : null;
+        Instant expiresAt = parts[expiresAtIdx].isEmpty() ? null : Instant.parse(parts[expiresAtIdx]);
 
         return ApiKey.builder(parts[0], keyHash)
                 .name(parts[1])
                 .description(parts[2])
                 .permissions(permissions)
-                .createdAt(Instant.parse(parts[4]))
+                .createdBy(createdBy)
+                .createdAt(Instant.parse(parts[createdAtIdx]))
                 .expiresAt(expiresAt)
-                .revoked(Boolean.parseBoolean(parts[6]))
+                .revoked(Boolean.parseBoolean(parts[revokedIdx]))
                 .build();
     }
 }

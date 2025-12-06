@@ -69,7 +69,7 @@ public class BootstrapService implements BootstrapManagement {
 
         // Create the bootstrap key
         var createResult = apiKeyService.createWithKey(
-                BOOTSTRAP_KEY_NAME, BOOTSTRAP_KEY_DESCRIPTION, Set.of(Permissions.ALL), ttl, plaintextKey);
+                BOOTSTRAP_KEY_NAME, BOOTSTRAP_KEY_DESCRIPTION, Set.of(Permissions.ALL), ttl, plaintextKey, "bootstrap");
 
         LOG.infof(
                 "Bootstrap API key created: id=%s, expires=%s",

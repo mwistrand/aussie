@@ -18,6 +18,9 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import io.quarkus.security.identity.SecurityIdentity;
+
+import aussie.adapter.in.auth.ApiKeyIdentityProvider.ApiKeyPrincipal;
 import aussie.adapter.in.auth.PermissionRoleMapper;
 import aussie.adapter.in.dto.CreateApiKeyRequest;
 import aussie.core.model.ApiKey;
@@ -42,10 +45,12 @@ import aussie.core.port.in.ApiKeyManagement;
 public class ApiKeyResource {
 
     private final ApiKeyManagement apiKeyService;
+    private final SecurityIdentity identity;
 
     @Inject
-    public ApiKeyResource(ApiKeyManagement apiKeyService) {
+    public ApiKeyResource(ApiKeyManagement apiKeyService, SecurityIdentity identity) {
         this.apiKeyService = apiKeyService;
+        this.identity = identity;
     }
 
     /**
@@ -65,8 +70,12 @@ public class ApiKeyResource {
 
         Duration ttl = request.ttlDays() != null ? Duration.ofDays(request.ttlDays()) : null;
 
+        // Get the creator's identity
+        String createdBy = getCreatorId();
+
         try {
-            var result = apiKeyService.create(request.name(), request.description(), request.permissions(), ttl);
+            var result =
+                    apiKeyService.create(request.name(), request.description(), request.permissions(), ttl, createdBy);
 
             // Return the plaintext key only this one time
             var responseBody = new HashMap<String, Object>();
@@ -74,6 +83,7 @@ public class ApiKeyResource {
             responseBody.put("key", result.plaintextKey());
             responseBody.put("name", result.metadata().name());
             responseBody.put("permissions", result.metadata().permissions());
+            responseBody.put("createdBy", result.metadata().createdBy());
             if (result.metadata().expiresAt() != null) {
                 responseBody.put("expiresAt", result.metadata().expiresAt().toString());
             }
@@ -85,6 +95,17 @@ public class ApiKeyResource {
                     .entity(Map.of("error", e.getMessage()))
                     .build();
         }
+    }
+
+    /**
+     * Gets the identifier of the principal creating this key.
+     */
+    private String getCreatorId() {
+        var principal = identity.getPrincipal();
+        if (principal instanceof ApiKeyPrincipal apiKeyPrincipal) {
+            return apiKeyPrincipal.getKeyId();
+        }
+        return principal.getName();
     }
 
     /**

@@ -38,11 +38,11 @@ public class AuthenticationIntegrationTest {
     @BeforeEach
     void setUp() {
         // Create API keys for testing
-        var fullAccessResult =
-                apiKeyService.create("test-full", null, Set.of(Permissions.ADMIN_READ, Permissions.ADMIN_WRITE), null);
+        var fullAccessResult = apiKeyService.create(
+                "test-full", null, Set.of(Permissions.ADMIN_READ, Permissions.ADMIN_WRITE), null, "test");
         validApiKey = fullAccessResult.plaintextKey();
 
-        var readOnlyResult = apiKeyService.create("test-readonly", null, Set.of(Permissions.ADMIN_READ), null);
+        var readOnlyResult = apiKeyService.create("test-readonly", null, Set.of(Permissions.ADMIN_READ), null, "test");
         readOnlyApiKey = readOnlyResult.plaintextKey();
     }
 
@@ -97,5 +97,25 @@ public class AuthenticationIntegrationTest {
     void passThroughPathsShouldNotRequireAuth() {
         // Pass-through paths return 404 (no service registered) but not 401
         given().when().get("/test-service/api/test").then().statusCode(404);
+    }
+
+    @Test
+    @DisplayName("whoami should return key info for authenticated user")
+    void whoamiShouldReturnKeyInfo() {
+        given().header("Authorization", "Bearer " + validApiKey)
+                .when()
+                .get("/admin/whoami")
+                .then()
+                .statusCode(200);
+    }
+
+    @Test
+    @DisplayName("whoami should return permissions for authenticated user")
+    void whoamiShouldReturnPermissions() {
+        given().header("Authorization", "Bearer " + readOnlyApiKey)
+                .when()
+                .get("/admin/whoami")
+                .then()
+                .statusCode(200);
     }
 }

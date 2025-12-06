@@ -74,11 +74,11 @@ class BootstrapServiceTest {
     }
 
     private void createAdminKey() {
-        apiKeyService.create("existing-admin", "Existing admin key", Set.of(Permissions.ALL), null);
+        apiKeyService.create("existing-admin", "Existing admin key", Set.of(Permissions.ALL), null, "test");
     }
 
     private void createReadOnlyKey() {
-        apiKeyService.create("read-only", "Read-only key", Set.of(Permissions.ADMIN_READ), null);
+        apiKeyService.create("read-only", "Read-only key", Set.of(Permissions.ADMIN_READ), null, "test");
     }
 
     @Nested
@@ -140,7 +140,7 @@ class BootstrapServiceTest {
         @Test
         @DisplayName("should return true for key with wildcard permission")
         void shouldReturnTrueForWildcardPermission() {
-            apiKeyService.create("admin", null, Set.of(Permissions.ALL), null);
+            apiKeyService.create("admin", null, Set.of(Permissions.ALL), null, "test");
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
@@ -150,7 +150,7 @@ class BootstrapServiceTest {
         @Test
         @DisplayName("should return true for key with admin:write permission")
         void shouldReturnTrueForAdminWritePermission() {
-            apiKeyService.create("admin", null, Set.of(Permissions.ADMIN_WRITE), null);
+            apiKeyService.create("admin", null, Set.of(Permissions.ADMIN_WRITE), null, "test");
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
@@ -170,7 +170,7 @@ class BootstrapServiceTest {
         @Test
         @DisplayName("should ignore revoked admin keys")
         void shouldIgnoreRevokedAdminKeys() {
-            var result = apiKeyService.create("admin", null, Set.of(Permissions.ALL), null);
+            var result = apiKeyService.create("admin", null, Set.of(Permissions.ALL), null, "test");
             apiKeyService.revoke(result.keyId());
 
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
