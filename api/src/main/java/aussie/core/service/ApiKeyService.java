@@ -32,6 +32,7 @@ public class ApiKeyService implements ApiKeyManagement {
 
     private static final int KEY_LENGTH_BYTES = 32;
     private static final int KEY_ID_LENGTH = 8;
+    private static final int MIN_BOOTSTRAP_KEY_LENGTH = 32;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final ApiKeyRepository repository;
@@ -101,6 +102,40 @@ public class ApiKeyService implements ApiKeyManagement {
     @Override
     public Optional<ApiKey> get(String keyId) {
         return repository.findById(keyId).await().indefinitely().map(ApiKey::redacted);
+    }
+
+    @Override
+    public ApiKeyCreateResult createWithKey(
+            String name, String description, Set<String> permissions, Duration ttl, String plaintextKey) {
+        // Validate the provided key
+        if (plaintextKey == null || plaintextKey.isBlank()) {
+            throw new IllegalArgumentException("Plaintext key cannot be null or blank");
+        }
+        if (plaintextKey.length() < MIN_BOOTSTRAP_KEY_LENGTH) {
+            throw new IllegalArgumentException("Key must be at least " + MIN_BOOTSTRAP_KEY_LENGTH + " characters");
+        }
+
+        // Validate TTL against configured maximum
+        validateTtl(ttl);
+
+        String keyId = generateKeyId();
+        String keyHash = hashKey(plaintextKey);
+
+        Instant expiresAt = ttl != null ? Instant.now().plus(ttl) : null;
+
+        var apiKey = ApiKey.builder(keyId, keyHash)
+                .name(name)
+                .description(description)
+                .permissions(permissions != null ? permissions : Set.of())
+                .createdAt(Instant.now())
+                .expiresAt(expiresAt)
+                .revoked(false)
+                .build();
+
+        // Save synchronously (blocking) for simplicity in the create flow
+        repository.save(apiKey).await().indefinitely();
+
+        return new ApiKeyCreateResult(keyId, plaintextKey, apiKey);
     }
 
     /**

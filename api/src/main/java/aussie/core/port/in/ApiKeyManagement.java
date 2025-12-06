@@ -70,4 +70,21 @@ public interface ApiKeyManagement {
      * @return the ApiKey if found, empty otherwise
      */
     Optional<ApiKey> get(String keyId);
+
+    /**
+     * Creates a new API key with a specific plaintext key value.
+     *
+     * <p>This method is used for bootstrap scenarios where the key is provided
+     * by the administrator via configuration rather than auto-generated.
+     *
+     * @param name         display name for the key
+     * @param description  optional description of the key's purpose
+     * @param permissions  set of permissions to grant
+     * @param ttl          time-to-live for the key (null = never expires)
+     * @param plaintextKey the specific key value to use (min 32 chars)
+     * @return result containing the key ID and metadata
+     * @throws IllegalArgumentException if the key is too short or TTL exceeds max
+     */
+    ApiKeyCreateResult createWithKey(
+            String name, String description, Set<String> permissions, Duration ttl, String plaintextKey);
 }

@@ -309,6 +309,84 @@ Contact your platform team to obtain an API key with appropriate permissions:
 - **Read-only access**: For viewing registered services
 - **Read/write access**: For registering and managing services
 
+### Bootstrap Mode (First-Time Setup)
+
+When deploying Aussie for the first time, you need an admin API key to access the admin endpoints, but you can't create one without authentication - a classic chicken-and-egg problem. Bootstrap mode solves this.
+
+#### Enabling Bootstrap
+
+Set the following environment variables before starting Aussie:
+
+```bash
+# Enable bootstrap mode
+export AUSSIE_BOOTSTRAP_ENABLED=true
+
+# Provide a secure bootstrap key (minimum 32 characters)
+export AUSSIE_BOOTSTRAP_KEY="your-secure-bootstrap-key-at-least-32-chars"
+
+# Optional: Set TTL (default: 24 hours, maximum: 24 hours)
+export AUSSIE_BOOTSTRAP_TTL=PT24H
+
+# Start the gateway
+./gradlew quarkusDev
+```
+
+On startup, Aussie will:
+1. Check if bootstrap mode is enabled
+2. Verify no admin keys already exist
+3. Create a time-limited admin key using your provided bootstrap key
+4. Log the key ID and expiration (never the key itself)
+
+#### Using the Bootstrap Key
+
+Once created, use your bootstrap key to create a permanent admin key:
+
+```bash
+# Create a permanent admin key using the bootstrap key
+curl -X POST http://localhost:8080/admin/api-keys \
+  -H "Authorization: Bearer your-secure-bootstrap-key-at-least-32-chars" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "primary-admin",
+    "permissions": ["*"],
+    "ttlDays": 365
+  }'
+```
+
+Save the returned key securely - the bootstrap key will expire automatically within 24 hours.
+
+#### Recovery Mode
+
+If you've lost all admin keys, you can use recovery mode to create a new bootstrap key even when admin keys exist:
+
+```bash
+# WARNING: Use only for emergency recovery
+export AUSSIE_BOOTSTRAP_ENABLED=true
+export AUSSIE_BOOTSTRAP_KEY="new-secure-recovery-key-at-least-32-chars"
+export AUSSIE_BOOTSTRAP_RECOVERY_MODE=true
+```
+
+Recovery mode is logged with a security warning - review your system if you didn't initiate this.
+
+#### Security Considerations
+
+| Practice | Description |
+|----------|-------------|
+| **Use a strong key** | Minimum 32 characters, randomly generated |
+| **Short-lived keys** | Bootstrap keys expire in ≤24 hours by design |
+| **Immediate rotation** | Create a permanent key and disable bootstrap immediately |
+| **Audit logs** | All bootstrap operations are logged to `aussie.audit.bootstrap` |
+| **Recovery mode caution** | Only use when absolutely necessary |
+
+#### Configuration Reference
+
+| Property | Environment Variable | Default | Description |
+|----------|---------------------|---------|-------------|
+| `aussie.bootstrap.enabled` | `AUSSIE_BOOTSTRAP_ENABLED` | `false` | Enable bootstrap mode |
+| `aussie.bootstrap.key` | `AUSSIE_BOOTSTRAP_KEY` | - | Bootstrap key (min 32 chars) |
+| `aussie.bootstrap.ttl` | `AUSSIE_BOOTSTRAP_TTL` | `PT24H` | Bootstrap key TTL (max: 24h) |
+| `aussie.bootstrap.recovery-mode` | `AUSSIE_BOOTSTRAP_RECOVERY_MODE` | `false` | Allow bootstrap with existing keys |
+
 ### Custom Authentication Providers
 
 Platform teams can integrate custom authentication systems (OAuth, SAML, custom headers, etc.) by implementing the `HttpAuthenticationMechanism` interface from Quarkus Security.
