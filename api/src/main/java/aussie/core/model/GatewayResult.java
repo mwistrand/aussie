@@ -27,4 +27,8 @@ public sealed interface GatewayResult {
     record ReservedPath(String path) implements GatewayResult {}
 
     record Error(String message) implements GatewayResult {}
+
+    record Unauthorized(String reason) implements GatewayResult {}
+
+    record Forbidden(String reason) implements GatewayResult {}
 }

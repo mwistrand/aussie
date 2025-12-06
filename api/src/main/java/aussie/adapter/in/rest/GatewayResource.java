@@ -125,6 +125,13 @@ public class GatewayResource {
             case GatewayResult.Error error -> Response.status(Response.Status.BAD_GATEWAY)
                     .entity("Error forwarding request: " + error.message())
                     .build();
+            case GatewayResult.Unauthorized unauthorized -> Response.status(Response.Status.UNAUTHORIZED)
+                    .header("WWW-Authenticate", "Bearer realm=\"aussie\"")
+                    .entity("Unauthorized: " + unauthorized.reason())
+                    .build();
+            case GatewayResult.Forbidden forbidden -> Response.status(Response.Status.FORBIDDEN)
+                    .entity("Forbidden: " + forbidden.reason())
+                    .build();
         };
     }
 }

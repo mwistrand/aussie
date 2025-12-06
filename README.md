@@ -1070,6 +1070,88 @@ When registering a service, you can configure endpoints for gateway routing:
 - **PUBLIC**: Accessible from any source
 - **PRIVATE**: Restricted by `accessConfig` (IP/domain allowlists)
 
+### Per-Route Authentication
+
+Aussie supports per-route authentication for endpoints that require user identity. When enabled, Aussie validates incoming JWT tokens against configured identity providers and forwards authenticated requests with a signed Aussie token.
+
+#### Enabling Per-Route Authentication
+
+Configure token providers and JWS signing in `application.properties`:
+
+```properties
+# Enable per-route authentication
+aussie.auth.route-auth.enabled=true
+
+# Configure an OIDC provider (e.g., Auth0, Okta, Keycloak)
+aussie.auth.route-auth.providers.my-idp.issuer=https://example.auth0.com/
+aussie.auth.route-auth.providers.my-idp.jwks-uri=https://example.auth0.com/.well-known/jwks.json
+aussie.auth.route-auth.providers.my-idp.audiences=aussie-gateway
+
+# Configure JWS token issuance for backends
+aussie.auth.route-auth.jws.issuer=aussie-gateway
+aussie.auth.route-auth.jws.key-id=v1
+aussie.auth.route-auth.jws.token-ttl=PT5M
+aussie.auth.route-auth.jws.forwarded-claims=sub,email,name,groups,roles
+
+# RSA signing key (base64-encoded PKCS#8 PEM)
+aussie.auth.route-auth.jws.signing-key=${AUSSIE_JWS_SIGNING_KEY}
+```
+
+#### Marking Endpoints as Requiring Authentication
+
+Add `authRequired: true` to endpoint configurations:
+
+```json
+{
+  "serviceId": "user-service",
+  "baseUrl": "http://user-service:8080",
+  "endpoints": [
+    {
+      "path": "/api/users",
+      "methods": ["GET"],
+      "visibility": "PUBLIC",
+      "authRequired": false
+    },
+    {
+      "path": "/api/users/{userId}/profile",
+      "methods": ["GET", "PUT"],
+      "visibility": "PUBLIC",
+      "authRequired": true
+    }
+  ]
+}
+```
+
+#### How It Works
+
+1. **Client sends request** with `Authorization: Bearer <token>` header
+2. **Aussie validates** the token against configured OIDC providers (JWKS signature, issuer, audience, expiration)
+3. **Aussie issues** a new signed JWS token containing forwarded claims
+4. **Backend receives** `Authorization: Bearer <aussie-token>` with validated identity
+
+#### Backend Integration
+
+Backends only need to trust Aussie's signing key. The forwarded token includes:
+
+| Claim | Description |
+|-------|-------------|
+| `iss` | Aussie's issuer (e.g., "aussie-gateway") |
+| `sub` | Original token subject |
+| `original_iss` | Original token issuer |
+| `iat`, `exp` | Issued/expiration times |
+| Forwarded claims | Configurable (email, name, groups, roles, etc.) |
+
+To verify tokens in your backend, configure your JWT library to trust Aussie's public key:
+
+```bash
+# Generate an RSA key pair
+openssl genrsa -out aussie-private.pem 2048
+openssl rsa -in aussie-private.pem -pubout -out aussie-public.pem
+
+# Base64 encode for configuration
+cat aussie-private.pem | base64 -w0 > aussie-private.b64
+```
+
 ## Admin API
 
 All admin endpoints require authentication. See [Authentication](#authentication) for details.

@@ -4,7 +4,11 @@ import java.util.Optional;
 import java.util.Set;
 
 public record EndpointConfig(
-        String path, Set<String> methods, EndpointVisibility visibility, Optional<String> pathRewrite) {
+        String path,
+        Set<String> methods,
+        EndpointVisibility visibility,
+        Optional<String> pathRewrite,
+        boolean authRequired) {
     public EndpointConfig {
         if (path == null || path.isBlank()) {
             throw new IllegalArgumentException("Path cannot be null or blank");
@@ -18,6 +22,14 @@ public record EndpointConfig(
         if (pathRewrite == null) {
             pathRewrite = Optional.empty();
         }
+    }
+
+    /**
+     * Convenience constructor without authRequired (defaults to false).
+     */
+    public EndpointConfig(
+            String path, Set<String> methods, EndpointVisibility visibility, Optional<String> pathRewrite) {
+        this(path, methods, visibility, pathRewrite, false);
     }
 
     public static EndpointConfig publicEndpoint(String path, Set<String> methods) {

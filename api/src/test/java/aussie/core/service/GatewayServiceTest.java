@@ -26,6 +26,8 @@ import aussie.core.model.GatewayResult;
 import aussie.core.model.GatewaySecurityConfig;
 import aussie.core.model.PreparedProxyRequest;
 import aussie.core.model.ProxyResponse;
+import aussie.core.model.RouteAuthResult;
+import aussie.core.model.RouteMatch;
 import aussie.core.model.ServiceRegistration;
 import aussie.core.port.out.ProxyClient;
 
@@ -36,6 +38,7 @@ class GatewayServiceTest {
     private ServiceRegistry serviceRegistry;
     private ProxyRequestPreparer requestPreparer;
     private TestProxyClient proxyClient;
+    private RouteAuthenticationService routeAuthService;
     private GatewayService gatewayService;
 
     // Permissive security config for testing
@@ -48,7 +51,8 @@ class GatewayServiceTest {
                 new InMemoryServiceRegistrationRepository(), NoOpConfigurationCache.INSTANCE, validator);
         requestPreparer = new ProxyRequestPreparer(() -> (req, uri) -> Map.of());
         proxyClient = new TestProxyClient();
-        gatewayService = new GatewayService(serviceRegistry, requestPreparer, proxyClient);
+        routeAuthService = new NoOpRouteAuthService();
+        gatewayService = new GatewayService(serviceRegistry, requestPreparer, proxyClient, routeAuthService);
     }
 
     private GatewayRequest createRequest(String method, String path) {
@@ -253,6 +257,21 @@ class GatewayServiceTest {
                 return Uni.createFrom().failure(error);
             }
             return Uni.createFrom().item(response);
+        }
+    }
+
+    /**
+     * A no-op route authentication service that always allows requests (returns NotRequired).
+     * Used for testing GatewayService without real authentication.
+     */
+    private static class NoOpRouteAuthService extends RouteAuthenticationService {
+        NoOpRouteAuthService() {
+            super(null, null);
+        }
+
+        @Override
+        public Uni<RouteAuthResult> authenticate(GatewayRequest request, RouteMatch route) {
+            return Uni.createFrom().item(new RouteAuthResult.NotRequired());
         }
     }
 }

@@ -37,6 +37,7 @@ services:
         echo "Running schema initialization..."
         cqlsh cassandra -f /scripts/V1__create_keyspace.cql
         cqlsh cassandra -f /scripts/V2__create_tables.cql
+        cqlsh cassandra -f /scripts/V3__create_api_keys_table.cql
         echo "Schema initialization complete"
 
   redis:

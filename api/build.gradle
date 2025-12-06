@@ -30,6 +30,9 @@ dependencies {
     // Security (RBAC with @RolesAllowed)
     implementation 'io.quarkus:quarkus-security'
 
+    // JWT/JOSE library for token validation and issuance
+    implementation 'org.bitbucket.b_c:jose4j:0.9.4'
+
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.rest-assured:rest-assured'
     testImplementation 'org.wiremock:wiremock:3.3.1'

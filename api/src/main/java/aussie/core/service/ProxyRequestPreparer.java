@@ -5,11 +5,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import aussie.core.model.AussieToken;
 import aussie.core.model.GatewayRequest;
 import aussie.core.model.PreparedProxyRequest;
 import aussie.core.model.RouteMatch;
@@ -47,8 +49,23 @@ public class ProxyRequestPreparer {
     }
 
     public PreparedProxyRequest prepare(GatewayRequest request, RouteMatch route) {
+        return prepare(request, route, Optional.empty());
+    }
+
+    /**
+     * Prepare a proxy request with optional Aussie token for authenticated routes.
+     *
+     * @param request the gateway request
+     * @param route   the matched route
+     * @param token   optional Aussie token to include in Authorization header
+     * @return prepared proxy request
+     */
+    public PreparedProxyRequest prepare(GatewayRequest request, RouteMatch route, Optional<AussieToken> token) {
         var targetUri = route.targetUri();
         var headers = buildHeaders(request, targetUri);
+
+        // Set Authorization header with Aussie token if present
+        token.ifPresent(t -> headers.put("Authorization", List.of("Bearer " + t.jws())));
 
         return new PreparedProxyRequest(request.method(), targetUri, headers, request.body());
     }
