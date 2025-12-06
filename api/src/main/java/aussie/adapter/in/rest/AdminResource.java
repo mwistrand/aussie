@@ -3,6 +3,7 @@ package aussie.adapter.in.rest;
 import java.util.List;
 import java.util.Map;
 
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -17,6 +18,7 @@ import jakarta.ws.rs.core.Response;
 
 import io.smallrye.mutiny.Uni;
 
+import aussie.adapter.in.auth.PermissionRoleMapper;
 import aussie.adapter.in.dto.ServiceRegistrationRequest;
 import aussie.adapter.in.dto.ServiceRegistrationResponse;
 import aussie.core.model.RegistrationResult;
@@ -27,6 +29,12 @@ import aussie.core.service.ServiceRegistry;
  *
  * <p>This adapter handles HTTP-specific concerns (request/response mapping, status codes)
  * and delegates all business logic and validation to the service layer.
+ *
+ * <p>Authorization is enforced via {@code @RolesAllowed} annotations:
+ * <ul>
+ *   <li>GET endpoints require {@code admin-read} or {@code admin} role</li>
+ *   <li>POST/DELETE endpoints require {@code admin-write} or {@code admin} role</li>
+ * </ul>
  */
 @Path("/admin/services")
 @ApplicationScoped
@@ -42,6 +50,7 @@ public class AdminResource {
     }
 
     @POST
+    @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_WRITE, PermissionRoleMapper.ROLE_ADMIN})
     public Uni<Response> registerService(ServiceRegistrationRequest request) {
         // Minimal adapter-level validation to prevent NPE during DTO conversion
         if (request == null || request.serviceId() == null || request.baseUrl() == null) {
@@ -73,6 +82,7 @@ public class AdminResource {
 
     @DELETE
     @Path("/{serviceId}")
+    @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_WRITE, PermissionRoleMapper.ROLE_ADMIN})
     public Uni<Response> unregisterService(@PathParam("serviceId") String serviceId) {
         return serviceRegistry.getService(serviceId).flatMap(existing -> {
             if (existing.isEmpty()) {
@@ -88,6 +98,7 @@ public class AdminResource {
     }
 
     @GET
+    @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_READ, PermissionRoleMapper.ROLE_ADMIN})
     public Uni<List<ServiceRegistrationResponse>> listServices() {
         return serviceRegistry.getAllServices().map(services -> services.stream()
                 .map(ServiceRegistrationResponse::fromModel)
@@ -96,6 +107,7 @@ public class AdminResource {
 
     @GET
     @Path("/{serviceId}")
+    @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_READ, PermissionRoleMapper.ROLE_ADMIN})
     public Uni<Response> getService(@PathParam("serviceId") String serviceId) {
         return serviceRegistry.getService(serviceId).map(serviceOpt -> serviceOpt
                 .map(service -> Response.ok(ServiceRegistrationResponse.fromModel(service))

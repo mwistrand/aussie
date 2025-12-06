@@ -196,6 +196,277 @@ aussie.gateway.limits.max-total-headers-size=32768
 
 ---
 
+## Authentication
+
+Aussie requires authentication for all admin endpoints (`/admin/*`). Gateway and pass-through routes remain open for public traffic.
+
+### For Platform Teams Running Aussie
+
+#### Configuration
+
+Authentication is enabled by default. Configure it in `application.properties`:
+
+```properties
+# Enable/disable authentication (default: true)
+aussie.auth.enabled=true
+
+# Only require auth for admin paths (default: true)
+aussie.auth.admin-paths-only=true
+
+# DANGEROUS: Disable authentication entirely (NEVER use in production!)
+# This is only for local development
+aussie.auth.dangerous-noop=false
+```
+
+For local development, you can disable authentication:
+
+```properties
+%dev.aussie.auth.dangerous-noop=true
+```
+
+#### Creating API Keys
+
+Create an API key via the admin endpoint:
+
+```bash
+curl -X POST http://localhost:8080/admin/api-keys \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-team-key",
+    "description": "API key for My Team",
+    "permissions": ["admin:read", "admin:write"],
+    "ttlDays": 90
+  }'
+```
+
+Response:
+
+```json
+{
+  "keyId": "ak_abc123",
+  "key": "aussie_xxxxxxxxxxxx",
+  "name": "my-team-key",
+  "permissions": ["admin:read", "admin:write"],
+  "expiresAt": "2025-03-06T10:30:00Z"
+}
+```
+
+> **Important:** Save the `key` value immediately. It is only shown once and cannot be retrieved later.
+
+#### Managing API Keys
+
+```bash
+# List all API keys (hashes are redacted)
+curl http://localhost:8080/admin/api-keys \
+  -H "Authorization: Bearer aussie_xxxxxxxxxxxx"
+
+# Get a specific key
+curl http://localhost:8080/admin/api-keys/{keyId} \
+  -H "Authorization: Bearer aussie_xxxxxxxxxxxx"
+
+# Revoke a key
+curl -X DELETE http://localhost:8080/admin/api-keys/{keyId} \
+  -H "Authorization: Bearer aussie_xxxxxxxxxxxx"
+```
+
+#### Permissions
+
+| Permission | Description |
+|------------|-------------|
+| `admin:read` | Read access to admin endpoints (GET, HEAD, OPTIONS) |
+| `admin:write` | Write access to admin endpoints (POST, PUT, DELETE) |
+| `*` | Full access to all operations |
+
+### For App Developers Using the CLI
+
+#### Authenticating with the API
+
+All admin requests require a Bearer token:
+
+```bash
+curl http://localhost:8080/admin/services \
+  -H "Authorization: Bearer aussie_xxxxxxxxxxxx"
+```
+
+#### Using the CLI with Authentication
+
+The CLI supports authentication via environment variable or command flag:
+
+```bash
+# Set your API key as an environment variable
+export AUSSIE_API_KEY="aussie_xxxxxxxxxxxx"
+
+# Register a service (uses AUSSIE_API_KEY)
+./aussie register -f my-service.json
+
+# Or pass the key directly
+./aussie register -f my-service.json --api-key aussie_xxxxxxxxxxxx
+```
+
+#### Obtaining an API Key
+
+Contact your platform team to obtain an API key with appropriate permissions:
+- **Read-only access**: For viewing registered services
+- **Read/write access**: For registering and managing services
+
+### Custom Authentication Providers
+
+Platform teams can integrate custom authentication systems (OAuth, SAML, custom headers, etc.) by implementing the `HttpAuthenticationMechanism` interface from Quarkus Security.
+
+#### Architecture Overview
+
+Aussie uses Quarkus Security for authentication with `@RolesAllowed` annotations for authorization:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Incoming Request                                               │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  HttpAuthenticationMechanism                                     │
+│  - Extracts credentials from request                            │
+│  - Creates AuthenticationRequest                                │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  IdentityProvider                                               │
+│  - Validates credentials                                        │
+│  - Maps permissions to Quarkus Security roles                   │
+│  - Returns SecurityIdentity                                     │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  @RolesAllowed Enforcement                                      │
+│  - Checks SecurityIdentity roles                                │
+│  - Returns 403 Forbidden if insufficient permissions            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Role Mapping
+
+Permissions are mapped to Quarkus Security roles:
+- `admin:read` → `admin-read` role
+- `admin:write` → `admin-write` role
+- `*` → `admin` role (full access)
+
+#### Creating a Custom Provider
+
+1. **Create an Authentication Request** (credential holder):
+
+```java
+public class MyAuthRequest extends BaseAuthenticationRequest {
+    private final String token;
+
+    public MyAuthRequest(String token) {
+        this.token = token;
+    }
+
+    public String getToken() { return token; }
+}
+```
+
+2. **Implement the Authentication Mechanism** (extracts credentials):
+
+```java
+@ApplicationScoped
+@Priority(2) // Higher priority than default API key auth
+public class MyAuthMechanism implements HttpAuthenticationMechanism {
+
+    @Override
+    public Uni<SecurityIdentity> authenticate(
+            RoutingContext context,
+            IdentityProviderManager identityProviderManager) {
+
+        String token = context.request().getHeader("X-My-Auth-Token");
+        if (token == null) {
+            return Uni.createFrom().nullItem(); // Try next mechanism
+        }
+
+        return identityProviderManager.authenticate(new MyAuthRequest(token));
+    }
+
+    @Override
+    public Set<Class<? extends AuthenticationRequest>> getCredentialTypes() {
+        return Set.of(MyAuthRequest.class);
+    }
+}
+```
+
+3. **Implement the Identity Provider** (validates and creates identity):
+
+```java
+@ApplicationScoped
+public class MyIdentityProvider implements IdentityProvider<MyAuthRequest> {
+
+    @Inject
+    PermissionRoleMapper roleMapper;
+
+    @Override
+    public Class<MyAuthRequest> getRequestType() {
+        return MyAuthRequest.class;
+    }
+
+    @Override
+    public Uni<SecurityIdentity> authenticate(
+            MyAuthRequest request,
+            AuthenticationRequestContext context) {
+
+        return context.runBlocking(() -> {
+            // Validate token against your auth system
+            UserInfo user = validateWithMyAuthSystem(request.getToken());
+
+            // Map permissions to roles
+            Set<String> roles = roleMapper.toRoles(user.getPermissions());
+
+            return QuarkusSecurityIdentity.builder()
+                    .setPrincipal(new MyPrincipal(user.getId(), user.getName()))
+                    .addRoles(roles)
+                    .build();
+        });
+    }
+}
+```
+
+#### Integration Patterns
+
+| Auth System | Implementation Approach |
+|-------------|------------------------|
+| **OAuth2/OIDC** | Use `quarkus-oidc` extension or validate JWT tokens |
+| **SAML** | Parse SAML assertions, map attributes to roles |
+| **Custom Header** | Extract header value, validate against your service |
+| **mTLS** | Extract client certificate info from request |
+
+#### Testing Your Provider
+
+```java
+@QuarkusTest
+class MyAuthProviderTest {
+
+    @Test
+    void authenticatedRequestSucceeds() {
+        given()
+            .header("X-My-Auth-Token", "valid-token")
+        .when()
+            .get("/admin/services")
+        .then()
+            .statusCode(200);
+    }
+}
+```
+
+#### Security Best Practices
+
+1. **Always validate tokens** - Never trust client-provided data
+2. **Use secure token transmission** - Require HTTPS in production
+3. **Log authentication events** - Track successes and failures
+4. **Set appropriate TTLs** - Configure `aussie.auth.api-keys.max-ttl`
+5. **Rotate credentials** - Plan for key rotation in your implementation
+
+---
+
 ## Project Structure
 
 ```
@@ -439,12 +710,25 @@ When registering a service, you can configure endpoints for gateway routing:
 
 ## Admin API
 
+All admin endpoints require authentication. See [Authentication](#authentication) for details.
+
+### Service Management
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/admin/services` | GET | List all registered services |
 | `/admin/services` | POST | Register a new service |
 | `/admin/services/{id}` | GET | Get a specific service |
 | `/admin/services/{id}` | DELETE | Unregister a service |
+
+### API Key Management
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/api-keys` | GET | List all API keys (hashes redacted) |
+| `/admin/api-keys` | POST | Create a new API key |
+| `/admin/api-keys/{id}` | GET | Get a specific API key |
+| `/admin/api-keys/{id}` | DELETE | Revoke an API key |
 
 ## Development
 

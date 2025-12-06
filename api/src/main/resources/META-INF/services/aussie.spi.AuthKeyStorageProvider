@@ -1,0 +1,2 @@
+aussie.adapter.out.storage.memory.InMemoryAuthKeyStorageProvider
+aussie.adapter.out.storage.cassandra.CassandraAuthKeyStorageProvider
