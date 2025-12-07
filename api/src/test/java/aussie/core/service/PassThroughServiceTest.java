@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -18,11 +19,14 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import aussie.adapter.out.storage.NoOpConfigurationCache;
 import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
+import aussie.core.model.AussieToken;
 import aussie.core.model.GatewayRequest;
 import aussie.core.model.GatewayResult;
 import aussie.core.model.GatewaySecurityConfig;
 import aussie.core.model.PreparedProxyRequest;
 import aussie.core.model.ProxyResponse;
+import aussie.core.model.RouteAuthResult;
+import aussie.core.model.RouteMatch;
 import aussie.core.model.ServiceRegistration;
 import aussie.core.port.out.ProxyClient;
 
@@ -34,6 +38,7 @@ class PassThroughServiceTest {
     private ProxyRequestPreparer requestPreparer;
     private TestProxyClient proxyClient;
     private VisibilityResolver visibilityResolver;
+    private ConfigurableRouteAuthService routeAuthService;
     private PassThroughService passThroughService;
 
     // Permissive security config for testing
@@ -47,7 +52,9 @@ class PassThroughServiceTest {
         requestPreparer = new ProxyRequestPreparer(() -> (req, uri) -> Map.of());
         proxyClient = new TestProxyClient();
         visibilityResolver = new VisibilityResolver(new GlobPatternMatcher());
-        passThroughService = new PassThroughService(serviceRegistry, requestPreparer, proxyClient, visibilityResolver);
+        routeAuthService = new ConfigurableRouteAuthService();
+        passThroughService = new PassThroughService(
+                serviceRegistry, requestPreparer, proxyClient, visibilityResolver, routeAuthService);
     }
 
     private GatewayRequest createRequest(String method, String path) {
@@ -251,6 +258,111 @@ class PassThroughServiceTest {
         }
     }
 
+    @Nested
+    @DisplayName("Authentication")
+    class AuthenticationTests {
+
+        @Test
+        @DisplayName("Should forward without authentication when defaultAuthRequired is false")
+        void shouldForwardWithoutAuthWhenNotRequired() {
+            registerService("my-service", "http://backend:9090");
+            proxyClient.setResponse(new ProxyResponse(200, Map.of(), new byte[0]));
+            routeAuthService.setResult(new RouteAuthResult.NotRequired());
+
+            var request = createRequest("GET", "/api/test");
+
+            var result =
+                    passThroughService.forward("my-service", request).await().indefinitely();
+
+            assertInstanceOf(GatewayResult.Success.class, result);
+        }
+
+        @Test
+        @DisplayName("Should return Unauthorized when authentication fails")
+        void shouldReturnUnauthorizedWhenAuthFails() {
+            var service = ServiceRegistration.builder("auth-service")
+                    .baseUrl("http://backend:9090")
+                    .defaultAuthRequired(true)
+                    .build();
+            serviceRegistry.register(service).await().atMost(TIMEOUT);
+            routeAuthService.setResult(new RouteAuthResult.Unauthorized("Token expired"));
+
+            var request = createRequest("GET", "/api/protected");
+
+            var result =
+                    passThroughService.forward("auth-service", request).await().indefinitely();
+
+            assertInstanceOf(GatewayResult.Unauthorized.class, result);
+            var unauthorized = (GatewayResult.Unauthorized) result;
+            assertEquals("Token expired", unauthorized.reason());
+        }
+
+        @Test
+        @DisplayName("Should return Forbidden when user lacks permission")
+        void shouldReturnForbiddenWhenLacksPermission() {
+            var service = ServiceRegistration.builder("auth-service")
+                    .baseUrl("http://backend:9090")
+                    .defaultAuthRequired(true)
+                    .build();
+            serviceRegistry.register(service).await().atMost(TIMEOUT);
+            routeAuthService.setResult(new RouteAuthResult.Forbidden("Insufficient permissions"));
+
+            var request = createRequest("GET", "/api/admin");
+
+            var result =
+                    passThroughService.forward("auth-service", request).await().indefinitely();
+
+            assertInstanceOf(GatewayResult.Forbidden.class, result);
+            var forbidden = (GatewayResult.Forbidden) result;
+            assertEquals("Insufficient permissions", forbidden.reason());
+        }
+
+        @Test
+        @DisplayName("Should forward with token when authentication succeeds")
+        void shouldForwardWithTokenWhenAuthSucceeds() {
+            var service = ServiceRegistration.builder("auth-service")
+                    .baseUrl("http://backend:9090")
+                    .defaultAuthRequired(true)
+                    .build();
+            serviceRegistry.register(service).await().atMost(TIMEOUT);
+            proxyClient.setResponse(new ProxyResponse(200, Map.of(), new byte[0]));
+
+            var token =
+                    new AussieToken("test-token-jws", "user123", Instant.now().plusSeconds(3600), Map.of());
+            routeAuthService.setResult(new RouteAuthResult.Authenticated(token));
+
+            var request = createRequest("GET", "/api/protected");
+
+            var result =
+                    passThroughService.forward("auth-service", request).await().indefinitely();
+
+            assertInstanceOf(GatewayResult.Success.class, result);
+            var forwardedRequest = proxyClient.getLastRequest();
+            var authHeader = forwardedRequest.headers().get("Authorization");
+            assertEquals(List.of("Bearer test-token-jws"), authHeader);
+        }
+
+        @Test
+        @DisplayName("Should use defaultAuthRequired from service registration")
+        void shouldUseDefaultAuthRequiredFromService() {
+            var service = ServiceRegistration.builder("protected-service")
+                    .baseUrl("http://backend:9090")
+                    .defaultAuthRequired(true)
+                    .build();
+            serviceRegistry.register(service).await().atMost(TIMEOUT);
+            routeAuthService.setResult(new RouteAuthResult.Unauthorized("Authentication required"));
+
+            var request = createRequest("GET", "/api/data");
+
+            var result = passThroughService
+                    .forward("protected-service", request)
+                    .await()
+                    .indefinitely();
+
+            assertInstanceOf(GatewayResult.Unauthorized.class, result);
+        }
+    }
+
     private static class TestProxyClient implements ProxyClient {
         private ProxyResponse response = new ProxyResponse(200, Map.of(), new byte[0]);
         private Throwable error = null;
@@ -277,6 +389,27 @@ class PassThroughServiceTest {
                 return Uni.createFrom().failure(error);
             }
             return Uni.createFrom().item(response);
+        }
+    }
+
+    /**
+     * A configurable route authentication service for testing.
+     * Allows tests to set the desired authentication result.
+     */
+    private static class ConfigurableRouteAuthService extends RouteAuthenticationService {
+        private RouteAuthResult result = new RouteAuthResult.NotRequired();
+
+        ConfigurableRouteAuthService() {
+            super(null, null);
+        }
+
+        void setResult(RouteAuthResult result) {
+            this.result = result;
+        }
+
+        @Override
+        public Uni<RouteAuthResult> authenticate(GatewayRequest request, RouteMatch route) {
+            return Uni.createFrom().item(result);
         }
     }
 }

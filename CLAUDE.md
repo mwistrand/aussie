@@ -34,3 +34,8 @@ Project layout:
 - Always use `@Override`
 - Prefer `Optional` over null for API return types
 - Use `var` only for local variables with obvious types
+
+## Database
+
+- Cassandra and Redis by default
+- Always include migration scripts when necessary

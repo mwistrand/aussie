@@ -14,6 +14,7 @@ public record ServiceRegistrationRequest(
         String baseUrl,
         String routePrefix,
         String defaultVisibility,
+        Boolean defaultAuthRequired,
         List<VisibilityRuleDto> visibilityRules,
         List<EndpointConfigDto> endpoints,
         ServiceAccessConfigDto accessConfig) {
@@ -21,6 +22,8 @@ public record ServiceRegistrationRequest(
         var defaultVis = defaultVisibility != null
                 ? EndpointVisibility.valueOf(defaultVisibility.toUpperCase())
                 : EndpointVisibility.PRIVATE;
+
+        var defaultAuth = defaultAuthRequired != null ? defaultAuthRequired : true;
 
         var visibilityRuleModels = visibilityRules != null
                 ? visibilityRules.stream().map(VisibilityRuleDto::toModel).toList()
@@ -40,6 +43,7 @@ public record ServiceRegistrationRequest(
                 URI.create(baseUrl),
                 routePrefix,
                 defaultVis,
+                defaultAuth,
                 visibilityRuleModels,
                 endpointModels,
                 accessConfigModel);

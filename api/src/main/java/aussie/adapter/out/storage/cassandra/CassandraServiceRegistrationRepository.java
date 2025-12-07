@@ -52,9 +52,9 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                 """
                 INSERT INTO service_registrations
                 (service_id, display_name, base_url, route_prefix,
-                 default_visibility, visibility_rules, endpoints, access_config,
+                 default_visibility, default_auth_required, visibility_rules, endpoints, access_config,
                  created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
                 """);
     }
 
@@ -88,6 +88,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                             registration.baseUrl().toString(),
                             registration.routePrefix(),
                             registration.defaultVisibility().name(),
+                            registration.defaultAuthRequired(),
                             toJson(registration.visibilityRules()),
                             toJson(registration.endpoints()),
                             registration.accessConfig().map(this::toJson).orElse(null));
@@ -157,12 +158,16 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     }
 
     private ServiceRegistration fromRow(Row row) {
+        // Default to true for existing rows where column is null
+        boolean defaultAuthRequired = row.isNull("default_auth_required") ? true : row.getBool("default_auth_required");
+
         return new ServiceRegistration(
                 row.getString("service_id"),
                 row.getString("display_name"),
                 URI.create(row.getString("base_url")),
                 row.getString("route_prefix"),
                 EndpointVisibility.valueOf(row.getString("default_visibility")),
+                defaultAuthRequired,
                 fromJsonList(row.getString("visibility_rules"), new TypeReference<>() {}),
                 fromJsonList(row.getString("endpoints"), new TypeReference<>() {}),
                 Optional.ofNullable(row.getString("access_config"))

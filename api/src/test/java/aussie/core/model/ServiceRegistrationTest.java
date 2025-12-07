@@ -102,6 +102,7 @@ class ServiceRegistrationTest {
                     URI.create("http://localhost:8080"),
                     null, // routePrefix - defaults to /my-service
                     null, // defaultVisibility - defaults to PRIVATE
+                    false, // defaultAuthRequired
                     null, // visibilityRules - defaults to empty list
                     List.of(),
                     Optional.empty());

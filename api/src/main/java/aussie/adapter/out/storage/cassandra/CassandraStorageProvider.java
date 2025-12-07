@@ -6,6 +6,7 @@ import java.util.Optional;
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.datastax.oss.driver.api.core.CqlSessionBuilder;
 import io.smallrye.mutiny.Uni;
+import org.jboss.logging.Logger;
 
 import aussie.core.model.StorageHealth;
 import aussie.core.port.out.ServiceRegistrationRepository;
@@ -27,6 +28,8 @@ import aussie.spi.StorageRepositoryProvider;
  * </ul>
  */
 public class CassandraStorageProvider implements StorageRepositoryProvider {
+
+    private static final Logger LOG = Logger.getLogger(CassandraStorageProvider.class);
 
     private CqlSession session;
 
@@ -57,8 +60,37 @@ public class CassandraStorageProvider implements StorageRepositoryProvider {
 
     @Override
     public ServiceRegistrationRepository createRepository(StorageAdapterConfig config) {
+        String keyspace = config.getOrDefault("aussie.storage.cassandra.keyspace", "aussie");
+        boolean runMigrations =
+                Boolean.parseBoolean(config.getOrDefault("aussie.storage.cassandra.run-migrations", "false"));
+
+        if (runMigrations) {
+            runMigrations(config, keyspace);
+        }
+
         this.session = buildSession(config);
         return new CassandraServiceRegistrationRepository(session);
+    }
+
+    private void runMigrations(StorageAdapterConfig config, String keyspace) {
+        LOG.info("Running Cassandra migrations...");
+
+        // First, connect without keyspace to run keyspace creation migration
+        try (CqlSession noKeyspaceSession = buildSessionWithoutKeyspace(config)) {
+            // Run V1 (keyspace creation) with session without keyspace
+            var keyspaceMigrationRunner = new CassandraMigrationRunner(noKeyspaceSession, keyspace);
+            keyspaceMigrationRunner.runKeyspaceMigration();
+        } catch (Exception e) {
+            LOG.warnv("Keyspace migration check failed (may already exist): {0}", e.getMessage());
+        }
+
+        // Then connect with keyspace for all other migrations
+        try (CqlSession keyspaceSession = buildSession(config)) {
+            var migrationRunner = new CassandraMigrationRunner(keyspaceSession, keyspace);
+            migrationRunner.runMigrations();
+        }
+
+        LOG.info("Cassandra migrations completed");
     }
 
     @Override
@@ -82,12 +114,23 @@ public class CassandraStorageProvider implements StorageRepositoryProvider {
     }
 
     private CqlSession buildSession(StorageAdapterConfig config) {
+        String keyspace = config.getOrDefault("aussie.storage.cassandra.keyspace", "aussie");
+        return buildSessionInternal(config, keyspace);
+    }
+
+    private CqlSession buildSessionWithoutKeyspace(StorageAdapterConfig config) {
+        return buildSessionInternal(config, null);
+    }
+
+    private CqlSession buildSessionInternal(StorageAdapterConfig config, String keyspace) {
         String contactPoints = config.getOrDefault("aussie.storage.cassandra.contact-points", "localhost:9042");
         String datacenter = config.getOrDefault("aussie.storage.cassandra.datacenter", "datacenter1");
-        String keyspace = config.getOrDefault("aussie.storage.cassandra.keyspace", "aussie");
 
-        CqlSessionBuilder builder =
-                CqlSession.builder().withLocalDatacenter(datacenter).withKeyspace(keyspace);
+        CqlSessionBuilder builder = CqlSession.builder().withLocalDatacenter(datacenter);
+
+        if (keyspace != null) {
+            builder.withKeyspace(keyspace);
+        }
 
         for (String contactPoint : contactPoints.split(",")) {
             String[] parts = contactPoint.trim().split(":");

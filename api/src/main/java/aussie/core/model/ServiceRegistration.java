@@ -10,6 +10,7 @@ public record ServiceRegistration(
         URI baseUrl,
         String routePrefix,
         EndpointVisibility defaultVisibility,
+        boolean defaultAuthRequired,
         List<VisibilityRule> visibilityRules,
         List<EndpointConfig> endpoints,
         Optional<ServiceAccessConfig> accessConfig) {
@@ -50,6 +51,7 @@ public record ServiceRegistration(
         private URI baseUrl;
         private String routePrefix;
         private EndpointVisibility defaultVisibility;
+        private boolean defaultAuthRequired = true;
         private List<VisibilityRule> visibilityRules = List.of();
         private List<EndpointConfig> endpoints = List.of();
         private ServiceAccessConfig accessConfig;
@@ -83,6 +85,11 @@ public record ServiceRegistration(
             return this;
         }
 
+        public Builder defaultAuthRequired(boolean defaultAuthRequired) {
+            this.defaultAuthRequired = defaultAuthRequired;
+            return this;
+        }
+
         public Builder visibilityRules(List<VisibilityRule> visibilityRules) {
             this.visibilityRules = visibilityRules;
             return this;
@@ -105,6 +112,7 @@ public record ServiceRegistration(
                     baseUrl,
                     routePrefix,
                     defaultVisibility,
+                    defaultAuthRequired,
                     visibilityRules,
                     endpoints,
                     Optional.ofNullable(accessConfig));

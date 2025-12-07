@@ -10,6 +10,7 @@ public record ServiceRegistrationResponse(
         String baseUrl,
         String routePrefix,
         String defaultVisibility,
+        Boolean defaultAuthRequired,
         List<VisibilityRuleDto> visibilityRules,
         List<EndpointConfigDto> endpoints,
         ServiceAccessConfigDto accessConfig) {
@@ -33,6 +34,7 @@ public record ServiceRegistrationResponse(
                 model.baseUrl().toString(),
                 model.routePrefix(),
                 model.defaultVisibility().name(),
+                model.defaultAuthRequired() ? null : false,
                 visibilityRuleDtos,
                 endpointDtos,
                 accessConfigDto);

@@ -281,6 +281,7 @@ class PassThroughIntegrationTest {
                     .displayName("Unreachable Service")
                     .baseUrl("http://localhost:59999")
                     .defaultVisibility(EndpointVisibility.PUBLIC)
+                    .defaultAuthRequired(false)
                     .endpoints(List.of())
                     .build();
             serviceRegistry.register(service).await().atMost(java.time.Duration.ofSeconds(5));
@@ -325,6 +326,7 @@ class PassThroughIntegrationTest {
             var service = ServiceRegistration.builder("restricted-service")
                     .displayName("Restricted Service")
                     .baseUrl("http://localhost:" + backendServer.port())
+                    .defaultAuthRequired(false)
                     .endpoints(List.of())
                     .accessConfig(accessConfig)
                     .build();
@@ -350,6 +352,7 @@ class PassThroughIntegrationTest {
             var service = ServiceRegistration.builder("restricted-service")
                     .displayName("Restricted Service")
                     .baseUrl("http://localhost:" + backendServer.port())
+                    .defaultAuthRequired(false)
                     .endpoints(List.of())
                     .accessConfig(accessConfig)
                     .build();
@@ -389,6 +392,7 @@ class PassThroughIntegrationTest {
                     .displayName("Mixed Service")
                     .baseUrl("http://localhost:" + backendServer.port())
                     .defaultVisibility(EndpointVisibility.PUBLIC)
+                    .defaultAuthRequired(false)
                     .endpoints(List.of(endpoint))
                     .build();
             serviceRegistry.register(service).await().atMost(java.time.Duration.ofSeconds(5));
@@ -414,6 +418,7 @@ class PassThroughIntegrationTest {
                 .displayName(serviceId)
                 .baseUrl("http://localhost:" + backendServer.port())
                 .defaultVisibility(EndpointVisibility.PUBLIC)
+                .defaultAuthRequired(false)
                 .endpoints(List.of())
                 .build();
         serviceRegistry.register(service).await().atMost(java.time.Duration.ofSeconds(5));
