@@ -24,17 +24,23 @@ import aussie.core.port.out.ApiKeyRepository;
  * aussie.auth.storage.provider=cassandra or implement a custom provider.
  *
  * <p>This class is instantiated by {@link InMemoryAuthKeyStorageProvider}.
+ *
+ * <p>Thread-safety: Uses explicit synchronization to maintain consistency
+ * between the two internal maps during write operations.
  */
 public class InMemoryApiKeyRepository implements ApiKeyRepository {
 
     private final ConcurrentHashMap<String, ApiKey> storageById = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ApiKey> storageByHash = new ConcurrentHashMap<>();
+    private final Object writeLock = new Object();
 
     @Override
     public Uni<Void> save(ApiKey apiKey) {
         return Uni.createFrom().item(() -> {
-            storageById.put(apiKey.id(), apiKey);
-            storageByHash.put(apiKey.keyHash(), apiKey);
+            synchronized (writeLock) {
+                storageById.put(apiKey.id(), apiKey);
+                storageByHash.put(apiKey.keyHash(), apiKey);
+            }
             return null;
         });
     }
@@ -52,12 +58,14 @@ public class InMemoryApiKeyRepository implements ApiKeyRepository {
     @Override
     public Uni<Boolean> delete(String keyId) {
         return Uni.createFrom().item(() -> {
-            var apiKey = storageById.remove(keyId);
-            if (apiKey != null) {
-                storageByHash.remove(apiKey.keyHash());
-                return true;
+            synchronized (writeLock) {
+                var apiKey = storageById.remove(keyId);
+                if (apiKey != null) {
+                    storageByHash.remove(apiKey.keyHash());
+                    return true;
+                }
+                return false;
             }
-            return false;
         });
     }
 

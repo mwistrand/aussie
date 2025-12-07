@@ -3,6 +3,7 @@ package aussie.adapter.in.auth;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.core.MultivaluedMap;
@@ -19,10 +20,12 @@ import aussie.spi.AuthenticationProvider;
 /**
  * Development-only authentication provider that allows all requests.
  *
- * <p>This provider grants all permissions to all requests without requiring
+ * <p>
+ * This provider grants all permissions to all requests without requiring
  * any credentials. It is intended ONLY for local development and testing.
  *
- * <p><b>WARNING:</b> Never enable this in production! The property
+ * <p>
+ * <b>WARNING:</b> Never enable this in production! The property
  * {@code aussie.auth.dangerous-noop} must be explicitly set to {@code true}
  * for this provider to be active.
  */
@@ -31,7 +34,7 @@ public class NoopAuthProvider implements AuthenticationProvider {
 
     private static final Logger LOG = Logger.getLogger(NoopAuthProvider.class);
 
-    private boolean warningLogged = false;
+    private final AtomicBoolean warningLogged = new AtomicBoolean(false);
 
     /**
      * Reads the config dynamically at runtime.
@@ -57,11 +60,10 @@ public class NoopAuthProvider implements AuthenticationProvider {
     @Override
     public boolean isAvailable() {
         boolean enabled = isDangerousNoopEnabled();
-        if (enabled && !warningLogged) {
+        if (enabled && warningLogged.compareAndSet(false, true)) {
             LOG.warn("⚠️  DANGEROUS: Authentication is DISABLED (aussie.auth.dangerous-noop=true)");
             LOG.warn("⚠️  All requests will be allowed without authentication!");
             LOG.warn("⚠️  Do NOT use this setting in production!");
-            warningLogged = true;
         }
         return enabled;
     }

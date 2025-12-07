@@ -30,6 +30,9 @@ import aussie.spi.StorageRepositoryProvider;
  *   <li>Otherwise, select the highest priority available provider</li>
  *   <li>Cache provider is selected independently (and is optional)</li>
  * </ol>
+ *
+ * <p>Thread-safety: Uses synchronized methods for lazy provider initialization
+ * to ensure thread-safe access from CDI producer methods.
  */
 @ApplicationScoped
 public class StorageProviderLoader {
@@ -104,7 +107,7 @@ public class StorageProviderLoader {
         return indicators;
     }
 
-    private StorageRepositoryProvider getRepositoryProvider() {
+    private synchronized StorageRepositoryProvider getRepositoryProvider() {
         if (repositoryProvider != null) {
             return repositoryProvider;
         }
@@ -127,7 +130,7 @@ public class StorageProviderLoader {
         return repositoryProvider;
     }
 
-    private Optional<ConfigurationCacheProvider> getCacheProvider() {
+    private synchronized Optional<ConfigurationCacheProvider> getCacheProvider() {
         if (cacheProviderResolved) {
             return Optional.ofNullable(cacheProvider);
         }

@@ -1,5 +1,6 @@
 package aussie.core.service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -200,7 +201,7 @@ public class ServiceRegistry {
     }
 
     private Map<String, String> extractPathVariables(String pathTemplate, Matcher matcher) {
-        var variables = new ConcurrentHashMap<String, String>();
+        var variables = new HashMap<String, String>();
         var paramPattern = Pattern.compile("\\{([^/]+)\\}");
         var paramMatcher = paramPattern.matcher(pathTemplate);
 

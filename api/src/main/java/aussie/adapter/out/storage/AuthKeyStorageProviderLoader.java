@@ -32,6 +32,9 @@ import aussie.spi.StorageProviderException;
  *   <li>Otherwise, select the highest priority available provider</li>
  *   <li>Cache provider is selected independently (and is optional)</li>
  * </ol>
+ *
+ * <p>Thread-safety: Uses synchronized methods for lazy provider initialization
+ * to ensure thread-safe access from CDI producer methods.
  */
 @ApplicationScoped
 public class AuthKeyStorageProviderLoader {
@@ -111,7 +114,7 @@ public class AuthKeyStorageProviderLoader {
         return indicators;
     }
 
-    private AuthKeyStorageProvider getStorageProvider() {
+    private synchronized AuthKeyStorageProvider getStorageProvider() {
         if (storageProvider != null) {
             return storageProvider;
         }
@@ -134,7 +137,7 @@ public class AuthKeyStorageProviderLoader {
         return storageProvider;
     }
 
-    private Optional<AuthKeyCacheProvider> getCacheProvider() {
+    private synchronized Optional<AuthKeyCacheProvider> getCacheProvider() {
         if (cacheProviderResolved) {
             return Optional.ofNullable(cacheProvider);
         }

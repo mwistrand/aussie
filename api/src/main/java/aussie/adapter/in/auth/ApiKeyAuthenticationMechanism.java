@@ -1,6 +1,7 @@
 package aussie.adapter.in.auth;
 
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -20,11 +21,14 @@ import org.jboss.logging.Logger;
 /**
  * Quarkus HTTP authentication mechanism for API key authentication.
  *
- * <p>Extracts Bearer tokens from the Authorization header and creates
+ * <p>
+ * Extracts Bearer tokens from the Authorization header and creates
  * {@link ApiKeyAuthenticationRequest} credentials for validation by
  * {@link ApiKeyIdentityProvider}.
  *
- * <p>Example:
+ * <p>
+ * Example:
+ *
  * <pre>
  * Authorization: Bearer aussie_xxxxxxxxxxxx
  * </pre>
@@ -38,7 +42,7 @@ public class ApiKeyAuthenticationMechanism implements HttpAuthenticationMechanis
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String AUTHORIZATION_HEADER = "Authorization";
 
-    private boolean noopWarningLogged = false;
+    private final AtomicBoolean noopWarningLogged = new AtomicBoolean();
 
     /**
      * Check if dangerous noop mode is enabled.
@@ -53,11 +57,10 @@ public class ApiKeyAuthenticationMechanism implements HttpAuthenticationMechanis
      * Creates a SecurityIdentity with all roles for noop mode.
      */
     private SecurityIdentity createNoopIdentity() {
-        if (!noopWarningLogged) {
+        if (noopWarningLogged.compareAndSet(false, true)) {
             LOG.warn("⚠️  DANGEROUS: Authentication is DISABLED (aussie.auth.dangerous-noop=true)");
             LOG.warn("⚠️  All requests will be allowed without authentication!");
             LOG.warn("⚠️  Do NOT use this setting in production!");
-            noopWarningLogged = true;
         }
 
         return QuarkusSecurityIdentity.builder()

@@ -30,7 +30,11 @@ import aussie.core.port.out.JwksCache;
  *   <li>In-memory caching with configurable TTL</li>
  *   <li>Automatic refresh before expiration</li>
  *   <li>Graceful handling of key rotation</li>
+ *   <li>Thundering herd protection via request coalescing</li>
  * </ul>
+ *
+ * <p>Thread-safety: Uses request coalescing to prevent multiple concurrent
+ * fetches to the same JWKS endpoint when the cache expires.
  */
 @ApplicationScoped
 public class JwksCacheService implements JwksCache {
@@ -40,6 +44,7 @@ public class JwksCacheService implements JwksCache {
 
     private final WebClient webClient;
     private final Map<URI, CachedKeySet> cache = new ConcurrentHashMap<>();
+    private final Map<URI, Uni<JsonWebKeySet>> inFlightFetches = new ConcurrentHashMap<>();
 
     @Inject
     public JwksCacheService(Vertx vertx) {
@@ -53,7 +58,27 @@ public class JwksCacheService implements JwksCache {
             LOG.debugv("Using cached JWKS for {0}", jwksUri);
             return Uni.createFrom().item(cached.keySet());
         }
-        return fetchAndCache(jwksUri);
+        return getOrCreateFetch(jwksUri);
+    }
+
+    /**
+     * Gets an existing in-flight fetch or creates a new one.
+     * This prevents thundering herd by coalescing concurrent requests.
+     */
+    private Uni<JsonWebKeySet> getOrCreateFetch(URI jwksUri) {
+        return Uni.createFrom().deferred(() -> {
+            // Use computeIfAbsent to ensure only one fetch per URI
+            var fetch = inFlightFetches.computeIfAbsent(jwksUri, this::createFetch);
+            return fetch;
+        });
+    }
+
+    private Uni<JsonWebKeySet> createFetch(URI jwksUri) {
+        return fetchAndCache(jwksUri)
+                .onTermination()
+                .invoke(() -> inFlightFetches.remove(jwksUri))
+                .memoize()
+                .indefinitely();
     }
 
     @Override
@@ -65,13 +90,15 @@ public class JwksCacheService implements JwksCache {
     public Uni<JsonWebKeySet> refresh(URI jwksUri) {
         LOG.infov("Force refreshing JWKS for {0}", jwksUri);
         cache.remove(jwksUri);
-        return fetchAndCache(jwksUri);
+        inFlightFetches.remove(jwksUri); // Clear any stale in-flight fetch
+        return getOrCreateFetch(jwksUri);
     }
 
     @Override
     public void invalidate(URI jwksUri) {
         LOG.infov("Invalidating cached JWKS for {0}", jwksUri);
         cache.remove(jwksUri);
+        inFlightFetches.remove(jwksUri);
     }
 
     private Uni<JsonWebKeySet> fetchAndCache(URI jwksUri) {
