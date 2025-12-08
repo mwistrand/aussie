@@ -45,12 +45,31 @@ public class BootstrapIntegrationTest {
     public static class BootstrapEnabledProfile implements QuarkusTestProfile {
         @Override
         public Map<String, String> getConfigOverrides() {
-            return Map.of(
-                    "aussie.bootstrap.enabled", "true",
-                    "aussie.bootstrap.key", TEST_BOOTSTRAP_KEY,
-                    "aussie.bootstrap.ttl", "PT1H",
+            return Map.ofEntries(
+                    Map.entry("aussie.bootstrap.enabled", "true"),
+                    Map.entry("aussie.bootstrap.key", TEST_BOOTSTRAP_KEY),
+                    Map.entry("aussie.bootstrap.ttl", "PT1H"),
                     // Disable dangerous-noop so we can test actual authentication
-                    "aussie.auth.dangerous-noop", "false");
+                    Map.entry("aussie.auth.dangerous-noop", "false"),
+                    // Session configuration (disabled for this test)
+                    Map.entry("aussie.session.enabled", "false"),
+                    Map.entry("aussie.session.ttl", "PT8H"),
+                    Map.entry("aussie.session.idle-timeout", "PT30M"),
+                    Map.entry("aussie.session.sliding-expiration", "true"),
+                    Map.entry("aussie.session.id-generation.max-retries", "3"),
+                    Map.entry("aussie.session.cookie.name", "aussie_session"),
+                    Map.entry("aussie.session.cookie.path", "/"),
+                    Map.entry("aussie.session.cookie.secure", "false"),
+                    Map.entry("aussie.session.cookie.http-only", "true"),
+                    Map.entry("aussie.session.cookie.same-site", "Lax"),
+                    Map.entry("aussie.session.storage.provider", "memory"),
+                    Map.entry("aussie.session.storage.redis.key-prefix", "aussie:session:"),
+                    Map.entry("aussie.session.jws.enabled", "false"),
+                    Map.entry("aussie.session.jws.ttl", "PT5M"),
+                    Map.entry("aussie.session.jws.issuer", "aussie-gateway"),
+                    Map.entry("aussie.session.jws.include-claims", "sub,email,name,roles"),
+                    // Route auth disabled
+                    Map.entry("aussie.auth.route-auth.enabled", "false"));
         }
     }
 

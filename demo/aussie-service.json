@@ -18,6 +18,26 @@
       "pattern": "/api/auth/test",
       "methods": ["GET", "POST"],
       "visibility": "PUBLIC"
+    },
+    {
+      "pattern": "/login",
+      "methods": ["GET"],
+      "visibility": "PUBLIC"
+    },
+    {
+      "pattern": "/api/auth/login",
+      "methods": ["POST"],
+      "visibility": "PUBLIC"
+    },
+    {
+      "pattern": "/api/auth/callback",
+      "methods": ["GET"],
+      "visibility": "PUBLIC"
+    },
+    {
+      "pattern": "/.well-known/jwks.json",
+      "methods": ["GET"],
+      "visibility": "PUBLIC"
     }
   ]
 }
