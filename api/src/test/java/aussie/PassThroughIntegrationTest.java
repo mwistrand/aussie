@@ -174,8 +174,10 @@ class PassThroughIntegrationTest {
 
             registerService("data-service");
 
+            // Note: Authorization headers are consumed by auth mechanism,
+            // so we test with other custom headers
             given().header("X-Custom-Header", "custom-value")
-                    .header("Authorization", "Bearer token123")
+                    .header("X-Request-Id", "req-12345")
                     .when()
                     .get("/data-service/api/data")
                     .then()
@@ -183,7 +185,7 @@ class PassThroughIntegrationTest {
 
             backendServer.verify(getRequestedFor(urlEqualTo("/api/data"))
                     .withHeader("X-Custom-Header", WireMock.equalTo("custom-value"))
-                    .withHeader("Authorization", WireMock.equalTo("Bearer token123")));
+                    .withHeader("X-Request-Id", WireMock.equalTo("req-12345")));
         }
 
         @Test

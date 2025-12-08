@@ -73,31 +73,25 @@ public class ApiKeyAuthenticationMechanism implements HttpAuthenticationMechanis
 
     @Override
     public Uni<SecurityIdentity> authenticate(RoutingContext context, IdentityProviderManager identityProviderManager) {
-        // Check if noop mode is enabled - grant all permissions
+        String authHeader = context.request().getHeader(AUTHORIZATION_HEADER);
+
+        // Check for Bearer token first - always validate API keys when provided
+        if (authHeader != null && !authHeader.isBlank() && authHeader.startsWith(BEARER_PREFIX)) {
+            String apiKey = authHeader.substring(BEARER_PREFIX.length()).trim();
+            if (!apiKey.isBlank()) {
+                // Create authentication request and delegate to identity provider
+                ApiKeyAuthenticationRequest request = new ApiKeyAuthenticationRequest(apiKey);
+                return identityProviderManager.authenticate(request);
+            }
+        }
+
+        // No valid Bearer token - check if noop mode is enabled as fallback
         if (isDangerousNoopEnabled()) {
             return Uni.createFrom().item(createNoopIdentity());
         }
 
-        String authHeader = context.request().getHeader(AUTHORIZATION_HEADER);
-
-        // No Authorization header - return null to try other mechanisms
-        if (authHeader == null || authHeader.isBlank()) {
-            return Uni.createFrom().nullItem();
-        }
-
-        // Not a Bearer token - return null to try other mechanisms
-        if (!authHeader.startsWith(BEARER_PREFIX)) {
-            return Uni.createFrom().nullItem();
-        }
-
-        String apiKey = authHeader.substring(BEARER_PREFIX.length()).trim();
-        if (apiKey.isBlank()) {
-            return Uni.createFrom().nullItem();
-        }
-
-        // Create authentication request and delegate to identity provider
-        ApiKeyAuthenticationRequest request = new ApiKeyAuthenticationRequest(apiKey);
-        return identityProviderManager.authenticate(request);
+        // No auth header and noop disabled - return null to try other mechanisms
+        return Uni.createFrom().nullItem();
     }
 
     @Override
