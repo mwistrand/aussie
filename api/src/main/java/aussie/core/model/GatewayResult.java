@@ -31,4 +31,6 @@ public sealed interface GatewayResult {
     record Unauthorized(String reason) implements GatewayResult {}
 
     record Forbidden(String reason) implements GatewayResult {}
+
+    record BadRequest(String reason) implements GatewayResult {}
 }

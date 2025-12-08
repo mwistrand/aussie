@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aussie CORS Demo</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            padding: 2rem;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #1a1a1a;
+            margin-bottom: 0.5rem;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 2rem;
+        }
+        .info-box {
+            background: #e7f3ff;
+            border: 1px solid #b3d4fc;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+        }
+        .info-box h3 {
+            color: #0066cc;
+            margin-bottom: 0.5rem;
+        }
+        .info-box code {
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .card h2 {
+            color: #333;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+        .btn {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+        .btn:hover {
+            background: #0052a3;
+        }
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background: #6c757d;
+        }
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        .btn-success {
+            background: #28a745;
+        }
+        .btn-success:hover {
+            background: #218838;
+        }
+        .btn-danger {
+            background: #dc3545;
+        }
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        .btn-small {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+        .result {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.875rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+            display: none;
+        }
+        .result.show {
+            display: block;
+        }
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        .url-input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            margin-bottom: 1rem;
+        }
+        .config-section {
+            display: grid;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        @media (min-width: 600px) {
+            .config-section {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        label {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+        }
+        .endpoints {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .endpoint-btn {
+            background: #e9ecef;
+            border: 1px solid #dee2e6;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .endpoint-btn:hover {
+            background: #dee2e6;
+        }
+        .method-select {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+        }
+        .auth-status {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+        }
+        .auth-status.authenticated {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        .auth-status.unauthenticated {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+        }
+        .auth-status .status-text {
+            flex: 1;
+        }
+        .auth-status .user-info {
+            font-weight: 500;
+        }
+        .login-form {
+            display: grid;
+            gap: 1rem;
+        }
+        .login-form.hidden {
+            display: none;
+        }
+        .form-row {
+            display: grid;
+            gap: 1rem;
+        }
+        @media (min-width: 600px) {
+            .form-row {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .form-group input {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .checkbox-group input {
+            width: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Aussie Gateway - CORS Demo</h1>
+        <p class="subtitle">Testing cross-origin requests through the API gateway</p>
+
+        <div class="info-box">
+            <h3>Architecture</h3>
+            <p>
+                <strong>This UI</strong> runs on <code>localhost:8080</code><br>
+                <strong>Aussie Gateway</strong> runs on <code>localhost:1234</code><br>
+                <strong>Demo API</strong> runs on <code>localhost:3000</code>
+            </p>
+            <p style="margin-top: 0.5rem;">
+                When you make a request, the browser sends it to Aussie, which proxies it to the Demo API.
+                CORS headers allow this cross-origin communication.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>Authentication</h2>
+            <div id="authStatus" class="auth-status unauthenticated">
+                <div class="status-text">
+                    <span id="statusIcon">&#x26A0;</span>
+                    <span id="statusMessage">Not authenticated</span>
+                    <div id="userInfo" class="user-info" style="display: none;"></div>
+                </div>
+                <button id="logoutBtn" class="btn btn-danger btn-small" onclick="logout()" style="display: none;">Logout</button>
+            </div>
+
+            <div id="loginForm" class="login-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" placeholder="Enter any username" value="testuser">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" placeholder="Enter any password" value="password">
+                    </div>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="isAdmin">
+                    <label for="isAdmin" style="margin-bottom: 0;">Login as Admin (grants admin permissions)</label>
+                </div>
+                <div>
+                    <button class="btn btn-success" onclick="login()">Login via Aussie</button>
+                    <button class="btn btn-secondary" onclick="checkSession()" style="margin-left: 0.5rem;">Check Session</button>
+                </div>
+            </div>
+
+            <div id="authResult" class="result"></div>
+        </div>
+
+        <div class="card">
+            <h2>Gateway Configuration</h2>
+            <div class="config-section">
+                <div>
+                    <label for="aussieUrl">Aussie Gateway URL</label>
+                    <input type="text" id="aussieUrl" class="url-input" value="http://localhost:1234">
+                </div>
+                <div>
+                    <label for="serviceId">Service ID</label>
+                    <input type="text" id="serviceId" class="url-input" value="demo-service">
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Test API Endpoints</h2>
+            <p style="margin-bottom: 1rem; color: #666;">Quick test endpoints:</p>
+            <div class="endpoints">
+                <button class="endpoint-btn" onclick="testEndpoint('/api/health', 'GET')">GET /api/health</button>
+                <button class="endpoint-btn" onclick="testEndpoint('/api/users', 'GET')">GET /api/users</button>
+                <button class="endpoint-btn" onclick="testEndpoint('/api/users', 'POST')">POST /api/users</button>
+                <button class="endpoint-btn" onclick="testEndpoint('/api/admin/stats', 'GET')">GET /api/admin/stats (requires auth)</button>
+            </div>
+
+            <div>
+                <label for="customPath">Custom Path</label>
+                <input type="text" id="customPath" class="url-input" value="/api/health" placeholder="/api/health">
+            </div>
+            <div>
+                <label for="method">HTTP Method</label>
+                <select id="method" class="method-select">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                    <option value="OPTIONS">OPTIONS (Preflight)</option>
+                </select>
+            </div>
+            <button class="btn" onclick="makeRequest()">Send Request</button>
+            <button class="btn btn-secondary" onclick="sendPreflight()" style="margin-left: 0.5rem;">Test Preflight</button>
+
+            <div id="result" class="result"></div>
+        </div>
+
+        <div class="card">
+            <h2>Response Headers</h2>
+            <p style="margin-bottom: 1rem; color: #666;">CORS headers from the last response:</p>
+            <div id="headers" class="result show" style="display: block; background: #f8f9fa;">No request made yet</div>
+        </div>
+    </div>
+
+    <script>
+        // Check session on page load
+        document.addEventListener('DOMContentLoaded', checkSession);
+
+        function getConfig() {
+            return {
+                aussieUrl: document.getElementById('aussieUrl').value.replace(/\/$/, ''),
+                serviceId: document.getElementById('serviceId').value
+            };
+        }
+
+        async function login() {
+            const config = getConfig();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const isAdmin = document.getElementById('isAdmin').checked;
+            const authResult = document.getElementById('authResult');
+
+            if (!username) {
+                authResult.className = 'result show error';
+                authResult.textContent = 'Please enter a username';
+                return;
+            }
+
+            authResult.className = 'result show';
+            authResult.textContent = 'Logging in...';
+
+            try {
+                // Call demo API's login endpoint through Aussie
+                const loginUrl = `${config.aussieUrl}/${config.serviceId}/api/auth/login`;
+                console.log('Login URL:', loginUrl);
+                console.log('Config:', config);
+
+                const response = await fetch(loginUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        username,
+                        password,
+                        isAdmin,
+                        redirect: window.location.href
+                    })
+                });
+
+                console.log('Response status:', response.status);
+                const text = await response.text();
+                console.log('Response text:', text);
+                const data = text ? JSON.parse(text) : {};
+
+                if (!response.ok) {
+                    throw new Error(data.error || `Login failed: ${response.status}`);
+                }
+
+                authResult.className = 'result show success';
+
+                if (data.callbackUrl) {
+                    // Build full callback URL through Aussie gateway
+                    const fullCallbackUrl = data.callbackUrl.startsWith('http')
+                        ? data.callbackUrl
+                        : `${config.aussieUrl}${data.callbackUrl}`;
+                    authResult.textContent = `Login successful! Redirecting to create session...\n\nCallback URL: ${fullCallbackUrl}`;
+                    // Redirect to Aussie's auth callback to create session
+                    setTimeout(() => {
+                        window.location.href = fullCallbackUrl;
+                    }, 1000);
+                } else {
+                    authResult.textContent = `Login response:\n${JSON.stringify(data, null, 2)}`;
+                    // Check session after login
+                    setTimeout(checkSession, 500);
+                }
+            } catch (error) {
+                authResult.className = 'result show error';
+                authResult.textContent = `Login error: ${error.message}`;
+            }
+        }
+
+        async function checkSession() {
+            const config = getConfig();
+            const authResult = document.getElementById('authResult');
+            const authStatus = document.getElementById('authStatus');
+            const statusIcon = document.getElementById('statusIcon');
+            const statusMessage = document.getElementById('statusMessage');
+            const userInfo = document.getElementById('userInfo');
+            const loginForm = document.getElementById('loginForm');
+            const logoutBtn = document.getElementById('logoutBtn');
+
+            try {
+                // Check session status via Aussie's session endpoint
+                const sessionUrl = `${config.aussieUrl}/auth/session`;
+
+                const response = await fetch(sessionUrl, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const session = await response.json();
+
+                    // User is authenticated
+                    authStatus.className = 'auth-status authenticated';
+                    statusIcon.textContent = '\u2713'; // checkmark
+                    statusMessage.textContent = 'Authenticated';
+                    userInfo.style.display = 'block';
+                    userInfo.textContent = `User: ${session.subject || session.userId || 'Unknown'}`;
+                    loginForm.classList.add('hidden');
+                    logoutBtn.style.display = 'block';
+
+                    authResult.className = 'result show success';
+                    authResult.textContent = `Session info:\n${JSON.stringify(session, null, 2)}`;
+                } else {
+                    // Not authenticated
+                    authStatus.className = 'auth-status unauthenticated';
+                    statusIcon.textContent = '\u26A0'; // warning
+                    statusMessage.textContent = 'Not authenticated';
+                    userInfo.style.display = 'none';
+                    loginForm.classList.remove('hidden');
+                    logoutBtn.style.display = 'none';
+
+                    if (response.status === 401) {
+                        authResult.className = 'result show';
+                        authResult.textContent = 'No active session. Please log in.';
+                    } else {
+                        authResult.className = 'result show error';
+                        authResult.textContent = `Session check failed: ${response.status} ${response.statusText}`;
+                    }
+                }
+            } catch (error) {
+                authStatus.className = 'auth-status unauthenticated';
+                statusIcon.textContent = '\u26A0';
+                statusMessage.textContent = 'Session check failed';
+                userInfo.style.display = 'none';
+                loginForm.classList.remove('hidden');
+                logoutBtn.style.display = 'none';
+
+                authResult.className = 'result show error';
+                authResult.textContent = `Error checking session: ${error.message}\n\nMake sure Aussie is running on ${config.aussieUrl}`;
+            }
+        }
+
+        async function logout() {
+            const config = getConfig();
+            const authResult = document.getElementById('authResult');
+
+            try {
+                // Call DELETE /auth/session to invalidate the session
+                const logoutUrl = `${config.aussieUrl}/auth/session`;
+
+                const response = await fetch(logoutUrl, {
+                    method: 'DELETE',
+                    credentials: 'include',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    authResult.className = 'result show success';
+                    authResult.textContent = 'Logged out successfully';
+                } else {
+                    const data = await response.json().catch(() => ({}));
+                    authResult.className = 'result show error';
+                    authResult.textContent = `Logout failed: ${data.error || response.statusText}`;
+                }
+
+                // Update UI
+                checkSession();
+            } catch (error) {
+                authResult.className = 'result show error';
+                authResult.textContent = `Logout error: ${error.message}`;
+            }
+        }
+
+        function testEndpoint(path, method) {
+            document.getElementById('customPath').value = path;
+            document.getElementById('method').value = method;
+            makeRequest();
+        }
+
+        async function makeRequest() {
+            const config = getConfig();
+            const path = document.getElementById('customPath').value;
+            const method = document.getElementById('method').value;
+            const resultDiv = document.getElementById('result');
+            const headersDiv = document.getElementById('headers');
+
+            // Build URL: aussie/{serviceId}{path}
+            const url = `${config.aussieUrl}/${config.serviceId}${path}`;
+
+            resultDiv.className = 'result show';
+            resultDiv.textContent = `Requesting ${method} ${url}...`;
+
+            try {
+                const options = {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'include' // Include cookies for session
+                };
+
+                // Add body for POST/PUT
+                if (method === 'POST' || method === 'PUT') {
+                    options.body = JSON.stringify({
+                        name: 'Test User',
+                        email: 'test@example.com',
+                        timestamp: new Date().toISOString()
+                    });
+                }
+
+                const response = await fetch(url, options);
+                const corsHeaders = extractCorsHeaders(response.headers);
+
+                let data;
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    data = await response.text();
+                }
+
+                resultDiv.className = response.ok ? 'result show success' : 'result show error';
+                resultDiv.textContent = `Status: ${response.status} ${response.statusText}\n\nResponse:\n${JSON.stringify(data, null, 2)}`;
+
+                headersDiv.textContent = formatCorsHeaders(corsHeaders, response);
+            } catch (error) {
+                resultDiv.className = 'result show error';
+                resultDiv.textContent = `Error: ${error.message}\n\nThis may be a CORS error. Check browser console for details.`;
+                headersDiv.textContent = 'Request failed - no headers available';
+            }
+        }
+
+        async function sendPreflight() {
+            const config = getConfig();
+            const path = document.getElementById('customPath').value;
+            const url = `${config.aussieUrl}/${config.serviceId}${path}`;
+            const resultDiv = document.getElementById('result');
+            const headersDiv = document.getElementById('headers');
+
+            resultDiv.className = 'result show';
+            resultDiv.textContent = `Sending OPTIONS preflight to ${url}...`;
+
+            try {
+                const response = await fetch(url, {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Origin': window.location.origin,
+                        'Access-Control-Request-Method': 'POST',
+                        'Access-Control-Request-Headers': 'Content-Type,Authorization'
+                    }
+                });
+
+                const corsHeaders = extractCorsHeaders(response.headers);
+
+                resultDiv.className = response.ok ? 'result show success' : 'result show error';
+                resultDiv.textContent = `Preflight Response: ${response.status} ${response.statusText}`;
+
+                headersDiv.textContent = formatCorsHeaders(corsHeaders, response);
+            } catch (error) {
+                resultDiv.className = 'result show error';
+                resultDiv.textContent = `Preflight Error: ${error.message}`;
+                headersDiv.textContent = 'Preflight failed - no headers available';
+            }
+        }
+
+        function extractCorsHeaders(headers) {
+            const corsKeys = [
+                'access-control-allow-origin',
+                'access-control-allow-methods',
+                'access-control-allow-headers',
+                'access-control-allow-credentials',
+                'access-control-expose-headers',
+                'access-control-max-age',
+                'vary'
+            ];
+
+            const result = {};
+            corsKeys.forEach(key => {
+                const value = headers.get(key);
+                if (value) {
+                    result[key] = value;
+                }
+            });
+            return result;
+        }
+
+        function formatCorsHeaders(corsHeaders, response) {
+            const entries = Object.entries(corsHeaders);
+            if (entries.length === 0) {
+                return 'No CORS headers found in response.\n\nThis could mean:\n- CORS is not configured\n- The request was same-origin\n- The server didn\'t include CORS headers';
+            }
+
+            let output = `CORS Headers from ${response.url}:\n\n`;
+            entries.forEach(([key, value]) => {
+                output += `${key}: ${value}\n`;
+            });
+            return output;
+        }
+    </script>
+</body>
+</html>

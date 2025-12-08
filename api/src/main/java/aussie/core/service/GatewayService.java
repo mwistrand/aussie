@@ -58,6 +58,8 @@ public class GatewayService implements GatewayUseCase {
                     .item(new GatewayResult.Unauthorized(unauthorized.reason()));
             case RouteAuthResult.Forbidden forbidden -> Uni.createFrom()
                     .item(new GatewayResult.Forbidden(forbidden.reason()));
+            case RouteAuthResult.BadRequest badRequest -> Uni.createFrom()
+                    .item(new GatewayResult.BadRequest(badRequest.reason()));
         };
     }
 

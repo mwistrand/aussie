@@ -105,7 +105,8 @@ class ServiceRegistrationTest {
                     false, // defaultAuthRequired
                     null, // visibilityRules - defaults to empty list
                     List.of(),
-                    Optional.empty());
+                    Optional.empty(),
+                    Optional.empty()); // corsConfig
 
             assertNotNull(service);
             assertEquals("my-service", service.serviceId());

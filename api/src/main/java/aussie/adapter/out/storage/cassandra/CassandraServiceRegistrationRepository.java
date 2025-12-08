@@ -14,6 +14,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.smallrye.mutiny.Uni;
 
+import aussie.core.model.CorsConfig;
 import aussie.core.model.EndpointVisibility;
 import aussie.core.model.ServiceAccessConfig;
 import aussie.core.model.ServiceRegistration;
@@ -22,13 +23,13 @@ import aussie.core.port.out.ServiceRegistrationRepository;
 /**
  * Cassandra implementation of ServiceRegistrationRepository.
  *
- * <p>Provides durable, distributed storage for service registrations.
+ * <p>
+ * Provides durable, distributed storage for service registrations.
  * Complex nested structures are stored as JSON in text columns.
  */
 public class CassandraServiceRegistrationRepository implements ServiceRegistrationRepository {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
+    private final ObjectMapper objectMapper;
     private final CqlSession session;
     private final PreparedStatement insertStmt;
     private final PreparedStatement selectByIdStmt;
@@ -37,7 +38,8 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     private final PreparedStatement countStmt;
     private final PreparedStatement existsStmt;
 
-    public CassandraServiceRegistrationRepository(CqlSession session) {
+    public CassandraServiceRegistrationRepository(ObjectMapper objectMapper, CqlSession session) {
+        this.objectMapper = objectMapper;
         this.session = session;
         this.insertStmt = prepareInsert();
         this.selectByIdStmt = prepareSelectById();
@@ -50,12 +52,12 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     private PreparedStatement prepareInsert() {
         return session.prepare(
                 """
-                INSERT INTO service_registrations
-                (service_id, display_name, base_url, route_prefix,
-                 default_visibility, default_auth_required, visibility_rules, endpoints, access_config,
-                 created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
-                """);
+                        INSERT INTO service_registrations
+                        (service_id, display_name, base_url, route_prefix,
+                         default_visibility, default_auth_required, visibility_rules, endpoints, access_config,
+                         cors_config, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
+                        """);
     }
 
     private PreparedStatement prepareSelectById() {
@@ -91,7 +93,8 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                             registration.defaultAuthRequired(),
                             toJson(registration.visibilityRules()),
                             toJson(registration.endpoints()),
-                            registration.accessConfig().map(this::toJson).orElse(null));
+                            registration.accessConfig().map(this::toJson).orElse(null),
+                            registration.corsConfig().map(this::toJson).orElse(null));
                     return session.executeAsync(bound).toCompletableFuture();
                 })
                 .replaceWithVoid();
@@ -171,12 +174,13 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                 fromJsonList(row.getString("visibility_rules"), new TypeReference<>() {}),
                 fromJsonList(row.getString("endpoints"), new TypeReference<>() {}),
                 Optional.ofNullable(row.getString("access_config"))
-                        .map(json -> fromJson(json, ServiceAccessConfig.class)));
+                        .map(json -> fromJson(json, ServiceAccessConfig.class)),
+                Optional.ofNullable(row.getString("cors_config")).map(json -> fromJson(json, CorsConfig.class)));
     }
 
     private String toJson(Object obj) {
         try {
-            return OBJECT_MAPPER.writeValueAsString(obj);
+            return objectMapper.writeValueAsString(obj);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to serialize to JSON", e);
         }
@@ -184,7 +188,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
 
     private <T> T fromJson(String json, Class<T> type) {
         try {
-            return OBJECT_MAPPER.readValue(json, type);
+            return objectMapper.readValue(json, type);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to deserialize from JSON", e);
         }
@@ -195,7 +199,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
             return List.of();
         }
         try {
-            return OBJECT_MAPPER.readValue(json, typeRef);
+            return objectMapper.readValue(json, typeRef);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to deserialize list from JSON", e);
         }

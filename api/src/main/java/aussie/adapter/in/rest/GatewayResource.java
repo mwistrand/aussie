@@ -132,6 +132,9 @@ public class GatewayResource {
             case GatewayResult.Forbidden forbidden -> Response.status(Response.Status.FORBIDDEN)
                     .entity("Forbidden: " + forbidden.reason())
                     .build();
+            case GatewayResult.BadRequest badRequest -> Response.status(Response.Status.BAD_REQUEST)
+                    .entity("Bad request: " + badRequest.reason())
+                    .build();
         };
     }
 }

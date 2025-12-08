@@ -75,19 +75,30 @@ export async function generateToken(claims: TokenClaims): Promise<string> {
  */
 export function parseRedirectUrl(redirect: string | null): string {
   if (!redirect) {
-    return '/';
+    return 'http://localhost:8080/';
   }
 
-  // Only allow relative URLs or URLs to known safe domains
-  // This prevents open redirect vulnerabilities
+  // Allow known safe origins (preserve full URL for proper redirect)
+  const allowedOrigins = [
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+  ];
+
   try {
-    const url = new URL(redirect, 'http://localhost');
-    if (url.origin === 'http://localhost' || url.origin === 'http://demo:3000') {
-      return url.pathname + url.search;
+    const url = new URL(redirect);
+    // Check if origin is in allowed list
+    if (allowedOrigins.some(origin => url.origin === origin)) {
+      return redirect; // Return full URL for allowed origins
     }
   } catch {
-    // Invalid URL, use default
+    // Not a valid absolute URL, check if it's a relative path
+    if (redirect.startsWith('/') && !redirect.startsWith('//')) {
+      return `http://localhost:8080${redirect}`;
+    }
   }
 
-  return '/';
+  // Default to demo-ui
+  return 'http://localhost:8080/';
 }

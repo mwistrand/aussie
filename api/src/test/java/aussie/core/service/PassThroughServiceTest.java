@@ -38,6 +38,7 @@ class PassThroughServiceTest {
     private ProxyRequestPreparer requestPreparer;
     private TestProxyClient proxyClient;
     private VisibilityResolver visibilityResolver;
+    private EndpointMatcher endpointMatcher;
     private ConfigurableRouteAuthService routeAuthService;
     private PassThroughService passThroughService;
 
@@ -51,10 +52,12 @@ class PassThroughServiceTest {
                 new InMemoryServiceRegistrationRepository(), NoOpConfigurationCache.INSTANCE, validator);
         requestPreparer = new ProxyRequestPreparer(() -> (req, uri) -> Map.of());
         proxyClient = new TestProxyClient();
-        visibilityResolver = new VisibilityResolver(new GlobPatternMatcher());
+        var patternMatcher = new GlobPatternMatcher();
+        visibilityResolver = new VisibilityResolver(patternMatcher);
+        endpointMatcher = new EndpointMatcher(patternMatcher);
         routeAuthService = new ConfigurableRouteAuthService();
         passThroughService = new PassThroughService(
-                serviceRegistry, requestPreparer, proxyClient, visibilityResolver, routeAuthService);
+                serviceRegistry, requestPreparer, proxyClient, visibilityResolver, endpointMatcher, routeAuthService);
     }
 
     private GatewayRequest createRequest(String method, String path) {
@@ -400,7 +403,7 @@ class PassThroughServiceTest {
         private RouteAuthResult result = new RouteAuthResult.NotRequired();
 
         ConfigurableRouteAuthService() {
-            super(null, null);
+            super(null, null, null, null, null);
         }
 
         void setResult(RouteAuthResult result) {

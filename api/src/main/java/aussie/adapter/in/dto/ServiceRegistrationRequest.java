@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.Optional;
 
+import aussie.core.model.CorsConfig;
 import aussie.core.model.EndpointVisibility;
 import aussie.core.model.ServiceRegistration;
 import aussie.core.model.VisibilityRule;
@@ -17,7 +18,8 @@ public record ServiceRegistrationRequest(
         Boolean defaultAuthRequired,
         List<VisibilityRuleDto> visibilityRules,
         List<EndpointConfigDto> endpoints,
-        ServiceAccessConfigDto accessConfig) {
+        ServiceAccessConfigDto accessConfig,
+        CorsConfigDto cors) {
     public ServiceRegistration toModel() {
         var defaultVis = defaultVisibility != null
                 ? EndpointVisibility.valueOf(defaultVisibility.toUpperCase())
@@ -30,12 +32,14 @@ public record ServiceRegistrationRequest(
                 : List.<VisibilityRule>of();
 
         var endpointModels = endpoints != null
-                ? endpoints.stream().map(EndpointConfigDto::toModel).toList()
+                ? endpoints.stream().map(e -> e.toModel(defaultAuth)).toList()
                 : List.<aussie.core.model.EndpointConfig>of();
 
         var accessConfigModel = accessConfig != null
                 ? Optional.of(accessConfig.toModel())
                 : Optional.<aussie.core.model.ServiceAccessConfig>empty();
+
+        var corsConfigModel = cors != null ? Optional.of(cors.toModel()) : Optional.<CorsConfig>empty();
 
         return new ServiceRegistration(
                 serviceId,
@@ -46,6 +50,7 @@ public record ServiceRegistrationRequest(
                 defaultAuth,
                 visibilityRuleModels,
                 endpointModels,
-                accessConfigModel);
+                accessConfigModel,
+                corsConfigModel);
     }
 }

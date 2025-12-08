@@ -73,7 +73,11 @@ public class ApiKeyAuthenticationMechanism implements HttpAuthenticationMechanis
 
     @Override
     public Uni<SecurityIdentity> authenticate(RoutingContext context, IdentityProviderManager identityProviderManager) {
+        LOG.infof(
+                "ApiKeyAuthenticationMechanism.authenticate() called for path: %s",
+                context.request().path());
         String authHeader = context.request().getHeader(AUTHORIZATION_HEADER);
+        LOG.infof("Authorization header present: %s", authHeader != null);
 
         // Check for Bearer token first - always validate API keys when provided
         if (authHeader != null && !authHeader.isBlank() && authHeader.startsWith(BEARER_PREFIX)) {

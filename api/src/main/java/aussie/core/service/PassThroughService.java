@@ -11,7 +11,6 @@ import io.smallrye.mutiny.Uni;
 
 import aussie.core.model.AussieToken;
 import aussie.core.model.EndpointConfig;
-import aussie.core.model.EndpointVisibility;
 import aussie.core.model.GatewayRequest;
 import aussie.core.model.GatewayResult;
 import aussie.core.model.RouteAuthResult;
@@ -35,6 +34,7 @@ public class PassThroughService implements PassThroughUseCase {
     private final ProxyRequestPreparer requestPreparer;
     private final ProxyClient proxyClient;
     private final VisibilityResolver visibilityResolver;
+    private final EndpointMatcher endpointMatcher;
     private final RouteAuthenticationService routeAuthService;
 
     @Inject
@@ -43,11 +43,13 @@ public class PassThroughService implements PassThroughUseCase {
             ProxyRequestPreparer requestPreparer,
             ProxyClient proxyClient,
             VisibilityResolver visibilityResolver,
+            EndpointMatcher endpointMatcher,
             RouteAuthenticationService routeAuthService) {
         this.serviceRegistry = serviceRegistry;
         this.requestPreparer = requestPreparer;
         this.proxyClient = proxyClient;
         this.visibilityResolver = visibilityResolver;
+        this.endpointMatcher = endpointMatcher;
         this.routeAuthService = routeAuthService;
     }
 
@@ -63,8 +65,7 @@ public class PassThroughService implements PassThroughUseCase {
             }
 
             var service = serviceOpt.get();
-            var visibility = visibilityResolver.resolve(request.path(), request.method(), service);
-            var routeMatch = createPassThroughRouteMatch(service, request.path(), visibility);
+            var routeMatch = createRouteMatch(service, request.path(), request.method());
 
             return routeAuthService
                     .authenticate(request, routeMatch)
@@ -81,6 +82,8 @@ public class PassThroughService implements PassThroughUseCase {
                     .item(new GatewayResult.Unauthorized(unauthorized.reason()));
             case RouteAuthResult.Forbidden forbidden -> Uni.createFrom()
                     .item(new GatewayResult.Forbidden(forbidden.reason()));
+            case RouteAuthResult.BadRequest badRequest -> Uni.createFrom()
+                    .item(new GatewayResult.BadRequest(badRequest.reason()));
         };
     }
 
@@ -105,8 +108,16 @@ public class PassThroughService implements PassThroughUseCase {
                 .recoverWithItem(error -> new GatewayResult.Error(error.getMessage()));
     }
 
-    private RouteMatch createPassThroughRouteMatch(
-            ServiceRegistration service, String targetPath, EndpointVisibility visibility) {
+    private RouteMatch createRouteMatch(ServiceRegistration service, String targetPath, String method) {
+        // First, check if there's a matching endpoint config
+        var matchedEndpoint = endpointMatcher.match(targetPath, method, service);
+
+        if (matchedEndpoint.isPresent()) {
+            return new RouteMatch(service, matchedEndpoint.get(), targetPath, Map.of());
+        }
+
+        // No matching endpoint - create a catch-all with visibility rules and default auth
+        var visibility = visibilityResolver.resolve(targetPath, method, service);
         var catchAllEndpoint =
                 new EndpointConfig("/**", Set.of("*"), visibility, Optional.empty(), service.defaultAuthRequired());
         return new RouteMatch(service, catchAllEndpoint, targetPath, Map.of());

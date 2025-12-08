@@ -286,6 +286,9 @@ public class SessionResource {
 
     /**
      * Auth callback endpoint - validates token and creates session.
+     *
+     * <p>This endpoint receives a JWT token from an identity provider callback,
+     * validates it, creates a session, and redirects the user to their original page.
      */
     @GET
     @Path("/callback")
@@ -305,20 +308,122 @@ public class SessionResource {
                             .build());
         }
 
-        // TODO: Validate token with configured token validator
-        // For now, decode JWT claims without validation (demo mode)
-        // In production, this should validate the token signature
+        // Decode JWT claims (for demo mode, we trust the token without signature validation)
+        // In production, this should validate the token signature against JWKS
+        Map<String, Object> claims;
+        try {
+            claims = decodeJwtClaims(token);
+        } catch (Exception e) {
+            LOG.warnf("Failed to decode token: %s", e.getMessage());
+            return Uni.createFrom()
+                    .item(Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "Invalid token format"))
+                            .build());
+        }
 
-        // For demo purposes, just acknowledge the callback
-        // The actual token validation and session creation should be implemented
-        // based on the configured token providers
+        String userId = (String) claims.get("sub");
+        if (userId == null || userId.isBlank()) {
+            return Uni.createFrom()
+                    .item(Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "Token missing subject claim"))
+                            .build());
+        }
 
-        return Uni.createFrom()
-                .item(Response.status(Response.Status.NOT_IMPLEMENTED)
-                        .entity(Map.of(
-                                "error", "Token validation not yet implemented",
-                                "hint", "Use POST /auth/session with validated claims"))
-                        .build());
+        String issuer = (String) claims.getOrDefault("iss", "unknown");
+
+        @SuppressWarnings("unchecked")
+        var permissionsList = (java.util.List<String>) claims.get("permissions");
+        Set<String> permissions = permissionsList != null ? new HashSet<>(permissionsList) : Set.of();
+
+        String userAgent = request.getHeader("User-Agent");
+        String ipAddress =
+                request.remoteAddress() != null ? request.remoteAddress().host() : null;
+
+        // Sanitize redirect URL to prevent open redirect attacks
+        String safeRedirectUrl = sanitizeRedirectUrl(redirectUrl);
+
+        return sessionManagement
+                .createSession(userId, issuer, claims, permissions, userAgent, ipAddress)
+                .map(session -> {
+                    LOG.infof("Session created via callback for user: %s", userId);
+
+                    io.vertx.core.http.Cookie vertxCookie = cookieManager.createCookie(session);
+                    NewCookie jaxrsCookie = convertToJaxRsCookie(vertxCookie, session);
+
+                    // Redirect to the original page
+                    return Response.seeOther(URI.create(safeRedirectUrl))
+                            .cookie(jaxrsCookie)
+                            .build();
+                })
+                .onFailure()
+                .recoverWithItem(error -> {
+                    LOG.errorf("Failed to create session from callback: %s", error.getMessage());
+                    return Response.serverError()
+                            .entity(Map.of("error", "Failed to create session"))
+                            .build();
+                });
+    }
+
+    /**
+     * Decodes JWT claims without signature validation (demo mode).
+     * In production, use proper JWT validation with JWKS.
+     */
+    private Map<String, Object> decodeJwtClaims(String token) {
+        String[] parts = token.split("\\.");
+        if (parts.length != 3) {
+            throw new IllegalArgumentException("Invalid JWT format");
+        }
+
+        String payload = parts[1];
+        // Add padding if needed
+        int padding = 4 - (payload.length() % 4);
+        if (padding != 4) {
+            payload = payload + "=".repeat(padding);
+        }
+
+        byte[] decoded = java.util.Base64.getUrlDecoder().decode(payload);
+        String json = new String(decoded, java.nio.charset.StandardCharsets.UTF_8);
+
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> claims = new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, Map.class);
+            return claims;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Failed to parse JWT payload", e);
+        }
+    }
+
+    /**
+     * Sanitizes redirect URL to prevent open redirect attacks.
+     * Only allows relative URLs or URLs to known safe origins.
+     */
+    private String sanitizeRedirectUrl(String redirectUrl) {
+        if (redirectUrl == null || redirectUrl.isBlank()) {
+            return "/";
+        }
+
+        // Allow relative URLs (starting with /)
+        if (redirectUrl.startsWith("/") && !redirectUrl.startsWith("//")) {
+            return redirectUrl;
+        }
+
+        // Allow known safe origins (demo-ui, localhost variants)
+        // In production, this should be configurable
+        Set<String> allowedOrigins = Set.of(
+                "http://localhost:8080", "http://127.0.0.1:8080", "http://localhost:3000", "http://127.0.0.1:3000");
+
+        try {
+            URI uri = URI.create(redirectUrl);
+            String origin = uri.getScheme() + "://" + uri.getHost() + (uri.getPort() != -1 ? ":" + uri.getPort() : "");
+            if (allowedOrigins.contains(origin)) {
+                return redirectUrl;
+            }
+        } catch (Exception e) {
+            LOG.debugf("Failed to parse redirect URL: %s", redirectUrl);
+        }
+
+        LOG.debugf("Rejecting potentially unsafe redirect URL: %s", redirectUrl);
+        return "/";
     }
 
     private NewCookie convertToJaxRsCookie(io.vertx.core.http.Cookie vertxCookie, Session session) {

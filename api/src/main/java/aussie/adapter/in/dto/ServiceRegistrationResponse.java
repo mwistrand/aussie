@@ -13,7 +13,8 @@ public record ServiceRegistrationResponse(
         Boolean defaultAuthRequired,
         List<VisibilityRuleDto> visibilityRules,
         List<EndpointConfigDto> endpoints,
-        ServiceAccessConfigDto accessConfig) {
+        ServiceAccessConfigDto accessConfig,
+        CorsConfigDto cors) {
     public static ServiceRegistrationResponse fromModel(ServiceRegistration model) {
         var visibilityRuleDtos = model.visibilityRules().isEmpty()
                 ? null
@@ -28,15 +29,18 @@ public record ServiceRegistrationResponse(
         var accessConfigDto =
                 model.accessConfig().map(ServiceAccessConfigDto::fromModel).orElse(null);
 
+        var corsConfigDto = model.corsConfig().map(CorsConfigDto::fromModel).orElse(null);
+
         return new ServiceRegistrationResponse(
                 model.serviceId(),
                 model.displayName(),
                 model.baseUrl().toString(),
                 model.routePrefix(),
                 model.defaultVisibility().name(),
-                model.defaultAuthRequired() ? null : false,
+                model.defaultAuthRequired(),
                 visibilityRuleDtos,
                 endpointDtos,
-                accessConfigDto);
+                accessConfigDto,
+                corsConfigDto);
     }
 }

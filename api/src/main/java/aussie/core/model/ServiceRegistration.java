@@ -13,7 +13,8 @@ public record ServiceRegistration(
         boolean defaultAuthRequired,
         List<VisibilityRule> visibilityRules,
         List<EndpointConfig> endpoints,
-        Optional<ServiceAccessConfig> accessConfig) {
+        Optional<ServiceAccessConfig> accessConfig,
+        Optional<CorsConfig> corsConfig) {
     public ServiceRegistration {
         if (serviceId == null || serviceId.isBlank()) {
             throw new IllegalArgumentException("Service ID cannot be null or blank");
@@ -39,6 +40,9 @@ public record ServiceRegistration(
         if (accessConfig == null) {
             accessConfig = Optional.empty();
         }
+        if (corsConfig == null) {
+            corsConfig = Optional.empty();
+        }
     }
 
     public static Builder builder(String serviceId) {
@@ -55,6 +59,7 @@ public record ServiceRegistration(
         private List<VisibilityRule> visibilityRules = List.of();
         private List<EndpointConfig> endpoints = List.of();
         private ServiceAccessConfig accessConfig;
+        private CorsConfig corsConfig;
 
         private Builder(String serviceId) {
             this.serviceId = serviceId;
@@ -105,6 +110,11 @@ public record ServiceRegistration(
             return this;
         }
 
+        public Builder corsConfig(CorsConfig corsConfig) {
+            this.corsConfig = corsConfig;
+            return this;
+        }
+
         public ServiceRegistration build() {
             return new ServiceRegistration(
                     serviceId,
@@ -115,7 +125,8 @@ public record ServiceRegistration(
                     defaultAuthRequired,
                     visibilityRules,
                     endpoints,
-                    Optional.ofNullable(accessConfig));
+                    Optional.ofNullable(accessConfig),
+                    Optional.ofNullable(corsConfig));
         }
     }
 }

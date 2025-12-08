@@ -9,8 +9,12 @@ import aussie.core.model.EndpointVisibility;
 public record EndpointConfigDto(
         String path, Set<String> methods, String visibility, String pathRewrite, Boolean authRequired) {
     public EndpointConfig toModel() {
+        return toModel(false);
+    }
+
+    public EndpointConfig toModel(boolean defaultAuthRequired) {
         var vis = visibility != null ? EndpointVisibility.valueOf(visibility.toUpperCase()) : EndpointVisibility.PUBLIC;
-        var auth = authRequired != null ? authRequired : false;
+        var auth = authRequired != null ? authRequired : defaultAuthRequired;
 
         return new EndpointConfig(path, methods, vis, Optional.ofNullable(pathRewrite), auth);
     }

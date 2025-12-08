@@ -4,7 +4,9 @@ import java.time.Duration;
 import java.util.Optional;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import io.quarkus.redis.datasource.keys.ReactiveKeyCommands;
 import io.quarkus.redis.datasource.value.ReactiveValueCommands;
@@ -21,7 +23,9 @@ import aussie.core.port.out.ConfigurationCache;
 public class RedisConfigurationCache implements ConfigurationCache {
 
     private static final String KEY_PREFIX = "aussie:config:";
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
+            .registerModule(new Jdk8Module())
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     private final ReactiveValueCommands<String, String> valueCommands;
     private final ReactiveKeyCommands<String> keyCommands;

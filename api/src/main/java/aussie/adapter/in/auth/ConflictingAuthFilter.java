@@ -42,8 +42,13 @@ public class ConflictingAuthFilter implements ContainerRequestFilter {
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
+        LOG.infof(
+                "ConflictingAuthFilter.filter() called for path: %s",
+                requestContext.getUriInfo().getPath());
+
         // Skip if session config is not available (e.g., in tests without session config)
         if (!sessionConfigInstance.isResolvable()) {
+            LOG.info("Session config not resolvable, skipping");
             return;
         }
 

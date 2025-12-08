@@ -3,41 +3,55 @@
   "displayName": "Demo Service",
   "baseUrl": "http://demo:3000",
   "defaultVisibility": "PRIVATE",
-  "visibilityRules": [
+  "defaultAuthRequired": true,
+  "endpoints": [
     {
-      "pattern": "/api/health",
+      "path": "/api/health",
       "methods": ["GET"],
-      "visibility": "PUBLIC"
+      "visibility": "PUBLIC",
+      "authRequired": false
     },
     {
-      "pattern": "/api/users",
+      "path": "/api/users",
       "methods": ["GET", "POST"],
       "visibility": "PUBLIC"
     },
     {
-      "pattern": "/api/auth/test",
+      "path": "/api/auth/test",
       "methods": ["GET", "POST"],
-      "visibility": "PUBLIC"
+      "visibility": "PUBLIC",
+      "authRequired": false
     },
     {
-      "pattern": "/login",
+      "path": "/login",
       "methods": ["GET"],
-      "visibility": "PUBLIC"
+      "visibility": "PUBLIC",
+      "authRequired": false
     },
     {
-      "pattern": "/api/auth/login",
+      "path": "/api/auth/login",
       "methods": ["POST"],
-      "visibility": "PUBLIC"
+      "visibility": "PUBLIC",
+      "authRequired": false
     },
     {
-      "pattern": "/api/auth/callback",
+      "path": "/api/auth/callback",
       "methods": ["GET"],
-      "visibility": "PUBLIC"
+      "visibility": "PUBLIC",
+      "authRequired": false
     },
     {
-      "pattern": "/.well-known/jwks.json",
+      "path": "/.well-known/jwks.json",
       "methods": ["GET"],
-      "visibility": "PUBLIC"
+      "visibility": "PUBLIC",
+      "authRequired": false
     }
-  ]
+  ],
+  "cors": {
+    "allowedOrigins": ["http://localhost:8080", "http://127.0.0.1:8080"],
+    "allowedMethods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    "allowedHeaders": ["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
+    "allowCredentials": true,
+    "maxAge": 3600
+  }
 }

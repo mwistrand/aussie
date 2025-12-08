@@ -1,7 +1,12 @@
 package aussie.adapter.out.storage.redis;
 
+import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -32,7 +37,31 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
     SessionConfigMapping sessionConfig;
 
     private RedisSessionRepository repository;
-    private Boolean available;
+    private final AtomicBoolean available = new AtomicBoolean(false);
+    private final CountDownLatch checkLatch = new CountDownLatch(1);
+
+    @PostConstruct
+    void checkAvailability() {
+        // Check availability asynchronously at startup
+        redisDataSource
+                .key(String.class)
+                .exists("test-connection")
+                .ifNoItem()
+                .after(Duration.ofSeconds(5))
+                .fail()
+                .subscribe()
+                .with(
+                        result -> {
+                            available.set(true);
+                            checkLatch.countDown();
+                            LOG.info("Redis session storage is available");
+                        },
+                        error -> {
+                            available.set(false);
+                            checkLatch.countDown();
+                            LOG.warnf("Redis session storage is not available: %s", error.getMessage());
+                        });
+    }
 
     @Override
     public String name() {
@@ -46,21 +75,17 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
 
     @Override
     public boolean isAvailable() {
-        if (available != null) {
-            return available;
-        }
-
+        // Wait for the async check to complete (with timeout)
         try {
-            // Test Redis connection
-            redisDataSource.key(String.class).exists("test-connection").await().atMost(java.time.Duration.ofSeconds(5));
-            available = true;
-            LOG.info("Redis session storage is available");
-        } catch (Exception e) {
-            available = false;
-            LOG.warnf("Redis session storage is not available: %s", e.getMessage());
+            if (!checkLatch.await(6, TimeUnit.SECONDS)) {
+                LOG.warn("Redis availability check timed out");
+                return false;
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
         }
-
-        return available;
+        return available.get();
     }
 
     @Override
@@ -75,19 +100,18 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
 
     @Override
     public Optional<HealthCheckResponse> healthCheck() {
-        try {
-            redisDataSource.key(String.class).exists("health-check").await().atMost(java.time.Duration.ofSeconds(2));
-
+        // Use cached availability state to avoid blocking on health checks
+        if (available.get()) {
             return Optional.of(HealthCheckResponse.named("session-storage-redis")
                     .up()
                     .withData("type", "redis")
                     .withData("keyPrefix", sessionConfig.storage().redis().keyPrefix())
                     .build());
-        } catch (Exception e) {
+        } else {
             return Optional.of(HealthCheckResponse.named("session-storage-redis")
                     .down()
                     .withData("type", "redis")
-                    .withData("error", e.getMessage())
+                    .withData("error", "Redis not available or check not completed")
                     .build());
         }
     }

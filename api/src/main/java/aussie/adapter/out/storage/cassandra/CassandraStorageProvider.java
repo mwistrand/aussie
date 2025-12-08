@@ -5,6 +5,9 @@ import java.util.Optional;
 
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.datastax.oss.driver.api.core.CqlSessionBuilder;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
@@ -69,7 +72,10 @@ public class CassandraStorageProvider implements StorageRepositoryProvider {
         }
 
         this.session = buildSession(config);
-        return new CassandraServiceRegistrationRepository(session);
+        ObjectMapper objectMapper = new ObjectMapper()
+                .registerModule(new Jdk8Module())
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        return new CassandraServiceRegistrationRepository(objectMapper, session);
     }
 
     private void runMigrations(StorageAdapterConfig config, String keyspace) {

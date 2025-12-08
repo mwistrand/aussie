@@ -126,6 +126,113 @@ class AdminResourceTest {
                     .then()
                     .statusCode(400);
         }
+
+        @Test
+        @DisplayName("Should inherit defaultAuthRequired=true for endpoints without explicit authRequired")
+        void shouldInheritDefaultAuthRequiredTrue() {
+            var requestBody =
+                    """
+                {
+                    "serviceId": "auth-inherit-service",
+                    "baseUrl": "http://localhost:8081",
+                    "defaultAuthRequired": true,
+                    "endpoints": [
+                        {
+                            "path": "/api/public",
+                            "methods": ["GET"],
+                            "visibility": "PUBLIC",
+                            "authRequired": false
+                        },
+                        {
+                            "path": "/api/protected",
+                            "methods": ["GET"],
+                            "visibility": "PUBLIC"
+                        }
+                    ]
+                }
+                """;
+
+            given().contentType(ContentType.JSON)
+                    .body(requestBody)
+                    .when()
+                    .post("/admin/services")
+                    .then()
+                    .statusCode(201)
+                    .body("serviceId", equalTo("auth-inherit-service"))
+                    .body("defaultAuthRequired", equalTo(true))
+                    .body("endpoints[0].path", equalTo("/api/public"))
+                    .body("endpoints[0].authRequired", equalTo(false))
+                    .body("endpoints[1].path", equalTo("/api/protected"))
+                    .body("endpoints[1].authRequired", equalTo(true));
+        }
+
+        @Test
+        @DisplayName("Should inherit defaultAuthRequired=false for endpoints without explicit authRequired")
+        void shouldInheritDefaultAuthRequiredFalse() {
+            var requestBody =
+                    """
+                {
+                    "serviceId": "no-auth-service",
+                    "baseUrl": "http://localhost:8081",
+                    "defaultAuthRequired": false,
+                    "endpoints": [
+                        {
+                            "path": "/api/admin",
+                            "methods": ["GET"],
+                            "visibility": "PRIVATE",
+                            "authRequired": true
+                        },
+                        {
+                            "path": "/api/public",
+                            "methods": ["GET"],
+                            "visibility": "PUBLIC"
+                        }
+                    ]
+                }
+                """;
+
+            given().contentType(ContentType.JSON)
+                    .body(requestBody)
+                    .when()
+                    .post("/admin/services")
+                    .then()
+                    .statusCode(201)
+                    .body("serviceId", equalTo("no-auth-service"))
+                    .body("defaultAuthRequired", equalTo(false))
+                    .body("endpoints[0].path", equalTo("/api/admin"))
+                    .body("endpoints[0].authRequired", equalTo(true))
+                    .body("endpoints[1].path", equalTo("/api/public"))
+                    .body("endpoints[1].authRequired", equalTo(false));
+        }
+
+        @Test
+        @DisplayName("Should default defaultAuthRequired to true when not specified")
+        void shouldDefaultAuthRequiredToTrue() {
+            var requestBody =
+                    """
+                {
+                    "serviceId": "default-auth-service",
+                    "baseUrl": "http://localhost:8081",
+                    "endpoints": [
+                        {
+                            "path": "/api/test",
+                            "methods": ["GET"],
+                            "visibility": "PUBLIC"
+                        }
+                    ]
+                }
+                """;
+
+            given().contentType(ContentType.JSON)
+                    .body(requestBody)
+                    .when()
+                    .post("/admin/services")
+                    .then()
+                    .statusCode(201)
+                    .body("serviceId", equalTo("default-auth-service"))
+                    .body("defaultAuthRequired", equalTo(true))
+                    .body("endpoints[0].authRequired", equalTo(true));
+        }
     }
 
     @Nested

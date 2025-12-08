@@ -48,16 +48,23 @@ public class SessionAuthenticationMechanism implements HttpAuthenticationMechani
 
     @Override
     public Uni<SecurityIdentity> authenticate(RoutingContext context, IdentityProviderManager identityProviderManager) {
+        LOG.infof(
+                "SessionAuthenticationMechanism.authenticate() called for path: %s",
+                context.request().path());
+
         // Skip if sessions are disabled
         if (!config.enabled()) {
+            LOG.info("Sessions disabled, skipping");
             return Uni.createFrom().nullItem();
         }
 
         // Extract session ID from cookie
         Optional<String> sessionIdOpt = cookieManager.extractSessionId(context.request());
         if (sessionIdOpt.isEmpty()) {
+            LOG.info("No session cookie found");
             return Uni.createFrom().nullItem();
         }
+        LOG.infof("Found session cookie: %s", sessionIdOpt.get());
 
         String sessionId = sessionIdOpt.get();
 

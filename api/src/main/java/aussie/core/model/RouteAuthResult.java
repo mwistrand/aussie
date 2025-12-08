@@ -30,4 +30,11 @@ public sealed interface RouteAuthResult {
      * @param reason description of why access was denied
      */
     record Forbidden(String reason) implements RouteAuthResult {}
+
+    /**
+     * Request is malformed (e.g., both bearer token and session cookie present).
+     *
+     * @param reason description of why the request is invalid
+     */
+    record BadRequest(String reason) implements RouteAuthResult {}
 }

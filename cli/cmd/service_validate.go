@@ -35,40 +35,6 @@ func init() {
 	serviceValidateCmd.MarkFlagRequired("file")
 }
 
-// ServiceConfig represents the v2 service configuration format
-type ServiceConfig struct {
-	ServiceID         string               `json:"serviceId"`
-	DisplayName       string               `json:"displayName"`
-	BaseURL           string               `json:"baseUrl"`
-	RoutePrefix       string               `json:"routePrefix,omitempty"`
-	DefaultVisibility string               `json:"defaultVisibility,omitempty"`
-	VisibilityRules   []VisibilityRule     `json:"visibilityRules,omitempty"`
-	Endpoints         []EndpointConfig     `json:"endpoints,omitempty"`
-	AccessConfig      *ServiceAccessConfig `json:"accessConfig,omitempty"`
-}
-
-// VisibilityRule represents a visibility rule for path patterns
-type VisibilityRule struct {
-	Pattern    string   `json:"pattern"`
-	Methods    []string `json:"methods,omitempty"`
-	Visibility string   `json:"visibility"`
-}
-
-// EndpointConfig represents an endpoint configuration (v1 format)
-type EndpointConfig struct {
-	Path        string   `json:"path"`
-	Methods     []string `json:"methods"`
-	Visibility  string   `json:"visibility"`
-	PathRewrite string   `json:"pathRewrite,omitempty"`
-}
-
-// ServiceAccessConfig represents access control configuration
-type ServiceAccessConfig struct {
-	AllowedIPs        []string `json:"allowedIps,omitempty"`
-	AllowedDomains    []string `json:"allowedDomains,omitempty"`
-	AllowedSubdomains []string `json:"allowedSubdomains,omitempty"`
-}
-
 // ValidationError represents a validation error with path context
 type ValidationError struct {
 	Path    string
@@ -147,7 +113,7 @@ func ValidateServiceConfig(data []byte) *ValidationResult {
 	}
 
 	// Parse into struct for validation
-	var config ServiceConfig
+	var config ServiceRegistration
 	if err := json.Unmarshal(data, &config); err != nil {
 		result.AddError("", fmt.Sprintf("failed to parse configuration: %v", err))
 		return result
