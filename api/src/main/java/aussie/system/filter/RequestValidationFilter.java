@@ -11,9 +11,9 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
-import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 
+import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.ValidationResult;
 import aussie.core.service.RequestSizeValidator;
 
@@ -36,9 +36,16 @@ public class RequestValidationFilter implements ContainerRequestFilter {
         var result = validator.validateRequest(contentLength, headers);
 
         if (result instanceof ValidationResult.Invalid invalid) {
-            requestContext.abortWith(Response.status(invalid.suggestedStatusCode())
-                    .entity(invalid.reason())
-                    .build());
+            int statusCode = invalid.suggestedStatusCode();
+            String reason = invalid.reason();
+
+            if (statusCode == 413) {
+                throw GatewayProblem.payloadTooLarge(reason);
+            } else if (statusCode == 431) {
+                throw GatewayProblem.headerTooLarge(reason);
+            } else {
+                throw GatewayProblem.badRequest(reason);
+            }
         }
     }
 

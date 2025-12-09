@@ -72,7 +72,8 @@ public class ApiKeyResourceTest {
                 .post("/admin/api-keys")
                 .then()
                 .statusCode(400)
-                .body("error", equalTo("name is required"));
+                .contentType("application/problem+json")
+                .body("detail", equalTo("name is required"));
     }
 
     @Test

@@ -20,6 +20,7 @@ import jakarta.ws.rs.core.Response;
 
 import io.smallrye.mutiny.Uni;
 
+import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.GatewayRequest;
 import aussie.core.model.GatewayResult;
 import aussie.core.port.in.PassThroughUseCase;
@@ -136,28 +137,14 @@ public class PassThroughResource {
                 }
                 yield responseBuilder.build();
             }
-            case GatewayResult.ServiceNotFound notFound -> Response.status(Response.Status.NOT_FOUND)
-                    .entity("Service not found")
-                    .build();
-            case GatewayResult.ReservedPath reserved -> Response.status(Response.Status.NOT_FOUND)
-                    .entity("Not found")
-                    .build();
-            case GatewayResult.RouteNotFound notFound -> Response.status(Response.Status.NOT_FOUND)
-                    .entity("Not found")
-                    .build();
-            case GatewayResult.Error error -> Response.status(Response.Status.BAD_GATEWAY)
-                    .entity("Error forwarding request")
-                    .build();
-            case GatewayResult.Unauthorized unauthorized -> Response.status(Response.Status.UNAUTHORIZED)
-                    .header("WWW-Authenticate", "Bearer realm=\"aussie\"")
-                    .entity("Unauthorized")
-                    .build();
-            case GatewayResult.Forbidden forbidden -> Response.status(Response.Status.FORBIDDEN)
-                    .entity("Forbidden")
-                    .build();
-            case GatewayResult.BadRequest badRequest -> Response.status(Response.Status.BAD_REQUEST)
-                    .entity("Bad request")
-                    .build();
+            case GatewayResult.ServiceNotFound s -> throw GatewayProblem.serviceNotFound(s.serviceId());
+            case GatewayResult.ReservedPath rp -> throw GatewayProblem.notFound(
+                    "Path '%s' is reserved".formatted(rp.path()));
+            case GatewayResult.RouteNotFound r -> throw GatewayProblem.routeNotFound(r.path());
+            case GatewayResult.Error e -> throw GatewayProblem.badGateway(e.message());
+            case GatewayResult.Unauthorized u -> throw GatewayProblem.unauthorized(u.reason());
+            case GatewayResult.Forbidden f -> throw GatewayProblem.forbidden(f.reason());
+            case GatewayResult.BadRequest b -> throw GatewayProblem.badRequest(b.reason());
         };
     }
 }

@@ -3,7 +3,6 @@ package aussie.adapter.in.rest;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -24,6 +23,7 @@ import io.smallrye.mutiny.Uni;
 import aussie.adapter.in.auth.ApiKeyIdentityProvider.ApiKeyPrincipal;
 import aussie.adapter.in.auth.PermissionRoleMapper;
 import aussie.adapter.in.dto.CreateApiKeyRequest;
+import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.ApiKey;
 import aussie.core.port.in.ApiKeyManagement;
 
@@ -64,10 +64,7 @@ public class ApiKeyResource {
     @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_WRITE, PermissionRoleMapper.ROLE_ADMIN})
     public Uni<Response> createKey(CreateApiKeyRequest request) {
         if (request == null || request.name() == null || request.name().isBlank()) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of("error", "name is required"))
-                            .build());
+            throw GatewayProblem.badRequest("name is required");
         }
 
         Duration ttl = request.ttlDays() != null ? Duration.ofDays(request.ttlDays()) : null;
@@ -95,9 +92,7 @@ public class ApiKeyResource {
                             .build();
                 })
                 .onFailure(IllegalArgumentException.class)
-                .recoverWithItem(e -> Response.status(Response.Status.BAD_REQUEST)
-                        .entity(Map.of("error", e.getMessage()))
-                        .build());
+                .transform(e -> GatewayProblem.validationError(e.getMessage()));
     }
 
     /**
@@ -133,9 +128,7 @@ public class ApiKeyResource {
     public Uni<Response> getKey(@PathParam("keyId") String keyId) {
         return apiKeyService.get(keyId).map(opt -> opt.map(
                         key -> Response.ok(key).build())
-                .orElse(Response.status(Response.Status.NOT_FOUND)
-                        .entity(Map.of("error", "API key not found: " + keyId))
-                        .build()));
+                .orElseThrow(() -> GatewayProblem.resourceNotFound("API key", keyId)));
     }
 
     /**
@@ -152,9 +145,7 @@ public class ApiKeyResource {
             if (revoked) {
                 return Response.noContent().build();
             } else {
-                return Response.status(Response.Status.NOT_FOUND)
-                        .entity(Map.of("error", "API key not found: " + keyId))
-                        .build();
+                throw GatewayProblem.resourceNotFound("API key", keyId);
             }
         });
     }

@@ -26,6 +26,7 @@ import org.jboss.logging.Logger;
 
 import aussie.adapter.in.auth.SessionAuthenticationMechanism.SessionPrincipal;
 import aussie.adapter.in.auth.SessionCookieManager;
+import aussie.adapter.in.problem.GatewayProblem;
 import aussie.config.SessionConfigMapping;
 import aussie.core.model.Session;
 import aussie.core.port.in.SessionManagement;
@@ -65,10 +66,7 @@ public class SessionResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Uni<Response> createSession(CreateSessionRequest createRequest) {
         if (!config.enabled()) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.NOT_FOUND)
-                            .entity(Map.of("error", "Sessions are disabled"))
-                            .build());
+            throw GatewayProblem.featureDisabled("Sessions");
         }
 
         String userAgent = request.getHeader("User-Agent");
@@ -105,11 +103,9 @@ public class SessionResource {
                             .build();
                 })
                 .onFailure()
-                .recoverWithItem(error -> {
+                .transform(error -> {
                     LOG.errorf("Failed to create session: %s", error.getMessage());
-                    return Response.serverError()
-                            .entity(Map.of("error", "Failed to create session"))
-                            .build();
+                    return GatewayProblem.internalError("Failed to create session");
                 });
     }
 
@@ -120,32 +116,21 @@ public class SessionResource {
     @Path("/session")
     public Uni<Response> getSession() {
         if (!config.enabled()) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.NOT_FOUND)
-                            .entity(Map.of("error", "Sessions are disabled"))
-                            .build());
+            throw GatewayProblem.featureDisabled("Sessions");
         }
 
         // Check if user is authenticated via session
         if (securityIdentity.isAnonymous()) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.UNAUTHORIZED)
-                            .entity(Map.of("error", "Not authenticated"))
-                            .build());
+            throw GatewayProblem.unauthorized("Not authenticated");
         }
 
         if (!(securityIdentity.getPrincipal() instanceof SessionPrincipal sessionPrincipal)) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.UNAUTHORIZED)
-                            .entity(Map.of("error", "Not authenticated via session"))
-                            .build());
+            throw GatewayProblem.unauthorized("Not authenticated via session");
         }
 
         return sessionManagement.getSession(sessionPrincipal.getSessionId()).map(sessionOpt -> {
             if (sessionOpt.isEmpty()) {
-                return Response.status(Response.Status.UNAUTHORIZED)
-                        .entity(Map.of("error", "Session not found"))
-                        .build();
+                throw GatewayProblem.unauthorized("Session not found");
             }
 
             Session session = sessionOpt.get();
@@ -168,10 +153,7 @@ public class SessionResource {
     @Path("/session")
     public Uni<Response> logout() {
         if (!config.enabled()) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.NOT_FOUND)
-                            .entity(Map.of("error", "Sessions are disabled"))
-                            .build());
+            throw GatewayProblem.featureDisabled("Sessions");
         }
 
         if (securityIdentity.isAnonymous()
@@ -208,18 +190,12 @@ public class SessionResource {
     @Path("/sessions")
     public Uni<Response> logoutAll() {
         if (!config.enabled()) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.NOT_FOUND)
-                            .entity(Map.of("error", "Sessions are disabled"))
-                            .build());
+            throw GatewayProblem.featureDisabled("Sessions");
         }
 
         if (securityIdentity.isAnonymous()
                 || !(securityIdentity.getPrincipal() instanceof SessionPrincipal sessionPrincipal)) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.UNAUTHORIZED)
-                            .entity(Map.of("error", "Not authenticated"))
-                            .build());
+            throw GatewayProblem.unauthorized("Not authenticated");
         }
 
         return sessionManagement
@@ -249,25 +225,17 @@ public class SessionResource {
     @Path("/session/refresh")
     public Uni<Response> refreshSession() {
         if (!config.enabled()) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.NOT_FOUND)
-                            .entity(Map.of("error", "Sessions are disabled"))
-                            .build());
+            throw GatewayProblem.featureDisabled("Sessions");
         }
 
         if (securityIdentity.isAnonymous()
                 || !(securityIdentity.getPrincipal() instanceof SessionPrincipal sessionPrincipal)) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.UNAUTHORIZED)
-                            .entity(Map.of("error", "Not authenticated"))
-                            .build());
+            throw GatewayProblem.unauthorized("Not authenticated");
         }
 
         return sessionManagement.refreshSession(sessionPrincipal.getSessionId()).map(sessionOpt -> {
             if (sessionOpt.isEmpty()) {
-                return Response.status(Response.Status.UNAUTHORIZED)
-                        .entity(Map.of("error", "Session not found"))
-                        .build();
+                throw GatewayProblem.unauthorized("Session not found");
             }
 
             Session session = sessionOpt.get();
@@ -295,17 +263,11 @@ public class SessionResource {
     public Uni<Response> authCallback(@QueryParam("token") String token, @QueryParam("redirect") String redirectUrl) {
 
         if (!config.enabled()) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.NOT_FOUND)
-                            .entity(Map.of("error", "Sessions are disabled"))
-                            .build());
+            throw GatewayProblem.featureDisabled("Sessions");
         }
 
         if (token == null || token.isBlank()) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of("error", "Token is required"))
-                            .build());
+            throw GatewayProblem.badRequest("Token is required");
         }
 
         // Decode JWT claims (for demo mode, we trust the token without signature validation)
@@ -315,18 +277,12 @@ public class SessionResource {
             claims = decodeJwtClaims(token);
         } catch (Exception e) {
             LOG.warnf("Failed to decode token: %s", e.getMessage());
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of("error", "Invalid token format"))
-                            .build());
+            throw GatewayProblem.badRequest("Invalid token format");
         }
 
         String userId = (String) claims.get("sub");
         if (userId == null || userId.isBlank()) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of("error", "Token missing subject claim"))
-                            .build());
+            throw GatewayProblem.badRequest("Token missing subject claim");
         }
 
         String issuer = (String) claims.getOrDefault("iss", "unknown");
@@ -356,11 +312,9 @@ public class SessionResource {
                             .build();
                 })
                 .onFailure()
-                .recoverWithItem(error -> {
+                .transform(error -> {
                     LOG.errorf("Failed to create session from callback: %s", error.getMessage());
-                    return Response.serverError()
-                            .entity(Map.of("error", "Failed to create session"))
-                            .build();
+                    return GatewayProblem.internalError("Failed to create session");
                 });
     }
 

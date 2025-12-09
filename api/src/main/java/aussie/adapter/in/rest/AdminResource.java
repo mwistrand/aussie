@@ -1,7 +1,6 @@
 package aussie.adapter.in.rest;
 
 import java.util.List;
-import java.util.Map;
 
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -21,6 +20,7 @@ import io.smallrye.mutiny.Uni;
 import aussie.adapter.in.auth.PermissionRoleMapper;
 import aussie.adapter.in.dto.ServiceRegistrationRequest;
 import aussie.adapter.in.dto.ServiceRegistrationResponse;
+import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.RegistrationResult;
 import aussie.core.service.ServiceRegistry;
 
@@ -54,10 +54,7 @@ public class AdminResource {
     public Uni<Response> registerService(ServiceRegistrationRequest request) {
         // Minimal adapter-level validation to prevent NPE during DTO conversion
         if (request == null || request.serviceId() == null || request.baseUrl() == null) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of("error", "serviceId and baseUrl are required"))
-                            .build());
+            throw GatewayProblem.badRequest("serviceId and baseUrl are required");
         }
 
         try {
@@ -68,15 +65,10 @@ public class AdminResource {
                 case RegistrationResult.Success s -> Response.status(Response.Status.CREATED)
                         .entity(ServiceRegistrationResponse.fromModel(s.registration()))
                         .build();
-                case RegistrationResult.Failure f -> Response.status(f.statusCode())
-                        .entity(Map.of("error", f.reason()))
-                        .build();
+                case RegistrationResult.Failure f -> throw GatewayProblem.badRequest(f.reason());
             });
         } catch (IllegalArgumentException e) {
-            return Uni.createFrom()
-                    .item(Response.status(Response.Status.BAD_REQUEST)
-                            .entity(Map.of("error", e.getMessage()))
-                            .build());
+            throw GatewayProblem.validationError(e.getMessage());
         }
     }
 
@@ -86,10 +78,7 @@ public class AdminResource {
     public Uni<Response> unregisterService(@PathParam("serviceId") String serviceId) {
         return serviceRegistry.getService(serviceId).flatMap(existing -> {
             if (existing.isEmpty()) {
-                return Uni.createFrom()
-                        .item(Response.status(Response.Status.NOT_FOUND)
-                                .entity(Map.of("error", "Service not found: " + serviceId))
-                                .build());
+                throw GatewayProblem.resourceNotFound("Service", serviceId);
             }
 
             return serviceRegistry.unregister(serviceId).map(deleted -> Response.noContent()
@@ -112,8 +101,6 @@ public class AdminResource {
         return serviceRegistry.getService(serviceId).map(serviceOpt -> serviceOpt
                 .map(service -> Response.ok(ServiceRegistrationResponse.fromModel(service))
                         .build())
-                .orElse(Response.status(Response.Status.NOT_FOUND)
-                        .entity(Map.of("error", "Service not found: " + serviceId))
-                        .build()));
+                .orElseThrow(() -> GatewayProblem.resourceNotFound("Service", serviceId)));
     }
 }

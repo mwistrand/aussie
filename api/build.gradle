@@ -28,6 +28,9 @@ dependencies {
     // Health checks
     implementation 'io.quarkus:quarkus-smallrye-health'
 
+    // RFC 7807 Problem Details for error responses
+    implementation 'io.quarkiverse.resteasy-problem:quarkus-resteasy-problem:3.21.0'
+
     // Security (RBAC with @RolesAllowed)
     implementation 'io.quarkus:quarkus-security'
 

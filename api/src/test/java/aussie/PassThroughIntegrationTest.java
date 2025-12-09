@@ -234,7 +234,9 @@ class PassThroughIntegrationTest {
                     .get("/nonexistent-service/api/health")
                     .then()
                     .statusCode(404)
-                    .body(containsString("Service not found"));
+                    .contentType("application/problem+json")
+                    .body("title", containsString("Service Not Found"))
+                    .body("detail", containsString("is not registered"));
         }
 
         @Test
@@ -246,7 +248,12 @@ class PassThroughIntegrationTest {
         @Test
         @DisplayName("Should not conflict with gateway path")
         void shouldNotConflictWithGatewayPath() {
-            given().when().get("/gateway/some/path").then().statusCode(404).body(containsString("Not found"));
+            given().when()
+                    .get("/gateway/some/path")
+                    .then()
+                    .statusCode(404)
+                    .contentType("application/problem+json")
+                    .body("title", containsString("Not Found"));
         }
     }
 
@@ -292,7 +299,8 @@ class PassThroughIntegrationTest {
                     .get("/unreachable-service/api/health")
                     .then()
                     .statusCode(502)
-                    .body(containsString("Error forwarding request"));
+                    .contentType("application/problem+json")
+                    .body("title", containsString("Bad Gateway"));
         }
     }
 

@@ -13,11 +13,11 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
-import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 
 import org.jboss.logging.Logger;
 
+import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.EndpointConfig;
 import aussie.core.model.RouteMatch;
 import aussie.core.model.ServiceRegistration;
@@ -139,9 +139,8 @@ public class AccessControlFilter implements ContainerRequestFilter {
                 source, route.endpoint(), route.service().accessConfig());
 
         if (!isPublic) {
-            requestContext.abortWith(Response.status(Response.Status.NOT_FOUND)
-                    .entity("Not found")
-                    .build());
+            // Return 404 to hide resource existence from unauthorized users
+            throw GatewayProblem.notFound("Not found");
         }
     }
 }
