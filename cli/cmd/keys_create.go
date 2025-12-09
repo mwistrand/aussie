@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -82,7 +83,7 @@ func runKeysCreate(cmd *cobra.Command, args []string) error {
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)

@@ -7,11 +7,17 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/aussie/cli/internal/config"
 )
+
+// isValidServerURL validates that the input is a valid HTTP/HTTPS URL
+func isValidServerURL(url string) bool {
+	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
+}
 
 var (
 	loginServer string
@@ -64,6 +70,9 @@ func runLogin(cmd *cobra.Command, args []string) error {
 			}
 			serverInput = strings.TrimSpace(serverInput)
 			if serverInput != "" {
+				if !isValidServerURL(serverInput) {
+					return fmt.Errorf("invalid server URL: must start with http:// or https://")
+				}
 				cfg.Host = serverInput
 			}
 		}
@@ -88,7 +97,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)

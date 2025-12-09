@@ -5,11 +5,16 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/aussie/cli/internal/config"
 	"github.com/spf13/cobra"
 )
+
+// validServiceIDPattern matches alphanumeric characters, hyphens, and underscores only
+var validServiceIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 var servicePreviewCmd = &cobra.Command{
 	Use:   "preview <service-id>",
@@ -46,6 +51,11 @@ type ServiceResponse struct {
 func runServicePreview(cmd *cobra.Command, args []string) error {
 	serviceID := args[0]
 
+	// Validate service ID to prevent path traversal attacks
+	if !validServiceIDPattern.MatchString(serviceID) {
+		return fmt.Errorf("invalid service ID format: must contain only alphanumeric characters, hyphens, and underscores")
+	}
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -59,13 +69,17 @@ func runServicePreview(cmd *cobra.Command, args []string) error {
 
 	// Fetch service from API
 	url := fmt.Sprintf("%s/admin/services/%s", cfg.Host, serviceID)
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Aussie at %s: %w", cfg.Host, err)
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
 
 	if resp.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("service '%s' not found", serviceID)

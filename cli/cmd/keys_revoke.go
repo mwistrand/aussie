@@ -3,11 +3,16 @@ package cmd
 import (
 	"fmt"
 	"net/http"
+	"regexp"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/aussie/cli/internal/config"
 )
+
+// validIDPattern matches alphanumeric characters, hyphens, and underscores only
+var validIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 var keysRevokeCmd = &cobra.Command{
 	Use:   "revoke <key-id>",
@@ -28,6 +33,11 @@ func init() {
 
 func runKeysRevoke(cmd *cobra.Command, args []string) error {
 	keyId := args[0]
+
+	// Validate key ID to prevent path traversal attacks
+	if !validIDPattern.MatchString(keyId) {
+		return fmt.Errorf("invalid key ID format: must contain only alphanumeric characters, hyphens, and underscores")
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -50,7 +60,7 @@ func runKeysRevoke(cmd *cobra.Command, args []string) error {
 	}
 	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to server: %w", err)

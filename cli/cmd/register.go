@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/aussie/cli/internal/config"
 	"github.com/spf13/cobra"
@@ -158,14 +159,17 @@ func runRegister(cmd *cobra.Command, args []string) error {
 		req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 	}
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Aussie at %s: %w", cfg.Host, err)
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
 
 	if resp.StatusCode == http.StatusCreated {
 		// Pretty print the response

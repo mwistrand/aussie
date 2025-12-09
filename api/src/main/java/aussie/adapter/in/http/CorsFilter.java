@@ -93,14 +93,14 @@ public class CorsFilter {
         // Check if origin is allowed
         if (!corsConfig.isOriginAllowed(origin)) {
             LOG.debugf("CORS preflight rejected: origin %s not allowed", origin);
-            rc.response().setStatusCode(403).end("CORS origin not allowed");
+            rc.response().setStatusCode(403).end("Forbidden");
             return;
         }
 
         // Check if method is allowed
         if (requestMethod != null && !corsConfig.isMethodAllowed(requestMethod)) {
             LOG.debugf("CORS preflight rejected: method %s not allowed", requestMethod);
-            rc.response().setStatusCode(403).end("CORS method not allowed");
+            rc.response().setStatusCode(403).end("Forbidden");
             return;
         }
 

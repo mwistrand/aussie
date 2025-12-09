@@ -123,17 +123,17 @@ public class GatewayResource {
                     .entity("Not found")
                     .build();
             case GatewayResult.Error error -> Response.status(Response.Status.BAD_GATEWAY)
-                    .entity("Error forwarding request: " + error.message())
+                    .entity("Bad gateway")
                     .build();
             case GatewayResult.Unauthorized unauthorized -> Response.status(Response.Status.UNAUTHORIZED)
                     .header("WWW-Authenticate", "Bearer realm=\"aussie\"")
-                    .entity("Unauthorized: " + unauthorized.reason())
+                    .entity("Unauthorized")
                     .build();
             case GatewayResult.Forbidden forbidden -> Response.status(Response.Status.FORBIDDEN)
-                    .entity("Forbidden: " + forbidden.reason())
+                    .entity("Forbidden")
                     .build();
             case GatewayResult.BadRequest badRequest -> Response.status(Response.Status.BAD_REQUEST)
-                    .entity("Bad request: " + badRequest.reason())
+                    .entity("Bad request")
                     .build();
         };
     }

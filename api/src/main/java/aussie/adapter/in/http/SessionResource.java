@@ -402,9 +402,25 @@ public class SessionResource {
             return "/";
         }
 
-        // Allow relative URLs (starting with /)
-        if (redirectUrl.startsWith("/") && !redirectUrl.startsWith("//")) {
-            return redirectUrl;
+        // Normalize and validate the URL to prevent bypass attempts
+        String normalized = redirectUrl.trim();
+
+        // Reject URLs with protocol-relative patterns or backslashes (which can be
+        // normalized to forward slashes by browsers)
+        if (normalized.startsWith("//") || normalized.contains("\\") || normalized.contains("%")) {
+            LOG.debugf("Rejecting redirect URL with suspicious pattern: %s", redirectUrl);
+            return "/";
+        }
+
+        // Allow relative URLs (starting with / but not //)
+        // Additional check: ensure the path doesn't contain embedded URLs
+        if (normalized.startsWith("/") && !normalized.startsWith("//")) {
+            // Verify no protocol in the path (e.g., /http://evil.com)
+            if (!normalized.contains("://") && !normalized.contains("@")) {
+                return normalized;
+            }
+            LOG.debugf("Rejecting redirect URL with embedded protocol/credentials: %s", redirectUrl);
+            return "/";
         }
 
         // Allow known safe origins (demo-ui, localhost variants)
@@ -413,10 +429,15 @@ public class SessionResource {
                 "http://localhost:8080", "http://127.0.0.1:8080", "http://localhost:3000", "http://127.0.0.1:3000");
 
         try {
-            URI uri = URI.create(redirectUrl);
+            URI uri = URI.create(normalized);
+            // Ensure scheme is present (not a protocol-relative URL)
+            if (uri.getScheme() == null) {
+                LOG.debugf("Rejecting redirect URL without scheme: %s", redirectUrl);
+                return "/";
+            }
             String origin = uri.getScheme() + "://" + uri.getHost() + (uri.getPort() != -1 ? ":" + uri.getPort() : "");
             if (allowedOrigins.contains(origin)) {
-                return redirectUrl;
+                return normalized;
             }
         } catch (Exception e) {
             LOG.debugf("Failed to parse redirect URL: %s", redirectUrl);

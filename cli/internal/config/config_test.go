@@ -109,11 +109,16 @@ func TestLoadFromFile_EmptyFile(t *testing.T) {
 }
 
 func TestLoad_NoConfigFiles(t *testing.T) {
-	// Save current directory
+	// Save current directory and HOME
 	origDir, _ := os.Getwd()
+	origHome := os.Getenv("HOME")
 	tmpDir := t.TempDir()
 	os.Chdir(tmpDir)
-	defer os.Chdir(origDir)
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		os.Chdir(origDir)
+		os.Setenv("HOME", origHome)
+	}()
 
 	cfg, err := Load()
 
@@ -128,11 +133,16 @@ func TestLoad_NoConfigFiles(t *testing.T) {
 }
 
 func TestLoad_LocalConfigOverridesGlobal(t *testing.T) {
-	// Save current directory
+	// Save current directory and HOME
 	origDir, _ := os.Getwd()
+	origHome := os.Getenv("HOME")
 	tmpDir := t.TempDir()
 	os.Chdir(tmpDir)
-	defer os.Chdir(origDir)
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		os.Chdir(origDir)
+		os.Setenv("HOME", origHome)
+	}()
 
 	// Create local config
 	localContent := `host = "http://local:8080"`
