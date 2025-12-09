@@ -1,5 +1,7 @@
 package aussie.core.port.in;
 
+import io.smallrye.mutiny.Uni;
+
 import aussie.core.model.BootstrapResult;
 
 /**
@@ -21,10 +23,10 @@ public interface BootstrapManagement {
      *   <li>Create a time-limited admin key with full permissions</li>
      * </ul>
      *
-     * @return the bootstrap result containing the key ID and expiration
+     * @return Uni with the bootstrap result containing the key ID and expiration
      * @throws BootstrapException if bootstrap is misconfigured or fails
      */
-    BootstrapResult bootstrap();
+    Uni<BootstrapResult> bootstrap();
 
     /**
      * Check if any admin keys exist in the system.
@@ -32,9 +34,9 @@ public interface BootstrapManagement {
      * <p>Admin keys are those with either '*' permission or 'admin:write' permission.
      * Revoked and expired keys are not counted.
      *
-     * @return true if at least one valid admin key exists
+     * @return Uni with true if at least one valid admin key exists
      */
-    boolean hasAdminKeys();
+    Uni<Boolean> hasAdminKeys();
 
     /**
      * Check if bootstrap should run based on current state and configuration.
@@ -45,9 +47,9 @@ public interface BootstrapManagement {
      *   <li>Bootstrap is enabled AND recovery mode is enabled</li>
      * </ul>
      *
-     * @return true if bootstrap should be attempted
+     * @return Uni with true if bootstrap should be attempted
      */
-    boolean shouldBootstrap();
+    Uni<Boolean> shouldBootstrap();
 
     /**
      * Exception thrown when bootstrap fails due to misconfiguration or error.

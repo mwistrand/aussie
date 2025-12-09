@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import io.smallrye.mutiny.Uni;
+
 import aussie.core.model.ApiKey;
 import aussie.core.model.ApiKeyCreateResult;
 
@@ -27,9 +29,10 @@ public interface ApiKeyManagement {
      * @param permissions set of permissions to grant (e.g., "admin:read", "admin:write")
      * @param ttl         time-to-live for the key (null = never expires)
      * @param createdBy   identifier of the principal creating this key (e.g., key ID or "bootstrap")
-     * @return result containing the key ID, plaintext key, and metadata
+     * @return Uni with result containing the key ID, plaintext key, and metadata
      */
-    ApiKeyCreateResult create(String name, String description, Set<String> permissions, Duration ttl, String createdBy);
+    Uni<ApiKeyCreateResult> create(
+            String name, String description, Set<String> permissions, Duration ttl, String createdBy);
 
     /**
      * Validates a plaintext API key and returns the associated metadata if valid.
@@ -42,16 +45,16 @@ public interface ApiKeyManagement {
      * </ul>
      *
      * @param plaintextKey the API key to validate
-     * @return the ApiKey metadata if valid, empty if invalid or not found
+     * @return Uni with the ApiKey metadata if valid, empty if invalid or not found
      */
-    Optional<ApiKey> validate(String plaintextKey);
+    Uni<Optional<ApiKey>> validate(String plaintextKey);
 
     /**
      * Lists all API keys with hashes redacted.
      *
-     * @return list of all keys (including revoked/expired) with redacted hashes
+     * @return Uni with list of all keys (including revoked/expired) with redacted hashes
      */
-    List<ApiKey> list();
+    Uni<List<ApiKey>> list();
 
     /**
      * Revokes an API key by its ID.
@@ -60,17 +63,17 @@ public interface ApiKeyManagement {
      * retained for audit purposes but marked as revoked.
      *
      * @param keyId the key ID to revoke
-     * @return true if the key was found and revoked, false if not found
+     * @return Uni with true if the key was found and revoked, false if not found
      */
-    boolean revoke(String keyId);
+    Uni<Boolean> revoke(String keyId);
 
     /**
      * Gets a specific API key by ID with hash redacted.
      *
      * @param keyId the key ID to retrieve
-     * @return the ApiKey if found, empty otherwise
+     * @return Uni with the ApiKey if found, empty otherwise
      */
-    Optional<ApiKey> get(String keyId);
+    Uni<Optional<ApiKey>> get(String keyId);
 
     /**
      * Creates a new API key with a specific plaintext key value.
@@ -84,10 +87,10 @@ public interface ApiKeyManagement {
      * @param ttl          time-to-live for the key (null = never expires)
      * @param plaintextKey the specific key value to use (min 32 chars)
      * @param createdBy    identifier of the principal creating this key (e.g., "bootstrap")
-     * @return result containing the key ID and metadata
+     * @return Uni with result containing the key ID and metadata
      * @throws IllegalArgumentException if the key is too short or TTL exceeds max
      */
-    ApiKeyCreateResult createWithKey(
+    Uni<ApiKeyCreateResult> createWithKey(
             String name,
             String description,
             Set<String> permissions,

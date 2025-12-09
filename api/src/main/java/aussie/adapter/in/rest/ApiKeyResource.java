@@ -19,6 +19,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import io.quarkus.security.identity.SecurityIdentity;
+import io.smallrye.mutiny.Uni;
 
 import aussie.adapter.in.auth.ApiKeyIdentityProvider.ApiKeyPrincipal;
 import aussie.adapter.in.auth.PermissionRoleMapper;
@@ -61,11 +62,12 @@ public class ApiKeyResource {
      */
     @POST
     @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_WRITE, PermissionRoleMapper.ROLE_ADMIN})
-    public Response createKey(CreateApiKeyRequest request) {
+    public Uni<Response> createKey(CreateApiKeyRequest request) {
         if (request == null || request.name() == null || request.name().isBlank()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", "name is required"))
-                    .build();
+            return Uni.createFrom()
+                    .item(Response.status(Response.Status.BAD_REQUEST)
+                            .entity(Map.of("error", "name is required"))
+                            .build());
         }
 
         Duration ttl = request.ttlDays() != null ? Duration.ofDays(request.ttlDays()) : null;
@@ -73,28 +75,29 @@ public class ApiKeyResource {
         // Get the creator's identity
         String createdBy = getCreatorId();
 
-        try {
-            var result =
-                    apiKeyService.create(request.name(), request.description(), request.permissions(), ttl, createdBy);
+        return apiKeyService
+                .create(request.name(), request.description(), request.permissions(), ttl, createdBy)
+                .map(result -> {
+                    // Return the plaintext key only this one time
+                    var responseBody = new HashMap<String, Object>();
+                    responseBody.put("keyId", result.keyId());
+                    responseBody.put("key", result.plaintextKey());
+                    responseBody.put("name", result.metadata().name());
+                    responseBody.put("permissions", result.metadata().permissions());
+                    responseBody.put("createdBy", result.metadata().createdBy());
+                    if (result.metadata().expiresAt() != null) {
+                        responseBody.put(
+                                "expiresAt", result.metadata().expiresAt().toString());
+                    }
 
-            // Return the plaintext key only this one time
-            var responseBody = new HashMap<String, Object>();
-            responseBody.put("keyId", result.keyId());
-            responseBody.put("key", result.plaintextKey());
-            responseBody.put("name", result.metadata().name());
-            responseBody.put("permissions", result.metadata().permissions());
-            responseBody.put("createdBy", result.metadata().createdBy());
-            if (result.metadata().expiresAt() != null) {
-                responseBody.put("expiresAt", result.metadata().expiresAt().toString());
-            }
-
-            return Response.status(Response.Status.CREATED).entity(responseBody).build();
-        } catch (IllegalArgumentException e) {
-            // TTL validation failed
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", e.getMessage()))
-                    .build();
-        }
+                    return Response.status(Response.Status.CREATED)
+                            .entity(responseBody)
+                            .build();
+                })
+                .onFailure(IllegalArgumentException.class)
+                .recoverWithItem(e -> Response.status(Response.Status.BAD_REQUEST)
+                        .entity(Map.of("error", e.getMessage()))
+                        .build());
     }
 
     /**
@@ -115,7 +118,7 @@ public class ApiKeyResource {
      */
     @GET
     @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_READ, PermissionRoleMapper.ROLE_ADMIN})
-    public List<ApiKey> listKeys() {
+    public Uni<List<ApiKey>> listKeys() {
         return apiKeyService.list();
     }
 
@@ -127,13 +130,12 @@ public class ApiKeyResource {
     @GET
     @Path("/{keyId}")
     @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_READ, PermissionRoleMapper.ROLE_ADMIN})
-    public Response getKey(@PathParam("keyId") String keyId) {
-        return apiKeyService
-                .get(keyId)
-                .map(key -> Response.ok(key).build())
+    public Uni<Response> getKey(@PathParam("keyId") String keyId) {
+        return apiKeyService.get(keyId).map(opt -> opt.map(
+                        key -> Response.ok(key).build())
                 .orElse(Response.status(Response.Status.NOT_FOUND)
                         .entity(Map.of("error", "API key not found: " + keyId))
-                        .build());
+                        .build()));
     }
 
     /**
@@ -145,15 +147,15 @@ public class ApiKeyResource {
     @DELETE
     @Path("/{keyId}")
     @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_WRITE, PermissionRoleMapper.ROLE_ADMIN})
-    public Response revokeKey(@PathParam("keyId") String keyId) {
-        boolean revoked = apiKeyService.revoke(keyId);
-
-        if (revoked) {
-            return Response.noContent().build();
-        } else {
-            return Response.status(Response.Status.NOT_FOUND)
-                    .entity(Map.of("error", "API key not found: " + keyId))
-                    .build();
-        }
+    public Uni<Response> revokeKey(@PathParam("keyId") String keyId) {
+        return apiKeyService.revoke(keyId).map(revoked -> {
+            if (revoked) {
+                return Response.noContent().build();
+            } else {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity(Map.of("error", "API key not found: " + keyId))
+                        .build();
+            }
+        });
     }
 }

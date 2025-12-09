@@ -92,7 +92,7 @@ public class BootstrapIntegrationTest {
     @Test
     @DisplayName("bootstrap key should be validated correctly")
     void bootstrapKeyShouldBeValidated() {
-        var validated = apiKeyService.validate(TEST_BOOTSTRAP_KEY);
+        var validated = apiKeyService.validate(TEST_BOOTSTRAP_KEY).await().indefinitely();
 
         assertTrue(validated.isPresent(), "Bootstrap key should validate successfully");
         assertTrue(

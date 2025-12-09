@@ -47,6 +47,13 @@ public class BootstrapInitializer {
         this.config = config;
     }
 
+    /**
+     * Bootstrap initialization runs at startup.
+     *
+     * <p>Note: This method blocks on reactive calls because Quarkus startup events
+     * are inherently synchronous. The bootstrap process must complete before the
+     * application is ready to serve requests.
+     */
     void onStart(@Observes StartupEvent event) {
         if (!config.enabled()) {
             LOG.debug("Bootstrap mode is disabled");
@@ -64,7 +71,8 @@ public class BootstrapInitializer {
             throw new BootstrapException("Bootstrap is enabled but no key provided. Set AUSSIE_BOOTSTRAP_KEY.");
         }
 
-        if (!bootstrapService.shouldBootstrap()) {
+        // Block on reactive call - startup must complete synchronously
+        if (!bootstrapService.shouldBootstrap().await().indefinitely()) {
             LOG.info("Bootstrap skipped: admin keys already exist (use recovery mode to override)");
             AUDIT.infof("BOOTSTRAP_SKIPPED reason=admin_keys_exist recovery_mode=%s", config.recoveryMode());
             return;
@@ -73,7 +81,8 @@ public class BootstrapInitializer {
         LOG.info("Creating bootstrap admin key...");
 
         try {
-            BootstrapResult result = bootstrapService.bootstrap();
+            // Block on reactive call - startup must complete synchronously
+            BootstrapResult result = bootstrapService.bootstrap().await().indefinitely();
             logBootstrapResult(result);
         } catch (BootstrapException e) {
             LOG.error("========================================");

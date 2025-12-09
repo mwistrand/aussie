@@ -74,11 +74,17 @@ class BootstrapServiceTest {
     }
 
     private void createAdminKey() {
-        apiKeyService.create("existing-admin", "Existing admin key", Set.of(Permissions.ALL), null, "test");
+        apiKeyService
+                .create("existing-admin", "Existing admin key", Set.of(Permissions.ALL), null, "test")
+                .await()
+                .indefinitely();
     }
 
     private void createReadOnlyKey() {
-        apiKeyService.create("read-only", "Read-only key", Set.of(Permissions.ADMIN_READ), null, "test");
+        apiKeyService
+                .create("read-only", "Read-only key", Set.of(Permissions.ADMIN_READ), null, "test")
+                .await()
+                .indefinitely();
     }
 
     @Nested
@@ -91,7 +97,7 @@ class BootstrapServiceTest {
             var config = createConfig(false, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertFalse(service.shouldBootstrap());
+            assertFalse(service.shouldBootstrap().await().indefinitely());
         }
 
         @Test
@@ -100,7 +106,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertTrue(service.shouldBootstrap());
+            assertTrue(service.shouldBootstrap().await().indefinitely());
         }
 
         @Test
@@ -110,7 +116,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertFalse(service.shouldBootstrap());
+            assertFalse(service.shouldBootstrap().await().indefinitely());
         }
 
         @Test
@@ -120,7 +126,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, true, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertTrue(service.shouldBootstrap());
+            assertTrue(service.shouldBootstrap().await().indefinitely());
         }
     }
 
@@ -134,27 +140,33 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertFalse(service.hasAdminKeys());
+            assertFalse(service.hasAdminKeys().await().indefinitely());
         }
 
         @Test
         @DisplayName("should return true for key with wildcard permission")
         void shouldReturnTrueForWildcardPermission() {
-            apiKeyService.create("admin", null, Set.of(Permissions.ALL), null, "test");
+            apiKeyService
+                    .create("admin", null, Set.of(Permissions.ALL), null, "test")
+                    .await()
+                    .indefinitely();
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertTrue(service.hasAdminKeys());
+            assertTrue(service.hasAdminKeys().await().indefinitely());
         }
 
         @Test
         @DisplayName("should return true for key with admin:write permission")
         void shouldReturnTrueForAdminWritePermission() {
-            apiKeyService.create("admin", null, Set.of(Permissions.ADMIN_WRITE), null, "test");
+            apiKeyService
+                    .create("admin", null, Set.of(Permissions.ADMIN_WRITE), null, "test")
+                    .await()
+                    .indefinitely();
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertTrue(service.hasAdminKeys());
+            assertTrue(service.hasAdminKeys().await().indefinitely());
         }
 
         @Test
@@ -164,19 +176,22 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertFalse(service.hasAdminKeys());
+            assertFalse(service.hasAdminKeys().await().indefinitely());
         }
 
         @Test
         @DisplayName("should ignore revoked admin keys")
         void shouldIgnoreRevokedAdminKeys() {
-            var result = apiKeyService.create("admin", null, Set.of(Permissions.ALL), null, "test");
-            apiKeyService.revoke(result.keyId());
+            var result = apiKeyService
+                    .create("admin", null, Set.of(Permissions.ALL), null, "test")
+                    .await()
+                    .indefinitely();
+            apiKeyService.revoke(result.keyId()).await().indefinitely();
 
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertFalse(service.hasAdminKeys());
+            assertFalse(service.hasAdminKeys().await().indefinitely());
         }
 
         @Test
@@ -195,7 +210,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertFalse(service.hasAdminKeys());
+            assertFalse(service.hasAdminKeys().await().indefinitely());
         }
     }
 
@@ -209,7 +224,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            var result = service.bootstrap();
+            var result = service.bootstrap().await().indefinitely();
 
             assertNotNull(result.keyId());
             assertNotNull(result.expiresAt());
@@ -222,9 +237,9 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            service.bootstrap();
+            service.bootstrap().await().indefinitely();
 
-            var validated = apiKeyService.validate(VALID_BOOTSTRAP_KEY);
+            var validated = apiKeyService.validate(VALID_BOOTSTRAP_KEY).await().indefinitely();
             assertTrue(validated.isPresent());
             assertEquals("bootstrap-admin", validated.get().name());
             assertTrue(validated.get().permissions().contains(Permissions.ALL));
@@ -236,7 +251,8 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.empty());
             var service = createService(config);
 
-            assertThrows(BootstrapException.class, service::bootstrap);
+            assertThrows(
+                    BootstrapException.class, () -> service.bootstrap().await().indefinitely());
         }
 
         @Test
@@ -245,7 +261,8 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of("   "));
             var service = createService(config);
 
-            assertThrows(BootstrapException.class, service::bootstrap);
+            assertThrows(
+                    BootstrapException.class, () -> service.bootstrap().await().indefinitely());
         }
 
         @Test
@@ -254,7 +271,8 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(SHORT_KEY));
             var service = createService(config);
 
-            assertThrows(BootstrapException.class, service::bootstrap);
+            assertThrows(
+                    BootstrapException.class, () -> service.bootstrap().await().indefinitely());
         }
 
         @Test
@@ -263,7 +281,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY), Duration.ofDays(30));
             var service = createService(config);
 
-            var result = service.bootstrap();
+            var result = service.bootstrap().await().indefinitely();
 
             // Expiration should be within 24 hours (plus a small buffer for test execution)
             assertTrue(result.expiresAt().isBefore(Instant.now().plus(Duration.ofHours(25))));
@@ -275,7 +293,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY), Duration.ofHours(12));
             var service = createService(config);
 
-            var result = service.bootstrap();
+            var result = service.bootstrap().await().indefinitely();
 
             // Expiration should be approximately 12 hours (with buffer)
             assertTrue(result.expiresAt().isAfter(Instant.now().plus(Duration.ofHours(11))));
@@ -289,7 +307,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, true, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            var result = service.bootstrap();
+            var result = service.bootstrap().await().indefinitely();
 
             assertTrue(result.wasRecovery());
         }
@@ -300,7 +318,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            var result = service.bootstrap();
+            var result = service.bootstrap().await().indefinitely();
 
             assertFalse(result.wasRecovery());
         }
@@ -311,7 +329,8 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY), Duration.ZERO);
             var service = createService(config);
 
-            assertThrows(BootstrapException.class, service::bootstrap);
+            assertThrows(
+                    BootstrapException.class, () -> service.bootstrap().await().indefinitely());
         }
 
         @Test
@@ -320,7 +339,8 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY), Duration.ofHours(-1));
             var service = createService(config);
 
-            assertThrows(BootstrapException.class, service::bootstrap);
+            assertThrows(
+                    BootstrapException.class, () -> service.bootstrap().await().indefinitely());
         }
     }
 }

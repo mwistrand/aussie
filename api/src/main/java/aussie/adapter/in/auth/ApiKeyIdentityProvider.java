@@ -47,14 +47,13 @@ public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthentica
     public Uni<SecurityIdentity> authenticate(
             ApiKeyAuthenticationRequest request, AuthenticationRequestContext context) {
 
-        return context.runBlocking(() -> validateAndBuildIdentity(request.getApiKey()));
+        return apiKeyManagement
+                .validate(request.getApiKey())
+                .map(optApiKey -> optApiKey.orElseThrow(() -> new AuthenticationFailedException("Invalid API key")))
+                .map(this::buildIdentity);
     }
 
-    private SecurityIdentity validateAndBuildIdentity(String plaintextKey) {
-        ApiKey apiKey = apiKeyManagement
-                .validate(plaintextKey)
-                .orElseThrow(() -> new AuthenticationFailedException("Invalid API key"));
-
+    private SecurityIdentity buildIdentity(ApiKey apiKey) {
         // Map permissions to Quarkus Security roles
         var roles = roleMapper.toRoles(apiKey.permissions());
 

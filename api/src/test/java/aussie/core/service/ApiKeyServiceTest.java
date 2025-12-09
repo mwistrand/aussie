@@ -40,12 +40,15 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should create key with specified name and permissions")
         void shouldCreateKeyWithNameAndPermissions() {
-            var result = apiKeyService.create(
-                    "test-key",
-                    "Test description",
-                    Set.of(Permissions.ADMIN_READ, Permissions.ADMIN_WRITE),
-                    null,
-                    "test-creator");
+            var result = apiKeyService
+                    .create(
+                            "test-key",
+                            "Test description",
+                            Set.of(Permissions.ADMIN_READ, Permissions.ADMIN_WRITE),
+                            null,
+                            "test-creator")
+                    .await()
+                    .indefinitely();
 
             assertNotNull(result.keyId());
             assertNotNull(result.plaintextKey());
@@ -59,7 +62,10 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should create key with TTL")
         void shouldCreateKeyWithTtl() {
-            var result = apiKeyService.create("expiring-key", null, Set.of(), Duration.ofDays(30), "test");
+            var result = apiKeyService
+                    .create("expiring-key", null, Set.of(), Duration.ofDays(30), "test")
+                    .await()
+                    .indefinitely();
 
             assertNotNull(result.metadata().expiresAt());
         }
@@ -67,7 +73,10 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should create key without expiration when TTL is null")
         void shouldCreateKeyWithoutExpirationWhenTtlIsNull() {
-            var result = apiKeyService.create("permanent-key", null, Set.of(), null, "test");
+            var result = apiKeyService
+                    .create("permanent-key", null, Set.of(), null, "test")
+                    .await()
+                    .indefinitely();
 
             assertTrue(result.metadata().expiresAt() == null);
         }
@@ -75,8 +84,14 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should generate unique key IDs")
         void shouldGenerateUniqueKeyIds() {
-            var result1 = apiKeyService.create("key1", null, Set.of(), null, "test");
-            var result2 = apiKeyService.create("key2", null, Set.of(), null, "test");
+            var result1 = apiKeyService
+                    .create("key1", null, Set.of(), null, "test")
+                    .await()
+                    .indefinitely();
+            var result2 = apiKeyService
+                    .create("key2", null, Set.of(), null, "test")
+                    .await()
+                    .indefinitely();
 
             assertNotEquals(result1.keyId(), result2.keyId());
         }
@@ -84,8 +99,14 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should generate unique plaintext keys")
         void shouldGenerateUniquePlaintextKeys() {
-            var result1 = apiKeyService.create("key1", null, Set.of(), null, "test");
-            var result2 = apiKeyService.create("key2", null, Set.of(), null, "test");
+            var result1 = apiKeyService
+                    .create("key1", null, Set.of(), null, "test")
+                    .await()
+                    .indefinitely();
+            var result2 = apiKeyService
+                    .create("key2", null, Set.of(), null, "test")
+                    .await()
+                    .indefinitely();
 
             assertNotEquals(result1.plaintextKey(), result2.plaintextKey());
         }
@@ -98,9 +119,13 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should validate existing key")
         void shouldValidateExistingKey() {
-            var createResult = apiKeyService.create("valid-key", null, Set.of(Permissions.ADMIN_READ), null, "test");
+            var createResult = apiKeyService
+                    .create("valid-key", null, Set.of(Permissions.ADMIN_READ), null, "test")
+                    .await()
+                    .indefinitely();
 
-            var validateResult = apiKeyService.validate(createResult.plaintextKey());
+            var validateResult =
+                    apiKeyService.validate(createResult.plaintextKey()).await().indefinitely();
 
             assertTrue(validateResult.isPresent());
             assertEquals(createResult.keyId(), validateResult.get().id());
@@ -109,7 +134,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return empty for non-existent key")
         void shouldReturnEmptyForNonExistentKey() {
-            var result = apiKeyService.validate("non-existent-key");
+            var result = apiKeyService.validate("non-existent-key").await().indefinitely();
 
             assertTrue(result.isEmpty());
         }
@@ -117,7 +142,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return empty for null key")
         void shouldReturnEmptyForNullKey() {
-            var result = apiKeyService.validate(null);
+            var result = apiKeyService.validate(null).await().indefinitely();
 
             assertTrue(result.isEmpty());
         }
@@ -125,7 +150,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return empty for blank key")
         void shouldReturnEmptyForBlankKey() {
-            var result = apiKeyService.validate("   ");
+            var result = apiKeyService.validate("   ").await().indefinitely();
 
             assertTrue(result.isEmpty());
         }
@@ -133,10 +158,14 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return empty for revoked key")
         void shouldReturnEmptyForRevokedKey() {
-            var createResult = apiKeyService.create("to-revoke", null, Set.of(), null, "test");
-            apiKeyService.revoke(createResult.keyId());
+            var createResult = apiKeyService
+                    .create("to-revoke", null, Set.of(), null, "test")
+                    .await()
+                    .indefinitely();
+            apiKeyService.revoke(createResult.keyId()).await().indefinitely();
 
-            var validateResult = apiKeyService.validate(createResult.plaintextKey());
+            var validateResult =
+                    apiKeyService.validate(createResult.plaintextKey()).await().indefinitely();
 
             assertTrue(validateResult.isEmpty());
         }
@@ -149,7 +178,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return empty list when no keys exist")
         void shouldReturnEmptyListWhenNoKeysExist() {
-            var result = apiKeyService.list();
+            var result = apiKeyService.list().await().indefinitely();
 
             assertTrue(result.isEmpty());
         }
@@ -157,10 +186,10 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return all keys with redacted hashes")
         void shouldReturnAllKeysWithRedactedHashes() {
-            apiKeyService.create("key1", null, Set.of(), null, "test");
-            apiKeyService.create("key2", null, Set.of(), null, "test");
+            apiKeyService.create("key1", null, Set.of(), null, "test").await().indefinitely();
+            apiKeyService.create("key2", null, Set.of(), null, "test").await().indefinitely();
 
-            var result = apiKeyService.list();
+            var result = apiKeyService.list().await().indefinitely();
 
             assertEquals(2, result.size());
             assertTrue(result.stream().allMatch(k -> k.keyHash().equals("[REDACTED]")));
@@ -174,9 +203,12 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should revoke existing key")
         void shouldRevokeExistingKey() {
-            var createResult = apiKeyService.create("to-revoke", null, Set.of(), null, "test");
+            var createResult = apiKeyService
+                    .create("to-revoke", null, Set.of(), null, "test")
+                    .await()
+                    .indefinitely();
 
-            boolean result = apiKeyService.revoke(createResult.keyId());
+            boolean result = apiKeyService.revoke(createResult.keyId()).await().indefinitely();
 
             assertTrue(result);
         }
@@ -184,7 +216,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return false when key does not exist")
         void shouldReturnFalseWhenKeyDoesNotExist() {
-            boolean result = apiKeyService.revoke("non-existent");
+            boolean result = apiKeyService.revoke("non-existent").await().indefinitely();
 
             assertFalse(result);
         }
@@ -192,10 +224,13 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("revoked key should appear in list as revoked")
         void revokedKeyShouldAppearInListAsRevoked() {
-            var createResult = apiKeyService.create("to-revoke", null, Set.of(), null, "test");
-            apiKeyService.revoke(createResult.keyId());
+            var createResult = apiKeyService
+                    .create("to-revoke", null, Set.of(), null, "test")
+                    .await()
+                    .indefinitely();
+            apiKeyService.revoke(createResult.keyId()).await().indefinitely();
 
-            var list = apiKeyService.list();
+            var list = apiKeyService.list().await().indefinitely();
             var revokedKey = list.stream()
                     .filter(k -> k.id().equals(createResult.keyId()))
                     .findFirst();
@@ -212,9 +247,12 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return key with redacted hash")
         void shouldReturnKeyWithRedactedHash() {
-            var createResult = apiKeyService.create("get-test", null, Set.of(), null, "test");
+            var createResult = apiKeyService
+                    .create("get-test", null, Set.of(), null, "test")
+                    .await()
+                    .indefinitely();
 
-            var result = apiKeyService.get(createResult.keyId());
+            var result = apiKeyService.get(createResult.keyId()).await().indefinitely();
 
             assertTrue(result.isPresent());
             assertEquals("[REDACTED]", result.get().keyHash());
@@ -223,7 +261,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return empty for non-existent key")
         void shouldReturnEmptyForNonExistentKey() {
-            var result = apiKeyService.get("non-existent");
+            var result = apiKeyService.get("non-existent").await().indefinitely();
 
             assertTrue(result.isEmpty());
         }
@@ -238,13 +276,16 @@ class ApiKeyServiceTest {
         void shouldCreateKeyWithSpecifiedPlaintextKey() {
             String specifiedKey = "my-specified-key-that-is-at-least-32-chars";
 
-            var result = apiKeyService.createWithKey(
-                    "bootstrap-key",
-                    "Bootstrap key for testing",
-                    Set.of(Permissions.ADMIN_READ, Permissions.ADMIN_WRITE),
-                    null,
-                    specifiedKey,
-                    "bootstrap");
+            var result = apiKeyService
+                    .createWithKey(
+                            "bootstrap-key",
+                            "Bootstrap key for testing",
+                            Set.of(Permissions.ADMIN_READ, Permissions.ADMIN_WRITE),
+                            null,
+                            specifiedKey,
+                            "bootstrap")
+                    .await()
+                    .indefinitely();
 
             assertNotNull(result.keyId());
             assertEquals(specifiedKey, result.plaintextKey());
@@ -257,10 +298,13 @@ class ApiKeyServiceTest {
         void shouldValidateKeyAgainstProvidedPlaintext() {
             String specifiedKey = "my-bootstrap-key-that-is-at-least-32-characters";
 
-            apiKeyService.createWithKey(
-                    "validate-test", null, Set.of(Permissions.ADMIN_READ), null, specifiedKey, "bootstrap");
+            apiKeyService
+                    .createWithKey(
+                            "validate-test", null, Set.of(Permissions.ADMIN_READ), null, specifiedKey, "bootstrap")
+                    .await()
+                    .indefinitely();
 
-            var validateResult = apiKeyService.validate(specifiedKey);
+            var validateResult = apiKeyService.validate(specifiedKey).await().indefinitely();
 
             assertTrue(validateResult.isPresent());
             assertEquals("validate-test", validateResult.get().name());
@@ -299,8 +343,10 @@ class ApiKeyServiceTest {
         void shouldCreateKeyWithTtl() {
             String specifiedKey = "my-ttl-key-that-is-at-least-32-characters";
 
-            var result = apiKeyService.createWithKey(
-                    "ttl-bootstrap", null, Set.of(), Duration.ofDays(7), specifiedKey, "bootstrap");
+            var result = apiKeyService
+                    .createWithKey("ttl-bootstrap", null, Set.of(), Duration.ofDays(7), specifiedKey, "bootstrap")
+                    .await()
+                    .indefinitely();
 
             assertNotNull(result.metadata().expiresAt());
         }
@@ -332,7 +378,10 @@ class ApiKeyServiceTest {
             var restrictedService = new ApiKeyService(repository, restrictedConfig);
 
             // Request TTL shorter than max should succeed
-            var result = restrictedService.create("valid-ttl-key", null, Set.of(), Duration.ofDays(7), "test");
+            var result = restrictedService
+                    .create("valid-ttl-key", null, Set.of(), Duration.ofDays(7), "test")
+                    .await()
+                    .indefinitely();
 
             assertNotNull(result.keyId());
         }

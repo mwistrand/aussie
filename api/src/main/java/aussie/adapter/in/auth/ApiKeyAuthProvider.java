@@ -52,6 +52,14 @@ public class ApiKeyAuthProvider implements AuthenticationProvider {
         return true;
     }
 
+    /**
+     * Authenticate using API key validation.
+     *
+     * <p>Note: This method blocks on the reactive validation call because the
+     * {@link AuthenticationProvider} SPI is synchronous. This is acceptable because
+     * this provider is part of the deprecated legacy authentication system. The
+     * primary authentication path uses Quarkus Security which is fully reactive.
+     */
     @Override
     public AuthenticationResult authenticate(MultivaluedMap<String, String> headers, String path) {
         String authHeader = headers.getFirst("Authorization");
@@ -71,9 +79,11 @@ public class ApiKeyAuthProvider implements AuthenticationProvider {
             return AuthenticationResult.Failure.unauthorized("Empty API key");
         }
 
-        // Validate the key
+        // Validate the key (blocking call for legacy SPI compatibility)
         return apiKeyService
                 .validate(key)
+                .await()
+                .indefinitely()
                 .map(apiKey -> {
                     var context = AuthenticationContext.builder(Principal.service(apiKey.id(), apiKey.name()))
                             .permissions(apiKey.permissions())

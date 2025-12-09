@@ -15,6 +15,8 @@ import java.util.Set;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import io.smallrye.mutiny.Uni;
+
 import aussie.config.ApiKeyConfig;
 import aussie.core.model.ApiKey;
 import aussie.core.model.ApiKeyCreateResult;
@@ -45,7 +47,7 @@ public class ApiKeyService implements ApiKeyManagement {
     }
 
     @Override
-    public ApiKeyCreateResult create(
+    public Uni<ApiKeyCreateResult> create(
             String name, String description, Set<String> permissions, Duration ttl, String createdBy) {
         // Validate TTL against configured maximum
         validateTtl(ttl);
@@ -66,48 +68,44 @@ public class ApiKeyService implements ApiKeyManagement {
                 .revoked(false)
                 .build();
 
-        // Save synchronously (blocking) for simplicity in the create flow
-        repository.save(apiKey).await().indefinitely();
-
-        return new ApiKeyCreateResult(keyId, plaintextKey, apiKey);
+        return repository.save(apiKey).replaceWith(new ApiKeyCreateResult(keyId, plaintextKey, apiKey));
     }
 
     @Override
-    public Optional<ApiKey> validate(String plaintextKey) {
+    public Uni<Optional<ApiKey>> validate(String plaintextKey) {
         if (plaintextKey == null || plaintextKey.isBlank()) {
-            return Optional.empty();
+            return Uni.createFrom().item(Optional.empty());
         }
 
         String keyHash = hashKey(plaintextKey);
-        return repository.findByHash(keyHash).await().indefinitely().filter(ApiKey::isValid);
+        return repository.findByHash(keyHash).map(opt -> opt.filter(ApiKey::isValid));
     }
 
     @Override
-    public List<ApiKey> list() {
-        return repository.findAll().await().indefinitely().stream()
-                .map(ApiKey::redacted)
-                .toList();
+    public Uni<List<ApiKey>> list() {
+        return repository
+                .findAll()
+                .map(keys -> keys.stream().map(ApiKey::redacted).toList());
     }
 
     @Override
-    public boolean revoke(String keyId) {
-        var existingKey = repository.findById(keyId).await().indefinitely();
-        if (existingKey.isEmpty()) {
-            return false;
-        }
-
-        var revokedKey = existingKey.get().revoke();
-        repository.save(revokedKey).await().indefinitely();
-        return true;
+    public Uni<Boolean> revoke(String keyId) {
+        return repository.findById(keyId).flatMap(existingKey -> {
+            if (existingKey.isEmpty()) {
+                return Uni.createFrom().item(false);
+            }
+            var revokedKey = existingKey.get().revoke();
+            return repository.save(revokedKey).replaceWith(true);
+        });
     }
 
     @Override
-    public Optional<ApiKey> get(String keyId) {
-        return repository.findById(keyId).await().indefinitely().map(ApiKey::redacted);
+    public Uni<Optional<ApiKey>> get(String keyId) {
+        return repository.findById(keyId).map(opt -> opt.map(ApiKey::redacted));
     }
 
     @Override
-    public ApiKeyCreateResult createWithKey(
+    public Uni<ApiKeyCreateResult> createWithKey(
             String name,
             String description,
             Set<String> permissions,
@@ -140,10 +138,7 @@ public class ApiKeyService implements ApiKeyManagement {
                 .revoked(false)
                 .build();
 
-        // Save synchronously (blocking) for simplicity in the create flow
-        repository.save(apiKey).await().indefinitely();
-
-        return new ApiKeyCreateResult(keyId, plaintextKey, apiKey);
+        return repository.save(apiKey).replaceWith(new ApiKeyCreateResult(keyId, plaintextKey, apiKey));
     }
 
     /**

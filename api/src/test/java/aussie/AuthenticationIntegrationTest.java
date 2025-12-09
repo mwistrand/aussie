@@ -38,11 +38,16 @@ public class AuthenticationIntegrationTest {
     @BeforeEach
     void setUp() {
         // Create API keys for testing
-        var fullAccessResult = apiKeyService.create(
-                "test-full", null, Set.of(Permissions.ADMIN_READ, Permissions.ADMIN_WRITE), null, "test");
+        var fullAccessResult = apiKeyService
+                .create("test-full", null, Set.of(Permissions.ADMIN_READ, Permissions.ADMIN_WRITE), null, "test")
+                .await()
+                .indefinitely();
         validApiKey = fullAccessResult.plaintextKey();
 
-        var readOnlyResult = apiKeyService.create("test-readonly", null, Set.of(Permissions.ADMIN_READ), null, "test");
+        var readOnlyResult = apiKeyService
+                .create("test-readonly", null, Set.of(Permissions.ADMIN_READ), null, "test")
+                .await()
+                .indefinitely();
         readOnlyApiKey = readOnlyResult.plaintextKey();
     }
 

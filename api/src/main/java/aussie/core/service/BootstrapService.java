@@ -6,6 +6,7 @@ import java.util.Set;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
 import aussie.config.BootstrapConfig;
@@ -49,7 +50,7 @@ public class BootstrapService implements BootstrapManagement {
     }
 
     @Override
-    public BootstrapResult bootstrap() {
+    public Uni<BootstrapResult> bootstrap() {
         // Validate key is provided
         String plaintextKey = config.key()
                 .filter(k -> !k.isBlank())
@@ -62,44 +63,54 @@ public class BootstrapService implements BootstrapManagement {
                     + "Received: " + plaintextKey.length() + " characters.");
         }
 
-        boolean isRecovery = config.recoveryMode() && hasAdminKeys();
-
         // Enforce maximum TTL
         Duration ttl = enforceTtlLimit(config.ttl());
 
-        // Create the bootstrap key
-        var createResult = apiKeyService.createWithKey(
-                BOOTSTRAP_KEY_NAME, BOOTSTRAP_KEY_DESCRIPTION, Set.of(Permissions.ALL), ttl, plaintextKey, "bootstrap");
+        // Check if this is a recovery scenario and create the bootstrap key
+        return hasAdminKeys().flatMap(hasKeys -> {
+            boolean isRecovery = config.recoveryMode() && hasKeys;
+            return apiKeyService
+                    .createWithKey(
+                            BOOTSTRAP_KEY_NAME,
+                            BOOTSTRAP_KEY_DESCRIPTION,
+                            Set.of(Permissions.ALL),
+                            ttl,
+                            plaintextKey,
+                            "bootstrap")
+                    .map(createResult -> {
+                        LOG.infof(
+                                "Bootstrap API key created: id=%s, expires=%s",
+                                createResult.keyId(), createResult.metadata().expiresAt());
 
-        LOG.infof(
-                "Bootstrap API key created: id=%s, expires=%s",
-                createResult.keyId(), createResult.metadata().expiresAt());
-
-        return isRecovery
-                ? BootstrapResult.recovery(
-                        createResult.keyId(), createResult.metadata().expiresAt())
-                : BootstrapResult.standard(
-                        createResult.keyId(), createResult.metadata().expiresAt());
+                        return isRecovery
+                                ? BootstrapResult.recovery(
+                                        createResult.keyId(),
+                                        createResult.metadata().expiresAt())
+                                : BootstrapResult.standard(
+                                        createResult.keyId(),
+                                        createResult.metadata().expiresAt());
+                    });
+        });
     }
 
     @Override
-    public boolean hasAdminKeys() {
-        return repository.findAll().await().indefinitely().stream()
-                .filter(ApiKey::isValid)
-                .anyMatch(this::isAdminKey);
+    public Uni<Boolean> hasAdminKeys() {
+        return repository
+                .findAll()
+                .map(keys -> keys.stream().filter(ApiKey::isValid).anyMatch(this::isAdminKey));
     }
 
     @Override
-    public boolean shouldBootstrap() {
+    public Uni<Boolean> shouldBootstrap() {
         if (!config.enabled()) {
-            return false;
+            return Uni.createFrom().item(false);
         }
 
         if (config.recoveryMode()) {
-            return true; // Recovery mode always allows bootstrap
+            return Uni.createFrom().item(true); // Recovery mode always allows bootstrap
         }
 
-        return !hasAdminKeys();
+        return hasAdminKeys().map(hasKeys -> !hasKeys);
     }
 
     /**
