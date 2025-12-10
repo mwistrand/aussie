@@ -9,6 +9,7 @@ import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 
+import aussie.config.TelemetryConfig;
 import aussie.core.model.AussieToken;
 import aussie.core.model.EndpointConfig;
 import aussie.core.model.GatewayRequest;
@@ -18,6 +19,10 @@ import aussie.core.model.RouteMatch;
 import aussie.core.model.ServiceRegistration;
 import aussie.core.port.in.PassThroughUseCase;
 import aussie.core.port.out.ProxyClient;
+import aussie.telemetry.attribution.RequestMetrics;
+import aussie.telemetry.attribution.TrafficAttributionService;
+import aussie.telemetry.metrics.GatewayMetrics;
+import aussie.telemetry.security.SecurityMonitor;
 
 @ApplicationScoped
 public class PassThroughService implements PassThroughUseCase {
@@ -36,6 +41,10 @@ public class PassThroughService implements PassThroughUseCase {
     private final VisibilityResolver visibilityResolver;
     private final EndpointMatcher endpointMatcher;
     private final RouteAuthenticationService routeAuthService;
+    private final GatewayMetrics metrics;
+    private final SecurityMonitor securityMonitor;
+    private final TrafficAttributionService attributionService;
+    private final TelemetryConfig telemetryConfig;
 
     @Inject
     public PassThroughService(
@@ -44,23 +53,34 @@ public class PassThroughService implements PassThroughUseCase {
             ProxyClient proxyClient,
             VisibilityResolver visibilityResolver,
             EndpointMatcher endpointMatcher,
-            RouteAuthenticationService routeAuthService) {
+            RouteAuthenticationService routeAuthService,
+            GatewayMetrics metrics,
+            SecurityMonitor securityMonitor,
+            TrafficAttributionService attributionService,
+            TelemetryConfig telemetryConfig) {
         this.serviceRegistry = serviceRegistry;
         this.requestPreparer = requestPreparer;
         this.proxyClient = proxyClient;
         this.visibilityResolver = visibilityResolver;
         this.endpointMatcher = endpointMatcher;
         this.routeAuthService = routeAuthService;
+        this.metrics = metrics;
+        this.securityMonitor = securityMonitor;
+        this.attributionService = attributionService;
+        this.telemetryConfig = telemetryConfig;
     }
 
     @Override
     public Uni<GatewayResult> forward(String serviceId, GatewayRequest request) {
+        long startTime = System.nanoTime();
+
         if (RESERVED_PATHS.contains(serviceId.toLowerCase())) {
             return Uni.createFrom().item(new GatewayResult.ReservedPath(serviceId));
         }
 
         return serviceRegistry.getService(serviceId).flatMap(serviceOpt -> {
             if (serviceOpt.isEmpty()) {
+                metrics.recordServiceNotFound(serviceId);
                 return Uni.createFrom().item(new GatewayResult.ServiceNotFound(serviceId));
             }
 
@@ -69,8 +89,92 @@ public class PassThroughService implements PassThroughUseCase {
 
             return routeAuthService
                     .authenticate(request, routeMatch)
-                    .flatMap(authResult -> handleAuthResult(authResult, request, routeMatch));
+                    .flatMap(authResult -> handleAuthResult(authResult, request, routeMatch))
+                    .invoke(result -> recordTelemetry(serviceId, request, result, startTime));
         });
+    }
+
+    private void recordTelemetry(String serviceId, GatewayRequest request, GatewayResult result, long startTime) {
+        long durationMs = (System.nanoTime() - startTime) / 1_000_000;
+        int statusCode = getStatusCode(result);
+        boolean isError = statusCode >= 400;
+        long requestBytes = request.body() != null ? request.body().length : 0;
+        long responseBytes = getResponseBytes(result);
+
+        // Record request metrics
+        metrics.recordRequest(serviceId, request.method(), statusCode, durationMs);
+        metrics.recordRequestSize(serviceId, requestBytes, responseBytes);
+
+        // Record security monitoring
+        String clientIp = extractClientIp(request);
+        securityMonitor.recordRequest(clientIp, serviceId, isError);
+
+        // Record traffic attribution
+        if (telemetryConfig.trafficAttribution().enabled()) {
+            var attribution = attributionService.extractAttribution(
+                    serviceId,
+                    getHeader(request, attributionService.getTeamHeaderName()),
+                    getHeader(request, attributionService.getCostCenterHeaderName()),
+                    getHeader(request, attributionService.getTenantHeaderName()),
+                    getHeader(request, "X-Client-Application"));
+
+            var requestMetrics = RequestMetrics.of(requestBytes, responseBytes, durationMs, statusCode);
+            attributionService.recordAttributedRequest(attribution, requestMetrics);
+        }
+
+        // Record specific error types
+        if (result instanceof GatewayResult.Error) {
+            metrics.recordError(serviceId, "proxy_error");
+        } else if (result instanceof GatewayResult.Unauthorized) {
+            metrics.recordError(serviceId, "unauthorized");
+        } else if (result instanceof GatewayResult.Forbidden) {
+            metrics.recordError(serviceId, "forbidden");
+        }
+    }
+
+    private int getStatusCode(GatewayResult result) {
+        return switch (result) {
+            case GatewayResult.Success success -> success.statusCode();
+            case GatewayResult.RouteNotFound ignored -> 404;
+            case GatewayResult.ServiceNotFound ignored -> 404;
+            case GatewayResult.ReservedPath ignored -> 400;
+            case GatewayResult.Unauthorized ignored -> 401;
+            case GatewayResult.Forbidden ignored -> 403;
+            case GatewayResult.BadRequest ignored -> 400;
+            case GatewayResult.Error ignored -> 502;
+        };
+    }
+
+    private long getResponseBytes(GatewayResult result) {
+        if (result instanceof GatewayResult.Success success && success.body() != null) {
+            return success.body().length;
+        }
+        return 0;
+    }
+
+    private String extractClientIp(GatewayRequest request) {
+        var forwardedFor = getHeader(request, "X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+        var realIp = getHeader(request, "X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp.trim();
+        }
+        return "unknown";
+    }
+
+    private String getHeader(GatewayRequest request, String headerName) {
+        var values = request.headers().get(headerName);
+        if (values != null && !values.isEmpty()) {
+            return values.get(0);
+        }
+        for (var entry : request.headers().entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(headerName) && !entry.getValue().isEmpty()) {
+                return entry.getValue().get(0);
+            }
+        }
+        return null;
     }
 
     private Uni<GatewayResult> handleAuthResult(

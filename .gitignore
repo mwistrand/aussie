@@ -44,4 +44,4 @@ nb-configuration.xml
 **/private_/
 
 # CLI output
-**/aussie
+cli/aussie

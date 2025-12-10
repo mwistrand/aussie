@@ -67,7 +67,8 @@ public class ProxyRequestPreparer {
         // Set Authorization header with Aussie token if present
         token.ifPresent(t -> headers.put("Authorization", List.of("Bearer " + t.jws())));
 
-        return new PreparedProxyRequest(request.method(), targetUri, headers, request.body());
+        return new PreparedProxyRequest(
+                route.service().serviceId(), request.method(), targetUri, headers, request.body());
     }
 
     private Map<String, List<String>> buildHeaders(GatewayRequest request, URI targetUri) {

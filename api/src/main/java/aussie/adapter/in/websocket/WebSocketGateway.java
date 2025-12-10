@@ -25,6 +25,7 @@ import aussie.core.model.WebSocketProxySession;
 import aussie.core.model.WebSocketUpgradeRequest;
 import aussie.core.model.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
+import aussie.telemetry.metrics.GatewayMetrics;
 
 /**
  * Handles WebSocket proxy connections after authentication.
@@ -44,16 +45,24 @@ public class WebSocketGateway {
 
     // Track active sessions for metrics/debugging (per-instance count)
     private final Map<String, WebSocketProxySession> activeSessions = new ConcurrentHashMap<>();
+    // Track session start times for duration metrics
+    private final Map<String, Long> sessionStartTimes = new ConcurrentHashMap<>();
 
     private final WebSocketGatewayUseCase gatewayUseCase;
     private final WebSocketConfigMapping config;
     private final Vertx vertx;
+    private final GatewayMetrics metrics;
 
     @Inject
-    public WebSocketGateway(WebSocketGatewayUseCase gatewayUseCase, WebSocketConfigMapping config, Vertx vertx) {
+    public WebSocketGateway(
+            WebSocketGatewayUseCase gatewayUseCase,
+            WebSocketConfigMapping config,
+            Vertx vertx,
+            GatewayMetrics metrics) {
         this.gatewayUseCase = gatewayUseCase;
         this.config = config;
         this.vertx = vertx;
+        this.metrics = metrics;
     }
 
     /**
@@ -119,6 +128,7 @@ public class WebSocketGateway {
 
     private void establishProxy(RoutingContext ctx, WebSocketUpgradeResult.Authorized auth) {
         var sessionId = UUID.randomUUID().toString();
+        var serviceId = auth.route().service().serviceId();
 
         // Extract auth session ID and user ID for logout tracking
         var authSessionId = auth.authSessionId();
@@ -151,9 +161,23 @@ public class WebSocketGateway {
                                         sessionId, clientWs, backendWs, vertx, config, authSessionId, userId);
 
                                 activeSessions.put(sessionId, session);
+                                sessionStartTimes.put(sessionId, System.currentTimeMillis());
+
+                                // Record connection metrics
+                                metrics.incrementWebSocketConnections();
+                                metrics.recordWebSocketEvent(serviceId, "opened");
 
                                 // Clean up session when closed
-                                clientWs.closeHandler(v -> activeSessions.remove(sessionId));
+                                clientWs.closeHandler(v -> {
+                                    activeSessions.remove(sessionId);
+                                    var startTime = sessionStartTimes.remove(sessionId);
+                                    metrics.decrementWebSocketConnections();
+                                    metrics.recordWebSocketEvent(serviceId, "closed");
+                                    if (startTime != null) {
+                                        metrics.recordWebSocketDuration(
+                                                serviceId, System.currentTimeMillis() - startTime);
+                                    }
+                                });
 
                                 // Start the session (enables message forwarding and timers)
                                 session.start();
@@ -163,11 +187,13 @@ public class WebSocketGateway {
                             .onFailure(err -> {
                                 LOG.warnv(err, "Client WebSocket upgrade failed for session {0}", sessionId);
                                 backendWs.close((short) 1001, "Client upgrade failed");
+                                metrics.recordWebSocketEvent(serviceId, "error");
                                 ctx.response().setStatusCode(500).end("WebSocket upgrade failed");
                             });
                 })
                 .onFailure(err -> {
                     LOG.warnv(err, "Backend WebSocket connection failed to {0}", backendUri);
+                    metrics.recordWebSocketEvent(serviceId, "backend_error");
                     // Don't expose internal error details to clients for security reasons
                     ctx.response().setStatusCode(502).end("Backend connection failed");
                 });

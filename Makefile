@@ -1,6 +1,6 @@
 COMPOSE=docker compose
 
-.PHONY: up down restart api api-down demo demo-down test migrate
+.PHONY: up down restart api api-down demo demo-down test migrate otel otel-down storage storage-down infra infra-down
 
 up:
 	$(COMPOSE) up -d --build
@@ -10,13 +10,33 @@ down:
 
 restart: down up
 
+# Start observability services: Jaeger, Prometheus, Grafana, Alertmanager
+otel:
+	$(COMPOSE) up -d --build jaeger prometheus grafana alertmanager
+
+otel-down:
+	$(COMPOSE) stop jaeger prometheus grafana alertmanager || true
+
+# Start storage services: Cassandra, Cassandra-init, Redis
+storage:
+	$(COMPOSE) up -d --build cassandra cassandra-init redis
+
+storage-down:
+	$(COMPOSE) stop cassandra cassandra-init redis || true
+
+# Start infra: both otel and storage
+infra: otel storage
+
+infra-down:
+	$(COMPOSE) stop jaeger prometheus grafana alertmanager cassandra cassandra-init redis || true
+
 # Start everything except the demo app
 api:
-	$(COMPOSE) up -d --build cassandra cassandra-init redis api
+	$(COMPOSE) up -d --build jaeger prometheus grafana alertmanager cassandra cassandra-init redis api
 
 # Stop everything except the demo app
 api-down:
-	$(COMPOSE) stop cassandra cassandra-init redis api || true
+	$(COMPOSE) stop jaeger prometheus grafana alertmanager cassandra cassandra-init redis api || true
 
 # Start only the demo app
 demo:

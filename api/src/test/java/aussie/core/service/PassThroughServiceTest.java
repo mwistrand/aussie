@@ -19,6 +19,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import aussie.adapter.out.storage.NoOpConfigurationCache;
 import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
+import aussie.config.TelemetryConfig;
 import aussie.core.model.AussieToken;
 import aussie.core.model.GatewayRequest;
 import aussie.core.model.GatewayResult;
@@ -29,6 +30,9 @@ import aussie.core.model.RouteAuthResult;
 import aussie.core.model.RouteMatch;
 import aussie.core.model.ServiceRegistration;
 import aussie.core.port.out.ProxyClient;
+import aussie.telemetry.attribution.TrafficAttributionService;
+import aussie.telemetry.metrics.GatewayMetrics;
+import aussie.telemetry.security.SecurityMonitor;
 
 @DisplayName("PassThroughService")
 class PassThroughServiceTest {
@@ -56,8 +60,24 @@ class PassThroughServiceTest {
         visibilityResolver = new VisibilityResolver(patternMatcher);
         endpointMatcher = new EndpointMatcher(patternMatcher);
         routeAuthService = new ConfigurableRouteAuthService();
+
+        // Create no-op telemetry components for testing
+        var metrics = new NoOpGatewayMetrics();
+        var securityMonitor = new NoOpSecurityMonitor();
+        var attributionService = new NoOpTrafficAttributionService();
+        var telemetryConfig = new NoOpTelemetryConfig();
+
         passThroughService = new PassThroughService(
-                serviceRegistry, requestPreparer, proxyClient, visibilityResolver, endpointMatcher, routeAuthService);
+                serviceRegistry,
+                requestPreparer,
+                proxyClient,
+                visibilityResolver,
+                endpointMatcher,
+                routeAuthService,
+                metrics,
+                securityMonitor,
+                attributionService,
+                telemetryConfig);
     }
 
     private GatewayRequest createRequest(String method, String path) {
@@ -413,6 +433,88 @@ class PassThroughServiceTest {
         @Override
         public Uni<RouteAuthResult> authenticate(GatewayRequest request, RouteMatch route) {
             return Uni.createFrom().item(result);
+        }
+    }
+
+    /** No-op GatewayMetrics for testing. */
+    private static class NoOpGatewayMetrics extends GatewayMetrics {
+        @Override
+        public void recordRequest(String serviceId, String method, int statusCode, long durationMs) {}
+
+        @Override
+        public void recordRequestSize(String serviceId, long requestBytes, long responseBytes) {}
+
+        @Override
+        public void recordServiceNotFound(String serviceId) {}
+
+        @Override
+        public void recordError(String serviceId, String errorType) {}
+    }
+
+    /** No-op SecurityMonitor for testing. */
+    private static class NoOpSecurityMonitor extends SecurityMonitor {
+        @Override
+        public void recordRequest(String clientIp, String serviceId, boolean isError) {}
+    }
+
+    /** No-op TrafficAttributionService for testing. */
+    private static class NoOpTrafficAttributionService extends TrafficAttributionService {
+        @Override
+        public String getTeamHeaderName() {
+            return "X-Team-ID";
+        }
+
+        @Override
+        public String getCostCenterHeaderName() {
+            return "X-Cost-Center";
+        }
+
+        @Override
+        public String getTenantHeaderName() {
+            return "X-Tenant-ID";
+        }
+    }
+
+    /** No-op TelemetryConfig for testing. */
+    private static class NoOpTelemetryConfig implements TelemetryConfig {
+        @Override
+        public TrafficAttributionConfig trafficAttribution() {
+            return new TrafficAttributionConfig() {
+                @Override
+                public boolean enabled() {
+                    return false;
+                }
+
+                @Override
+                public boolean includeHeaders() {
+                    return false;
+                }
+
+                @Override
+                public String teamHeader() {
+                    return "X-Team-ID";
+                }
+
+                @Override
+                public String costCenterHeader() {
+                    return "X-Cost-Center";
+                }
+
+                @Override
+                public String tenantHeader() {
+                    return "X-Tenant-ID";
+                }
+            };
+        }
+
+        @Override
+        public SecurityConfig security() {
+            return null;
+        }
+
+        @Override
+        public MetricsConfig metrics() {
+            return null;
         }
     }
 }

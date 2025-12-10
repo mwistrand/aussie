@@ -1,0 +1,76 @@
+# Alertmanager configuration
+# Documentation: https://prometheus.io/docs/alerting/latest/configuration/
+
+global:
+  # Default SMTP settings (configure for your environment)
+  # smtp_smarthost: 'smtp.example.com:587'
+  # smtp_from: 'alertmanager@example.com'
+
+# Route tree - determines how alerts are grouped and routed
+route:
+  # Default receiver
+  receiver: 'default-receiver'
+
+  # Group alerts by these labels
+  group_by: ['alertname', 'severity']
+
+  # Wait before sending notification for a group
+  group_wait: 30s
+
+  # Wait before sending notification about new alerts in a group
+  group_interval: 5m
+
+  # Wait before resending notification
+  repeat_interval: 4h
+
+  # Child routes for severity-based routing
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical-receiver'
+      group_wait: 10s
+      repeat_interval: 1h
+
+    # Warning alerts - batched notifications
+    - match:
+        severity: warning
+      receiver: 'warning-receiver'
+      group_wait: 1m
+      repeat_interval: 4h
+
+# Receivers - notification endpoints
+receivers:
+  # Default receiver (logs only for development)
+  - name: 'default-receiver'
+    # No external notifications in default config
+
+  # Critical alerts receiver
+  - name: 'critical-receiver'
+    # Configure webhook, email, or other notification methods
+    # webhook_configs:
+    #   - url: 'http://your-webhook-endpoint/alerts'
+    #     send_resolved: true
+
+  # Warning alerts receiver
+  - name: 'warning-receiver'
+    # Configure for less urgent notifications
+    # email_configs:
+    #   - to: 'team@example.com'
+    #     send_resolved: true
+
+# Inhibition rules - suppress notifications when related alerts fire
+inhibit_rules:
+  # If critical fires, suppress warnings for same alertname
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname']
+
+  # If gateway is down, suppress all other gateway alerts
+  - source_match:
+      alertname: 'AussieGatewayDown'
+    target_match_re:
+      alertname: 'Aussie.*'
+    equal: ['instance']

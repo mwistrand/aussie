@@ -1,0 +1,14 @@
+# Grafana dashboard provisioning
+# Documentation: https://grafana.com/docs/grafana/latest/administration/provisioning/#dashboards
+
+apiVersion: 1
+
+providers:
+  - name: 'Aussie Gateway'
+    orgId: 1
+    folder: 'Aussie Gateway'
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json

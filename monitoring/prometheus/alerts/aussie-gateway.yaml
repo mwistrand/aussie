@@ -1,0 +1,135 @@
+# Alerting rules for Aussie Gateway
+# Documentation: https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
+
+groups:
+  - name: aussie-availability
+    rules:
+      - alert: AussieGatewayDown
+        expr: up{job="aussie-gateway"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Aussie Gateway is down"
+          description: "Aussie Gateway has been unreachable for more than 1 minute."
+
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(aussie_requests_total{status_class="5xx"}[5m]))
+            /
+            sum(rate(aussie_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 5% for the last 5 minutes."
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.99, sum(rate(aussie_requests_duration_bucket[5m])) by (le))
+          > 5000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency detected"
+          description: "P99 latency is above 5 seconds."
+
+  - name: aussie-security
+    rules:
+      - alert: HighAuthFailureRate
+        expr: sum(rate(aussie_auth_failures_total[5m])) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Auth failures exceeding 10/sec for 2 minutes. Possible brute force attack."
+
+      - alert: PossibleDosAttack
+        expr: sum(rate(aussie_security_rate_limit_exceeded_total[1m])) > 50
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Possible DoS attack detected"
+          description: "Rate limit violations exceeding 50/min. Immediate investigation required."
+
+      - alert: SuspiciousErrorRate
+        expr: |
+          (
+            sum by (client_ip_hash) (rate(aussie_errors_total[5m]))
+            /
+            sum by (client_ip_hash) (rate(aussie_requests_total[5m]))
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Suspicious client with high error rate"
+          description: "Client {{ $labels.client_ip_hash }} has >80% error rate."
+
+      - alert: UnusualTrafficSpike
+        expr: |
+          sum(rate(aussie_requests_total[5m])) >
+          2 * avg_over_time(sum(rate(aussie_requests_total[5m]))[1h:5m])
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unusual traffic spike detected"
+          description: "Current traffic is 2x the hourly average."
+
+  - name: aussie-resources
+    rules:
+      - alert: HighMemoryUsage
+        expr: |
+          jvm_memory_used_bytes{area="heap"}
+          /
+          jvm_memory_max_bytes{area="heap"}
+          > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High JVM heap memory usage"
+          description: "JVM heap usage is above 90%."
+
+      - alert: TooManyWebSocketConnections
+        expr: aussie_connections_websocket_active > 10000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of WebSocket connections"
+          description: "More than 10,000 active WebSocket connections."
+
+  - name: aussie-upstream
+    rules:
+      - alert: UpstreamHighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(aussie_proxy_latency_bucket[5m])) by (le, service_id))
+          > 2000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Upstream service {{ $labels.service_id }} has high latency"
+          description: "P95 upstream latency is above 2 seconds."
+
+      - alert: UpstreamHighErrorRate
+        expr: |
+          (
+            sum by (service_id) (rate(aussie_proxy_latency_count{upstream_status_class="5xx"}[5m]))
+            /
+            sum by (service_id) (rate(aussie_proxy_latency_count[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Upstream service {{ $labels.service_id }} has high error rate"
+          description: "Upstream error rate is above 10%."
