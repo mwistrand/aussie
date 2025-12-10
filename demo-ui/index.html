@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aussie CORS Demo</title>
+    <title>Aussie Gateway Demo</title>
     <style>
         * {
             box-sizing: border-box;
@@ -220,12 +220,120 @@
         .checkbox-group input {
             width: auto;
         }
+        /* WebSocket styles */
+        .ws-panel {
+            display: grid;
+            gap: 1rem;
+        }
+        @media (min-width: 800px) {
+            .ws-panel {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        .ws-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        .ws-card h3 {
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .ws-card .badge {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: normal;
+        }
+        .ws-card .badge-public {
+            background: #d4edda;
+            color: #155724;
+        }
+        .ws-card .badge-auth {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .ws-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+        }
+        .ws-status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #dc3545;
+        }
+        .ws-status-dot.connected {
+            background: #28a745;
+        }
+        .ws-status-dot.connecting {
+            background: #ffc107;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .ws-messages {
+            height: 200px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 0.5rem;
+            font-family: monospace;
+            font-size: 0.8rem;
+            margin-bottom: 0.5rem;
+        }
+        .ws-message {
+            padding: 4px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .ws-message:last-child {
+            border-bottom: none;
+        }
+        .ws-message.sent {
+            color: #0066cc;
+        }
+        .ws-message.received {
+            color: #28a745;
+        }
+        .ws-message.system {
+            color: #6c757d;
+            font-style: italic;
+        }
+        .ws-message.error {
+            color: #dc3545;
+        }
+        .ws-input-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .ws-input {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
+        .ws-btn-row {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Aussie Gateway - CORS Demo</h1>
-        <p class="subtitle">Testing cross-origin requests through the API gateway</p>
+        <h1>Aussie Gateway Demo</h1>
+        <p class="subtitle">Testing HTTP, CORS, and WebSocket connections through the API gateway</p>
 
         <div class="info-box">
             <h3>Architecture</h3>
@@ -323,6 +431,63 @@
             <h2>Response Headers</h2>
             <p style="margin-bottom: 1rem; color: #666;">CORS headers from the last response:</p>
             <div id="headers" class="result show" style="display: block; background: #f8f9fa;">No request made yet</div>
+        </div>
+
+        <div class="card">
+            <h2>WebSocket Testing</h2>
+            <p style="margin-bottom: 1rem; color: #666;">Test WebSocket connections through the Aussie gateway:</p>
+
+            <div class="ws-panel">
+                <!-- Echo WebSocket (Public) -->
+                <div class="ws-card">
+                    <h3>
+                        Echo WebSocket
+                        <span class="badge badge-public">PUBLIC</span>
+                    </h3>
+                    <p style="font-size: 0.8rem; color: #666; margin-bottom: 0.5rem;">/ws/echo - Echoes messages back</p>
+                    <div class="ws-status">
+                        <div id="echoStatusDot" class="ws-status-dot"></div>
+                        <span id="echoStatusText">Disconnected</span>
+                    </div>
+                    <div id="echoMessages" class="ws-messages">
+                        <div class="ws-message system">Not connected</div>
+                    </div>
+                    <div class="ws-input-row">
+                        <input type="text" id="echoInput" class="ws-input" placeholder="Type a message..." disabled>
+                        <button class="btn btn-small" onclick="sendEchoMessage()" id="echoSendBtn" disabled>Send</button>
+                    </div>
+                    <div class="ws-btn-row">
+                        <button class="btn btn-success btn-small" onclick="connectEcho()" id="echoConnectBtn">Connect</button>
+                        <button class="btn btn-danger btn-small" onclick="disconnectEcho()" id="echoDisconnectBtn" disabled>Disconnect</button>
+                        <button class="btn btn-secondary btn-small" onclick="clearEchoMessages()">Clear</button>
+                    </div>
+                </div>
+
+                <!-- Chat WebSocket (Authenticated) -->
+                <div class="ws-card">
+                    <h3>
+                        Chat WebSocket
+                        <span class="badge badge-auth">AUTH REQUIRED</span>
+                    </h3>
+                    <p style="font-size: 0.8rem; color: #666; margin-bottom: 0.5rem;">/ws/chat - Requires authentication</p>
+                    <div class="ws-status">
+                        <div id="chatStatusDot" class="ws-status-dot"></div>
+                        <span id="chatStatusText">Disconnected</span>
+                    </div>
+                    <div id="chatMessages" class="ws-messages">
+                        <div class="ws-message system">Not connected</div>
+                    </div>
+                    <div class="ws-input-row">
+                        <input type="text" id="chatInput" class="ws-input" placeholder="Type a message..." disabled>
+                        <button class="btn btn-small" onclick="sendChatMessage()" id="chatSendBtn" disabled>Send</button>
+                    </div>
+                    <div class="ws-btn-row">
+                        <button class="btn btn-success btn-small" onclick="connectChat()" id="chatConnectBtn">Connect</button>
+                        <button class="btn btn-danger btn-small" onclick="disconnectChat()" id="chatDisconnectBtn" disabled>Disconnect</button>
+                        <button class="btn btn-secondary btn-small" onclick="clearChatMessages()">Clear</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -631,6 +796,219 @@
             });
             return output;
         }
+
+        // ========== WebSocket Functions ==========
+
+        let echoSocket = null;
+        let chatSocket = null;
+
+        function getWebSocketUrl(path) {
+            const config = getConfig();
+            // Convert http(s) to ws(s)
+            const wsProtocol = config.aussieUrl.startsWith('https') ? 'wss' : 'ws';
+            const host = config.aussieUrl.replace(/^https?:\/\//, '');
+            return `${wsProtocol}://${host}/${config.serviceId}${path}`;
+        }
+
+        function formatTimestamp() {
+            return new Date().toLocaleTimeString();
+        }
+
+        function addMessage(containerId, message, type = 'system') {
+            const container = document.getElementById(containerId);
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `ws-message ${type}`;
+            msgDiv.textContent = `[${formatTimestamp()}] ${message}`;
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function updateStatus(prefix, connected, statusText) {
+            const dot = document.getElementById(`${prefix}StatusDot`);
+            const text = document.getElementById(`${prefix}StatusText`);
+            const connectBtn = document.getElementById(`${prefix}ConnectBtn`);
+            const disconnectBtn = document.getElementById(`${prefix}DisconnectBtn`);
+            const input = document.getElementById(`${prefix}Input`);
+            const sendBtn = document.getElementById(`${prefix}SendBtn`);
+
+            dot.className = `ws-status-dot ${connected ? 'connected' : ''}`;
+            text.textContent = statusText;
+            connectBtn.disabled = connected;
+            disconnectBtn.disabled = !connected;
+            input.disabled = !connected;
+            sendBtn.disabled = !connected;
+        }
+
+        function setConnecting(prefix) {
+            const dot = document.getElementById(`${prefix}StatusDot`);
+            const text = document.getElementById(`${prefix}StatusText`);
+            dot.className = 'ws-status-dot connecting';
+            text.textContent = 'Connecting...';
+        }
+
+        // Echo WebSocket functions
+        function connectEcho() {
+            if (echoSocket && echoSocket.readyState === WebSocket.OPEN) {
+                return;
+            }
+
+            const url = getWebSocketUrl('/ws/echo');
+            setConnecting('echo');
+            addMessage('echoMessages', `Connecting to ${url}...`, 'system');
+
+            try {
+                echoSocket = new WebSocket(url);
+
+                echoSocket.onopen = () => {
+                    updateStatus('echo', true, 'Connected');
+                    addMessage('echoMessages', 'Connected to Echo WebSocket', 'system');
+                };
+
+                echoSocket.onmessage = (event) => {
+                    if (event.data instanceof Blob) {
+                        event.data.text().then((content) => {
+                            addMessage('echoMessages', `Server: ${content}`, 'received');
+                        });
+                    } else {
+                        addMessage('echoMessages', `Server: ${event.data}`, 'received');
+                    }
+                };
+
+                echoSocket.onerror = (error) => {
+                    addMessage('echoMessages', `Error: WebSocket error occurred`, 'error');
+                    console.error('Echo WebSocket error:', error);
+                };
+
+                echoSocket.onclose = (event) => {
+                    updateStatus('echo', false, 'Disconnected');
+                    const reason = event.reason || getCloseReason(event.code);
+                    addMessage('echoMessages', `Disconnected: ${reason} (code: ${event.code})`, 'system');
+                    echoSocket = null;
+                };
+            } catch (error) {
+                updateStatus('echo', false, 'Error');
+                addMessage('echoMessages', `Failed to connect: ${error.message}`, 'error');
+            }
+        }
+
+        function disconnectEcho() {
+            if (echoSocket) {
+                echoSocket.close(1000, 'User disconnected');
+            }
+        }
+
+        function sendEchoMessage() {
+            const input = document.getElementById('echoInput');
+            const message = input.value.trim();
+            if (message && echoSocket && echoSocket.readyState === WebSocket.OPEN) {
+                echoSocket.send(message);
+                addMessage('echoMessages', `You: ${message}`, 'sent');
+                input.value = '';
+            }
+        }
+
+        function clearEchoMessages() {
+            document.getElementById('echoMessages').innerHTML = '<div class="ws-message system">Messages cleared</div>';
+        }
+
+        // Chat WebSocket functions
+        function connectChat() {
+            if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                return;
+            }
+
+            const url = getWebSocketUrl('/ws/chat');
+            setConnecting('chat');
+            addMessage('chatMessages', `Connecting to ${url}...`, 'system');
+            addMessage('chatMessages', 'Note: This endpoint requires authentication', 'system');
+
+            try {
+                chatSocket = new WebSocket(url);
+
+                chatSocket.onopen = () => {
+                    updateStatus('chat', true, 'Connected');
+                    addMessage('chatMessages', 'Connected to Chat WebSocket', 'system');
+                };
+
+                chatSocket.onmessage = (event) => {
+                    if (event.data instanceof Blob) {
+                        event.data.text().then((content) => {
+                            addMessage('chatMessages', `Server: ${content}`, 'received');
+                        });
+                    } else {
+                        addMessage('chatMessages', `Server: ${event.data}`, 'received');
+                    }
+                };
+
+                chatSocket.onerror = (error) => {
+                    addMessage('chatMessages', `Error: WebSocket error occurred`, 'error');
+                    console.error('Chat WebSocket error:', error);
+                };
+
+                chatSocket.onclose = (event) => {
+                    updateStatus('chat', false, 'Disconnected');
+                    const reason = event.reason || getCloseReason(event.code);
+                    addMessage('chatMessages', `Disconnected: ${reason} (code: ${event.code})`, 'system');
+                    if (event.code === 1008 || event.code === 4001) {
+                        addMessage('chatMessages', 'Hint: Try logging in first using the Authentication section above', 'error');
+                    }
+                    chatSocket = null;
+                };
+            } catch (error) {
+                updateStatus('chat', false, 'Error');
+                addMessage('chatMessages', `Failed to connect: ${error.message}`, 'error');
+            }
+        }
+
+        function disconnectChat() {
+            if (chatSocket) {
+                chatSocket.close(1000, 'User disconnected');
+            }
+        }
+
+        function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (message && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                chatSocket.send(message);
+                addMessage('chatMessages', `You: ${message}`, 'sent');
+                input.value = '';
+            }
+        }
+
+        function clearChatMessages() {
+            document.getElementById('chatMessages').innerHTML = '<div class="ws-message system">Messages cleared</div>';
+        }
+
+        function getCloseReason(code) {
+            const reasons = {
+                1000: 'Normal closure',
+                1001: 'Going away',
+                1002: 'Protocol error',
+                1003: 'Unsupported data',
+                1005: 'No status received',
+                1006: 'Abnormal closure',
+                1007: 'Invalid frame payload data',
+                1008: 'Policy violation',
+                1009: 'Message too big',
+                1010: 'Missing extension',
+                1011: 'Internal error',
+                1015: 'TLS handshake failure',
+                4001: 'Unauthorized',
+                4003: 'Forbidden'
+            };
+            return reasons[code] || 'Unknown reason';
+        }
+
+        // Add enter key support for inputs
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('echoInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendEchoMessage();
+            });
+            document.getElementById('chatInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendChatMessage();
+            });
+        });
     </script>
 </body>
 </html>

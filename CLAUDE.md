@@ -31,9 +31,9 @@ Project layout:
 - No wildcard imports; group: java.*, jakarta.*, third-party, project
 - PascalCase for classes, camelCase for methods/variables, UPPER_SNAKE_CASE for constants
 - Prefer `var` over explicit types, except when explicit types are required for understandability
+- Avoid blocking threads, instead preferring reactive interfaces
 - Always use `@Override`
 - Prefer `Optional` over null for API return types
-- Use `var` only for local variables with obvious types
 
 ## Database
 

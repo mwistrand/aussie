@@ -1,5 +1,7 @@
 package aussie.core.model;
 
+import java.util.Optional;
+
 /**
  * Result of route authentication evaluation.
  */
@@ -8,9 +10,18 @@ public sealed interface RouteAuthResult {
     /**
      * Request was authenticated. Contains the Aussie-signed token to forward to backend.
      *
-     * @param token the signed token to include in the Authorization header
+     * @param token         the signed token to include in the Authorization header
+     * @param authSessionId the session ID if session-based auth was used (for logout tracking)
      */
-    record Authenticated(AussieToken token) implements RouteAuthResult {}
+    record Authenticated(AussieToken token, Optional<String> authSessionId) implements RouteAuthResult {
+
+        /**
+         * Convenience constructor for non-session authentication.
+         */
+        public Authenticated(AussieToken token) {
+            this(token, Optional.empty());
+        }
+    }
 
     /**
      * Route does not require authentication. Request can proceed without a token.

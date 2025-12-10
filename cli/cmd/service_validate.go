@@ -76,6 +76,11 @@ var validMethods = map[string]bool{
 	"OPTIONS": true,
 }
 
+var validEndpointTypes = map[string]bool{
+	"HTTP":      true,
+	"WEBSOCKET": true,
+}
+
 func runServiceValidate(cmd *cobra.Command, args []string) error {
 	// Read the configuration file
 	data, err := os.ReadFile(validateFile)
@@ -198,14 +203,39 @@ func validateEndpoint(endpoint EndpointConfig, path string, result *ValidationRe
 		result.AddError(path+".path", "must start with '/'")
 	}
 
-	if len(endpoint.Methods) == 0 {
-		result.AddError(path+".methods", "required field is missing or empty")
+	// Validate endpoint type if specified
+	isWebSocket := false
+	if endpoint.Type != "" {
+		upperType := strings.ToUpper(endpoint.Type)
+		if !validEndpointTypes[upperType] {
+			result.AddError(path+".type", "must be 'HTTP' or 'WEBSOCKET'")
+		}
+		isWebSocket = upperType == "WEBSOCKET"
+	}
+
+	// WebSocket endpoints don't require methods (they always use GET for upgrade)
+	// HTTP endpoints require methods
+	if !isWebSocket {
+		if len(endpoint.Methods) == 0 {
+			result.AddError(path+".methods", "required field is missing or empty")
+		} else {
+			for j, method := range endpoint.Methods {
+				upperMethod := strings.ToUpper(method)
+				if !validMethods[upperMethod] && upperMethod != "*" {
+					result.AddError(fmt.Sprintf("%s.methods[%d]", path, j),
+						fmt.Sprintf("invalid HTTP method '%s'", method))
+				}
+			}
+		}
 	} else {
-		for j, method := range endpoint.Methods {
-			upperMethod := strings.ToUpper(method)
-			if !validMethods[upperMethod] && upperMethod != "*" {
-				result.AddError(fmt.Sprintf("%s.methods[%d]", path, j),
-					fmt.Sprintf("invalid HTTP method '%s'", method))
+		// WebSocket endpoints: validate methods if provided (should only be GET or empty)
+		if len(endpoint.Methods) > 0 {
+			for j, method := range endpoint.Methods {
+				upperMethod := strings.ToUpper(method)
+				if upperMethod != "GET" && upperMethod != "*" {
+					result.AddError(fmt.Sprintf("%s.methods[%d]", path, j),
+						fmt.Sprintf("WebSocket endpoints only support GET method, got '%s'", method))
+				}
 			}
 		}
 	}

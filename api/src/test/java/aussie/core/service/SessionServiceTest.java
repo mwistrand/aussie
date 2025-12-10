@@ -9,6 +9,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletionStage;
+
+import jakarta.enterprise.event.Event;
+import jakarta.enterprise.event.NotificationOptions;
+import jakarta.enterprise.util.TypeLiteral;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +42,7 @@ class SessionServiceTest {
         sessionService.storageRegistry = registry;
         sessionService.idGenerator = new SessionIdGenerator();
         sessionService.config = config;
+        sessionService.sessionInvalidatedEvent = new NoOpEvent<>();
     }
 
     @Nested
@@ -426,6 +432,41 @@ class SessionServiceTest {
         @Override
         public aussie.core.port.out.SessionRepository getRepository() {
             return repository;
+        }
+    }
+
+    /**
+     * No-op Event implementation for testing.
+     */
+    static class NoOpEvent<T> implements Event<T> {
+        @Override
+        public void fire(T event) {
+            // No-op
+        }
+
+        @Override
+        public <U extends T> CompletionStage<U> fireAsync(U event) {
+            return java.util.concurrent.CompletableFuture.completedFuture(event);
+        }
+
+        @Override
+        public <U extends T> CompletionStage<U> fireAsync(U event, NotificationOptions options) {
+            return java.util.concurrent.CompletableFuture.completedFuture(event);
+        }
+
+        @Override
+        public Event<T> select(java.lang.annotation.Annotation... qualifiers) {
+            return this;
+        }
+
+        @Override
+        public <U extends T> Event<U> select(Class<U> subtype, java.lang.annotation.Annotation... qualifiers) {
+            return new NoOpEvent<>();
+        }
+
+        @Override
+        public <U extends T> Event<U> select(TypeLiteral<U> subtype, java.lang.annotation.Annotation... qualifiers) {
+            return new NoOpEvent<>();
         }
     }
 }

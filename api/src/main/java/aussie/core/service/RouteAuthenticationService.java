@@ -136,7 +136,8 @@ public class RouteAuthenticationService {
                         "Authenticated session {0} for route {1}, subject: {2}",
                         sessionId, route.endpoint().path(), session.userId());
 
-                return new RouteAuthResult.Authenticated(aussieToken);
+                // Include session ID for logout tracking (e.g., WebSocket disconnect on logout)
+                return new RouteAuthResult.Authenticated(aussieToken, Optional.of(sessionId));
             } catch (SessionTokenService.SessionTokenException e) {
                 LOG.errorv(
                         e,

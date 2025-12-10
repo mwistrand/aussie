@@ -45,6 +45,18 @@
       "methods": ["GET"],
       "visibility": "PUBLIC",
       "authRequired": false
+    },
+    {
+      "path": "/ws/echo",
+      "type": "WEBSOCKET",
+      "visibility": "PUBLIC",
+      "authRequired": false
+    },
+    {
+      "path": "/ws/chat",
+      "type": "WEBSOCKET",
+      "visibility": "PRIVATE",
+      "authRequired": true
     }
   ],
   "cors": {

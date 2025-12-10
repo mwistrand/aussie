@@ -510,6 +510,197 @@ func TestIsValidURL(t *testing.T) {
 	}
 }
 
+// WebSocket endpoint tests
+
+func TestValidateServiceConfig_ValidWebSocketEndpoint(t *testing.T) {
+	json := `{
+		"serviceId": "my-service",
+		"displayName": "My Service",
+		"baseUrl": "http://localhost:8080",
+		"endpoints": [
+			{
+				"path": "/ws/echo",
+				"type": "WEBSOCKET",
+				"visibility": "PUBLIC"
+			}
+		]
+	}`
+
+	result := ValidateServiceConfig([]byte(json))
+
+	if !result.IsValid() {
+		t.Errorf("Expected valid config for WebSocket endpoint, got errors: %v", result.Errors)
+	}
+}
+
+func TestValidateServiceConfig_WebSocketEndpointWithMethods(t *testing.T) {
+	json := `{
+		"serviceId": "my-service",
+		"displayName": "My Service",
+		"baseUrl": "http://localhost:8080",
+		"endpoints": [
+			{
+				"path": "/ws/chat",
+				"type": "WEBSOCKET",
+				"methods": ["GET"],
+				"visibility": "PRIVATE"
+			}
+		]
+	}`
+
+	result := ValidateServiceConfig([]byte(json))
+
+	if !result.IsValid() {
+		t.Errorf("Expected valid config for WebSocket endpoint with GET method, got errors: %v", result.Errors)
+	}
+}
+
+func TestValidateServiceConfig_WebSocketEndpointWithInvalidMethod(t *testing.T) {
+	json := `{
+		"serviceId": "my-service",
+		"displayName": "My Service",
+		"baseUrl": "http://localhost:8080",
+		"endpoints": [
+			{
+				"path": "/ws/chat",
+				"type": "WEBSOCKET",
+				"methods": ["POST"],
+				"visibility": "PUBLIC"
+			}
+		]
+	}`
+
+	result := ValidateServiceConfig([]byte(json))
+
+	if result.IsValid() {
+		t.Error("Expected validation error for WebSocket endpoint with POST method")
+	}
+
+	if !hasErrorWithPath(result, "endpoints[0].methods[0]") {
+		t.Error("Expected error for endpoints[0].methods[0] field")
+	}
+}
+
+func TestValidateServiceConfig_InvalidEndpointType(t *testing.T) {
+	json := `{
+		"serviceId": "my-service",
+		"displayName": "My Service",
+		"baseUrl": "http://localhost:8080",
+		"endpoints": [
+			{
+				"path": "/api/test",
+				"type": "INVALID",
+				"methods": ["GET"],
+				"visibility": "PUBLIC"
+			}
+		]
+	}`
+
+	result := ValidateServiceConfig([]byte(json))
+
+	if result.IsValid() {
+		t.Error("Expected validation error for invalid endpoint type")
+	}
+
+	if !hasErrorWithPath(result, "endpoints[0].type") {
+		t.Error("Expected error for endpoints[0].type field")
+	}
+}
+
+func TestValidateServiceConfig_HttpEndpointRequiresMethods(t *testing.T) {
+	json := `{
+		"serviceId": "my-service",
+		"displayName": "My Service",
+		"baseUrl": "http://localhost:8080",
+		"endpoints": [
+			{
+				"path": "/api/test",
+				"type": "HTTP",
+				"visibility": "PUBLIC"
+			}
+		]
+	}`
+
+	result := ValidateServiceConfig([]byte(json))
+
+	if result.IsValid() {
+		t.Error("Expected validation error for HTTP endpoint without methods")
+	}
+
+	if !hasErrorWithPath(result, "endpoints[0].methods") {
+		t.Error("Expected error for endpoints[0].methods field")
+	}
+}
+
+func TestValidateServiceConfig_MixedEndpoints(t *testing.T) {
+	json := `{
+		"serviceId": "my-service",
+		"displayName": "My Service",
+		"baseUrl": "http://localhost:8080",
+		"endpoints": [
+			{
+				"path": "/api/users",
+				"methods": ["GET", "POST"],
+				"visibility": "PUBLIC"
+			},
+			{
+				"path": "/ws/notifications",
+				"type": "WEBSOCKET",
+				"visibility": "PRIVATE"
+			}
+		]
+	}`
+
+	result := ValidateServiceConfig([]byte(json))
+
+	if !result.IsValid() {
+		t.Errorf("Expected valid config with mixed HTTP and WebSocket endpoints, got errors: %v", result.Errors)
+	}
+}
+
+func TestValidateServiceConfig_WebSocketEndpointCaseInsensitive(t *testing.T) {
+	json := `{
+		"serviceId": "my-service",
+		"displayName": "My Service",
+		"baseUrl": "http://localhost:8080",
+		"endpoints": [
+			{
+				"path": "/ws/echo",
+				"type": "websocket",
+				"visibility": "PUBLIC"
+			}
+		]
+	}`
+
+	result := ValidateServiceConfig([]byte(json))
+
+	if !result.IsValid() {
+		t.Errorf("Expected valid config for WebSocket endpoint with lowercase type, got errors: %v", result.Errors)
+	}
+}
+
+func TestValidateServiceConfig_WebSocketEndpointWildcardMethod(t *testing.T) {
+	json := `{
+		"serviceId": "my-service",
+		"displayName": "My Service",
+		"baseUrl": "http://localhost:8080",
+		"endpoints": [
+			{
+				"path": "/ws/echo",
+				"type": "WEBSOCKET",
+				"methods": ["*"],
+				"visibility": "PUBLIC"
+			}
+		]
+	}`
+
+	result := ValidateServiceConfig([]byte(json))
+
+	if !result.IsValid() {
+		t.Errorf("Expected valid config for WebSocket endpoint with wildcard method, got errors: %v", result.Errors)
+	}
+}
+
 // Helper function to check if result has an error with the given path
 func hasErrorWithPath(result *ValidationResult, path string) bool {
 	for _, err := range result.Errors {

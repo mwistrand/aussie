@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
@@ -13,6 +14,7 @@ import org.jboss.logging.Logger;
 
 import aussie.config.SessionConfigMapping;
 import aussie.core.model.Session;
+import aussie.core.model.SessionInvalidatedEvent;
 import aussie.core.port.in.SessionManagement;
 import aussie.core.port.out.SessionRepository;
 
@@ -35,6 +37,9 @@ public class SessionService implements SessionManagement {
 
     @Inject
     SessionConfigMapping config;
+
+    @Inject
+    Event<SessionInvalidatedEvent> sessionInvalidatedEvent;
 
     @Override
     public Uni<Session> createSession(
@@ -147,13 +152,19 @@ public class SessionService implements SessionManagement {
     @Override
     public Uni<Void> invalidateSession(String sessionId) {
         LOG.infof("Invalidating session: %s", sessionId);
-        return getRepository().delete(sessionId);
+        return getRepository().delete(sessionId).invoke(() -> {
+            // Fire event to notify WebSocket connections to close
+            sessionInvalidatedEvent.fireAsync(SessionInvalidatedEvent.forSession(sessionId));
+        });
     }
 
     @Override
     public Uni<Void> invalidateAllUserSessions(String userId) {
         LOG.infof("Invalidating all sessions for user: %s", userId);
-        return getRepository().deleteByUserId(userId);
+        return getRepository().deleteByUserId(userId).invoke(() -> {
+            // Fire event to notify WebSocket connections to close
+            sessionInvalidatedEvent.fireAsync(SessionInvalidatedEvent.forUser(userId));
+        });
     }
 
     private SessionRepository getRepository() {

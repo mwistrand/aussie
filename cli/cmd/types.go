@@ -28,6 +28,7 @@ type EndpointConfig struct {
 	Visibility   string   `json:"visibility,omitempty"`
 	PathRewrite  string   `json:"pathRewrite,omitempty"`
 	AuthRequired *bool    `json:"authRequired,omitempty"`
+	Type         string   `json:"type,omitempty"` // "HTTP" (default) or "WEBSOCKET"
 }
 
 // ServiceAccessConfig defines access control settings

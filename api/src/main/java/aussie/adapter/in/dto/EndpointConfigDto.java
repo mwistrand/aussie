@@ -4,10 +4,12 @@ import java.util.Optional;
 import java.util.Set;
 
 import aussie.core.model.EndpointConfig;
+import aussie.core.model.EndpointType;
 import aussie.core.model.EndpointVisibility;
 
 public record EndpointConfigDto(
-        String path, Set<String> methods, String visibility, String pathRewrite, Boolean authRequired) {
+        String path, Set<String> methods, String visibility, String pathRewrite, Boolean authRequired, String type) {
+
     public EndpointConfig toModel() {
         return toModel(false);
     }
@@ -15,8 +17,9 @@ public record EndpointConfigDto(
     public EndpointConfig toModel(boolean defaultAuthRequired) {
         var vis = visibility != null ? EndpointVisibility.valueOf(visibility.toUpperCase()) : EndpointVisibility.PUBLIC;
         var auth = authRequired != null ? authRequired : defaultAuthRequired;
+        var endpointType = type != null ? EndpointType.valueOf(type.toUpperCase()) : EndpointType.HTTP;
 
-        return new EndpointConfig(path, methods, vis, Optional.ofNullable(pathRewrite), auth);
+        return new EndpointConfig(path, methods, vis, Optional.ofNullable(pathRewrite), auth, endpointType);
     }
 
     public static EndpointConfigDto fromModel(EndpointConfig model) {
@@ -25,6 +28,7 @@ public record EndpointConfigDto(
                 model.methods(),
                 model.visibility().name(),
                 model.pathRewrite().orElse(null),
-                model.authRequired());
+                model.authRequired(),
+                model.type().name());
     }
 }
