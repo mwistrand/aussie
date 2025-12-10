@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.datastax.oss.driver.api.core.cql.BoundStatement;
@@ -13,6 +14,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
+import io.vertx.core.Context;
+import io.vertx.core.Vertx;
 
 import aussie.core.model.CorsConfig;
 import aussie.core.model.EndpointVisibility;
@@ -82,6 +86,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
 
     @Override
     public Uni<Void> save(ServiceRegistration registration) {
+        Executor executor = getContextExecutor();
         return Uni.createFrom()
                 .completionStage(() -> {
                     BoundStatement bound = insertStmt.bind(
@@ -97,16 +102,19 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                             registration.corsConfig().map(this::toJson).orElse(null));
                     return session.executeAsync(bound).toCompletableFuture();
                 })
+                .emitOn(executor)
                 .replaceWithVoid();
     }
 
     @Override
     public Uni<Optional<ServiceRegistration>> findById(String serviceId) {
+        Executor executor = getContextExecutor();
         return Uni.createFrom()
                 .completionStage(() -> {
                     BoundStatement bound = selectByIdStmt.bind(serviceId);
                     return session.executeAsync(bound).toCompletableFuture();
                 })
+                .emitOn(executor)
                 .map(rs -> {
                     Row row = rs.one();
                     return row != null ? Optional.of(fromRow(row)) : Optional.empty();
@@ -115,6 +123,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
 
     @Override
     public Uni<Boolean> delete(String serviceId) {
+        Executor executor = getContextExecutor();
         return exists(serviceId).flatMap(existed -> {
             if (!existed) {
                 return Uni.createFrom().item(false);
@@ -124,15 +133,18 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                         BoundStatement bound = deleteStmt.bind(serviceId);
                         return session.executeAsync(bound).toCompletableFuture();
                     })
+                    .emitOn(executor)
                     .map(rs -> true);
         });
     }
 
     @Override
     public Uni<List<ServiceRegistration>> findAll() {
+        Executor executor = getContextExecutor();
         return Uni.createFrom()
                 .completionStage(
                         () -> session.executeAsync(selectAllStmt.bind()).toCompletableFuture())
+                .emitOn(executor)
                 .map(rs -> {
                     List<ServiceRegistration> registrations = new ArrayList<>();
                     rs.currentPage().forEach(row -> registrations.add(fromRow(row)));
@@ -142,18 +154,22 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
 
     @Override
     public Uni<Boolean> exists(String serviceId) {
+        Executor executor = getContextExecutor();
         return Uni.createFrom()
                 .completionStage(() -> {
                     BoundStatement bound = existsStmt.bind(serviceId);
                     return session.executeAsync(bound).toCompletableFuture();
                 })
+                .emitOn(executor)
                 .map(rs -> rs.one() != null);
     }
 
     @Override
     public Uni<Long> count() {
+        Executor executor = getContextExecutor();
         return Uni.createFrom()
                 .completionStage(() -> session.executeAsync(countStmt.bind()).toCompletableFuture())
+                .emitOn(executor)
                 .map(rs -> {
                     Row row = rs.one();
                     return row != null ? row.getLong(0) : 0L;
@@ -203,5 +219,21 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to deserialize list from JSON", e);
         }
+    }
+
+    /**
+     * Gets an executor that will run on the Vert.x context if available,
+     * otherwise falls back to the default worker pool.
+     *
+     * <p>This is necessary because the Cassandra driver completes its futures
+     * on Netty I/O threads, which don't have a Vert.x context. When Quarkus
+     * RESTEasy Reactive tries to resume processing, it expects a Vert.x context.
+     */
+    private Executor getContextExecutor() {
+        Context context = Vertx.currentContext();
+        if (context != null) {
+            return command -> context.runOnContext(v -> command.run());
+        }
+        return Infrastructure.getDefaultWorkerPool();
     }
 }

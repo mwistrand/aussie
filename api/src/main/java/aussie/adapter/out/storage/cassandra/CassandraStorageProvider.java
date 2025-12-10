@@ -2,6 +2,7 @@ package aussie.adapter.out.storage.cassandra;
 
 import java.net.InetSocketAddress;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.datastax.oss.driver.api.core.CqlSessionBuilder;
@@ -9,6 +10,9 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
+import io.vertx.core.Context;
+import io.vertx.core.Vertx;
 import org.jboss.logging.Logger;
 
 import aussie.core.model.StorageHealth;
@@ -106,10 +110,12 @@ public class CassandraStorageProvider implements StorageRepositoryProvider {
                 return Uni.createFrom().item(StorageHealth.unhealthy("cassandra", "Session not initialized or closed"));
             }
 
+            Executor executor = getContextExecutor();
             long start = System.currentTimeMillis();
             return Uni.createFrom()
                     .completionStage(() -> session.executeAsync("SELECT release_version FROM system.local")
                             .toCompletableFuture())
+                    .emitOn(executor)
                     .map(rs -> {
                         long latency = System.currentTimeMillis() - start;
                         return StorageHealth.healthy("cassandra", latency);
@@ -157,5 +163,17 @@ public class CassandraStorageProvider implements StorageRepositoryProvider {
         } catch (Exception e) {
             throw new StorageProviderException("Failed to connect to Cassandra", e);
         }
+    }
+
+    /**
+     * Gets an executor that will run on the Vert.x context if available,
+     * otherwise falls back to the default worker pool.
+     */
+    private Executor getContextExecutor() {
+        Context context = Vertx.currentContext();
+        if (context != null) {
+            return command -> context.runOnContext(v -> command.run());
+        }
+        return Infrastructure.getDefaultWorkerPool();
     }
 }

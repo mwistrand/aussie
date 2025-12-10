@@ -1,38 +1,33 @@
 package aussie.system.filter;
 
-import java.io.IOException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
-import jakarta.annotation.Priority;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.container.ContainerRequestContext;
-import jakarta.ws.rs.container.ContainerRequestFilter;
-import jakarta.ws.rs.ext.Provider;
+import jakarta.ws.rs.core.Response;
 
-import org.jboss.logging.Logger;
+import io.smallrye.mutiny.Uni;
+import org.jboss.resteasy.reactive.server.ServerRequestFilter;
 
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.EndpointConfig;
 import aussie.core.model.RouteMatch;
-import aussie.core.model.ServiceRegistration;
 import aussie.core.service.AccessControlEvaluator;
 import aussie.core.service.ServiceRegistry;
 import aussie.core.service.SourceIdentifierExtractor;
 import aussie.core.service.VisibilityResolver;
 
-@Provider
-@Priority(Priorities.AUTHORIZATION)
-public class AccessControlFilter implements ContainerRequestFilter {
+/**
+ * Reactive access control filter for gateway requests.
+ *
+ * <p>Uses @ServerRequestFilter with Uni return type to avoid blocking
+ * the Vert.x event loop when performing async service lookups.
+ */
+public class AccessControlFilter {
 
-    private static final Logger LOG = Logger.getLogger(AccessControlFilter.class);
     private static final Set<String> RESERVED_PATHS = Set.of("admin", "gateway", "q");
-    private static final long LOOKUP_TIMEOUT_SECONDS = 5;
 
     private final ServiceRegistry serviceRegistry;
     private final SourceIdentifierExtractor sourceExtractor;
@@ -51,8 +46,8 @@ public class AccessControlFilter implements ContainerRequestFilter {
         this.visibilityResolver = visibilityResolver;
     }
 
-    @Override
-    public void filter(ContainerRequestContext requestContext) throws IOException {
+    @ServerRequestFilter
+    public Uni<Response> filter(ContainerRequestContext requestContext) {
         var path = requestContext.getUriInfo().getPath();
         var method = requestContext.getMethod();
 
@@ -63,26 +58,25 @@ public class AccessControlFilter implements ContainerRequestFilter {
 
         // Handle gateway requests
         if (path.startsWith("gateway/")) {
-            handleGatewayRequest(requestContext, path, method);
-            return;
+            return handleGatewayRequest(requestContext, path, method);
         }
 
         // Handle pass-through requests (/{serviceId}/{path})
-        handlePassThroughRequest(requestContext, path, method);
+        return handlePassThroughRequest(requestContext, path, method);
     }
 
-    private void handleGatewayRequest(ContainerRequestContext requestContext, String path, String method) {
+    private Uni<Response> handleGatewayRequest(ContainerRequestContext requestContext, String path, String method) {
         var gatewayPath = "/" + path.substring("gateway/".length());
 
         var routeMatch = serviceRegistry.findRoute(gatewayPath, method);
         if (routeMatch.isEmpty()) {
-            return;
+            return Uni.createFrom().nullItem();
         }
 
-        checkAccessControl(requestContext, routeMatch.get());
+        return checkAccessControl(requestContext, routeMatch.get());
     }
 
-    private void handlePassThroughRequest(ContainerRequestContext requestContext, String path, String method) {
+    private Uni<Response> handlePassThroughRequest(ContainerRequestContext requestContext, String path, String method) {
         var slashIndex = path.indexOf('/');
         String serviceId;
         String remainingPath;
@@ -96,51 +90,45 @@ public class AccessControlFilter implements ContainerRequestFilter {
         }
 
         if (RESERVED_PATHS.contains(serviceId.toLowerCase())) {
-            return;
+            return Uni.createFrom().nullItem();
         }
 
-        // Get service asynchronously and wait for result
-        Optional<ServiceRegistration> serviceOpt;
-        try {
-            serviceOpt = serviceRegistry
-                    .getService(serviceId)
-                    .subscribeAsCompletionStage()
-                    .get(LOOKUP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        } catch (InterruptedException | ExecutionException | TimeoutException e) {
-            LOG.warnf("Failed to lookup service %s: %s", serviceId, e.getMessage());
-            return;
-        }
+        // Use reactive chain - no blocking!
+        final String finalRemainingPath = remainingPath;
+        return serviceRegistry.getService(serviceId).flatMap(serviceOpt -> {
+            if (serviceOpt.isEmpty()) {
+                return Uni.createFrom().nullItem();
+            }
 
-        if (serviceOpt.isEmpty()) {
-            return;
-        }
+            var service = serviceOpt.get();
 
-        var service = serviceOpt.get();
+            // First, try to find a specific route match for this path
+            var routeMatch = serviceRegistry.findRoute(finalRemainingPath, method);
+            if (routeMatch.isPresent() && routeMatch.get().service().serviceId().equals(serviceId)) {
+                return checkAccessControl(requestContext, routeMatch.get());
+            }
 
-        // First, try to find a specific route match for this path
-        var routeMatch = serviceRegistry.findRoute(remainingPath, method);
-        if (routeMatch.isPresent() && routeMatch.get().service().serviceId().equals(serviceId)) {
-            checkAccessControl(requestContext, routeMatch.get());
-            return;
-        }
+            // For pass-through, resolve visibility using the VisibilityResolver
+            var visibility = visibilityResolver.resolve(finalRemainingPath, method, service);
 
-        // For pass-through, resolve visibility using the VisibilityResolver
-        var visibility = visibilityResolver.resolve(remainingPath, method, service);
+            var syntheticEndpoint = new EndpointConfig("/**", Set.of("*"), visibility, Optional.empty());
+            var syntheticRoute = new RouteMatch(service, syntheticEndpoint, finalRemainingPath, Map.of());
 
-        var syntheticEndpoint = new EndpointConfig("/**", Set.of("*"), visibility, Optional.empty());
-        var syntheticRoute = new RouteMatch(service, syntheticEndpoint, remainingPath, Map.of());
-
-        checkAccessControl(requestContext, syntheticRoute);
+            return checkAccessControl(requestContext, syntheticRoute);
+        });
     }
 
-    private void checkAccessControl(ContainerRequestContext requestContext, RouteMatch route) {
+    private Uni<Response> checkAccessControl(ContainerRequestContext requestContext, RouteMatch route) {
         var source = sourceExtractor.extract(requestContext);
-        var isPublic = accessEvaluator.isAllowed(
+        var isAllowed = accessEvaluator.isAllowed(
                 source, route.endpoint(), route.service().accessConfig());
 
-        if (!isPublic) {
+        if (!isAllowed) {
             // Return 404 to hide resource existence from unauthorized users
             throw GatewayProblem.notFound("Not found");
         }
+
+        // Return null to continue processing (no abort)
+        return Uni.createFrom().nullItem();
     }
 }

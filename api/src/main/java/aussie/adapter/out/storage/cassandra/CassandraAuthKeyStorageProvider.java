@@ -2,10 +2,14 @@ package aussie.adapter.out.storage.cassandra;
 
 import java.net.InetSocketAddress;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.datastax.oss.driver.api.core.CqlSessionBuilder;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
+import io.vertx.core.Context;
+import io.vertx.core.Vertx;
 
 import aussie.core.model.StorageHealth;
 import aussie.core.port.out.ApiKeyRepository;
@@ -76,10 +80,12 @@ public class CassandraAuthKeyStorageProvider implements AuthKeyStorageProvider {
                         .item(StorageHealth.unhealthy("cassandra-auth", "Session not initialized or closed"));
             }
 
+            Executor executor = getContextExecutor();
             long start = System.currentTimeMillis();
             return Uni.createFrom()
                     .completionStage(() -> session.executeAsync("SELECT release_version FROM system.local")
                             .toCompletableFuture())
+                    .emitOn(executor)
                     .map(rs -> {
                         long latency = System.currentTimeMillis() - start;
                         return StorageHealth.healthy("cassandra-auth", latency);
@@ -134,5 +140,17 @@ public class CassandraAuthKeyStorageProvider implements AuthKeyStorageProvider {
         Optional<String> encryptionKey = config.get("aussie.auth.encryption.key");
         String keyId = config.getOrDefault("aussie.auth.encryption.key-id", "v1");
         return new ApiKeyEncryptionService(encryptionKey, keyId);
+    }
+
+    /**
+     * Gets an executor that will run on the Vert.x context if available,
+     * otherwise falls back to the default worker pool.
+     */
+    private Executor getContextExecutor() {
+        Context context = Vertx.currentContext();
+        if (context != null) {
+            return command -> context.runOnContext(v -> command.run());
+        }
+        return Infrastructure.getDefaultWorkerPool();
     }
 }
