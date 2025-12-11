@@ -14,7 +14,9 @@ public record ServiceRegistration(
         List<VisibilityRule> visibilityRules,
         List<EndpointConfig> endpoints,
         Optional<ServiceAccessConfig> accessConfig,
-        Optional<CorsConfig> corsConfig) {
+        Optional<CorsConfig> corsConfig,
+        Optional<ServicePermissionPolicy> permissionPolicy,
+        long version) {
     public ServiceRegistration {
         if (serviceId == null || serviceId.isBlank()) {
             throw new IllegalArgumentException("Service ID cannot be null or blank");
@@ -43,6 +45,50 @@ public record ServiceRegistration(
         if (corsConfig == null) {
             corsConfig = Optional.empty();
         }
+        if (permissionPolicy == null) {
+            permissionPolicy = Optional.empty();
+        }
+        if (version < 0) {
+            version = 1;
+        }
+    }
+
+    /**
+     * Creates a new ServiceRegistration with an incremented version.
+     */
+    public ServiceRegistration withIncrementedVersion() {
+        return new ServiceRegistration(
+                serviceId,
+                displayName,
+                baseUrl,
+                routePrefix,
+                defaultVisibility,
+                defaultAuthRequired,
+                visibilityRules,
+                endpoints,
+                accessConfig,
+                corsConfig,
+                permissionPolicy,
+                version + 1);
+    }
+
+    /**
+     * Creates a new ServiceRegistration with the given permission policy.
+     */
+    public ServiceRegistration withPermissionPolicy(ServicePermissionPolicy policy) {
+        return new ServiceRegistration(
+                serviceId,
+                displayName,
+                baseUrl,
+                routePrefix,
+                defaultVisibility,
+                defaultAuthRequired,
+                visibilityRules,
+                endpoints,
+                accessConfig,
+                corsConfig,
+                Optional.ofNullable(policy),
+                version);
     }
 
     public static Builder builder(String serviceId) {
@@ -60,6 +106,8 @@ public record ServiceRegistration(
         private List<EndpointConfig> endpoints = List.of();
         private ServiceAccessConfig accessConfig;
         private CorsConfig corsConfig;
+        private ServicePermissionPolicy permissionPolicy;
+        private long version = 1;
 
         private Builder(String serviceId) {
             this.serviceId = serviceId;
@@ -115,6 +163,16 @@ public record ServiceRegistration(
             return this;
         }
 
+        public Builder permissionPolicy(ServicePermissionPolicy permissionPolicy) {
+            this.permissionPolicy = permissionPolicy;
+            return this;
+        }
+
+        public Builder version(long version) {
+            this.version = version;
+            return this;
+        }
+
         public ServiceRegistration build() {
             return new ServiceRegistration(
                     serviceId,
@@ -126,7 +184,9 @@ public record ServiceRegistration(
                     visibilityRules,
                     endpoints,
                     Optional.ofNullable(accessConfig),
-                    Optional.ofNullable(corsConfig));
+                    Optional.ofNullable(corsConfig),
+                    Optional.ofNullable(permissionPolicy),
+                    version);
         }
     }
 }

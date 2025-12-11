@@ -17,8 +17,8 @@ Aussie is a lightweight API gateway for microservices. It provides two routing s
 
 | Guide | Audience | Description |
 |-------|----------|-------------|
-| [Platform Guide](doc/PLATFORM.md) | Platform teams | Deploying, configuring, and operating Aussie |
-| [Consumer Guide](doc/CONSUMER.md) | App developers | Onboarding services to Aussie |
+| [Platform Guide](docs/platform/README.md) | Platform teams | Deploying, configuring, and operating Aussie |
+| [Consumer Guide](docs/api/README.md) | App developers | Onboarding services to Aussie |
 
 ## Quick Start
 
@@ -31,7 +31,7 @@ The gateway will be available at http://localhost:1234 with the Demo UI at http:
 ### Build the CLI
 ```bash
 cd cli
-go build -o ../aussie
+go build -o aussie
 ```
 
 ### Register a Service
@@ -54,9 +54,9 @@ aussie/
 ├── api/          # Quarkus REST API (Java 21)
 ├── cli/          # Command-line interface (Go)
 ├── demo/         # Demo application (Next.js)
-└── doc/          # Documentation
-    ├── PLATFORM.md   # Platform team guide
-    └── CONSUMER.md   # App developer guide
+└── docs/         # Documentation
+    ├── api/          # Consumer guide
+    └── platform/     # Platform team guide
 ```
 
 ## Development

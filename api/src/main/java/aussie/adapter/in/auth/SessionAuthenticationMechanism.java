@@ -19,6 +19,7 @@ import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
 import aussie.config.SessionConfigMapping;
+import aussie.core.model.Permission;
 import aussie.core.model.Session;
 import aussie.core.port.in.SessionManagement;
 
@@ -44,7 +45,7 @@ public class SessionAuthenticationMechanism implements HttpAuthenticationMechani
     SessionManagement sessionManagement;
 
     @Inject
-    PermissionRoleMapper roleMapper;
+    Permission roleMapper;
 
     @Override
     public Uni<SecurityIdentity> authenticate(RoutingContext context, IdentityProviderManager identityProviderManager) {

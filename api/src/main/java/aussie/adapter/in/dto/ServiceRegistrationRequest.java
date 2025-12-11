@@ -10,6 +10,7 @@ import aussie.core.model.ServiceRegistration;
 import aussie.core.model.VisibilityRule;
 
 public record ServiceRegistrationRequest(
+        Long version,
         String serviceId,
         String displayName,
         String baseUrl,
@@ -19,7 +20,8 @@ public record ServiceRegistrationRequest(
         List<VisibilityRuleDto> visibilityRules,
         List<EndpointConfigDto> endpoints,
         ServiceAccessConfigDto accessConfig,
-        CorsConfigDto cors) {
+        CorsConfigDto cors,
+        ServicePermissionPolicyDto permissionPolicy) {
     public ServiceRegistration toModel() {
         var defaultVis = defaultVisibility != null
                 ? EndpointVisibility.valueOf(defaultVisibility.toUpperCase())
@@ -41,6 +43,10 @@ public record ServiceRegistrationRequest(
 
         var corsConfigModel = cors != null ? Optional.of(cors.toModel()) : Optional.<CorsConfig>empty();
 
+        var permissionPolicyModel = permissionPolicy != null
+                ? Optional.of(permissionPolicy.toModel())
+                : Optional.<aussie.core.model.ServicePermissionPolicy>empty();
+
         return new ServiceRegistration(
                 serviceId,
                 displayName != null ? displayName : serviceId,
@@ -51,6 +57,9 @@ public record ServiceRegistrationRequest(
                 visibilityRuleModels,
                 endpointModels,
                 accessConfigModel,
-                corsConfigModel);
+                corsConfigModel,
+                permissionPolicyModel,
+                version == null ? 1L : version); // New registrations
+        // start at version 1
     }
 }

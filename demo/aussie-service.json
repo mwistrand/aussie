@@ -1,4 +1,5 @@
 {
+  "version": 1,
   "serviceId": "demo-service",
   "displayName": "Demo Service",
   "baseUrl": "http://demo:3000",
@@ -65,5 +66,21 @@
     "allowedHeaders": ["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
     "allowCredentials": true,
     "maxAge": 3600
+  },
+  "permissionPolicy": {
+    "permissions": {
+      "service.config.read": {
+        "anyOfPermissions": ["demo-service.dev", "demo-service.lead", "demo-service.admin"]
+      },
+      "service.config.update": {
+        "anyOfPermissions": ["demo-service.dev", "demo-service.lead", "demo-service.admin"]
+      },
+      "service.config.delete": {
+        "anyOfPermissions": ["demo-service.admin"]
+      },
+      "service.permissions.write": {
+        "anyOfPermissions": ["demo-service.admin", "demo-service.lead"]
+      }
+    }
   }
 }

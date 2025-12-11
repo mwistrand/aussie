@@ -45,8 +45,10 @@ class WebSocketGatewayServiceTest {
     @BeforeEach
     void setUp() {
         var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG);
+        var defaultPolicy = new DefaultPermissionPolicy();
+        var authService = new ServiceAuthorizationService(defaultPolicy);
         serviceRegistry = new ServiceRegistry(
-                new InMemoryServiceRegistrationRepository(), NoOpConfigurationCache.INSTANCE, validator);
+                new InMemoryServiceRegistrationRepository(), NoOpConfigurationCache.INSTANCE, validator, authService);
         routeAuthService = new NoOpRouteAuthService();
         endpointMatcher = new EndpointMatcher(new GlobPatternMatcher());
         webSocketGatewayService = new WebSocketGatewayService(serviceRegistry, routeAuthService, endpointMatcher);

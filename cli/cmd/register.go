@@ -18,6 +18,7 @@ var (
 	registerFile string
 
 	// Basic service options
+	version             int64
 	serviceID           string
 	displayName         string
 	baseURL             string
@@ -37,6 +38,9 @@ var (
 	corsExposedHeaders []string
 	corsCredentials    string // "true", "false", or "" for not set
 	corsMaxAge         int64
+
+	// Permission policy options
+	permissionPolicyFile string
 )
 
 var registerCmd = &cobra.Command{
@@ -48,8 +52,14 @@ You can provide configuration via a JSON file, command-line flags, or both.
 When both are provided, command-line flags override values from the file.
 
 Required fields (via file or flags):
+  --version       Configuration version (must be current version + 1 to update)
   --service-id    Unique identifier for the service
   --base-url      The backend service URL
+
+Version Requirements:
+  For new services, use version 1. To update an existing service, the version
+  must be exactly the current stored version plus one. For example, if the
+  current version is 1, you must provide version 2 to update.
 
 Optional fields:
   --display-name          Human-readable name (defaults to service-id)
@@ -70,18 +80,24 @@ CORS Configuration:
   --cors-credentials      Allow credentials (true/false)
   --cors-max-age          Max age for preflight cache (seconds)
 
+Permission Policy:
+  --permission-policy-file  Path to JSON file containing permission policy
+
 Examples:
-  # Register using a JSON file
+  # Register a new service using a JSON file (file must include version: 1)
   aussie register -f service.json
 
-  # Register using command-line flags
-  aussie register --service-id my-service --base-url http://localhost:9090
+  # Register a new service using command-line flags
+  aussie register --version 1 --service-id my-service --base-url http://localhost:9090
+
+  # Update an existing service (increment version from current)
+  aussie register -f service.json --version 2
 
   # Use a file as base and override specific values
   aussie register -f service.json --base-url http://production:8080
 
   # Register with CORS enabled
-  aussie register --service-id api --base-url http://localhost:9090 \
+  aussie register --version 1 --service-id api --base-url http://localhost:9090 \
     --cors-origins "http://localhost:3000" --cors-credentials true`,
 	RunE: runRegister,
 }
@@ -93,6 +109,7 @@ func init() {
 	registerCmd.Flags().StringVarP(&registerFile, "file", "f", "", "Path to service configuration JSON file")
 
 	// Basic service options
+	registerCmd.Flags().Int64Var(&version, "version", 0, "Current configuration version")
 	registerCmd.Flags().StringVar(&serviceID, "service-id", "", "Unique identifier for the service")
 	registerCmd.Flags().StringVar(&displayName, "display-name", "", "Human-readable name for the service")
 	registerCmd.Flags().StringVar(&baseURL, "base-url", "", "The backend service URL")
@@ -112,6 +129,9 @@ func init() {
 	registerCmd.Flags().StringSliceVar(&corsExposedHeaders, "cors-exposed-headers", nil, "Headers exposed to the browser (comma-separated or repeated)")
 	registerCmd.Flags().StringVar(&corsCredentials, "cors-credentials", "", "Allow credentials for CORS (true/false)")
 	registerCmd.Flags().Int64Var(&corsMaxAge, "cors-max-age", 0, "Max age for preflight cache in seconds")
+
+	// Permission policy options
+	registerCmd.Flags().StringVar(&permissionPolicyFile, "permission-policy-file", "", "Path to JSON file containing permission policy")
 }
 
 func runRegister(cmd *cobra.Command, args []string) error {
@@ -133,6 +153,9 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate required fields
+	if registration.Version < 1 {
+		return fmt.Errorf("a positive version is required (use --version or provide in JSON file)")
+	}
 	if registration.ServiceID == "" {
 		return fmt.Errorf("service-id is required (use --service-id or provide in JSON file)")
 	}
@@ -190,9 +213,9 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	case http.StatusUnauthorized:
 		return fmt.Errorf("authentication required: use 'aussie auth login' to authenticate")
 	case http.StatusForbidden:
-		return fmt.Errorf("permission denied: insufficient privileges to register services")
+		return fmt.Errorf("permission denied: insufficient privileges")
 	case http.StatusConflict:
-		return fmt.Errorf("service already exists: %s", string(body))
+		return fmt.Errorf("version conflict: %s", string(body))
 	default:
 		return fmt.Errorf("registration failed (HTTP %d): %s", resp.StatusCode, string(body))
 	}
@@ -214,6 +237,9 @@ func buildServiceRegistration(cmd *cobra.Command) (*ServiceRegistration, error) 
 	}
 
 	// Override with command-line flags (only if explicitly set)
+	if cmd.Flags().Changed("version") {
+		registration.Version = version
+	}
 	if cmd.Flags().Changed("service-id") {
 		registration.ServiceID = serviceID
 	}
@@ -274,6 +300,20 @@ func buildServiceRegistration(cmd *cobra.Command) (*ServiceRegistration, error) 
 		if cmd.Flags().Changed("cors-max-age") {
 			registration.Cors.MaxAge = &corsMaxAge
 		}
+	}
+
+	// Permission policy - load from file if provided
+	if cmd.Flags().Changed("permission-policy-file") && permissionPolicyFile != "" {
+		policyData, err := os.ReadFile(permissionPolicyFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read permission policy file %s: %w", permissionPolicyFile, err)
+		}
+
+		var policy ServicePermissionPolicy
+		if err := json.Unmarshal(policyData, &policy); err != nil {
+			return nil, fmt.Errorf("invalid JSON in permission policy file %s: %w", permissionPolicyFile, err)
+		}
+		registration.PermissionPolicy = &policy
 	}
 
 	return &registration, nil

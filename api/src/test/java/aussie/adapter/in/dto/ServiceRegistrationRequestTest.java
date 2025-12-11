@@ -25,6 +25,7 @@ class ServiceRegistrationRequestTest {
         void shouldInheritDefaultAuthRequiredTrue() {
             var endpoint = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null);
             var request = new ServiceRegistrationRequest(
+                    1L,
                     "test-service",
                     "Test Service",
                     "http://localhost:8080",
@@ -33,6 +34,7 @@ class ServiceRegistrationRequestTest {
                     true,
                     null,
                     List.of(endpoint),
+                    null,
                     null,
                     null);
 
@@ -47,6 +49,7 @@ class ServiceRegistrationRequestTest {
         void shouldInheritDefaultAuthRequiredFalse() {
             var endpoint = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null);
             var request = new ServiceRegistrationRequest(
+                    1L,
                     "test-service",
                     "Test Service",
                     "http://localhost:8080",
@@ -55,6 +58,7 @@ class ServiceRegistrationRequestTest {
                     false,
                     null,
                     List.of(endpoint),
+                    null,
                     null,
                     null);
 
@@ -70,6 +74,7 @@ class ServiceRegistrationRequestTest {
             var publicEndpoint = new EndpointConfigDto("/api/public", Set.of("GET"), "PUBLIC", null, false, null);
             var protectedEndpoint = new EndpointConfigDto("/api/protected", Set.of("GET"), "PUBLIC", null, null, null);
             var request = new ServiceRegistrationRequest(
+                    1L,
                     "test-service",
                     "Test Service",
                     "http://localhost:8080",
@@ -78,6 +83,7 @@ class ServiceRegistrationRequestTest {
                     true,
                     null,
                     List.of(publicEndpoint, protectedEndpoint),
+                    null,
                     null,
                     null);
 
@@ -93,6 +99,7 @@ class ServiceRegistrationRequestTest {
         void shouldDefaultToTrueWhenNotSpecified() {
             var endpoint = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null);
             var request = new ServiceRegistrationRequest(
+                    1L,
                     "test-service",
                     "Test Service",
                     "http://localhost:8080",
@@ -101,6 +108,7 @@ class ServiceRegistrationRequestTest {
                     null,
                     null,
                     List.of(endpoint),
+                    null,
                     null,
                     null);
 
@@ -119,7 +127,7 @@ class ServiceRegistrationRequestTest {
         @DisplayName("Should default visibility to PRIVATE when not specified")
         void shouldDefaultVisibilityToPrivate() {
             var request = new ServiceRegistrationRequest(
-                    "test-service", null, "http://localhost:8080", null, null, null, null, null, null, null);
+                    1L, "test-service", null, "http://localhost:8080", null, null, null, null, null, null, null, null);
 
             var model = request.toModel();
 
@@ -130,7 +138,7 @@ class ServiceRegistrationRequestTest {
         @DisplayName("Should use serviceId as displayName when not specified")
         void shouldUseServiceIdAsDisplayName() {
             var request = new ServiceRegistrationRequest(
-                    "my-service", null, "http://localhost:8080", null, null, null, null, null, null, null);
+                    1L, "my-service", null, "http://localhost:8080", null, null, null, null, null, null, null, null);
 
             var model = request.toModel();
 
@@ -141,7 +149,18 @@ class ServiceRegistrationRequestTest {
         @DisplayName("Should parse visibility case-insensitively")
         void shouldParseVisibilityCaseInsensitively() {
             var request = new ServiceRegistrationRequest(
-                    "test-service", null, "http://localhost:8080", null, "public", null, null, null, null, null);
+                    1L,
+                    "test-service",
+                    null,
+                    "http://localhost:8080",
+                    null,
+                    "public",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null);
 
             var model = request.toModel();
 

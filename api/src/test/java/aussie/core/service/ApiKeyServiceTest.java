@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 
 import aussie.adapter.out.storage.memory.InMemoryApiKeyRepository;
 import aussie.config.ApiKeyConfig;
-import aussie.core.model.Permissions;
+import aussie.core.model.Permission;
 
 @DisplayName("ApiKeyService")
 class ApiKeyServiceTest {
@@ -44,7 +44,12 @@ class ApiKeyServiceTest {
                     .create(
                             "test-key",
                             "Test description",
-                            Set.of(Permissions.ADMIN_READ, Permissions.ADMIN_WRITE),
+                            Set.of(
+                                    Permission.SERVICE_CONFIG_READ,
+                                    Permission.SERVICE_CONFIG_CREATE,
+                                    Permission.SERVICE_CONFIG_UPDATE,
+                                    Permission.SERVICE_CONFIG_DELETE,
+                                    "demo-service.admin"),
                             null,
                             "test-creator")
                     .await()
@@ -55,8 +60,11 @@ class ApiKeyServiceTest {
             assertEquals("test-key", result.metadata().name());
             assertEquals("Test description", result.metadata().description());
             assertEquals("test-creator", result.metadata().createdBy());
-            assertTrue(result.metadata().permissions().contains(Permissions.ADMIN_READ));
-            assertTrue(result.metadata().permissions().contains(Permissions.ADMIN_WRITE));
+            assertTrue(result.metadata().permissions().contains(Permission.SERVICE_CONFIG_READ));
+            assertTrue(result.metadata().permissions().contains(Permission.SERVICE_CONFIG_CREATE));
+            assertTrue(result.metadata().permissions().contains(Permission.SERVICE_CONFIG_UPDATE));
+            assertTrue(result.metadata().permissions().contains(Permission.SERVICE_CONFIG_DELETE));
+            assertTrue(result.metadata().permissions().contains("demo-service.admin"));
         }
 
         @Test
@@ -120,7 +128,7 @@ class ApiKeyServiceTest {
         @DisplayName("should validate existing key")
         void shouldValidateExistingKey() {
             var createResult = apiKeyService
-                    .create("valid-key", null, Set.of(Permissions.ADMIN_READ), null, "test")
+                    .create("valid-key", null, Set.of(Permission.SERVICE_CONFIG_READ), null, "test")
                     .await()
                     .indefinitely();
 
@@ -280,7 +288,12 @@ class ApiKeyServiceTest {
                     .createWithKey(
                             "bootstrap-key",
                             "Bootstrap key for testing",
-                            Set.of(Permissions.ADMIN_READ, Permissions.ADMIN_WRITE),
+                            Set.of(
+                                    Permission.SERVICE_CONFIG_READ,
+                                    Permission.SERVICE_CONFIG_CREATE,
+                                    Permission.SERVICE_CONFIG_UPDATE,
+                                    Permission.SERVICE_CONFIG_DELETE,
+                                    "demo-service.admin"),
                             null,
                             specifiedKey,
                             "bootstrap")
@@ -291,6 +304,7 @@ class ApiKeyServiceTest {
             assertEquals(specifiedKey, result.plaintextKey());
             assertEquals("bootstrap-key", result.metadata().name());
             assertEquals("bootstrap", result.metadata().createdBy());
+            assertTrue(result.metadata().permissions().contains("demo-service.admin"));
         }
 
         @Test
@@ -300,7 +314,12 @@ class ApiKeyServiceTest {
 
             apiKeyService
                     .createWithKey(
-                            "validate-test", null, Set.of(Permissions.ADMIN_READ), null, specifiedKey, "bootstrap")
+                            "validate-test",
+                            null,
+                            Set.of(Permission.SERVICE_CONFIG_READ),
+                            null,
+                            specifiedKey,
+                            "bootstrap")
                     .await()
                     .indefinitely();
 

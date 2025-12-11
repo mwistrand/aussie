@@ -106,7 +106,9 @@ class ServiceRegistrationTest {
                     null, // visibilityRules - defaults to empty list
                     List.of(),
                     Optional.empty(),
-                    Optional.empty()); // corsConfig
+                    Optional.empty(), // corsConfig
+                    Optional.empty(), // permissionPolicy
+                    1L); // version
 
             assertNotNull(service);
             assertEquals("my-service", service.serviceId());

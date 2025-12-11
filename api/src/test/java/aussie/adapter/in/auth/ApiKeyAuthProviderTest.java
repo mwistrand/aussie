@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 import aussie.adapter.out.storage.memory.InMemoryApiKeyRepository;
 import aussie.config.ApiKeyConfig;
 import aussie.core.model.AuthenticationResult;
-import aussie.core.model.Permissions;
+import aussie.core.model.Permission;
 import aussie.core.service.ApiKeyService;
 
 @DisplayName("ApiKeyAuthProvider")
@@ -101,7 +101,17 @@ class ApiKeyAuthProviderTest {
         @DisplayName("should succeed with valid API key")
         void shouldSucceedWithValidApiKey() {
             var createResult = apiKeyService
-                    .create("test-key", null, Set.of(Permissions.ADMIN_READ, Permissions.ADMIN_WRITE), null, "test")
+                    .create(
+                            "test-key",
+                            null,
+                            Set.of(
+                                    Permission.SERVICE_CONFIG_READ,
+                                    Permission.SERVICE_CONFIG_CREATE,
+                                    Permission.SERVICE_CONFIG_UPDATE,
+                                    Permission.SERVICE_CONFIG_DELETE,
+                                    "demo-service.admin"),
+                            null,
+                            "test")
                     .await()
                     .indefinitely();
 
@@ -113,8 +123,10 @@ class ApiKeyAuthProviderTest {
             assertInstanceOf(AuthenticationResult.Success.class, result);
             var success = (AuthenticationResult.Success) result;
             assertEquals("test-key", success.context().principal().name());
-            assertTrue(success.context().hasPermission(Permissions.ADMIN_READ));
-            assertTrue(success.context().hasPermission(Permissions.ADMIN_WRITE));
+            assertTrue(success.context().hasPermission(Permission.SERVICE_CONFIG_READ));
+            assertTrue(success.context().hasPermission(Permission.SERVICE_CONFIG_CREATE));
+            assertTrue(success.context().hasPermission(Permission.SERVICE_CONFIG_UPDATE));
+            assertTrue(success.context().hasPermission(Permission.SERVICE_CONFIG_DELETE));
         }
 
         @Test

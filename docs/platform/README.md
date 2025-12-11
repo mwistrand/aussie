@@ -12,6 +12,7 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 - [Per-Route Authentication](#per-route-authentication)
 - [WebSocket Configuration](websocket-configuration.md)
 - [Admin API](#admin-api)
+- [Service Permission Policies](#service-permission-policies)
 
 ## Setup
 
@@ -60,11 +61,14 @@ export AUSSIE_AUTH_DANGEROUS_NOOP=false
 ### Creating API Keys
 Create an API key using the CLI:
 ```bash
-# Create a key with full permissions
+# Create a key with full admin access
 ./aussie keys create --name my-team-key --description "API key for My Team" --ttl 90
 
-# Create a key with specific permissions
-./aussie keys create --name read-only-key --permissions admin:read --ttl 30
+# Create a key with specific permissions for service-level access
+./aussie keys create --name service-admin --permissions "my-service.admin" --ttl 30
+
+# Create a key with multiple permissions
+./aussie keys create --name team-lead --permissions "*,my-service.lead" --ttl 90
 ```
 **Output:**
 ```
@@ -91,11 +95,22 @@ API Key (save this - it won't be shown again):
 ```
 
 ### Permissions
+Permissions control what operations an API key can perform. They work at two levels:
+
+**Aussie-level access** (gateway operations):
 | Permission | Description |
 |------------|-------------|
-| `admin:read` | Read access to admin endpoints (GET, HEAD, OPTIONS) |
-| `admin:write` | Write access to admin endpoints (POST, PUT, DELETE) |
-| `*` | Full access to all operations |
+| `*` | Full admin access - can perform all gateway and service operations |
+
+**Service-level access** (per-service operations):
+Service-level permissions are defined by your organization and mapped to operations via each service's permission policy. For example:
+| Permission | Typical Usage |
+|------------|---------------|
+| `my-service.admin` | Full access to my-service configuration |
+| `my-service.lead` | Can update my-service configuration |
+| `my-service.readonly` | Can read my-service configuration |
+
+See [Service Permission Policies](#service-permission-policies) for details on configuring service-level access.
 
 ## Bootstrap Mode (First-Time Setup)
 
@@ -299,3 +314,68 @@ All admin endpoints require authentication. See [Authentication Configuration](#
 # Revoke a key
 ./aussie keys revoke <key-id>
 ```
+
+## Service Permission Policies
+
+Service permission policies control which permissions are allowed to perform specific operations on a service. This enables fine-grained access control where different teams or roles can have different levels of access to each service's configuration.
+
+### How It Works
+
+1. **API keys have permissions** - When you create an API key with `--permissions "my-service.lead"`, that permission is available for authorization
+2. **Services define permission policies** - Each service can specify which permissions are allowed for each operation
+3. **Aussie checks authorization** - When a request comes in, Aussie checks if the API key's permissions match what the service allows
+
+### Defining a Permission Policy
+
+Include a `permissionPolicy` in your service configuration:
+
+```json
+{
+  "serviceId": "my-service",
+  "baseUrl": "http://my-service:3000",
+  "permissionPolicy": {
+    "permissions": {
+      "service.config.read": {
+        "anyOfPermissions": ["my-service.readonly", "my-service.lead", "my-service.admin"]
+      },
+      "service.config.update": {
+        "anyOfPermissions": ["my-service.lead", "my-service.admin"]
+      },
+      "service.config.delete": {
+        "anyOfPermissions": ["my-service.admin"]
+      },
+      "service.permissions.write": {
+        "anyOfPermissions": ["my-service.admin"]
+      }
+    }
+  }
+}
+```
+
+### Available Operations
+
+| Operation | Description |
+|-----------|-------------|
+| `service.config.read` | Read the service configuration |
+| `service.config.write` | Update the service configuration |
+| `service.config.delete` | Delete/unregister the service |
+| `service.permissions.read` | Read the service's permission policy |
+| `service.permissions.write` | Update the service's permission policy |
+
+### Default Policy
+
+Services without an explicit permission policy use the default policy, which requires the `aussie:admin` permission (granted by `*`) for all operations. This ensures new services are secure by default.
+
+### Example: Team-Based Access
+
+```bash
+# Create keys for different roles
+./aussie keys create --name ops-admin --permissions "*" --ttl 365
+./aussie keys create --name team-lead --permissions "my-service.lead,other-service.lead" --ttl 90
+./aussie keys create --name developer --permissions "my-service.readonly" --ttl 30
+```
+
+With the permission policy above:
+- `ops-admin` can do everything (wildcard grants `aussie:admin`)
+- `team-lead` can read and update my-service config, but not delete it
+- `developer` can only read my-service config

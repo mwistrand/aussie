@@ -7,7 +7,7 @@ import java.util.Set;
  *
  * @param name        display name for the key (required)
  * @param description optional description of the key's purpose
- * @param permissions set of permissions to grant (e.g., "admin:read", "admin:write")
+ * @param permissions set of permissions to grant (e.g., "service.config:read", "demo-service.admin")
  * @param ttlDays     time-to-live in days (null = never expires)
  */
 public record CreateApiKeyRequest(String name, String description, Set<String> permissions, Integer ttlDays) {}

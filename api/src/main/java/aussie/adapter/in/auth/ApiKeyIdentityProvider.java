@@ -1,5 +1,8 @@
 package aussie.adapter.in.auth;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -11,13 +14,14 @@ import io.quarkus.security.runtime.QuarkusSecurityIdentity;
 import io.smallrye.mutiny.Uni;
 
 import aussie.core.model.ApiKey;
+import aussie.core.model.Permission;
 import aussie.core.port.in.ApiKeyManagement;
 
 /**
  * Quarkus identity provider that validates API keys and builds SecurityIdentity.
  *
  * <p>This provider validates API keys via {@link ApiKeyManagement} and maps
- * the key's permissions to Quarkus Security roles using {@link PermissionRoleMapper}.
+ * the key's permissions to Quarkus Security roles using {@link Permission}.
  *
  * <p>The resulting {@link SecurityIdentity} contains:
  * <ul>
@@ -30,10 +34,10 @@ import aussie.core.port.in.ApiKeyManagement;
 public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthenticationRequest> {
 
     private final ApiKeyManagement apiKeyManagement;
-    private final PermissionRoleMapper roleMapper;
+    private final Permission roleMapper;
 
     @Inject
-    public ApiKeyIdentityProvider(ApiKeyManagement apiKeyManagement, PermissionRoleMapper roleMapper) {
+    public ApiKeyIdentityProvider(ApiKeyManagement apiKeyManagement, Permission roleMapper) {
         this.apiKeyManagement = apiKeyManagement;
         this.roleMapper = roleMapper;
     }
@@ -54,21 +58,50 @@ public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthentica
     }
 
     private SecurityIdentity buildIdentity(ApiKey apiKey) {
-        // Map permissions to Quarkus Security roles
+        // Map permissions to Quarkus Security roles for @RolesAllowed checks
         var roles = roleMapper.toRoles(apiKey.permissions());
+
+        // Build effective permissions for service-level authorization
+        var effectivePermissions = buildEffectivePermissions(apiKey);
 
         // Build the security identity
         var builder = QuarkusSecurityIdentity.builder()
                 .setPrincipal(new ApiKeyPrincipal(apiKey.id(), apiKey.name()))
                 .addRoles(roles)
                 .addAttribute("keyId", apiKey.id())
-                .addAttribute("permissions", apiKey.permissions());
+                .addAttribute("permissions", effectivePermissions);
 
         if (apiKey.expiresAt() != null) {
             builder.addAttribute("expiresAt", apiKey.expiresAt());
         }
 
         return builder.build();
+    }
+
+    /**
+     * Builds effective permissions for service-level authorization.
+     *
+     * <p>This includes all permissions from the API key, with special handling:
+     * <ul>
+     *   <li>Wildcard permission (*) adds "aussie:admin" for full access</li>
+     *   <li>All permissions are included (e.g., "demo-service.lead")</li>
+     * </ul>
+     */
+    private Set<String> buildEffectivePermissions(ApiKey apiKey) {
+        Set<String> effectivePermissions = new HashSet<>();
+
+        // Add permissions for service-level authorization
+        if (apiKey.permissions() != null) {
+            for (String permission : apiKey.permissions()) {
+                if (Permission.ALL.equals(permission)) {
+                    // Wildcard grants full admin access
+                    effectivePermissions.add(Permission.ADMIN_CLAIM);
+                }
+                effectivePermissions.add(permission);
+            }
+        }
+
+        return effectivePermissions;
     }
 
     /**

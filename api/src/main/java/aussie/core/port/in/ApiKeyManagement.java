@@ -26,7 +26,7 @@ public interface ApiKeyManagement {
      *
      * @param name        display name for the key (e.g., "user-service-prod")
      * @param description optional description of the key's purpose
-     * @param permissions set of permissions to grant (e.g., "admin:read", "admin:write")
+     * @param permissions set of permissions to grant (e.g., "service.config:read", "demo-service.admin")
      * @param ttl         time-to-live for the key (null = never expires)
      * @param createdBy   identifier of the principal creating this key (e.g., key ID or "bootstrap")
      * @return Uni with result containing the key ID, plaintext key, and metadata

@@ -63,12 +63,12 @@ func TestKeysCreateCmd_Initialized(t *testing.T) {
 	}
 
 	// Check that permissions flag exists
-	permsFlag := keysCreateCmd.Flags().Lookup("permissions")
-	if permsFlag == nil {
+	permissionsFlag := keysCreateCmd.Flags().Lookup("permissions")
+	if permissionsFlag == nil {
 		t.Error("keysCreateCmd should have 'permissions' flag")
 	}
-	if permsFlag != nil && permsFlag.Shorthand != "p" {
-		t.Errorf("permissions flag shorthand = %q, want %q", permsFlag.Shorthand, "p")
+	if permissionsFlag != nil && permissionsFlag.Shorthand != "p" {
+		t.Errorf("permissions flag shorthand = %q, want %q", permissionsFlag.Shorthand, "p")
 	}
 }
 
@@ -129,14 +129,14 @@ func TestKeysCmd_HasSubcommands(t *testing.T) {
 }
 
 func TestKeysCreateCmd_DefaultPermissions(t *testing.T) {
-	permsFlag := keysCreateCmd.Flags().Lookup("permissions")
-	if permsFlag == nil {
+	permissionsFlag := keysCreateCmd.Flags().Lookup("permissions")
+	if permissionsFlag == nil {
 		t.Fatal("keysCreateCmd should have 'permissions' flag")
 	}
 
 	// Default value should be "*" (wildcard)
-	if permsFlag.DefValue != "[*]" {
-		t.Errorf("permissions default = %q, want %q", permsFlag.DefValue, "[*]")
+	if permissionsFlag.DefValue != "[*]" {
+		t.Errorf("permissions default = %q, want %q", permissionsFlag.DefValue, "[*]")
 	}
 }
 

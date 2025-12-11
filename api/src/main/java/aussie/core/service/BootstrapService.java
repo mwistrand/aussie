@@ -12,7 +12,7 @@ import org.jboss.logging.Logger;
 import aussie.config.BootstrapConfig;
 import aussie.core.model.ApiKey;
 import aussie.core.model.BootstrapResult;
-import aussie.core.model.Permissions;
+import aussie.core.model.Permission;
 import aussie.core.port.in.ApiKeyManagement;
 import aussie.core.port.in.BootstrapManagement;
 import aussie.core.port.out.ApiKeyRepository;
@@ -20,10 +20,12 @@ import aussie.core.port.out.ApiKeyRepository;
 /**
  * Service for managing bootstrap admin key creation.
  *
- * <p>Implements the bootstrap flow for creating the first admin API key
+ * <p>
+ * Implements the bootstrap flow for creating the first admin API key
  * in a new deployment or recovering access to a locked-out system.
  *
- * <p>The bootstrap key must be provided by the administrator via the
+ * <p>
+ * The bootstrap key must be provided by the administrator via the
  * {@code AUSSIE_BOOTSTRAP_KEY} environment variable. Keys are never
  * auto-generated to ensure the administrator has control over the
  * initial credential.
@@ -73,7 +75,7 @@ public class BootstrapService implements BootstrapManagement {
                     .createWithKey(
                             BOOTSTRAP_KEY_NAME,
                             BOOTSTRAP_KEY_DESCRIPTION,
-                            Set.of(Permissions.ALL),
+                            Set.of(Permission.ALL), // Wildcard permission for full access
                             ttl,
                             plaintextKey,
                             "bootstrap")
@@ -117,7 +119,10 @@ public class BootstrapService implements BootstrapManagement {
      * Check if a key has admin-level permissions.
      */
     private boolean isAdminKey(ApiKey key) {
-        return key.permissions().contains(Permissions.ALL) || key.permissions().contains(Permissions.ADMIN_WRITE);
+        return key.permissions().contains(Permission.ALL)
+                || key.permissions().contains(Permission.SERVICE_CONFIG_CREATE)
+                || key.permissions().contains(Permission.SERVICE_CONFIG_UPDATE)
+                || key.permissions().contains(Permission.SERVICE_CONFIG_DELETE);
     }
 
     /**

@@ -27,10 +27,15 @@ var keysCreateCmd = &cobra.Command{
 
 The plaintext key is only displayed once when created. Make sure to save it securely.
 
+Permissions control what operations this key can perform:
+  - "*" grants full admin access (Aussie-level and service-level)
+  - Organization permissions like "my-service.admin" grant service-level access
+    based on each service's permission policy
+
 Examples:
   aussie keys create --name my-service
   aussie keys create --name ci-pipeline --ttl 7
-  aussie keys create --name my-key --permissions admin:read,admin:write`,
+  aussie keys create --name my-key --permissions "my-service.admin,my-service.lead"`,
 	RunE: runKeysCreate,
 }
 
@@ -39,7 +44,7 @@ func init() {
 	keysCreateCmd.Flags().StringVarP(&createKeyName, "name", "n", "", "Name for the API key (required)")
 	keysCreateCmd.Flags().StringVarP(&createKeyDescription, "description", "d", "", "Description of the key's purpose")
 	keysCreateCmd.Flags().IntVarP(&createKeyTtlDays, "ttl", "t", 0, "TTL in days (0 = no expiration)")
-	keysCreateCmd.Flags().StringSliceVarP(&createKeyPermissions, "permissions", "p", []string{"*"}, "Permissions (comma-separated)")
+	keysCreateCmd.Flags().StringSliceVarP(&createKeyPermissions, "permissions", "p", []string{"*"}, "Permissions granted to this key (comma-separated)")
 	keysCreateCmd.MarkFlagRequired("name")
 }
 

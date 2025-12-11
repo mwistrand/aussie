@@ -21,6 +21,7 @@ import io.vertx.core.Vertx;
 import aussie.core.model.CorsConfig;
 import aussie.core.model.EndpointVisibility;
 import aussie.core.model.ServiceAccessConfig;
+import aussie.core.model.ServicePermissionPolicy;
 import aussie.core.model.ServiceRegistration;
 import aussie.core.port.out.ServiceRegistrationRepository;
 
@@ -59,8 +60,8 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                         INSERT INTO service_registrations
                         (service_id, display_name, base_url, route_prefix,
                          default_visibility, default_auth_required, visibility_rules, endpoints, access_config,
-                         cors_config, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
+                         cors_config, permission_policy, version, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
                         """);
     }
 
@@ -99,7 +100,9 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                             toJson(registration.visibilityRules()),
                             toJson(registration.endpoints()),
                             registration.accessConfig().map(this::toJson).orElse(null),
-                            registration.corsConfig().map(this::toJson).orElse(null));
+                            registration.corsConfig().map(this::toJson).orElse(null),
+                            registration.permissionPolicy().map(this::toJson).orElse(null),
+                            registration.version());
                     return session.executeAsync(bound).toCompletableFuture();
                 })
                 .emitOn(executor)
@@ -180,6 +183,9 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
         // Default to true for existing rows where column is null
         boolean defaultAuthRequired = row.isNull("default_auth_required") ? true : row.getBool("default_auth_required");
 
+        // Default to 1 for existing rows where version is null
+        long version = row.isNull("version") ? 1L : row.getLong("version");
+
         return new ServiceRegistration(
                 row.getString("service_id"),
                 row.getString("display_name"),
@@ -191,7 +197,10 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                 fromJsonList(row.getString("endpoints"), new TypeReference<>() {}),
                 Optional.ofNullable(row.getString("access_config"))
                         .map(json -> fromJson(json, ServiceAccessConfig.class)),
-                Optional.ofNullable(row.getString("cors_config")).map(json -> fromJson(json, CorsConfig.class)));
+                Optional.ofNullable(row.getString("cors_config")).map(json -> fromJson(json, CorsConfig.class)),
+                Optional.ofNullable(row.getString("permission_policy"))
+                        .map(json -> fromJson(json, ServicePermissionPolicy.class)),
+                version);
     }
 
     private String toJson(Object obj) {

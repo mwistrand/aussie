@@ -21,22 +21,25 @@ import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
 
 import aussie.adapter.in.auth.ApiKeyIdentityProvider.ApiKeyPrincipal;
-import aussie.adapter.in.auth.PermissionRoleMapper;
 import aussie.adapter.in.dto.CreateApiKeyRequest;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.ApiKey;
+import aussie.core.model.Permission;
 import aussie.core.port.in.ApiKeyManagement;
 
 /**
  * REST resource for API key management.
  *
- * <p>Provides endpoints for creating, listing, and revoking API keys used
+ * <p>
+ * Provides endpoints for creating, listing, and revoking API keys used
  * for authentication to admin endpoints.
  *
- * <p>Authorization is enforced via {@code @RolesAllowed} annotations:
+ * <p>
+ * Authorization is enforced via {@code @RolesAllowed} annotations:
  * <ul>
- *   <li>GET endpoints require {@code admin-read} or {@code admin} role</li>
- *   <li>POST/DELETE endpoints require {@code admin-write} or {@code admin} role</li>
+ * <li>GET endpoints require {@code apikeys-read} or {@code admin} role</li>
+ * <li>POST/DELETE endpoints require {@code apikeys-write} or {@code admin}
+ * role</li>
  * </ul>
  */
 @Path("/admin/api-keys")
@@ -57,11 +60,12 @@ public class ApiKeyResource {
     /**
      * Create a new API key.
      *
-     * <p>The plaintext key is only returned in the response to this request.
+     * <p>
+     * The plaintext key is only returned in the response to this request.
      * It cannot be retrieved later - only the hash is stored.
      */
     @POST
-    @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_WRITE, PermissionRoleMapper.ROLE_ADMIN})
+    @RolesAllowed({Permission.APIKEYS_WRITE, Permission.ADMIN})
     public Uni<Response> createKey(CreateApiKeyRequest request) {
         if (request == null || request.name() == null || request.name().isBlank()) {
             throw GatewayProblem.badRequest("name is required");
@@ -109,10 +113,11 @@ public class ApiKeyResource {
     /**
      * List all API keys.
      *
-     * <p>Key hashes are redacted in the response.
+     * <p>
+     * Key hashes are redacted in the response.
      */
     @GET
-    @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_READ, PermissionRoleMapper.ROLE_ADMIN})
+    @RolesAllowed({Permission.APIKEYS_READ, Permission.ADMIN})
     public Uni<List<ApiKey>> listKeys() {
         return apiKeyService.list();
     }
@@ -120,11 +125,12 @@ public class ApiKeyResource {
     /**
      * Get a specific API key by ID.
      *
-     * <p>Key hash is redacted in the response.
+     * <p>
+     * Key hash is redacted in the response.
      */
     @GET
     @Path("/{keyId}")
-    @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_READ, PermissionRoleMapper.ROLE_ADMIN})
+    @RolesAllowed({Permission.APIKEYS_READ, Permission.ADMIN})
     public Uni<Response> getKey(@PathParam("keyId") String keyId) {
         return apiKeyService.get(keyId).map(opt -> opt.map(
                         key -> Response.ok(key).build())
@@ -134,12 +140,13 @@ public class ApiKeyResource {
     /**
      * Revoke an API key.
      *
-     * <p>Revoked keys cannot be used for authentication. The key record is
+     * <p>
+     * Revoked keys cannot be used for authentication. The key record is
      * retained for audit purposes.
      */
     @DELETE
     @Path("/{keyId}")
-    @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_WRITE, PermissionRoleMapper.ROLE_ADMIN})
+    @RolesAllowed({Permission.APIKEYS_WRITE, Permission.ADMIN})
     public Uni<Response> revokeKey(@PathParam("keyId") String keyId) {
         return apiKeyService.revoke(keyId).map(revoked -> {
             if (revoked) {

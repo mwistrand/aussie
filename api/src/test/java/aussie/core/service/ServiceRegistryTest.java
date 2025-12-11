@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -21,7 +22,9 @@ import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
 import aussie.core.model.EndpointConfig;
 import aussie.core.model.EndpointVisibility;
 import aussie.core.model.GatewaySecurityConfig;
+import aussie.core.model.OperationPermission;
 import aussie.core.model.RegistrationResult;
+import aussie.core.model.ServicePermissionPolicy;
 import aussie.core.model.ServiceRegistration;
 
 @DisplayName("ServiceRegistry")
@@ -29,6 +32,7 @@ class ServiceRegistryTest {
 
     private static final Duration TIMEOUT = Duration.ofSeconds(5);
     private ServiceRegistry registry;
+    private ServiceAuthorizationService authService;
 
     // Permissive security config for testing
     private static final GatewaySecurityConfig PERMISSIVE_CONFIG = () -> true;
@@ -36,8 +40,10 @@ class ServiceRegistryTest {
     @BeforeEach
     void setUp() {
         var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG);
+        var defaultPolicy = new DefaultPermissionPolicy();
+        authService = new ServiceAuthorizationService(defaultPolicy);
         registry = new ServiceRegistry(
-                new InMemoryServiceRegistrationRepository(), NoOpConfigurationCache.INSTANCE, validator);
+                new InMemoryServiceRegistrationRepository(), NoOpConfigurationCache.INSTANCE, validator, authService);
     }
 
     @Nested
@@ -57,10 +63,10 @@ class ServiceRegistryTest {
         }
 
         @Test
-        @DisplayName("Should replace existing service on re-registration")
+        @DisplayName("Should replace existing service on re-registration with correct version")
         void shouldReplaceExistingService() {
-            var service1 = createService("test-service", "http://localhost:8080");
-            var service2 = createService("test-service", "http://localhost:9090");
+            var service1 = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            var service2 = createServiceWithVersion("test-service", "http://localhost:9090", 2);
 
             registry.register(service1).await().atMost(TIMEOUT);
             registry.register(service2).await().atMost(TIMEOUT);
@@ -112,6 +118,156 @@ class ServiceRegistryTest {
         void shouldReturnEmptyListWhenNoServices() {
             var services = registry.getAllServices().await().atMost(TIMEOUT);
             assertTrue(services.isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("Version Validation")
+    class VersionValidationTests {
+
+        @Test
+        @DisplayName("Should succeed for new service with version 1")
+        void shouldSucceedForNewServiceWithVersion1() {
+            var service = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            var result = registry.register(service).await().atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Success.class, result);
+        }
+
+        @Test
+        @DisplayName("Should fail for new service with version 0")
+        void shouldFailForNewServiceWithVersion0() {
+            var service = createServiceWithVersion("test-service", "http://localhost:8080", 0);
+            var result = registry.register(service).await().atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Failure.class, result);
+            var failure = (RegistrationResult.Failure) result;
+            assertTrue(failure.reason().contains("must have version 1"));
+            assertEquals(409, failure.statusCode());
+        }
+
+        @Test
+        @DisplayName("Should fail for new service with version 2")
+        void shouldFailForNewServiceWithVersion2() {
+            var service = createServiceWithVersion("test-service", "http://localhost:8080", 2);
+            var result = registry.register(service).await().atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Failure.class, result);
+            var failure = (RegistrationResult.Failure) result;
+            assertTrue(failure.reason().contains("must have version 1"));
+            assertEquals(409, failure.statusCode());
+        }
+
+        @Test
+        @DisplayName("Should succeed for update with version current+1")
+        void shouldSucceedForUpdateWithCorrectVersion() {
+            // Register initial service with version 1
+            var service1 = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            registry.register(service1).await().atMost(TIMEOUT);
+
+            // Update with version 2 (current + 1)
+            var service2 = createServiceWithVersion("test-service", "http://localhost:9090", 2);
+            var result = registry.register(service2).await().atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Success.class, result);
+            var retrieved = registry.getService("test-service").await().atMost(TIMEOUT);
+            assertTrue(retrieved.isPresent());
+            assertEquals(URI.create("http://localhost:9090"), retrieved.get().baseUrl());
+            assertEquals(2, retrieved.get().version());
+        }
+
+        @Test
+        @DisplayName("Should fail for update with same version")
+        void shouldFailForUpdateWithSameVersion() {
+            // Register initial service with version 1
+            var service1 = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            registry.register(service1).await().atMost(TIMEOUT);
+
+            // Try to update with version 1 (same as current)
+            var service2 = createServiceWithVersion("test-service", "http://localhost:9090", 1);
+            var result = registry.register(service2).await().atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Failure.class, result);
+            var failure = (RegistrationResult.Failure) result;
+            assertTrue(failure.reason().contains("Version conflict"));
+            assertTrue(failure.reason().contains("expected version 2"));
+            assertEquals(409, failure.statusCode());
+        }
+
+        @Test
+        @DisplayName("Should fail for update with version too high")
+        void shouldFailForUpdateWithVersionTooHigh() {
+            // Register initial service with version 1
+            var service1 = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            registry.register(service1).await().atMost(TIMEOUT);
+
+            // Try to update with version 3 (skipping version 2)
+            var service2 = createServiceWithVersion("test-service", "http://localhost:9090", 3);
+            var result = registry.register(service2).await().atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Failure.class, result);
+            var failure = (RegistrationResult.Failure) result;
+            assertTrue(failure.reason().contains("Version conflict"));
+            assertTrue(failure.reason().contains("expected version 2"));
+            assertEquals(409, failure.statusCode());
+        }
+
+        @Test
+        @DisplayName("Should fail for update with version 0")
+        void shouldFailForUpdateWithVersion0() {
+            // Register initial service with version 1
+            var service1 = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            registry.register(service1).await().atMost(TIMEOUT);
+
+            // Try to update with version 0
+            var service2 = createServiceWithVersion("test-service", "http://localhost:9090", 0);
+            var result = registry.register(service2).await().atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Failure.class, result);
+            var failure = (RegistrationResult.Failure) result;
+            assertTrue(failure.reason().contains("Version conflict"));
+            assertEquals(409, failure.statusCode());
+        }
+
+        @Test
+        @DisplayName("Should fail for update with negative version")
+        void shouldFailForUpdateWithNegativeVersion() {
+            // Register initial service with version 1
+            var service1 = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            registry.register(service1).await().atMost(TIMEOUT);
+
+            // Try to update with version -5
+            var service2 = createServiceWithVersion("test-service", "http://localhost:9090", -5);
+            var result = registry.register(service2).await().atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Failure.class, result);
+            assertEquals(409, ((RegistrationResult.Failure) result).statusCode());
+        }
+
+        @Test
+        @DisplayName("Should allow sequential version updates")
+        void shouldAllowSequentialVersionUpdates() {
+            // Version 1
+            var v1 = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            assertInstanceOf(
+                    RegistrationResult.Success.class,
+                    registry.register(v1).await().atMost(TIMEOUT));
+
+            // Version 2
+            var v2 = createServiceWithVersion("test-service", "http://localhost:8080", 2);
+            assertInstanceOf(
+                    RegistrationResult.Success.class,
+                    registry.register(v2).await().atMost(TIMEOUT));
+
+            // Version 3
+            var v3 = createServiceWithVersion("test-service", "http://localhost:8080", 3);
+            assertInstanceOf(
+                    RegistrationResult.Success.class,
+                    registry.register(v3).await().atMost(TIMEOUT));
+
+            var retrieved = registry.getService("test-service").await().atMost(TIMEOUT);
+            assertTrue(retrieved.isPresent());
+            assertEquals(3, retrieved.get().version());
         }
     }
 
@@ -361,10 +517,247 @@ class ServiceRegistryTest {
         }
     }
 
+    @Nested
+    @DisplayName("Authorization")
+    class AuthorizationTests {
+
+        private static final Set<String> ADMIN_PERMISSIONS = Set.of("*");
+        private static final Set<String> LEAD_PERMISSIONS = Set.of("test-service.lead");
+        private static final Set<String> READONLY_PERMISSIONS = Set.of("test-service.readonly");
+        private static final Set<String> NO_PERMISSIONS = Set.of();
+
+        @Test
+        @DisplayName("Should allow admin to create service")
+        void shouldAllowAdminToCreateService() {
+            var service = createService("test-service", "http://localhost:8080");
+            var result = registry.register(service, ADMIN_PERMISSIONS).await().atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Success.class, result);
+        }
+
+        @Test
+        @DisplayName("Should deny unauthorized user from creating service")
+        void shouldDenyUnauthorizedUserFromCreatingService() {
+            var service = createService("test-service", "http://localhost:8080");
+            var result = registry.register(service, NO_PERMISSIONS).await().atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Failure.class, result);
+            var failure = (RegistrationResult.Failure) result;
+            assertEquals(403, failure.statusCode());
+            assertTrue(failure.reason().contains("Not authorized to create"));
+        }
+
+        @Test
+        @DisplayName("Should allow update when permission matches service policy")
+        void shouldAllowUpdateWhenPermissionMatchesPolicy() {
+            // Create service with permission policy
+            var policy = new ServicePermissionPolicy(
+                    Map.of("service.config.update", new OperationPermission(Set.of("test-service.lead"))));
+            var service = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of())
+                    .permissionPolicy(policy)
+                    .build();
+            registry.register(service, ADMIN_PERMISSIONS).await().atMost(TIMEOUT);
+
+            // Update with lead permissions
+            var updatedService = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://localhost:9090")
+                    .endpoints(List.of())
+                    .permissionPolicy(policy)
+                    .version(2)
+                    .build();
+            var result =
+                    registry.register(updatedService, LEAD_PERMISSIONS).await().atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Success.class, result);
+        }
+
+        @Test
+        @DisplayName("Should deny update when permission does not match service policy")
+        void shouldDenyUpdateWhenPermissionDoesNotMatchPolicy() {
+            // Create service with permission policy
+            var policy = new ServicePermissionPolicy(
+                    Map.of("service.config.update", new OperationPermission(Set.of("test-service.lead"))));
+            var service = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of())
+                    .permissionPolicy(policy)
+                    .build();
+            registry.register(service, ADMIN_PERMISSIONS).await().atMost(TIMEOUT);
+
+            // Try to update with readonly permissions
+            var updatedService = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://localhost:9090")
+                    .endpoints(List.of())
+                    .permissionPolicy(policy)
+                    .version(2)
+                    .build();
+            var result = registry.register(updatedService, READONLY_PERMISSIONS)
+                    .await()
+                    .atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Failure.class, result);
+            var failure = (RegistrationResult.Failure) result;
+            assertEquals(403, failure.statusCode());
+            assertTrue(failure.reason().contains("Not authorized to update"));
+        }
+
+        @Test
+        @DisplayName("Should allow permission policy change with same policy")
+        void shouldAllowSamePermissionPolicy() {
+            // Create service with permission policy
+            var policy = new ServicePermissionPolicy(
+                    Map.of("service.config.update", new OperationPermission(Set.of("test-service.lead"))));
+            var service = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of())
+                    .permissionPolicy(policy)
+                    .build();
+            registry.register(service, ADMIN_PERMISSIONS).await().atMost(TIMEOUT);
+
+            // Update with same policy (should not require permissions.write)
+            var updatedService = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://localhost:9090")
+                    .endpoints(List.of())
+                    .permissionPolicy(policy) // Same policy
+                    .version(2)
+                    .build();
+            var result =
+                    registry.register(updatedService, LEAD_PERMISSIONS).await().atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Success.class, result);
+        }
+
+        @Test
+        @DisplayName("Should require permissions.write when policy changes")
+        void shouldRequirePermissionsWriteWhenPolicyChanges() {
+            // Create service with permission policy
+            var initialPolicy = new ServicePermissionPolicy(
+                    Map.of("service.config.update", new OperationPermission(Set.of("test-service.lead"))));
+            var service = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of())
+                    .permissionPolicy(initialPolicy)
+                    .build();
+            registry.register(service, ADMIN_PERMISSIONS).await().atMost(TIMEOUT);
+
+            // Try to update with different policy (should require permissions.write)
+            var newPolicy = new ServicePermissionPolicy(Map.of(
+                    "service.config.update",
+                    new OperationPermission(Set.of("test-service.lead", "test-service.admin"))));
+            var updatedService = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://localhost:9090")
+                    .endpoints(List.of())
+                    .permissionPolicy(newPolicy) // Different policy
+                    .version(2)
+                    .build();
+            var result =
+                    registry.register(updatedService, LEAD_PERMISSIONS).await().atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Failure.class, result);
+            var failure = (RegistrationResult.Failure) result;
+            assertEquals(403, failure.statusCode());
+            assertTrue(failure.reason().contains("Not authorized to update permissions"));
+        }
+
+        @Test
+        @DisplayName("Should allow admin to change permission policy")
+        void shouldAllowAdminToChangePermissionPolicy() {
+            // Create service with permission policy
+            var initialPolicy = new ServicePermissionPolicy(
+                    Map.of("service.config.update", new OperationPermission(Set.of("test-service.lead"))));
+            var service = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of())
+                    .permissionPolicy(initialPolicy)
+                    .build();
+            registry.register(service, ADMIN_PERMISSIONS).await().atMost(TIMEOUT);
+
+            // Update with different policy using admin permissions
+            var newPolicy = new ServicePermissionPolicy(Map.of(
+                    "service.config.update",
+                    new OperationPermission(Set.of("test-service.lead", "test-service.admin"))));
+            var updatedService = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://localhost:9090")
+                    .endpoints(List.of())
+                    .permissionPolicy(newPolicy)
+                    .version(2)
+                    .build();
+            var result =
+                    registry.register(updatedService, ADMIN_PERMISSIONS).await().atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Success.class, result);
+        }
+
+        @Test
+        @DisplayName("Should deny unauthorized delete")
+        void shouldDenyUnauthorizedDelete() {
+            // Create service
+            var service = createService("test-service", "http://localhost:8080");
+            registry.register(service, ADMIN_PERMISSIONS).await().atMost(TIMEOUT);
+
+            // Try to delete with readonly permissions
+            var result = registry.unregisterAuthorized("test-service", READONLY_PERMISSIONS)
+                    .await()
+                    .atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Failure.class, result);
+            var failure = (RegistrationResult.Failure) result;
+            assertEquals(403, failure.statusCode());
+        }
+
+        @Test
+        @DisplayName("Should allow admin to delete")
+        void shouldAllowAdminToDelete() {
+            // Create service
+            var service = createService("test-service", "http://localhost:8080");
+            registry.register(service, ADMIN_PERMISSIONS).await().atMost(TIMEOUT);
+
+            // Delete with admin permissions
+            var result = registry.unregisterAuthorized("test-service", ADMIN_PERMISSIONS)
+                    .await()
+                    .atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Success.class, result);
+        }
+
+        @Test
+        @DisplayName("Should deny unauthorized read")
+        void shouldDenyUnauthorizedRead() {
+            // Create service with permission policy requiring readonly permission
+            var policy = new ServicePermissionPolicy(
+                    Map.of("service.config.read", new OperationPermission(Set.of("test-service.readonly"))));
+            var service = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of())
+                    .permissionPolicy(policy)
+                    .build();
+            registry.register(service, ADMIN_PERMISSIONS).await().atMost(TIMEOUT);
+
+            // Try to read with different permissions
+            var result = registry.getServiceAuthorized("test-service", Set.of("other-service.readonly"))
+                    .await()
+                    .atMost(TIMEOUT);
+
+            assertInstanceOf(RegistrationResult.Failure.class, result);
+            var failure = (RegistrationResult.Failure) result;
+            assertEquals(403, failure.statusCode());
+        }
+    }
+
     private ServiceRegistration createService(String serviceId, String baseUrl) {
         return ServiceRegistration.builder(serviceId)
                 .baseUrl(baseUrl)
                 .endpoints(List.of())
+                .build();
+    }
+
+    private ServiceRegistration createServiceWithVersion(String serviceId, String baseUrl, long version) {
+        return ServiceRegistration.builder(serviceId)
+                .baseUrl(baseUrl)
+                .endpoints(List.of())
+                .version(version)
                 .build();
     }
 }

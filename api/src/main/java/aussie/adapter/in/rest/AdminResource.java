@@ -1,6 +1,7 @@
 package aussie.adapter.in.rest;
 
 import java.util.List;
+import java.util.Set;
 
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -15,26 +16,23 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import io.quarkus.security.identity.CurrentIdentityAssociation;
 import io.smallrye.mutiny.Uni;
 
-import aussie.adapter.in.auth.PermissionRoleMapper;
 import aussie.adapter.in.dto.ServiceRegistrationRequest;
 import aussie.adapter.in.dto.ServiceRegistrationResponse;
 import aussie.adapter.in.problem.GatewayProblem;
+import aussie.core.model.Permission;
 import aussie.core.model.RegistrationResult;
 import aussie.core.service.ServiceRegistry;
 
 /**
  * REST resource for service administration.
  *
- * <p>This adapter handles HTTP-specific concerns (request/response mapping, status codes)
- * and delegates all business logic and validation to the service layer.
- *
- * <p>Authorization is enforced via {@code @RolesAllowed} annotations:
- * <ul>
- *   <li>GET endpoints require {@code admin-read} or {@code admin} role</li>
- *   <li>POST/DELETE endpoints require {@code admin-write} or {@code admin} role</li>
- * </ul>
+ * <p>
+ * This adapter handles HTTP-specific concerns (request/response mapping, status
+ * codes) and delegates all business logic, validation, and authorization to
+ * {@link ServiceRegistry}.
  */
 @Path("/admin/services")
 @ApplicationScoped
@@ -43,14 +41,16 @@ import aussie.core.service.ServiceRegistry;
 public class AdminResource {
 
     private final ServiceRegistry serviceRegistry;
+    private final CurrentIdentityAssociation identityAssociation;
 
     @Inject
-    public AdminResource(ServiceRegistry serviceRegistry) {
+    public AdminResource(ServiceRegistry serviceRegistry, CurrentIdentityAssociation identityAssociation) {
         this.serviceRegistry = serviceRegistry;
+        this.identityAssociation = identityAssociation;
     }
 
     @POST
-    @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_WRITE, PermissionRoleMapper.ROLE_ADMIN})
+    @RolesAllowed({Permission.SERVICE_CONFIG_CREATE, Permission.SERVICE_CONFIG_UPDATE, Permission.ADMIN})
     public Uni<Response> registerService(ServiceRegistrationRequest request) {
         // Minimal adapter-level validation to prevent NPE during DTO conversion
         if (request == null || request.serviceId() == null || request.baseUrl() == null) {
@@ -60,12 +60,16 @@ public class AdminResource {
         try {
             var service = request.toModel();
 
-            // Delegate to service for business validation and persistence
-            return serviceRegistry.register(service).map(result -> switch (result) {
-                case RegistrationResult.Success s -> Response.status(Response.Status.CREATED)
-                        .entity(ServiceRegistrationResponse.fromModel(s.registration()))
-                        .build();
-                case RegistrationResult.Failure f -> throw GatewayProblem.badRequest(f.reason());
+            return identityAssociation.getDeferredIdentity().flatMap(identity -> {
+                var permissions = extractPermissions(identity);
+
+                // Delegate to service for validation, authorization, and persistence
+                return serviceRegistry.register(service, permissions).map(result -> switch (result) {
+                    case RegistrationResult.Success s -> Response.status(Response.Status.CREATED)
+                            .entity(ServiceRegistrationResponse.fromModel(s.registration()))
+                            .build();
+                    case RegistrationResult.Failure f -> throw toGatewayProblem(f);
+                });
             });
         } catch (IllegalArgumentException e) {
             throw GatewayProblem.validationError(e.getMessage());
@@ -74,21 +78,22 @@ public class AdminResource {
 
     @DELETE
     @Path("/{serviceId}")
-    @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_WRITE, PermissionRoleMapper.ROLE_ADMIN})
+    @RolesAllowed({Permission.SERVICE_CONFIG_DELETE, Permission.ADMIN})
     public Uni<Response> unregisterService(@PathParam("serviceId") String serviceId) {
-        return serviceRegistry.getService(serviceId).flatMap(existing -> {
-            if (existing.isEmpty()) {
-                throw GatewayProblem.resourceNotFound("Service", serviceId);
-            }
+        return identityAssociation.getDeferredIdentity().flatMap(identity -> {
+            var permissions = extractPermissions(identity);
 
-            return serviceRegistry.unregister(serviceId).map(deleted -> Response.noContent()
-                    .build());
+            return serviceRegistry.unregisterAuthorized(serviceId, permissions).map(result -> switch (result) {
+                case RegistrationResult.Success s -> Response.noContent().build();
+                case RegistrationResult.Failure f -> throw toGatewayProblem(f);
+            });
         });
     }
 
     @GET
-    @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_READ, PermissionRoleMapper.ROLE_ADMIN})
+    @RolesAllowed({Permission.SERVICE_CONFIG_READ, Permission.ADMIN})
     public Uni<List<ServiceRegistrationResponse>> listServices() {
+        // List all services - service-level filtering could be added here if needed
         return serviceRegistry.getAllServices().map(services -> services.stream()
                 .map(ServiceRegistrationResponse::fromModel)
                 .toList());
@@ -96,11 +101,46 @@ public class AdminResource {
 
     @GET
     @Path("/{serviceId}")
-    @RolesAllowed({PermissionRoleMapper.ROLE_ADMIN_READ, PermissionRoleMapper.ROLE_ADMIN})
+    @RolesAllowed({Permission.SERVICE_CONFIG_READ, Permission.ADMIN})
     public Uni<Response> getService(@PathParam("serviceId") String serviceId) {
-        return serviceRegistry.getService(serviceId).map(serviceOpt -> serviceOpt
-                .map(service -> Response.ok(ServiceRegistrationResponse.fromModel(service))
-                        .build())
-                .orElseThrow(() -> GatewayProblem.resourceNotFound("Service", serviceId)));
+        return identityAssociation.getDeferredIdentity().flatMap(identity -> {
+            var permissions = extractPermissions(identity);
+
+            return serviceRegistry.getServiceAuthorized(serviceId, permissions).map(result -> switch (result) {
+                case RegistrationResult.Success s -> Response.ok(
+                                ServiceRegistrationResponse.fromModel(s.registration()))
+                        .build();
+                case RegistrationResult.Failure f -> throw toGatewayProblem(f);
+            });
+        });
+    }
+
+    /**
+     * Extracts effective permissions from the identity for service-level authorization.
+     */
+    @SuppressWarnings("unchecked")
+    private Set<String> extractPermissions(io.quarkus.security.identity.SecurityIdentity identity) {
+        if (identity == null || identity.isAnonymous()) {
+            return Set.of();
+        }
+
+        var permissions = identity.getAttribute("permissions");
+        if (permissions instanceof Set) {
+            return (Set<String>) permissions;
+        }
+
+        return Set.of();
+    }
+
+    /**
+     * Converts a RegistrationResult.Failure to the appropriate GatewayProblem exception.
+     */
+    private GatewayProblem toGatewayProblem(RegistrationResult.Failure failure) {
+        return switch (failure.statusCode()) {
+            case 403 -> GatewayProblem.forbidden(failure.reason());
+            case 404 -> GatewayProblem.resourceNotFound("Service", failure.reason());
+            case 409 -> GatewayProblem.conflict(failure.reason());
+            default -> GatewayProblem.badRequest(failure.reason());
+        };
     }
 }

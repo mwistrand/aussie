@@ -20,7 +20,7 @@ import aussie.adapter.out.storage.memory.InMemoryApiKeyRepository;
 import aussie.config.ApiKeyConfig;
 import aussie.config.BootstrapConfig;
 import aussie.core.model.ApiKey;
-import aussie.core.model.Permissions;
+import aussie.core.model.Permission;
 import aussie.core.port.in.BootstrapManagement.BootstrapException;
 
 @DisplayName("BootstrapService")
@@ -75,14 +75,14 @@ class BootstrapServiceTest {
 
     private void createAdminKey() {
         apiKeyService
-                .create("existing-admin", "Existing admin key", Set.of(Permissions.ALL), null, "test")
+                .create("existing-admin", "Existing admin key", Set.of(Permission.ALL), null, "test")
                 .await()
                 .indefinitely();
     }
 
     private void createReadOnlyKey() {
         apiKeyService
-                .create("read-only", "Read-only key", Set.of(Permissions.ADMIN_READ), null, "test")
+                .create("read-only", "Read-only key", Set.of(Permission.SERVICE_CONFIG_READ), null, "test")
                 .await()
                 .indefinitely();
     }
@@ -147,7 +147,7 @@ class BootstrapServiceTest {
         @DisplayName("should return true for key with wildcard permission")
         void shouldReturnTrueForWildcardPermission() {
             apiKeyService
-                    .create("admin", null, Set.of(Permissions.ALL), null, "test")
+                    .create("admin", null, Set.of(Permission.ALL), null, "test")
                     .await()
                     .indefinitely();
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
@@ -157,10 +157,18 @@ class BootstrapServiceTest {
         }
 
         @Test
-        @DisplayName("should return true for key with admin:write permission")
-        void shouldReturnTrueForAdminWritePermission() {
+        @DisplayName("should return true for key with service.config:write permission")
+        void shouldReturnTrueForServiceConfigWritePermission() {
             apiKeyService
-                    .create("admin", null, Set.of(Permissions.ADMIN_WRITE), null, "test")
+                    .create(
+                            "admin",
+                            null,
+                            Set.of(
+                                    Permission.SERVICE_CONFIG_CREATE,
+                                    Permission.SERVICE_CONFIG_UPDATE,
+                                    Permission.SERVICE_CONFIG_DELETE),
+                            null,
+                            "test")
                     .await()
                     .indefinitely();
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
@@ -183,7 +191,7 @@ class BootstrapServiceTest {
         @DisplayName("should ignore revoked admin keys")
         void shouldIgnoreRevokedAdminKeys() {
             var result = apiKeyService
-                    .create("admin", null, Set.of(Permissions.ALL), null, "test")
+                    .create("admin", null, Set.of(Permission.ALL), null, "test")
                     .await()
                     .indefinitely();
             apiKeyService.revoke(result.keyId()).await().indefinitely();
@@ -200,7 +208,7 @@ class BootstrapServiceTest {
             // Create an already-expired key by manipulating the repository directly
             var expiredKey = ApiKey.builder("expired-id", "hash")
                     .name("expired-admin")
-                    .permissions(Set.of(Permissions.ALL))
+                    .permissions(Set.of(Permission.ALL))
                     .createdAt(Instant.now().minusSeconds(3600))
                     .expiresAt(Instant.now().minusSeconds(1800)) // Expired 30 minutes ago
                     .revoked(false)
@@ -242,7 +250,7 @@ class BootstrapServiceTest {
             var validated = apiKeyService.validate(VALID_BOOTSTRAP_KEY).await().indefinitely();
             assertTrue(validated.isPresent());
             assertEquals("bootstrap-admin", validated.get().name());
-            assertTrue(validated.get().permissions().contains(Permissions.ALL));
+            assertTrue(validated.get().permissions().contains(Permission.ALL));
         }
 
         @Test

@@ -13,7 +13,7 @@ import java.util.Set;
  * @param keyHash     SHA-256 hash of the actual key (never store plaintext)
  * @param name        display name (e.g., "user-service-prod")
  * @param description optional description of this key's purpose
- * @param permissions set of permission strings granted to this key
+ * @param permissions set of permission strings granted to this key (e.g., "service.config:read", "demo-service.admin")
  * @param createdBy   identifier of the principal who created this key (e.g., key ID or "bootstrap")
  * @param createdAt   when the key was created
  * @param expiresAt   when the key expires (null = never)

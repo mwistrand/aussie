@@ -15,14 +15,15 @@ import io.restassured.http.ContentType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.Permissions;
+import aussie.core.model.Permission;
 import aussie.core.port.in.ApiKeyManagement;
 import aussie.core.port.out.ApiKeyRepository;
 
 /**
  * Integration tests for bootstrap admin key functionality.
  *
- * <p>These tests verify that the bootstrap mechanism correctly creates an
+ * <p>
+ * These tests verify that the bootstrap mechanism correctly creates an
  * admin API key on startup and that the key can be used for authentication.
  */
 @QuarkusTest
@@ -84,7 +85,7 @@ public class BootstrapIntegrationTest {
 
         assertTrue(bootstrapKey.isPresent(), "Bootstrap key should exist");
         assertTrue(
-                bootstrapKey.get().permissions().contains(Permissions.ALL),
+                bootstrapKey.get().permissions().contains(Permission.ALL),
                 "Bootstrap key should have wildcard permission");
         assertNotNull(bootstrapKey.get().expiresAt(), "Bootstrap key should have expiration");
     }
@@ -96,7 +97,7 @@ public class BootstrapIntegrationTest {
 
         assertTrue(validated.isPresent(), "Bootstrap key should validate successfully");
         assertTrue(
-                validated.get().permissions().contains(Permissions.ALL),
+                validated.get().permissions().contains(Permission.ALL),
                 "Validated key should have wildcard permission");
     }
 
@@ -117,12 +118,12 @@ public class BootstrapIntegrationTest {
                 .contentType(ContentType.JSON)
                 .body(
                         """
-                        {
-                            "serviceId": "bootstrap-test-service",
-                            "displayName": "Bootstrap Test Service",
-                            "baseUrl": "http://localhost:9999"
-                        }
-                        """)
+                                {
+                                    "serviceId": "bootstrap-test-service",
+                                    "displayName": "Bootstrap Test Service",
+                                    "baseUrl": "http://localhost:9999"
+                                }
+                                """)
                 .when()
                 .post("/admin/services")
                 .then()
@@ -152,11 +153,11 @@ public class BootstrapIntegrationTest {
                 .contentType(ContentType.JSON)
                 .body(
                         """
-                        {
-                            "name": "new-admin-key",
-                            "permissions": ["admin:read", "admin:write"]
-                        }
-                        """)
+                                {
+                                    "name": "new-admin-key",
+                                    "permissions": ["admin:read", "admin:write"]
+                                }
+                                """)
                 .when()
                 .post("/admin/api-keys")
                 .then()

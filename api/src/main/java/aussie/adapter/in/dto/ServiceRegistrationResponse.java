@@ -14,7 +14,9 @@ public record ServiceRegistrationResponse(
         List<VisibilityRuleDto> visibilityRules,
         List<EndpointConfigDto> endpoints,
         ServiceAccessConfigDto accessConfig,
-        CorsConfigDto cors) {
+        CorsConfigDto cors,
+        ServicePermissionPolicyDto permissionPolicy,
+        Long version) {
     public static ServiceRegistrationResponse fromModel(ServiceRegistration model) {
         var visibilityRuleDtos = model.visibilityRules().isEmpty()
                 ? null
@@ -31,6 +33,10 @@ public record ServiceRegistrationResponse(
 
         var corsConfigDto = model.corsConfig().map(CorsConfigDto::fromModel).orElse(null);
 
+        var permissionPolicyDto = model.permissionPolicy()
+                .map(ServicePermissionPolicyDto::fromModel)
+                .orElse(null);
+
         return new ServiceRegistrationResponse(
                 model.serviceId(),
                 model.displayName(),
@@ -41,6 +47,8 @@ public record ServiceRegistrationResponse(
                 visibilityRuleDtos,
                 endpointDtos,
                 accessConfigDto,
-                corsConfigDto);
+                corsConfigDto,
+                permissionPolicyDto,
+                model.version());
     }
 }

@@ -12,13 +12,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.Permissions;
+import aussie.core.model.Permission;
 import aussie.core.port.in.ApiKeyManagement;
 
 /**
  * Integration tests for API key-based authentication.
  *
- * <p>Note: These tests run with dangerous-noop=true (default test config),
+ * <p>
+ * Note: These tests run with dangerous-noop=true (default test config),
  * so they focus on testing API key functionality. The full auth flow
  * (rejecting unauthenticated requests) is tested in unit tests.
  *
@@ -38,14 +39,15 @@ public class AuthenticationIntegrationTest {
     @BeforeEach
     void setUp() {
         // Create API keys for testing
+        // Use wildcard permission for full access (includes service-level authorization)
         var fullAccessResult = apiKeyService
-                .create("test-full", null, Set.of(Permissions.ADMIN_READ, Permissions.ADMIN_WRITE), null, "test")
+                .create("test-full", null, Set.of(Permission.ALL), null, "test")
                 .await()
                 .indefinitely();
         validApiKey = fullAccessResult.plaintextKey();
 
         var readOnlyResult = apiKeyService
-                .create("test-readonly", null, Set.of(Permissions.ADMIN_READ), null, "test")
+                .create("test-readonly", null, Set.of(Permission.SERVICE_CONFIG_READ), null, "test")
                 .await()
                 .indefinitely();
         readOnlyApiKey = readOnlyResult.plaintextKey();
@@ -68,12 +70,12 @@ public class AuthenticationIntegrationTest {
                 .contentType(ContentType.JSON)
                 .body(
                         """
-                    {
-                        "serviceId": "auth-test-service",
-                        "displayName": "Auth Test Service",
-                        "baseUrl": "http://localhost:9999"
-                    }
-                    """)
+                                {
+                                    "serviceId": "auth-test-service",
+                                    "displayName": "Auth Test Service",
+                                    "baseUrl": "http://localhost:9999"
+                                }
+                                """)
                 .when()
                 .post("/admin/services")
                 .then()

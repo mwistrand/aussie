@@ -106,6 +106,15 @@ public class GatewayProblem extends HttpProblem {
                 .withDetail(detail));
     }
 
+    // ========== Conflict Errors ==========
+
+    public static GatewayProblem conflict(String detail) {
+        return new GatewayProblem(HttpProblem.builder()
+                .withTitle("Conflict")
+                .withStatus(Status.CONFLICT)
+                .withDetail(detail));
+    }
+
     // ========== Server Errors ==========
 
     public static GatewayProblem internalError(String detail) {

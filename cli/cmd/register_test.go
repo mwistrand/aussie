@@ -11,6 +11,9 @@ import (
 
 // validateServiceRegistration validates required fields in ServiceRegistration
 func validateServiceRegistration(reg *ServiceRegistration) error {
+	if reg.Version < 1 {
+		return &missingFieldError{field: "version"}
+	}
 	if reg.ServiceID == "" {
 		return &missingFieldError{field: "serviceId"}
 	}
@@ -39,6 +42,7 @@ func (e *missingFieldError) Error() string {
 
 func TestValidateServiceConfig_ValidConfig(t *testing.T) {
 	validJSON := `{
+		"version": 1,
 		"serviceId": "test-service",
 		"displayName": "Test Service",
 		"baseUrl": "http://localhost:9090",
@@ -53,6 +57,7 @@ func TestValidateServiceConfig_ValidConfig(t *testing.T) {
 
 func TestValidateServiceConfig_MinimalConfig(t *testing.T) {
 	minimalJSON := `{
+		"version": 1,
 		"serviceId": "test-service",
 		"baseUrl": "http://localhost:9090"
 	}`
@@ -63,8 +68,27 @@ func TestValidateServiceConfig_MinimalConfig(t *testing.T) {
 	}
 }
 
+func TestValidateServiceConfig_MissingVersion(t *testing.T) {
+	invalidJSON := `{
+		"serviceId": "test-service",
+		"baseUrl": "http://localhost:9090"
+	}`
+
+	err := validateServiceConfig([]byte(invalidJSON))
+	if err == nil {
+		t.Error("validateServiceConfig() should return error for missing version")
+	}
+
+	if mfe, ok := err.(*missingFieldError); ok {
+		if mfe.field != "version" {
+			t.Errorf("Expected missing field 'version', got '%s'", mfe.field)
+		}
+	}
+}
+
 func TestValidateServiceConfig_MissingServiceId(t *testing.T) {
 	invalidJSON := `{
+		"version": 1,
 		"baseUrl": "http://localhost:9090"
 	}`
 
@@ -82,6 +106,7 @@ func TestValidateServiceConfig_MissingServiceId(t *testing.T) {
 
 func TestValidateServiceConfig_MissingBaseUrl(t *testing.T) {
 	invalidJSON := `{
+		"version": 1,
 		"serviceId": "test-service"
 	}`
 
@@ -117,6 +142,7 @@ func TestValidateServiceConfig_EmptyJSON(t *testing.T) {
 
 func TestValidateServiceConfig_FullConfig(t *testing.T) {
 	fullJSON := `{
+		"version": 1,
 		"serviceId": "user-service",
 		"displayName": "User Service",
 		"baseUrl": "http://localhost:9090",
@@ -239,6 +265,7 @@ func TestRegisterCmd_Initialized(t *testing.T) {
 func TestRegisterCmd_HasAllFlags(t *testing.T) {
 	expectedFlags := []string{
 		"file",
+		"version",
 		"service-id",
 		"display-name",
 		"base-url",
@@ -254,6 +281,7 @@ func TestRegisterCmd_HasAllFlags(t *testing.T) {
 		"cors-exposed-headers",
 		"cors-credentials",
 		"cors-max-age",
+		"permission-policy-file",
 	}
 
 	for _, flagName := range expectedFlags {
@@ -275,6 +303,7 @@ func TestValidateServiceConfig_ArrayInsteadOfObject(t *testing.T) {
 
 func TestValidateServiceConfig_NullServiceId(t *testing.T) {
 	jsonWithNull := `{
+		"version": 1,
 		"serviceId": null,
 		"baseUrl": "http://localhost:8080"
 	}`
@@ -288,6 +317,7 @@ func TestValidateServiceConfig_NullServiceId(t *testing.T) {
 
 func TestValidateServiceConfig_EmptyStringValues(t *testing.T) {
 	jsonWithEmpty := `{
+		"version": 1,
 		"serviceId": "",
 		"baseUrl": ""
 	}`
@@ -304,6 +334,7 @@ func TestServiceRegistration_JSONSerialization(t *testing.T) {
 	maxAge := int64(3600)
 
 	reg := ServiceRegistration{
+		Version:             1,
 		ServiceID:           "test-service",
 		DisplayName:         "Test Service",
 		BaseURL:             "http://localhost:9090",
@@ -351,6 +382,7 @@ func TestServiceRegistration_JSONSerialization(t *testing.T) {
 
 func TestServiceRegistration_OmitEmptyFields(t *testing.T) {
 	reg := ServiceRegistration{
+		Version:   1,
 		ServiceID: "test-service",
 		BaseURL:   "http://localhost:9090",
 	}
@@ -375,6 +407,7 @@ func TestServiceRegistration_OmitEmptyFields(t *testing.T) {
 		"endpoints",
 		"accessConfig",
 		"cors",
+		"permissionPolicy",
 	}
 
 	for _, field := range omittedFields {
@@ -397,6 +430,7 @@ func TestBuildServiceRegistration_FromFileOnly(t *testing.T) {
 	filePath := filepath.Join(tmpDir, "service.json")
 
 	content := `{
+		"version": 1,
 		"serviceId": "file-service",
 		"baseUrl": "http://file-host:8080",
 		"displayName": "From File"
@@ -482,6 +516,7 @@ func TestBuildServiceRegistration_FlagsOverrideFile(t *testing.T) {
 	filePath := filepath.Join(tmpDir, "service.json")
 
 	content := `{
+		"version": 1,
 		"serviceId": "file-service",
 		"baseUrl": "http://file-host:8080",
 		"displayName": "From File",
@@ -732,5 +767,274 @@ func TestEndpointConfig_JSONRoundTrip(t *testing.T) {
 	}
 	if unmarshaled.AuthRequired == nil || *unmarshaled.AuthRequired != authRequired {
 		t.Error("AuthRequired not preserved")
+	}
+}
+
+func TestServicePermissionPolicy_JSONRoundTrip(t *testing.T) {
+	policy := ServicePermissionPolicy{
+		Permissions: map[string]OperationPermission{
+			"service.config.read": {
+				AnyOfPermissions: []string{"admin", "service.reader"},
+			},
+			"service.config.update": {
+				AnyOfPermissions: []string{"admin"},
+			},
+		},
+	}
+
+	data, err := json.Marshal(policy)
+	if err != nil {
+		t.Fatalf("Marshal error: %v", err)
+	}
+
+	var unmarshaled ServicePermissionPolicy
+	if err := json.Unmarshal(data, &unmarshaled); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+
+	if len(unmarshaled.Permissions) != 2 {
+		t.Errorf("Permissions length = %d, want 2", len(unmarshaled.Permissions))
+	}
+
+	readPerm, ok := unmarshaled.Permissions["service.config.read"]
+	if !ok {
+		t.Error("Missing 'service.config.read' permission")
+	} else if len(readPerm.AnyOfPermissions) != 2 {
+		t.Errorf("AnyOfPermissions length = %d, want 2", len(readPerm.AnyOfPermissions))
+	}
+
+	updatePerm, ok := unmarshaled.Permissions["service.config.update"]
+	if !ok {
+		t.Error("Missing 'service.config.update' permission")
+	} else if len(updatePerm.AnyOfPermissions) != 1 {
+		t.Errorf("AnyOfPermissions length = %d, want 1", len(updatePerm.AnyOfPermissions))
+	}
+}
+
+func TestServiceRegistration_WithPermissionPolicy(t *testing.T) {
+	reg := ServiceRegistration{
+		ServiceID: "test-service",
+		BaseURL:   "http://localhost:9090",
+		PermissionPolicy: &ServicePermissionPolicy{
+			Permissions: map[string]OperationPermission{
+				"service.config.read": {
+					AnyOfPermissions: []string{"admin", "test-service.reader"},
+				},
+			},
+		},
+	}
+
+	data, err := json.Marshal(reg)
+	if err != nil {
+		t.Fatalf("Failed to marshal ServiceRegistration: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("Failed to unmarshal to map: %v", err)
+	}
+
+	if _, exists := result["permissionPolicy"]; !exists {
+		t.Error("permissionPolicy should be present when set")
+	}
+
+	var unmarshaled ServiceRegistration
+	if err := json.Unmarshal(data, &unmarshaled); err != nil {
+		t.Fatalf("Failed to unmarshal ServiceRegistration: %v", err)
+	}
+
+	if unmarshaled.PermissionPolicy == nil {
+		t.Fatal("PermissionPolicy should not be nil")
+	}
+	if len(unmarshaled.PermissionPolicy.Permissions) != 1 {
+		t.Errorf("Permissions length = %d, want 1", len(unmarshaled.PermissionPolicy.Permissions))
+	}
+}
+
+func TestBuildServiceRegistration_WithPermissionPolicyFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	policyFilePath := filepath.Join(tmpDir, "policy.json")
+
+	policyContent := `{
+		"permissions": {
+			"service.config.read": {
+				"anyOfPermissions": ["admin", "service.reader"]
+			},
+			"service.config.update": {
+				"anyOfPermissions": ["admin"]
+			}
+		}
+	}`
+	if err := os.WriteFile(policyFilePath, []byte(policyContent), 0644); err != nil {
+		t.Fatalf("Failed to write policy file: %v", err)
+	}
+
+	// Save and restore global state
+	oldRegisterFile := registerFile
+	oldPermissionPolicyFile := permissionPolicyFile
+	defer func() {
+		registerFile = oldRegisterFile
+		permissionPolicyFile = oldPermissionPolicyFile
+	}()
+
+	registerFile = ""
+	permissionPolicyFile = policyFilePath
+
+	cmd := &cobra.Command{}
+	cmd.Flags().StringVarP(&registerFile, "file", "f", "", "")
+	cmd.Flags().StringVar(&serviceID, "service-id", "", "")
+	cmd.Flags().StringVar(&baseURL, "base-url", "", "")
+	cmd.Flags().StringVar(&permissionPolicyFile, "permission-policy-file", policyFilePath, "")
+
+	cmd.Flags().Set("permission-policy-file", policyFilePath)
+
+	reg, err := buildServiceRegistration(cmd)
+	if err != nil {
+		t.Fatalf("buildServiceRegistration() error: %v", err)
+	}
+
+	if reg.PermissionPolicy == nil {
+		t.Fatal("PermissionPolicy should not be nil")
+	}
+	if len(reg.PermissionPolicy.Permissions) != 2 {
+		t.Errorf("Permissions length = %d, want 2", len(reg.PermissionPolicy.Permissions))
+	}
+
+	readPerm, ok := reg.PermissionPolicy.Permissions["service.config.read"]
+	if !ok {
+		t.Error("Missing 'service.config.read' permission")
+	} else if len(readPerm.AnyOfPermissions) != 2 {
+		t.Errorf("AnyOfPermissions length = %d, want 2", len(readPerm.AnyOfPermissions))
+	}
+}
+
+func TestBuildServiceRegistration_PermissionPolicyFromMainFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "service.json")
+
+	content := `{
+		"serviceId": "file-service",
+		"baseUrl": "http://file-host:8080",
+		"permissionPolicy": {
+			"permissions": {
+				"service.config.read": {
+					"anyOfPermissions": ["admin"]
+				}
+			}
+		}
+	}`
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
+
+	// Save and restore global state
+	oldRegisterFile := registerFile
+	oldPermissionPolicyFile := permissionPolicyFile
+	defer func() {
+		registerFile = oldRegisterFile
+		permissionPolicyFile = oldPermissionPolicyFile
+	}()
+
+	registerFile = filePath
+	permissionPolicyFile = ""
+
+	cmd := &cobra.Command{}
+	cmd.Flags().StringVarP(&registerFile, "file", "f", filePath, "")
+	cmd.Flags().StringVar(&serviceID, "service-id", "", "")
+	cmd.Flags().StringVar(&baseURL, "base-url", "", "")
+	cmd.Flags().StringVar(&permissionPolicyFile, "permission-policy-file", "", "")
+
+	reg, err := buildServiceRegistration(cmd)
+	if err != nil {
+		t.Fatalf("buildServiceRegistration() error: %v", err)
+	}
+
+	if reg.PermissionPolicy == nil {
+		t.Fatal("PermissionPolicy should not be nil when provided in main file")
+	}
+	if len(reg.PermissionPolicy.Permissions) != 1 {
+		t.Errorf("Permissions length = %d, want 1", len(reg.PermissionPolicy.Permissions))
+	}
+}
+
+func TestBuildServiceRegistration_PermissionPolicyFileOverridesMainFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Main service file with one permission
+	mainFilePath := filepath.Join(tmpDir, "service.json")
+	mainContent := `{
+		"serviceId": "file-service",
+		"baseUrl": "http://file-host:8080",
+		"permissionPolicy": {
+			"permissions": {
+				"service.config.read": {
+					"anyOfPermissions": ["admin"]
+				}
+			}
+		}
+	}`
+	if err := os.WriteFile(mainFilePath, []byte(mainContent), 0644); err != nil {
+		t.Fatalf("Failed to write main file: %v", err)
+	}
+
+	// Separate policy file with different permissions
+	policyFilePath := filepath.Join(tmpDir, "policy.json")
+	policyContent := `{
+		"permissions": {
+			"service.config.update": {
+				"anyOfPermissions": ["super-admin"]
+			}
+		}
+	}`
+	if err := os.WriteFile(policyFilePath, []byte(policyContent), 0644); err != nil {
+		t.Fatalf("Failed to write policy file: %v", err)
+	}
+
+	// Save and restore global state
+	oldRegisterFile := registerFile
+	oldPermissionPolicyFile := permissionPolicyFile
+	defer func() {
+		registerFile = oldRegisterFile
+		permissionPolicyFile = oldPermissionPolicyFile
+	}()
+
+	registerFile = mainFilePath
+	permissionPolicyFile = policyFilePath
+
+	cmd := &cobra.Command{}
+	cmd.Flags().StringVarP(&registerFile, "file", "f", mainFilePath, "")
+	cmd.Flags().StringVar(&serviceID, "service-id", "", "")
+	cmd.Flags().StringVar(&baseURL, "base-url", "", "")
+	cmd.Flags().StringVar(&permissionPolicyFile, "permission-policy-file", policyFilePath, "")
+
+	cmd.Flags().Set("permission-policy-file", policyFilePath)
+
+	reg, err := buildServiceRegistration(cmd)
+	if err != nil {
+		t.Fatalf("buildServiceRegistration() error: %v", err)
+	}
+
+	if reg.PermissionPolicy == nil {
+		t.Fatal("PermissionPolicy should not be nil")
+	}
+
+	// Policy file should override the main file's permission policy
+	if len(reg.PermissionPolicy.Permissions) != 1 {
+		t.Errorf("Permissions length = %d, want 1", len(reg.PermissionPolicy.Permissions))
+	}
+
+	// Should have the permission from the policy file, not the main file
+	if _, ok := reg.PermissionPolicy.Permissions["service.config.update"]; !ok {
+		t.Error("Should have 'service.config.update' from policy file")
+	}
+	if _, ok := reg.PermissionPolicy.Permissions["service.config.read"]; ok {
+		t.Error("Should not have 'service.config.read' from main file (policy file overrides)")
+	}
+}
+
+func TestRegisterCmd_HasPermissionPolicyFlag(t *testing.T) {
+	flag := registerCmd.Flags().Lookup("permission-policy-file")
+	if flag == nil {
+		t.Error("registerCmd should have 'permission-policy-file' flag")
 	}
 }

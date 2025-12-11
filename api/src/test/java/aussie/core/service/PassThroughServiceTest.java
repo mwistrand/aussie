@@ -48,8 +48,10 @@ class PassThroughServiceTest {
     @BeforeEach
     void setUp() {
         var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG);
+        var defaultPolicy = new DefaultPermissionPolicy();
+        var authService = new ServiceAuthorizationService(defaultPolicy);
         serviceRegistry = new ServiceRegistry(
-                new InMemoryServiceRegistrationRepository(), NoOpConfigurationCache.INSTANCE, validator);
+                new InMemoryServiceRegistrationRepository(), NoOpConfigurationCache.INSTANCE, validator, authService);
         requestPreparer = new ProxyRequestPreparer(() -> (req, uri) -> Map.of());
         proxyClient = new TestProxyClient();
         var patternMatcher = new GlobPatternMatcher();
