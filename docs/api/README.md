@@ -10,6 +10,7 @@ This guide is for developers onboarding their applications to the Aussie API Gat
 - [Making Requests Through the Gateway](#making-requests-through-the-gateway)
 - [Routing Strategies](#routing-strategies)
 - [Endpoint Configuration](#endpoint-configuration)
+- [WebSocket Endpoints](websocket-onboarding.md)
 - [CLI Reference](#cli-reference)
 
 ## Getting Started

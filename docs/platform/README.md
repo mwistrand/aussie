@@ -10,6 +10,7 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 - [Request Forwarding](#request-forwarding)
 - [Request Size Limits](#request-size-limits)
 - [Per-Route Authentication](#per-route-authentication)
+- [WebSocket Configuration](websocket-configuration.md)
 - [Admin API](#admin-api)
 
 ## Setup
