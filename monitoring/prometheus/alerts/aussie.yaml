@@ -1,0 +1,125 @@
+# Aussie Gateway Alert Rules
+
+groups:
+  - name: aussie-availability
+    interval: 30s
+    rules:
+      - alert: AussieDown
+        expr: up{job="aussie"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Aussie gateway is down"
+          description: "Aussie gateway instance {{ $labels.instance }} has been down for more than 1 minute."
+
+  - name: aussie-errors
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(aussie_errors_total[5m])) by (service_id)
+          / sum(rate(aussie_requests_total[5m])) by (service_id) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate for service {{ $labels.service_id }}"
+          description: "Error rate is {{ $value | humanizePercentage }} for service {{ $labels.service_id }}."
+
+      - alert: VeryHighErrorRate
+        expr: |
+          sum(rate(aussie_errors_total[5m])) by (service_id)
+          / sum(rate(aussie_requests_total[5m])) by (service_id) > 0.20
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical error rate for service {{ $labels.service_id }}"
+          description: "Error rate is {{ $value | humanizePercentage }} for service {{ $labels.service_id }}."
+
+  - name: aussie-latency
+    interval: 30s
+    rules:
+      - alert: HighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(aussie_proxy_latency_seconds_bucket[5m])) by (le, service_id)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High p99 latency for service {{ $labels.service_id }}"
+          description: "P99 latency is {{ $value | humanizeDuration }} for service {{ $labels.service_id }}."
+
+      - alert: HighLatencyP50
+        expr: |
+          histogram_quantile(0.50,
+            sum(rate(aussie_proxy_latency_seconds_bucket[5m])) by (le, service_id)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High median latency for service {{ $labels.service_id }}"
+          description: "Median latency is {{ $value | humanizeDuration }} for service {{ $labels.service_id }}."
+
+  - name: aussie-security
+    interval: 30s
+    rules:
+      - alert: AuthFailureSpike
+        expr: |
+          sum(rate(aussie_auth_failures_total[5m])) > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Authentication failure spike detected"
+          description: "Authentication failures are spiking at {{ $value }} failures/second."
+
+      - alert: SecurityEventsCritical
+        expr: |
+          sum(rate(aussie_security_events_total{severity="critical"}[5m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical security events detected"
+          description: "{{ $value }} critical security events detected per second."
+
+      - alert: SuspiciousActivityDetected
+        expr: |
+          sum(rate(aussie_security_events_total{event_type="DosAttackDetected"}[5m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Potential DoS attack detected"
+          description: "DoS attack pattern detected at {{ $value }} events/second."
+
+  - name: aussie-websocket
+    interval: 30s
+    rules:
+      - alert: HighWebSocketConnections
+        expr: |
+          sum(aussie_websockets_active) > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of WebSocket connections"
+          description: "{{ $value }} active WebSocket connections."
+
+  - name: aussie-traffic
+    interval: 60s
+    rules:
+      - alert: HighTrafficVolume
+        expr: |
+          sum(rate(aussie_requests_total[5m])) > 10000
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "High traffic volume"
+          description: "Traffic volume is {{ $value }} requests/second."

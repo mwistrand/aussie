@@ -18,6 +18,8 @@ import io.smallrye.mutiny.Uni;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.out.telemetry.GatewayMetrics;
+import aussie.adapter.out.telemetry.SecurityMonitor;
 import aussie.config.SessionConfigMapping;
 import aussie.core.model.Permission;
 import aussie.core.model.Session;
@@ -47,6 +49,12 @@ public class SessionAuthenticationMechanism implements HttpAuthenticationMechani
     @Inject
     Permission roleMapper;
 
+    @Inject
+    GatewayMetrics metrics;
+
+    @Inject
+    SecurityMonitor securityMonitor;
+
     @Override
     public Uni<SecurityIdentity> authenticate(RoutingContext context, IdentityProviderManager identityProviderManager) {
         LOG.infof(
@@ -73,6 +81,9 @@ public class SessionAuthenticationMechanism implements HttpAuthenticationMechani
         return sessionManagement.getSession(sessionId).flatMap(sessionOpt -> {
             if (sessionOpt.isEmpty()) {
                 LOG.debugf("Session not found or invalid: %s", sessionId);
+                // Record invalid session metrics (cookie was present but session not found)
+                metrics.recordAuthFailure("invalid_session", null);
+                securityMonitor.recordAuthFailure("session", "Session not found or expired", null);
                 return Uni.createFrom().nullItem();
             }
 

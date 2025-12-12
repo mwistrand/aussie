@@ -29,6 +29,13 @@ dependencies {
     // Health checks
     implementation 'io.quarkus:quarkus-smallrye-health'
 
+    // OpenTelemetry for distributed tracing
+    implementation 'io.quarkus:quarkus-opentelemetry'
+
+    // Micrometer for metrics
+    implementation 'io.quarkus:quarkus-micrometer'
+    implementation 'io.quarkus:quarkus-micrometer-registry-prometheus'
+
     // RFC 7807 Problem Details for error responses
     implementation 'io.quarkiverse.resteasy-problem:quarkus-resteasy-problem:3.21.0'
 

@@ -17,7 +17,10 @@ import aussie.core.model.RouteAuthResult;
 import aussie.core.model.RouteMatch;
 import aussie.core.model.ServiceRegistration;
 import aussie.core.port.in.PassThroughUseCase;
+import aussie.core.port.out.Metrics;
 import aussie.core.port.out.ProxyClient;
+import aussie.core.port.out.SecurityMonitoring;
+import aussie.core.port.out.TrafficAttributing;
 
 @ApplicationScoped
 public class PassThroughService implements PassThroughUseCase {
@@ -36,6 +39,9 @@ public class PassThroughService implements PassThroughUseCase {
     private final VisibilityResolver visibilityResolver;
     private final EndpointMatcher endpointMatcher;
     private final RouteAuthenticationService routeAuthService;
+    private final Metrics metrics;
+    private final SecurityMonitoring securityMonitor;
+    private final TrafficAttributing attributionService;
 
     @Inject
     public PassThroughService(
@@ -44,24 +50,36 @@ public class PassThroughService implements PassThroughUseCase {
             ProxyClient proxyClient,
             VisibilityResolver visibilityResolver,
             EndpointMatcher endpointMatcher,
-            RouteAuthenticationService routeAuthService) {
+            RouteAuthenticationService routeAuthService,
+            Metrics metrics,
+            SecurityMonitoring securityMonitor,
+            TrafficAttributing attributionService) {
         this.serviceRegistry = serviceRegistry;
         this.requestPreparer = requestPreparer;
         this.proxyClient = proxyClient;
         this.visibilityResolver = visibilityResolver;
         this.endpointMatcher = endpointMatcher;
         this.routeAuthService = routeAuthService;
+        this.metrics = metrics;
+        this.securityMonitor = securityMonitor;
+        this.attributionService = attributionService;
     }
 
     @Override
     public Uni<GatewayResult> forward(String serviceId, GatewayRequest request) {
+        long startTime = System.nanoTime();
+
         if (RESERVED_PATHS.contains(serviceId.toLowerCase())) {
-            return Uni.createFrom().item(new GatewayResult.ReservedPath(serviceId));
+            var result = new GatewayResult.ReservedPath(serviceId);
+            metrics.recordGatewayResult(null, result);
+            return Uni.createFrom().item(result);
         }
 
         return serviceRegistry.getService(serviceId).flatMap(serviceOpt -> {
             if (serviceOpt.isEmpty()) {
-                return Uni.createFrom().item(new GatewayResult.ServiceNotFound(serviceId));
+                var result = new GatewayResult.ServiceNotFound(serviceId);
+                metrics.recordGatewayResult(null, result);
+                return Uni.createFrom().item(result);
             }
 
             var service = serviceOpt.get();
@@ -69,7 +87,8 @@ public class PassThroughService implements PassThroughUseCase {
 
             return routeAuthService
                     .authenticate(request, routeMatch)
-                    .flatMap(authResult -> handleAuthResult(authResult, request, routeMatch));
+                    .flatMap(authResult -> handleAuthResult(authResult, request, routeMatch))
+                    .invoke(result -> recordMetrics(request, service, result, startTime));
         });
     }
 
@@ -121,5 +140,32 @@ public class PassThroughService implements PassThroughUseCase {
         var catchAllEndpoint =
                 new EndpointConfig("/**", Set.of("*"), visibility, Optional.empty(), service.defaultAuthRequired());
         return new RouteMatch(service, catchAllEndpoint, targetPath, Map.of());
+    }
+
+    private void recordMetrics(
+            GatewayRequest request, ServiceRegistration service, GatewayResult result, long startTime) {
+        var serviceId = service.serviceId();
+        long durationMs = (System.nanoTime() - startTime) / 1_000_000;
+
+        // Record gateway result
+        metrics.recordGatewayResult(serviceId, result);
+
+        // Record request and latency for successful requests
+        if (result instanceof GatewayResult.Success success) {
+            metrics.recordRequest(serviceId, request.method(), success.statusCode());
+            metrics.recordProxyLatency(serviceId, request.method(), success.statusCode(), durationMs);
+
+            // Record traffic attribution
+            if (attributionService.isEnabled()) {
+                long requestBytes = request.body() != null ? request.body().length : 0;
+                long responseBytes = success.body() != null ? success.body().length : 0;
+                attributionService.record(request, service, requestBytes, responseBytes, durationMs);
+            }
+        }
+
+        // Record errors
+        if (result instanceof GatewayResult.Error) {
+            metrics.recordError(serviceId, "upstream_error");
+        }
     }
 }
