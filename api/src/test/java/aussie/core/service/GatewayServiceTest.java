@@ -29,7 +29,10 @@ import aussie.core.model.ProxyResponse;
 import aussie.core.model.RouteAuthResult;
 import aussie.core.model.RouteMatch;
 import aussie.core.model.ServiceRegistration;
+import aussie.core.port.out.Metrics;
 import aussie.core.port.out.ProxyClient;
+import aussie.core.port.out.SecurityMonitoring;
+import aussie.core.port.out.TrafficAttributing;
 
 @DisplayName("GatewayService")
 class GatewayServiceTest {
@@ -39,6 +42,9 @@ class GatewayServiceTest {
     private ProxyRequestPreparer requestPreparer;
     private TestProxyClient proxyClient;
     private RouteAuthenticationService routeAuthService;
+    private Metrics metrics;
+    private SecurityMonitoring securityMonitor;
+    private TrafficAttributing attributionService;
     private GatewayService gatewayService;
 
     // Permissive security config for testing
@@ -54,7 +60,17 @@ class GatewayServiceTest {
         requestPreparer = new ProxyRequestPreparer(() -> (req, uri) -> Map.of());
         proxyClient = new TestProxyClient();
         routeAuthService = new NoOpRouteAuthService();
-        gatewayService = new GatewayService(serviceRegistry, requestPreparer, proxyClient, routeAuthService);
+        metrics = new NoOpMetrics();
+        securityMonitor = new NoOpSecurityMonitoring();
+        attributionService = new NoOpTrafficAttributing();
+        gatewayService = new GatewayService(
+                serviceRegistry,
+                requestPreparer,
+                proxyClient,
+                routeAuthService,
+                metrics,
+                securityMonitor,
+                attributionService);
     }
 
     private GatewayRequest createRequest(String method, String path) {
@@ -275,5 +291,97 @@ class GatewayServiceTest {
         public Uni<RouteAuthResult> authenticate(GatewayRequest request, RouteMatch route) {
             return Uni.createFrom().item(new RouteAuthResult.NotRequired());
         }
+    }
+
+    /**
+     * No-op metrics for testing without real metric recording.
+     */
+    private static class NoOpMetrics implements Metrics {
+        @Override
+        public boolean isEnabled() {
+            return false;
+        }
+
+        @Override
+        public void recordRequest(String serviceId, String method, int statusCode) {}
+
+        @Override
+        public void recordProxyLatency(String serviceId, String method, int statusCode, long latencyMs) {}
+
+        @Override
+        public void recordGatewayResult(String serviceId, GatewayResult result) {}
+
+        @Override
+        public void recordTraffic(String serviceId, String teamId, long requestBytes, long responseBytes) {}
+
+        @Override
+        public void recordError(String serviceId, String errorType) {}
+
+        @Override
+        public void recordAuthFailure(String reason, String clientIpHash) {}
+
+        @Override
+        public void recordAuthSuccess(String method) {}
+
+        @Override
+        public void recordAccessDenied(String serviceId, String reason) {}
+
+        @Override
+        public void incrementActiveConnections() {}
+
+        @Override
+        public void decrementActiveConnections() {}
+
+        @Override
+        public void incrementActiveWebSockets() {}
+
+        @Override
+        public void decrementActiveWebSockets() {}
+
+        @Override
+        public void recordWebSocketConnect(String serviceId) {}
+
+        @Override
+        public void recordWebSocketDisconnect(String serviceId, long durationMs) {}
+
+        @Override
+        public void recordWebSocketLimitReached() {}
+    }
+
+    /**
+     * No-op security monitor for testing.
+     */
+    private static class NoOpSecurityMonitoring implements SecurityMonitoring {
+        @Override
+        public boolean isEnabled() {
+            return false;
+        }
+
+        @Override
+        public void recordRequest(String clientIp, String serviceId, boolean isError) {}
+
+        @Override
+        public void recordAuthFailure(String clientIp, String reason, String method) {}
+
+        @Override
+        public void recordAccessDenied(String clientIp, String serviceId, String path, String reason) {}
+    }
+
+    /**
+     * No-op traffic attribution for testing.
+     */
+    private static class NoOpTrafficAttributing implements TrafficAttributing {
+        @Override
+        public boolean isEnabled() {
+            return false;
+        }
+
+        @Override
+        public void record(
+                GatewayRequest request,
+                ServiceRegistration service,
+                long requestBodySize,
+                long responseBodySize,
+                long durationMs) {}
     }
 }

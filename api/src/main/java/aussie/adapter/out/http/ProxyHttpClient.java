@@ -10,6 +10,12 @@ import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import io.opentelemetry.api.trace.SpanKind;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.propagation.TextMapPropagator;
+import io.opentelemetry.context.propagation.TextMapSetter;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.mutiny.core.Vertx;
@@ -18,6 +24,7 @@ import io.vertx.mutiny.ext.web.client.HttpRequest;
 import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
 
+import aussie.adapter.out.telemetry.SpanAttributes;
 import aussie.core.model.PreparedProxyRequest;
 import aussie.core.model.ProxyResponse;
 import aussie.core.port.out.ProxyClient;
@@ -26,18 +33,29 @@ import aussie.core.service.ProxyRequestPreparer;
 /**
  * HTTP adapter for forwarding prepared proxy requests using Vert.x WebClient.
  * All header preparation logic is handled by {@link ProxyRequestPreparer} in core.
+ *
+ * <p>This adapter propagates W3C Trace Context headers (traceparent, tracestate)
+ * to downstream services for distributed tracing.
  */
 @ApplicationScoped
 public class ProxyHttpClient implements ProxyClient {
 
+    private static final TextMapSetter<HttpRequest<Buffer>> HEADER_SETTER =
+            (carrier, key, value) -> carrier.putHeader(key, value);
+
     private final Vertx vertx;
     private final ProxyRequestPreparer requestPreparer;
+    private final Tracer tracer;
+    private final TextMapPropagator propagator;
     private WebClient webClient;
 
     @Inject
-    public ProxyHttpClient(Vertx vertx, ProxyRequestPreparer requestPreparer) {
+    public ProxyHttpClient(
+            Vertx vertx, ProxyRequestPreparer requestPreparer, Tracer tracer, TextMapPropagator propagator) {
         this.vertx = vertx;
         this.requestPreparer = requestPreparer;
+        this.tracer = tracer;
+        this.propagator = propagator;
     }
 
     @PostConstruct
@@ -50,24 +68,52 @@ public class ProxyHttpClient implements ProxyClient {
         var targetUri = preparedRequest.targetUri();
         var method = HttpMethod.valueOf(preparedRequest.method());
 
+        // Create a client span for the outgoing request
+        var span = tracer.spanBuilder("HTTP " + preparedRequest.method())
+                .setSpanKind(SpanKind.CLIENT)
+                .setAttribute(SpanAttributes.HTTP_METHOD, preparedRequest.method())
+                .setAttribute(SpanAttributes.HTTP_URL, targetUri.toString())
+                .setAttribute(SpanAttributes.NET_PEER_NAME, targetUri.getHost())
+                .setAttribute(SpanAttributes.NET_PEER_PORT, (long) getPort(targetUri))
+                .startSpan();
+
         var request = createRequest(method, targetUri);
         applyHeaders(preparedRequest, request);
 
-        return executeRequest(request, preparedRequest.body());
+        // Propagate trace context (W3C Trace Context headers)
+        propagator.inject(Context.current().with(span), request, HEADER_SETTER);
+
+        return executeRequest(request, preparedRequest.body())
+                .invoke(response -> {
+                    span.setAttribute(SpanAttributes.HTTP_STATUS_CODE, (long) response.statusCode());
+                    if (response.statusCode() >= 400) {
+                        span.setStatus(StatusCode.ERROR, "HTTP " + response.statusCode());
+                    }
+                    span.end();
+                })
+                .onFailure()
+                .invoke(error -> {
+                    span.setStatus(StatusCode.ERROR, error.getMessage());
+                    span.recordException(error);
+                    span.end();
+                });
+    }
+
+    private int getPort(URI uri) {
+        var port = uri.getPort();
+        if (port == -1) {
+            port = "https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80;
+        }
+        return port;
     }
 
     private HttpRequest<Buffer> createRequest(HttpMethod method, URI targetUri) {
-        var port = targetUri.getPort();
-        if (port == -1) {
-            port = "https".equalsIgnoreCase(targetUri.getScheme()) ? 443 : 80;
-        }
-
         var path = targetUri.getRawPath();
         if (targetUri.getRawQuery() != null) {
             path += "?" + targetUri.getRawQuery();
         }
 
-        return webClient.request(method, port, targetUri.getHost(), path);
+        return webClient.request(method, getPort(targetUri), targetUri.getHost(), path);
     }
 
     private void applyHeaders(PreparedProxyRequest preparedRequest, HttpRequest<Buffer> httpRequest) {

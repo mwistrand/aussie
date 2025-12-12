@@ -13,7 +13,10 @@ import aussie.core.model.GatewayResult;
 import aussie.core.model.RouteAuthResult;
 import aussie.core.model.RouteMatch;
 import aussie.core.port.in.GatewayUseCase;
+import aussie.core.port.out.Metrics;
 import aussie.core.port.out.ProxyClient;
+import aussie.core.port.out.SecurityMonitoring;
+import aussie.core.port.out.TrafficAttributing;
 
 @ApplicationScoped
 public class GatewayService implements GatewayUseCase {
@@ -22,31 +25,77 @@ public class GatewayService implements GatewayUseCase {
     private final ProxyRequestPreparer requestPreparer;
     private final ProxyClient proxyClient;
     private final RouteAuthenticationService routeAuthService;
+    private final Metrics metrics;
+    private final SecurityMonitoring securityMonitor;
+    private final TrafficAttributing attributionService;
 
     @Inject
     public GatewayService(
             ServiceRegistry serviceRegistry,
             ProxyRequestPreparer requestPreparer,
             ProxyClient proxyClient,
-            RouteAuthenticationService routeAuthService) {
+            RouteAuthenticationService routeAuthService,
+            Metrics metrics,
+            SecurityMonitoring securityMonitor,
+            TrafficAttributing attributionService) {
         this.serviceRegistry = serviceRegistry;
         this.requestPreparer = requestPreparer;
         this.proxyClient = proxyClient;
         this.routeAuthService = routeAuthService;
+        this.metrics = metrics;
+        this.securityMonitor = securityMonitor;
+        this.attributionService = attributionService;
     }
 
     @Override
     public Uni<GatewayResult> forward(GatewayRequest request) {
+        long startTime = System.nanoTime();
         var routeMatch = serviceRegistry.findRoute(request.path(), request.method());
 
         if (routeMatch.isEmpty()) {
-            return Uni.createFrom().item(new GatewayResult.RouteNotFound(request.path()));
+            var result = new GatewayResult.RouteNotFound(request.path());
+            metrics.recordGatewayResult(null, result);
+            return Uni.createFrom().item(result);
         }
+
+        var service = routeMatch.get().service();
+        var serviceId = service.serviceId();
 
         // Check route authentication requirements
         return routeAuthService
                 .authenticate(request, routeMatch.get())
-                .flatMap(authResult -> handleAuthResult(authResult, request, routeMatch.get()));
+                .flatMap(authResult -> handleAuthResult(authResult, request, routeMatch.get()))
+                .invoke(result -> recordMetrics(request, service, result, startTime));
+    }
+
+    private void recordMetrics(
+            GatewayRequest request,
+            aussie.core.model.ServiceRegistration service,
+            GatewayResult result,
+            long startTime) {
+        var serviceId = service.serviceId();
+        long durationMs = (System.nanoTime() - startTime) / 1_000_000;
+
+        // Record gateway result
+        metrics.recordGatewayResult(serviceId, result);
+
+        // Record request and latency for successful requests
+        if (result instanceof GatewayResult.Success success) {
+            metrics.recordRequest(serviceId, request.method(), success.statusCode());
+            metrics.recordProxyLatency(serviceId, request.method(), success.statusCode(), durationMs);
+
+            // Record traffic attribution
+            if (attributionService.isEnabled()) {
+                long requestBytes = request.body() != null ? request.body().length : 0;
+                long responseBytes = success.body() != null ? success.body().length : 0;
+                attributionService.record(request, service, requestBytes, responseBytes, durationMs);
+            }
+        }
+
+        // Record errors
+        if (result instanceof GatewayResult.Error error) {
+            metrics.recordError(serviceId, "upstream_error");
+        }
     }
 
     private Uni<GatewayResult> handleAuthResult(

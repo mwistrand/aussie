@@ -19,6 +19,7 @@ import io.vertx.core.http.WebSocketConnectOptions;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.config.WebSocketConfigMapping;
 import aussie.core.model.SessionInvalidatedEvent;
 import aussie.core.model.WebSocketProxySession;
@@ -48,12 +49,18 @@ public class WebSocketGateway {
     private final WebSocketGatewayUseCase gatewayUseCase;
     private final WebSocketConfigMapping config;
     private final Vertx vertx;
+    private final GatewayMetrics metrics;
 
     @Inject
-    public WebSocketGateway(WebSocketGatewayUseCase gatewayUseCase, WebSocketConfigMapping config, Vertx vertx) {
+    public WebSocketGateway(
+            WebSocketGatewayUseCase gatewayUseCase,
+            WebSocketConfigMapping config,
+            Vertx vertx,
+            GatewayMetrics metrics) {
         this.gatewayUseCase = gatewayUseCase;
         this.config = config;
         this.vertx = vertx;
+        this.metrics = metrics;
     }
 
     /**
@@ -152,8 +159,16 @@ public class WebSocketGateway {
 
                                 activeSessions.put(sessionId, session);
 
+                                // Track connection metrics
+                                var serviceId = auth.route().service().serviceId();
+                                metrics.incrementActiveWebSockets();
+                                metrics.recordWebSocketConnect(serviceId);
+
                                 // Clean up session when closed
-                                clientWs.closeHandler(v -> activeSessions.remove(sessionId));
+                                clientWs.closeHandler(v -> {
+                                    activeSessions.remove(sessionId);
+                                    metrics.decrementActiveWebSockets();
+                                });
 
                                 // Start the session (enables message forwarding and timers)
                                 session.start();

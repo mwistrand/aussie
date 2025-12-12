@@ -1,6 +1,6 @@
 COMPOSE=docker compose
 
-.PHONY: up down restart api api-down demo demo-down test migrate
+.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test
 
 up:
 	$(COMPOSE) up -d --build
@@ -10,13 +10,27 @@ down:
 
 restart: down up
 
+otel:
+	$(COMPOSE) up -d --build jaeger prometheus grafana alertmanager
+otel-down:
+	$(COMPOSE) stop jaeger prometheus grafana alertmanager || true
+
+storage:
+	$(COMPOSE) up -d --build cassandra cassandra-init redis
+storage-down:
+	$(COMPOSE) stop cassandra cassandra-init redis || true
+
 # Start everything except the demo app
 api:
-	$(COMPOSE) up -d --build cassandra cassandra-init redis api
+	$(MAKE) otel
+	$(MAKE) storage
+	$(COMPOSE) up -d --build api
 
 # Stop everything except the demo app
 api-down:
-	$(COMPOSE) stop cassandra cassandra-init redis api || true
+	$(MAKE) otel-down || true
+	$(MAKE) storage-down || true
+	$(COMPOSE) stop api || true
 
 # Start only the demo app
 demo:

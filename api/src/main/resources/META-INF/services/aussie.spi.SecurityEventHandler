@@ -1,0 +1,2 @@
+aussie.adapter.out.telemetry.LoggingSecurityEventHandler
+aussie.adapter.out.telemetry.MetricsSecurityEventHandler

@@ -13,6 +13,8 @@ import io.quarkus.security.identity.SecurityIdentity;
 import io.quarkus.security.runtime.QuarkusSecurityIdentity;
 import io.smallrye.mutiny.Uni;
 
+import aussie.adapter.out.telemetry.GatewayMetrics;
+import aussie.adapter.out.telemetry.SecurityMonitor;
 import aussie.core.model.ApiKey;
 import aussie.core.model.Permission;
 import aussie.core.port.in.ApiKeyManagement;
@@ -35,11 +37,19 @@ public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthentica
 
     private final ApiKeyManagement apiKeyManagement;
     private final Permission roleMapper;
+    private final GatewayMetrics metrics;
+    private final SecurityMonitor securityMonitor;
 
     @Inject
-    public ApiKeyIdentityProvider(ApiKeyManagement apiKeyManagement, Permission roleMapper) {
+    public ApiKeyIdentityProvider(
+            ApiKeyManagement apiKeyManagement,
+            Permission roleMapper,
+            GatewayMetrics metrics,
+            SecurityMonitor securityMonitor) {
         this.apiKeyManagement = apiKeyManagement;
         this.roleMapper = roleMapper;
+        this.metrics = metrics;
+        this.securityMonitor = securityMonitor;
     }
 
     @Override
@@ -53,7 +63,15 @@ public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthentica
 
         return apiKeyManagement
                 .validate(request.getApiKey())
-                .map(optApiKey -> optApiKey.orElseThrow(() -> new AuthenticationFailedException("Invalid API key")))
+                .map(optApiKey -> {
+                    if (optApiKey.isEmpty()) {
+                        // Record the authentication failure
+                        metrics.recordAuthFailure("invalid_key", null);
+                        securityMonitor.recordAuthFailure("api_key", "Invalid API key", null);
+                        throw new AuthenticationFailedException("Invalid API key");
+                    }
+                    return optApiKey.get();
+                })
                 .map(this::buildIdentity);
     }
 
