@@ -240,22 +240,22 @@ func TestReadServiceFile_ValidFile(t *testing.T) {
 }
 
 func TestRegisterCmd_Initialized(t *testing.T) {
-	if registerCmd == nil {
-		t.Fatal("registerCmd is nil")
+	if serviceRegisterCmd == nil {
+		t.Fatal("serviceRegisterCmd is nil")
 	}
 
-	if registerCmd.Use != "register" {
-		t.Errorf("registerCmd.Use = %q, want %q", registerCmd.Use, "register")
+	if serviceRegisterCmd.Use != "register" {
+		t.Errorf("serviceRegisterCmd.Use = %q, want %q", serviceRegisterCmd.Use, "register")
 	}
 
-	if registerCmd.Short == "" {
-		t.Error("registerCmd.Short should not be empty")
+	if serviceRegisterCmd.Short == "" {
+		t.Error("serviceRegisterCmd.Short should not be empty")
 	}
 
 	// Check that file flag exists
-	flag := registerCmd.Flags().Lookup("file")
+	flag := serviceRegisterCmd.Flags().Lookup("file")
 	if flag == nil {
-		t.Error("registerCmd should have 'file' flag")
+		t.Error("serviceRegisterCmd should have 'file' flag")
 	}
 	if flag != nil && flag.Shorthand != "f" {
 		t.Errorf("file flag shorthand = %q, want %q", flag.Shorthand, "f")
@@ -285,9 +285,9 @@ func TestRegisterCmd_HasAllFlags(t *testing.T) {
 	}
 
 	for _, flagName := range expectedFlags {
-		flag := registerCmd.Flags().Lookup(flagName)
+		flag := serviceRegisterCmd.Flags().Lookup(flagName)
 		if flag == nil {
-			t.Errorf("registerCmd should have '%s' flag", flagName)
+			t.Errorf("serviceRegisterCmd should have '%s' flag", flagName)
 		}
 	}
 }
@@ -1033,8 +1033,8 @@ func TestBuildServiceRegistration_PermissionPolicyFileOverridesMainFile(t *testi
 }
 
 func TestRegisterCmd_HasPermissionPolicyFlag(t *testing.T) {
-	flag := registerCmd.Flags().Lookup("permission-policy-file")
+	flag := serviceRegisterCmd.Flags().Lookup("permission-policy-file")
 	if flag == nil {
-		t.Error("registerCmd should have 'permission-policy-file' flag")
+		t.Error("serviceRegisterCmd should have 'permission-policy-file' flag")
 	}
 }

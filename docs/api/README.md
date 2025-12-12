@@ -27,23 +27,24 @@ Contact your platform team to obtain an API key with appropriate permissions:
 - Read-only access (`admin:read`): For viewing registered services
 - Read/write access (`admin:read`, `admin:write`): For registering and managing services
 
-### Using the CLI with Authentication
-Use `auth login` to configure your credentials:
+### Configuring Authentication
+Add your API key to your configuration file:
+
+**~/.aussierc** (global) or **.aussierc** (project-local):
+```toml
+host = "http://localhost:1234"
+api_key = "your-api-key"
+```
+
 ```bash
-# Login interactively
-./aussie auth login
-
-# Or login with your API key directly
-./aussie auth login --key aussie_xxxxxxxxxxxx
-
 # Check your authentication status
 ./aussie auth status
 
 # Now all commands will use your stored credentials
-./aussie register -f my-service.json
+./aussie service register -f my-service.json
 ./aussie keys list
 ```
-Credentials are stored in `~/.aussie` and used automatically for subsequent commands.
+Credentials are stored in `~/.aussierc` and used automatically for subsequent commands.
 
 ### Checking Credentials
 Verify your credentials using the CLI:
@@ -73,7 +74,7 @@ The CLI uses configuration files to store settings like the server URL and API k
 
 **Configuration locations (in order of precedence):**
 1. Local `.aussierc` file in the current directory
-2. Global `~/.aussie` file in your home directory
+2. Global `~/.aussierc` file in your home directory
 3. Default values
 
 **Configuration format (TOML):**
@@ -116,11 +117,11 @@ api_key = "your-api-key"
 ```
 3. Register the service:
 ```bash
-./aussie register -f my-service.json
+./aussie service register -f my-service.json
 ```
 To use a different Aussie server:
 ```bash
-./aussie register -f my-service.json -s http://aussie.example.com:8080
+./aussie service register -f my-service.json -s http://aussie.example.com:8080
 ```
 
 ### Managing Services
@@ -208,7 +209,7 @@ Create `user-service.json`:
 Register and access:
 ```bash
 # Register the service
-./aussie register -f user-service.json
+./aussie service register -f user-service.json
 
 # Access via pass-through (serviceId in URL)
 curl http://localhost:1234/user-service/api/users
@@ -259,7 +260,7 @@ Create `user-service.json` with explicit endpoints:
 Register and access:
 ```bash
 # Register the service
-./aussie register -f user-service.json
+./aussie service register -f user-service.json
 
 # Access via gateway (unified namespace)
 curl http://localhost:1234/gateway/api/users
@@ -342,24 +343,14 @@ When `authRequired: true`:
 
 ## CLI Reference
 
-### Authentication Commands
+### Authentication
 
-#### `auth login`
-Configure your API key credentials interactively or via flags.
-```bash
-# Interactive login (prompts for server and API key)
-./aussie auth login
-
-# Login with API key flag
-./aussie auth login --key your-api-key
-
-# Login with both server and key
-./aussie auth login --server https://aussie.example.com --key your-api-key
+#### Configuration
+Add your API key to `~/.aussierc` (global) or `.aussierc` (project-local):
+```toml
+host = "http://localhost:1234"
+api_key = "your-api-key"
 ```
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--server` | `-s` | API server URL |
-| `--key` | `-k` | API key |
 
 #### `auth status`
 Check your current authentication status.
@@ -374,12 +365,6 @@ Key ID: abc123
 Name:   my-api-key
 Permissions: admin:read, admin:write
 Expires: 2025-06-06T10:30:00Z
-```
-
-#### `auth logout`
-Remove stored credentials from your configuration.
-```bash
-./aussie auth logout
 ```
 
 ### API Key Management Commands
@@ -420,14 +405,14 @@ Revoke an API key by its ID.
 
 ### Service Commands
 
-#### `register`
+#### `service register`
 Register a service with the gateway.
 ```bash
 # Register from a JSON file
-./aussie register -f my-service.json
+./aussie service register -f my-service.json
 
 # Register with a specific server
-./aussie register -f my-service.json -s https://aussie.example.com
+./aussie service register -f my-service.json -s https://aussie.example.com
 ```
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -460,16 +445,15 @@ Preview visibility settings for a registered service.
 ### Command Summary
 | Command | Description |
 |---------|-------------|
-| `auth login` | Configure API key credentials |
-| `auth logout` | Remove stored credentials |
 | `auth status` | Show current authentication status |
 | `keys create` | Create a new API key |
 | `keys list` | List all API keys |
 | `keys revoke <id>` | Revoke an API key |
-| `register -f <file>` | Register a service |
+| `service register -f <file>` | Register a service |
 | `service validate -f <file>` | Validate a service configuration |
 | `service list` | List all registered services |
 | `service preview <id>` | Preview service visibility settings |
+| `service delete <id>` | Delete a service registration |
 
 ### Global Flags
 These flags are available for all commands:

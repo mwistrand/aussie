@@ -66,7 +66,7 @@ func GlobalConfigPath() (string, error) {
 		return "", err
 	}
 
-	return filepath.Join(home, ".aussie"), nil
+	return filepath.Join(home, ".aussierc"), nil
 }
 
 // LoadFromFile loads configuration from a specific file

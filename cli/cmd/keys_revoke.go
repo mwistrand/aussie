@@ -50,7 +50,7 @@ func runKeysRevoke(cmd *cobra.Command, args []string) error {
 	}
 
 	if !cfg.IsAuthenticated() {
-		return fmt.Errorf("not authenticated. Run 'aussie auth login' first")
+		return fmt.Errorf("not authenticated. Add your API key to ~/.aussierc or .aussierc")
 	}
 
 	url := fmt.Sprintf("%s/admin/api-keys/%s", cfg.Host, keyId)
@@ -68,7 +68,7 @@ func runKeysRevoke(cmd *cobra.Command, args []string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("authentication failed. Run 'aussie auth login' to refresh credentials")
+		return fmt.Errorf("authentication failed. Check your API key in ~/.aussierc or .aussierc")
 	}
 	if resp.StatusCode == http.StatusForbidden {
 		return fmt.Errorf("insufficient permissions to revoke API keys")

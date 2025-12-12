@@ -34,7 +34,7 @@ func TestGlobalConfigPath(t *testing.T) {
 	}
 
 	home, _ := os.UserHomeDir()
-	expected := filepath.Join(home, ".aussie")
+	expected := filepath.Join(home, ".aussierc")
 
 	if path != expected {
 		t.Errorf("GlobalConfigPath() = %q, want %q", path, expected)
@@ -230,7 +230,7 @@ func TestSave(t *testing.T) {
 	}
 
 	// Verify file was created
-	savedPath := filepath.Join(tmpDir, ".aussie")
+	savedPath := filepath.Join(tmpDir, ".aussierc")
 	if _, err := os.Stat(savedPath); os.IsNotExist(err) {
 		t.Fatal("Save() did not create config file")
 	}
@@ -286,7 +286,7 @@ func TestClearApiKey(t *testing.T) {
 	}
 
 	// Verify persisted state
-	savedPath := filepath.Join(tmpDir, ".aussie")
+	savedPath := filepath.Join(tmpDir, ".aussierc")
 	loadedCfg, err := LoadFromFile(savedPath)
 	if err != nil {
 		t.Fatalf("Failed to load config after ClearApiKey: %v", err)

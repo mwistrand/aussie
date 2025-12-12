@@ -9,12 +9,13 @@ var serviceCmd = &cobra.Command{
 	Short: "Manage services registered with Aussie",
 	Long: `Commands for managing services registered with the Aussie API gateway.
 
-Use these commands to validate service configurations, preview visibility settings,
-and manage service registrations.
+Use these commands to register, validate, preview, and delete service configurations.
 
 Examples:
+  aussie service register -f my-service.json
   aussie service validate -f my-service.json
-  aussie service preview my-service`,
+  aussie service preview my-service
+  aussie service delete my-service`,
 }
 
 func init() {

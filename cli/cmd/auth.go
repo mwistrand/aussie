@@ -6,15 +6,16 @@ import (
 
 var authCmd = &cobra.Command{
 	Use:   "auth",
-	Short: "Manage authentication credentials",
-	Long: `Commands for managing authentication credentials for the Aussie API gateway.
+	Short: "View authentication status",
+	Long: `Commands for viewing authentication status with the Aussie API gateway.
 
-Use these commands to configure your API key and manage your authentication status.
+To configure authentication, add your API key to ~/.aussierc or .aussierc:
+
+  host = 'http://localhost:8080'
+  api_key = 'your-api-key'
 
 Examples:
-  aussie auth login
-  aussie auth status
-  aussie auth logout`,
+  aussie auth status`,
 }
 
 func init() {

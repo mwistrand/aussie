@@ -36,7 +36,7 @@ go build -o aussie
 
 ### Register a Service
 ```bash
-./aussie register -f path/to/onboarding/config.json
+./aussie service register -f path/to/onboarding/config.json
 ```
 
 ### Make Requests
@@ -113,5 +113,5 @@ npm run dev
 
 # Register with Aussie
 cd ..
-./aussie register -f demo/aussie-service.json
+./aussie service register -f demo/aussie-service.json
 ```

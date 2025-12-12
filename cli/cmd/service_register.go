@@ -43,7 +43,7 @@ var (
 	permissionPolicyFile string
 )
 
-var registerCmd = &cobra.Command{
+var serviceRegisterCmd = &cobra.Command{
 	Use:   "register",
 	Short: "Register a service with the Aussie API gateway",
 	Long: `Register a service with the Aussie API gateway.
@@ -85,53 +85,53 @@ Permission Policy:
 
 Examples:
   # Register a new service using a JSON file (file must include version: 1)
-  aussie register -f service.json
+  aussie service register -f service.json
 
   # Register a new service using command-line flags
-  aussie register --version 1 --service-id my-service --base-url http://localhost:9090
+  aussie service register --version 1 --service-id my-service --base-url http://localhost:9090
 
   # Update an existing service (increment version from current)
-  aussie register -f service.json --version 2
+  aussie service register -f service.json --version 2
 
   # Use a file as base and override specific values
-  aussie register -f service.json --base-url http://production:8080
+  aussie service register -f service.json --base-url http://production:8080
 
   # Register with CORS enabled
-  aussie register --version 1 --service-id api --base-url http://localhost:9090 \
+  aussie service register --version 1 --service-id api --base-url http://localhost:9090 \
     --cors-origins "http://localhost:3000" --cors-credentials true`,
 	RunE: runRegister,
 }
 
 func init() {
-	rootCmd.AddCommand(registerCmd)
+	serviceCmd.AddCommand(serviceRegisterCmd)
 
 	// File input
-	registerCmd.Flags().StringVarP(&registerFile, "file", "f", "", "Path to service configuration JSON file")
+	serviceRegisterCmd.Flags().StringVarP(&registerFile, "file", "f", "", "Path to service configuration JSON file")
 
 	// Basic service options
-	registerCmd.Flags().Int64Var(&version, "version", 0, "Current configuration version")
-	registerCmd.Flags().StringVar(&serviceID, "service-id", "", "Unique identifier for the service")
-	registerCmd.Flags().StringVar(&displayName, "display-name", "", "Human-readable name for the service")
-	registerCmd.Flags().StringVar(&baseURL, "base-url", "", "The backend service URL")
-	registerCmd.Flags().StringVar(&routePrefix, "route-prefix", "", "URL prefix for routing")
-	registerCmd.Flags().StringVar(&defaultVisibility, "default-visibility", "", "Default visibility: PUBLIC or PRIVATE")
-	registerCmd.Flags().StringVar(&defaultAuthRequired, "default-auth-required", "", "Whether authentication is required by default (true/false)")
+	serviceRegisterCmd.Flags().Int64Var(&version, "version", 0, "Current configuration version")
+	serviceRegisterCmd.Flags().StringVar(&serviceID, "service-id", "", "Unique identifier for the service")
+	serviceRegisterCmd.Flags().StringVar(&displayName, "display-name", "", "Human-readable name for the service")
+	serviceRegisterCmd.Flags().StringVar(&baseURL, "base-url", "", "The backend service URL")
+	serviceRegisterCmd.Flags().StringVar(&routePrefix, "route-prefix", "", "URL prefix for routing")
+	serviceRegisterCmd.Flags().StringVar(&defaultVisibility, "default-visibility", "", "Default visibility: PUBLIC or PRIVATE")
+	serviceRegisterCmd.Flags().StringVar(&defaultAuthRequired, "default-auth-required", "", "Whether authentication is required by default (true/false)")
 
 	// Access config options
-	registerCmd.Flags().StringSliceVar(&allowedIPs, "allowed-ips", nil, "IP addresses/CIDR ranges allowed to access (comma-separated or repeated)")
-	registerCmd.Flags().StringSliceVar(&allowedDomains, "allowed-domains", nil, "Domains allowed to access (comma-separated or repeated)")
-	registerCmd.Flags().StringSliceVar(&allowedSubdomains, "allowed-subdomains", nil, "Subdomains allowed to access (comma-separated or repeated)")
+	serviceRegisterCmd.Flags().StringSliceVar(&allowedIPs, "allowed-ips", nil, "IP addresses/CIDR ranges allowed to access (comma-separated or repeated)")
+	serviceRegisterCmd.Flags().StringSliceVar(&allowedDomains, "allowed-domains", nil, "Domains allowed to access (comma-separated or repeated)")
+	serviceRegisterCmd.Flags().StringSliceVar(&allowedSubdomains, "allowed-subdomains", nil, "Subdomains allowed to access (comma-separated or repeated)")
 
 	// CORS options
-	registerCmd.Flags().StringSliceVar(&corsOrigins, "cors-origins", nil, "Allowed origins for CORS (comma-separated or repeated)")
-	registerCmd.Flags().StringSliceVar(&corsMethods, "cors-methods", nil, "Allowed HTTP methods for CORS (comma-separated or repeated)")
-	registerCmd.Flags().StringSliceVar(&corsHeaders, "cors-headers", nil, "Allowed headers for CORS (comma-separated or repeated)")
-	registerCmd.Flags().StringSliceVar(&corsExposedHeaders, "cors-exposed-headers", nil, "Headers exposed to the browser (comma-separated or repeated)")
-	registerCmd.Flags().StringVar(&corsCredentials, "cors-credentials", "", "Allow credentials for CORS (true/false)")
-	registerCmd.Flags().Int64Var(&corsMaxAge, "cors-max-age", 0, "Max age for preflight cache in seconds")
+	serviceRegisterCmd.Flags().StringSliceVar(&corsOrigins, "cors-origins", nil, "Allowed origins for CORS (comma-separated or repeated)")
+	serviceRegisterCmd.Flags().StringSliceVar(&corsMethods, "cors-methods", nil, "Allowed HTTP methods for CORS (comma-separated or repeated)")
+	serviceRegisterCmd.Flags().StringSliceVar(&corsHeaders, "cors-headers", nil, "Allowed headers for CORS (comma-separated or repeated)")
+	serviceRegisterCmd.Flags().StringSliceVar(&corsExposedHeaders, "cors-exposed-headers", nil, "Headers exposed to the browser (comma-separated or repeated)")
+	serviceRegisterCmd.Flags().StringVar(&corsCredentials, "cors-credentials", "", "Allow credentials for CORS (true/false)")
+	serviceRegisterCmd.Flags().Int64Var(&corsMaxAge, "cors-max-age", 0, "Max age for preflight cache in seconds")
 
 	// Permission policy options
-	registerCmd.Flags().StringVar(&permissionPolicyFile, "permission-policy-file", "", "Path to JSON file containing permission policy")
+	serviceRegisterCmd.Flags().StringVar(&permissionPolicyFile, "permission-policy-file", "", "Path to JSON file containing permission policy")
 }
 
 func runRegister(cmd *cobra.Command, args []string) error {
@@ -211,7 +211,7 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	case http.StatusBadRequest:
 		return fmt.Errorf("invalid service configuration: %s", string(body))
 	case http.StatusUnauthorized:
-		return fmt.Errorf("authentication required: use 'aussie auth login' to authenticate")
+		return fmt.Errorf("authentication required: add your API key to ~/.aussierc or .aussierc")
 	case http.StatusForbidden:
 		return fmt.Errorf("permission denied: insufficient privileges")
 	case http.StatusConflict:

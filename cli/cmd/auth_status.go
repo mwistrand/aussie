@@ -39,7 +39,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	if !cfg.IsAuthenticated() {
 		fmt.Println("Status: Not authenticated")
-		fmt.Println("\nRun 'aussie auth login' to configure your API key.")
+		fmt.Println("\nAdd your API key to ~/.aussierc or .aussierc to authenticate.")
 		return nil
 	}
 
@@ -62,7 +62,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		fmt.Println("Status: Invalid or expired API key")
-		fmt.Println("\nRun 'aussie auth login' to configure a new API key.")
+		fmt.Println("\nUpdate your API key in ~/.aussierc or .aussierc.")
 		return nil
 	}
 	if resp.StatusCode == http.StatusForbidden {

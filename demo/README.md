@@ -41,7 +41,7 @@ Make sure Aussie is running (`cd ../api && ./gradlew quarkusDev`), then register
 ```bash
 # Using the Aussie CLI
 cd ../cli
-./aussie register -f ../demo/aussie-service.json
+./aussie service register -f ../demo/aussie-service.json
 
 # Or using curl
 curl -X POST http://localhost:8080/admin/services \

@@ -138,15 +138,19 @@ On startup, Aussie will:
 4. Log the key ID and expiration (never the key itself)
 
 ### Using the Bootstrap Key
-Once created, use your bootstrap key to login and create a permanent admin key:
-```bash
-# Login with the bootstrap key
-./aussie auth login --key your-secure-bootstrap-key-at-least-32-chars
+Once created, add your bootstrap key to your configuration and create a permanent admin key:
 
+**~/.aussierc:**
+```toml
+host = "http://localhost:8080"
+api_key = "your-secure-bootstrap-key-at-least-32-chars"
+```
+
+```bash
 # Create a permanent admin key
 ./aussie keys create --name primary-admin --permissions "*" --ttl 365
 ```
-Save the returned key securely - the bootstrap key will expire automatically within 24 hours.
+Save the returned key securely - the bootstrap key will expire automatically within 24 hours. Update your `~/.aussierc` with the new permanent key.
 
 ### Recovery Mode
 If you've lost all admin keys, you can use recovery mode to create a new bootstrap key even when admin keys exist:
@@ -289,7 +293,7 @@ All admin endpoints require authentication. See [Authentication Configuration](#
 ./aussie service list
 
 # Register a service
-./aussie register -f my-service.json
+./aussie service register -f my-service.json
 
 # Preview a service
 ./aussie service preview <service-id>
