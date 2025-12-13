@@ -28,14 +28,16 @@ import aussie.core.port.out.ServiceRegistrationRepository;
 /**
  * Service registry coordinating service registrations and route matching.
  *
- * <p>Uses repository port for persistence. Optionally uses cache if configured.
+ * <p>
+ * Uses repository port for persistence. Optionally uses cache if configured.
  * Maintains local compiled route patterns for fast request matching.
  *
- * <p>This service is responsible for:
+ * <p>
+ * This service is responsible for:
  * <ul>
- *   <li>Validating all registration requests before persisting</li>
- *   <li>Enforcing authorization for service operations</li>
- *   <li>Detecting permission policy changes that require elevated privileges</li>
+ * <li>Validating all registration requests before persisting</li>
+ * <li>Enforcing authorization for service operations</li>
+ * <li>Detecting permission policy changes that require elevated privileges</li>
  * </ul>
  */
 @ApplicationScoped
@@ -80,11 +82,13 @@ public class ServiceRegistry {
     /**
      * Register a new service or update an existing one.
      *
-     * <p>Validates the registration against gateway policies before persisting.
+     * <p>
+     * Validates the registration against gateway policies before persisting.
      * For new services, the version must be 1. For updates, the version must be
      * exactly the current stored version plus one (optimistic locking).
      *
-     * <p>This method does NOT enforce authorization. Use
+     * <p>
+     * This method does NOT enforce authorization. Use
      * {@link #register(ServiceRegistration, Set)} for authorized registration.
      *
      * @param service The service registration to save
@@ -97,19 +101,24 @@ public class ServiceRegistry {
     /**
      * Register a new service or update an existing one with authorization.
      *
-     * <p>Validates the registration against gateway policies before persisting.
+     * <p>
+     * Validates the registration against gateway policies before persisting.
      * For new services, the version must be 1. For updates, the version must be
      * exactly the current stored version plus one (optimistic locking).
      *
-     * <p>Authorization is enforced based on the operation:
+     * <p>
+     * Authorization is enforced based on the operation:
      * <ul>
-     *   <li>New service: requires service.config.create permission</li>
-     *   <li>Update: requires service.config.update permission on the existing service</li>
-     *   <li>Permission policy change: requires service.permissions.write permission</li>
+     * <li>New service: requires service.config.create permission</li>
+     * <li>Update: requires service.config.update permission on the existing
+     * service</li>
+     * <li>Permission policy change: requires service.permissions.write
+     * permission</li>
      * </ul>
      *
      * @param service The service registration to save
-     * @param claims The claims from the authenticated principal (null to skip authorization)
+     * @param claims  The claims from the authenticated principal (null to skip
+     *                authorization)
      * @return Uni with the registration result (success or failure with reason)
      */
     public Uni<RegistrationResult> register(ServiceRegistration service, Set<String> claims) {
@@ -179,7 +188,7 @@ public class ServiceRegistry {
      * Checks if the permission policy has changed between existing and new service.
      *
      * @param existing The existing service registration
-     * @param updated The updated service registration
+     * @param updated  The updated service registration
      * @return true if the permission policy has changed
      */
     private boolean hasPermissionPolicyChanged(ServiceRegistration existing, ServiceRegistration updated) {
@@ -203,7 +212,8 @@ public class ServiceRegistry {
     /**
      * Unregister a service by ID.
      *
-     * <p>This method does NOT enforce authorization. Use
+     * <p>
+     * This method does NOT enforce authorization. Use
      * {@link #unregisterAuthorized(String, Set)} for authorized unregistration.
      *
      * @param serviceId The service ID to remove
@@ -220,7 +230,7 @@ public class ServiceRegistry {
      * Unregister a service by ID with authorization.
      *
      * @param serviceId The service ID to remove
-     * @param claims The claims from the authenticated principal
+     * @param claims    The claims from the authenticated principal
      * @return Uni with the unregistration result
      */
     public Uni<RegistrationResult> unregisterAuthorized(String serviceId, Set<String> claims) {
@@ -247,7 +257,8 @@ public class ServiceRegistry {
     /**
      * Get a service by ID.
      *
-     * <p>This method does NOT enforce authorization. Use
+     * <p>
+     * This method does NOT enforce authorization. Use
      * {@link #getServiceAuthorized(String, Set)} for authorized retrieval.
      *
      * @param serviceId The service ID to find
@@ -268,7 +279,7 @@ public class ServiceRegistry {
      * Get a service by ID with authorization.
      *
      * @param serviceId The service ID to find
-     * @param claims The claims from the authenticated principal
+     * @param claims    The claims from the authenticated principal
      * @return Uni with the result containing the service or an error
      */
     public Uni<RegistrationResult> getServiceAuthorized(String serviceId, Set<String> claims) {
@@ -300,8 +311,11 @@ public class ServiceRegistry {
     /**
      * Update an existing service registration.
      *
-     * <p>This method is for updating existing services (e.g., changing permission policy).
-     * For full re-registration with validation, use {@link #register(ServiceRegistration)}.
+     * <p>
+     * This method is for updating existing services (e.g., changing permission
+     * policy).
+     * For full re-registration with validation, use
+     * {@link #register(ServiceRegistration)}.
      *
      * @param service The updated service registration
      * @return Uni completing when the update is persisted
@@ -316,9 +330,10 @@ public class ServiceRegistry {
     /**
      * Find a route matching the given path and method.
      *
-     * <p>This is a synchronous operation using local compiled routes for performance.
+     * <p>
+     * This is a synchronous operation using local compiled routes for performance.
      *
-     * @param path The request path
+     * @param path   The request path
      * @param method The HTTP method
      * @return Optional containing the route match if found
      */

@@ -7,6 +7,8 @@ import java.util.concurrent.ConcurrentMap;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import io.smallrye.mutiny.Uni;
+
 import aussie.config.RateLimitingConfig;
 import aussie.core.model.EffectiveRateLimit;
 import aussie.core.model.EndpointRateLimitConfig;
@@ -18,14 +20,16 @@ import aussie.core.port.out.ServiceRegistrationRepository;
 /**
  * Resolves effective rate limits based on the configuration hierarchy.
  *
- * <p>Resolution priority (highest to lowest):
+ * <p>
+ * Resolution priority (highest to lowest):
  * <ol>
- *   <li>Endpoint-specific configuration</li>
- *   <li>Service-level configuration</li>
- *   <li>Platform defaults</li>
+ * <li>Endpoint-specific configuration</li>
+ * <li>Service-level configuration</li>
+ * <li>Platform defaults</li>
  * </ol>
  *
- * <p>All resolved limits are capped at the platform maximum to ensure
+ * <p>
+ * All resolved limits are capped at the platform maximum to ensure
  * no service or endpoint can exceed platform-wide limits.
  */
 @ApplicationScoped
@@ -78,50 +82,55 @@ public class RateLimitResolver {
     }
 
     /**
-     * Resolves the effective rate limit using only service ID (for pass-through mode).
+     * Resolves the effective rate limit using only service ID (for pass-through
+     * mode).
      *
-     * <p>Looks up the service registration to honor service-specific rate limit
+     * <p>
+     * Looks up the service registration to honor service-specific rate limit
      * configuration. Falls back to platform defaults if service not found.
      *
      * @param serviceId the service ID
-     * @return the effective rate limit, capped at platform maximum
+     * @return Uni with the effective rate limit, capped at platform maximum
      */
-    public EffectiveRateLimit resolveByServiceId(String serviceId) {
+    public Uni<EffectiveRateLimit> resolveByServiceId(String serviceId) {
         if (serviceId == null || "unknown".equals(serviceId)) {
-            return resolvePlatformDefaults();
+            return Uni.createFrom().item(resolvePlatformDefaults());
         }
 
         // Check cache first
         final var cachedConfig = serviceConfigCache.get(serviceId);
-        if (cachedConfig != null) {
+        if (cachedConfig != null && !cachedConfig.isEmpty()) {
+            return Uni.createFrom()
+                    .item(resolveLimit(
+                            Optional.empty(),
+                            cachedConfig,
+                            config.defaultRequestsPerWindow(),
+                            config.windowSeconds(),
+                            config.burstCapacity()));
+        }
+
+        // Look up service registration asynchronously
+        return repository.findById(serviceId).map(serviceOpt -> {
+            final var serviceConfig =
+                    serviceOpt.map(ServiceRegistration::rateLimitConfig).orElse(Optional.empty());
+
+            // Cache the result (including empty for unknown services)
+            serviceConfigCache.put(serviceId, serviceConfig);
+
             return resolveLimit(
                     Optional.empty(),
-                    cachedConfig,
+                    serviceConfig,
                     config.defaultRequestsPerWindow(),
                     config.windowSeconds(),
                     config.burstCapacity());
-        }
-
-        // Look up service registration (blocking call - cached results mitigate impact)
-        final var serviceOpt = repository.findById(serviceId).await().indefinitely();
-        final var serviceConfig =
-                serviceOpt.map(ServiceRegistration::rateLimitConfig).orElse(Optional.empty());
-
-        // Cache the result (including empty for unknown services)
-        serviceConfigCache.put(serviceId, serviceConfig);
-
-        return resolveLimit(
-                Optional.empty(),
-                serviceConfig,
-                config.defaultRequestsPerWindow(),
-                config.windowSeconds(),
-                config.burstCapacity());
+        });
     }
 
     /**
      * Invalidates the cached rate limit config for a service.
      *
-     * <p>Call this when a service registration is updated or deleted.
+     * <p>
+     * Call this when a service registration is updated or deleted.
      *
      * @param serviceId the service ID to invalidate
      */

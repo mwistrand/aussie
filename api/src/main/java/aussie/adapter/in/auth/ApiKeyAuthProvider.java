@@ -55,12 +55,26 @@ public class ApiKeyAuthProvider implements AuthenticationProvider {
     /**
      * Authenticate using API key validation.
      *
-     * <p>Note: This method blocks on the reactive validation call because the
-     * {@link AuthenticationProvider} SPI is synchronous. This is acceptable because
-     * this provider is part of the deprecated legacy authentication system. The
-     * primary authentication path uses Quarkus Security which is fully reactive.
+     * <p><strong>Note on blocking behavior:</strong> This method intentionally uses
+     * {@code .await().indefinitely()} to block on the reactive validation call because
+     * the {@link AuthenticationProvider} SPI is synchronous.
+     *
+     * <p>This is an acceptable use of blocking because:
+     * <ul>
+     *   <li>This provider is only used in the deprecated legacy authentication filter</li>
+     *   <li>The primary authentication path uses Quarkus Security via
+     *       {@code ApiKeyAuthenticationMechanism}, which is fully reactive</li>
+     *   <li>The legacy filter is disabled by default (aussie.auth.use-legacy-filter=false)</li>
+     * </ul>
+     *
+     * <p>New deployments should use the Quarkus Security integration and not enable
+     * the legacy filter. This provider exists for backward compatibility only.
+     *
+     * @deprecated Part of the deprecated legacy authentication system. Use Quarkus
+     *             Security with {@code ApiKeyAuthenticationMechanism} instead.
      */
     @Override
+    @Deprecated
     public AuthenticationResult authenticate(MultivaluedMap<String, String> headers, String path) {
         String authHeader = headers.getFirst("Authorization");
 

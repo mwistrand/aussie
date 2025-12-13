@@ -22,8 +22,10 @@ import aussie.adapter.in.problem.GatewayProblem;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.SpanAttributes;
 import aussie.config.RateLimitingConfig;
+import aussie.core.model.EffectiveRateLimit;
 import aussie.core.model.RateLimitDecision;
 import aussie.core.model.RateLimitKey;
+import aussie.core.model.RouteMatch;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
 import aussie.core.service.RateLimitResolver;
@@ -35,6 +37,12 @@ import aussie.spi.SecurityEvent;
  * <p>
  * This filter runs early in the request chain (before authentication) to
  * reject excessive traffic before incurring authentication overhead.
+ *
+ * <p>
+ * Rate limits are resolved using the {@link RouteMatch} from the request
+ * context
+ * (set by {@link RequestContextFilter}). When a route match exists, service and
+ * endpoint-specific limits apply. Otherwise, platform defaults are used.
  *
  * <p>
  * Client identification priority:
@@ -82,11 +90,14 @@ public class RateLimitFilter implements ContainerRequestFilter, ContainerRespons
             return;
         }
 
+        final var routeMatch = (RouteMatch) requestContext.getProperty(RequestContextFilter.ROUTE_MATCH_PROPERTY);
         final var serviceId = extractServiceId(requestContext);
-        final var endpointId = extractEndpointId(requestContext);
         final var clientId = extractClientId(requestContext);
+
+        // Resolve limit synchronously - either from route match or platform defaults
+        final var effectiveLimit = resolveEffectiveLimit(routeMatch);
+        final var endpointId = routeMatch != null ? routeMatch.endpoint().path() : null;
         final var key = RateLimitKey.http(clientId, serviceId, endpointId);
-        final var effectiveLimit = resolveEffectiveLimit(serviceId, endpointId);
 
         rateLimiter
                 .checkAndConsume(key, effectiveLimit)
@@ -218,26 +229,23 @@ public class RateLimitFilter implements ContainerRequestFilter, ContainerRespons
     }
 
     // -------------------------------------------------------------------------
-    // Service/Endpoint Extraction
+    // Service Extraction
     // -------------------------------------------------------------------------
 
     private String extractServiceId(ContainerRequestContext ctx) {
-        final var serviceId = (String) ctx.getProperty("aussie.serviceId");
+        final var serviceId = (String) ctx.getProperty(RequestContextFilter.SERVICE_ID_PROPERTY);
         return serviceId != null ? serviceId : "unknown";
-    }
-
-    private String extractEndpointId(ContainerRequestContext ctx) {
-        return (String) ctx.getProperty("aussie.endpointId");
     }
 
     // -------------------------------------------------------------------------
     // Rate Limit Resolution
     // -------------------------------------------------------------------------
 
-    private aussie.core.model.EffectiveRateLimit resolveEffectiveLimit(String serviceId, String endpointId) {
-        // Use the resolver to get service-specific limits
-        // The filter doesn't have RouteMatch access, so we use service ID lookup
-        return rateLimitResolver.resolveByServiceId(serviceId);
+    private EffectiveRateLimit resolveEffectiveLimit(RouteMatch routeMatch) {
+        if (routeMatch != null) {
+            return rateLimitResolver.resolveHttpLimit(routeMatch);
+        }
+        return rateLimitResolver.resolvePlatformDefaults();
     }
 
     // -------------------------------------------------------------------------
