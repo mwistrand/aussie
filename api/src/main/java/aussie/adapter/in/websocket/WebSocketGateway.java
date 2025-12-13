@@ -21,11 +21,13 @@ import org.jboss.logging.Logger;
 
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.config.WebSocketConfigMapping;
+import aussie.core.model.MessageRateLimitHandler;
 import aussie.core.model.SessionInvalidatedEvent;
 import aussie.core.model.WebSocketProxySession;
 import aussie.core.model.WebSocketUpgradeRequest;
 import aussie.core.model.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
+import aussie.core.service.WebSocketRateLimitService;
 
 /**
  * Handles WebSocket proxy connections after authentication.
@@ -50,17 +52,20 @@ public class WebSocketGateway {
     private final WebSocketConfigMapping config;
     private final Vertx vertx;
     private final GatewayMetrics metrics;
+    private final WebSocketRateLimitService rateLimitService;
 
     @Inject
     public WebSocketGateway(
             WebSocketGatewayUseCase gatewayUseCase,
             WebSocketConfigMapping config,
             Vertx vertx,
-            GatewayMetrics metrics) {
+            GatewayMetrics metrics,
+            WebSocketRateLimitService rateLimitService) {
         this.gatewayUseCase = gatewayUseCase;
         this.config = config;
         this.vertx = vertx;
         this.metrics = metrics;
+        this.rateLimitService = rateLimitService;
     }
 
     /**
@@ -116,6 +121,7 @@ public class WebSocketGateway {
                                 case WebSocketUpgradeResult.NotWebSocket n -> ctx.response()
                                         .setStatusCode(400)
                                         .end("Not a WebSocket endpoint: " + n.path());
+                                case WebSocketUpgradeResult.RateLimited rl -> handleRateLimited(ctx, rl);
                             }
                         },
                         error -> {
@@ -124,22 +130,35 @@ public class WebSocketGateway {
                         });
     }
 
+    private void handleRateLimited(RoutingContext ctx, WebSocketUpgradeResult.RateLimited rl) {
+        metrics.recordRateLimitExceeded("unknown", "ws_connection");
+        ctx.response()
+                .setStatusCode(429)
+                .putHeader("Retry-After", String.valueOf(rl.retryAfterSeconds()))
+                .putHeader("X-RateLimit-Limit", String.valueOf(rl.limit()))
+                .putHeader("X-RateLimit-Remaining", "0")
+                .putHeader("X-RateLimit-Reset", String.valueOf(rl.resetAtEpochSeconds()))
+                .end("Rate limit exceeded. Retry after " + rl.retryAfterSeconds() + " seconds.");
+    }
+
     private void establishProxy(RoutingContext ctx, WebSocketUpgradeResult.Authorized auth) {
-        var sessionId = UUID.randomUUID().toString();
+        final var sessionId = UUID.randomUUID().toString();
+        final var serviceId = auth.route().service().serviceId();
+        final var clientId = extractClientId(ctx);
 
         // Extract auth session ID and user ID for logout tracking
-        var authSessionId = auth.authSessionId();
-        var userId = auth.token().map(t -> t.subject());
+        final var authSessionId = auth.authSessionId();
+        final var userId = auth.token().map(t -> t.subject());
 
         // Build headers for backend connection
-        var headers = MultiMap.caseInsensitiveMultiMap();
+        final var headers = MultiMap.caseInsensitiveMultiMap();
         if (auth.token().isPresent()) {
             headers.add("Authorization", "Bearer " + auth.token().get().jws());
         }
 
         // Connect to backend WebSocket FIRST (non-blocking Future)
-        var backendUri = auth.backendUri();
-        var options = new WebSocketConnectOptions()
+        final var backendUri = auth.backendUri();
+        final var options = new WebSocketConnectOptions()
                 .setHost(backendUri.getHost())
                 .setPort(getPort(backendUri))
                 .setURI(backendUri.getPath())
@@ -153,14 +172,24 @@ public class WebSocketGateway {
                     ctx.request()
                             .toWebSocket()
                             .onSuccess(clientWs -> {
+                                // Create message rate limit handler
+                                final var messageHandler =
+                                        createMessageRateLimitHandler(serviceId, clientId, sessionId);
+
                                 // Both connections established - create proxy session
-                                var session = new WebSocketProxySession(
-                                        sessionId, clientWs, backendWs, vertx, config, authSessionId, userId);
+                                final var session = new WebSocketProxySession(
+                                        sessionId,
+                                        clientWs,
+                                        backendWs,
+                                        vertx,
+                                        config,
+                                        authSessionId,
+                                        userId,
+                                        messageHandler);
 
                                 activeSessions.put(sessionId, session);
 
                                 // Track connection metrics
-                                var serviceId = auth.route().service().serviceId();
                                 metrics.incrementActiveWebSockets();
                                 metrics.recordWebSocketConnect(serviceId);
 
@@ -168,6 +197,15 @@ public class WebSocketGateway {
                                 clientWs.closeHandler(v -> {
                                     activeSessions.remove(sessionId);
                                     metrics.decrementActiveWebSockets();
+                                    rateLimitService
+                                            .cleanupConnection(serviceId, clientId, sessionId)
+                                            .subscribe()
+                                            .with(
+                                                    ignored -> {},
+                                                    err -> LOG.warnv(
+                                                            err,
+                                                            "Failed to cleanup rate limit state for session {0}",
+                                                            sessionId));
                                 });
 
                                 // Start the session (enables message forwarding and timers)
@@ -186,6 +224,55 @@ public class WebSocketGateway {
                     // Don't expose internal error details to clients for security reasons
                     ctx.response().setStatusCode(502).end("Backend connection failed");
                 });
+    }
+
+    private MessageRateLimitHandler createMessageRateLimitHandler(String serviceId, String clientId, String sessionId) {
+        if (!rateLimitService.isMessageRateLimitEnabled()) {
+            return MessageRateLimitHandler.noOp();
+        }
+
+        return onAllowed -> rateLimitService
+                .checkMessageLimit(serviceId, clientId, sessionId)
+                .map(decision -> {
+                    if (decision.allowed()) {
+                        onAllowed.run();
+                    } else {
+                        metrics.recordRateLimitExceeded(serviceId, "ws_message");
+                        throw new RuntimeException("Message rate limit exceeded");
+                    }
+                    return null;
+                })
+                .replaceWithVoid();
+    }
+
+    private String extractClientId(RoutingContext ctx) {
+        // Priority: session cookie > auth header > API key header > IP
+        final var sessionCookie = ctx.request().getCookie("aussie_session");
+        if (sessionCookie != null) {
+            return "session:" + sessionCookie.getValue();
+        }
+
+        final var sessionHeader = ctx.request().getHeader("X-Session-ID");
+        if (sessionHeader != null) {
+            return "session:" + sessionHeader;
+        }
+
+        final var authHeader = ctx.request().getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            return "bearer:" + Integer.toHexString(authHeader.substring(7).hashCode());
+        }
+
+        final var apiKeyId = ctx.request().getHeader("X-API-Key-ID");
+        if (apiKeyId != null) {
+            return "apikey:" + apiKeyId;
+        }
+
+        final var forwarded = ctx.request().getHeader("X-Forwarded-For");
+        if (forwarded != null) {
+            return "ip:" + forwarded.split(",")[0].trim();
+        }
+
+        return "ip:unknown";
     }
 
     /**

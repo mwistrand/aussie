@@ -67,6 +67,20 @@
     "allowCredentials": true,
     "maxAge": 3600
   },
+  "rateLimitConfig": {
+    "requestsPerWindow": 50,
+    "burstCapacity": 25,
+    "websocket": {
+      "connection": {
+        "requestsPerWindow": 5,
+        "burstCapacity": 3
+      },
+      "message": {
+        "requestsPerWindow": 200,
+        "burstCapacity": 100
+      }
+    }
+  },
   "permissionPolicy": {
     "permissions": {
       "service.config.read": {

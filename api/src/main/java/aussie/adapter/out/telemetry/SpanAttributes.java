@@ -194,4 +194,39 @@ public final class SpanAttributes {
 
     /** Result type for bad requests. */
     public static final String RESULT_BAD_REQUEST = "bad_request";
+
+    // -------------------------------------------------------------------------
+    // Rate Limiting Attributes
+    // -------------------------------------------------------------------------
+
+    /** Whether the request was rate limited. */
+    public static final String RATE_LIMITED = "aussie.rate_limit.limited";
+
+    /** Rate limit bucket/window limit. */
+    public static final String RATE_LIMIT_LIMIT = "aussie.rate_limit.limit";
+
+    /** Remaining requests in current window. */
+    public static final String RATE_LIMIT_REMAINING = "aussie.rate_limit.remaining";
+
+    /** Unix timestamp when the rate limit resets. */
+    public static final String RATE_LIMIT_RESET = "aussie.rate_limit.reset";
+
+    /** Seconds until the client can retry. */
+    public static final String RATE_LIMIT_RETRY_AFTER = "aussie.rate_limit.retry_after";
+
+    /** Type of rate limit applied (http, ws_connection, ws_message). */
+    public static final String RATE_LIMIT_TYPE = "aussie.rate_limit.type";
+
+    // -------------------------------------------------------------------------
+    // Rate Limit Type Values
+    // -------------------------------------------------------------------------
+
+    /** Rate limit type for HTTP requests. */
+    public static final String RATE_LIMIT_TYPE_HTTP = "http";
+
+    /** Rate limit type for WebSocket connections. */
+    public static final String RATE_LIMIT_TYPE_WS_CONNECTION = "ws_connection";
+
+    /** Rate limit type for WebSocket messages. */
+    public static final String RATE_LIMIT_TYPE_WS_MESSAGE = "ws_message";
 }

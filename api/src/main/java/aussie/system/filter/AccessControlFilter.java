@@ -1,7 +1,5 @@
 package aussie.system.filter;
 
-import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import jakarta.inject.Inject;
@@ -12,17 +10,18 @@ import io.smallrye.mutiny.Uni;
 import org.jboss.resteasy.reactive.server.ServerRequestFilter;
 
 import aussie.adapter.in.problem.GatewayProblem;
-import aussie.core.model.EndpointConfig;
-import aussie.core.model.RouteMatch;
+import aussie.core.model.RouteLookupResult;
+import aussie.core.model.ServiceOnlyMatch;
+import aussie.core.model.ServicePath;
 import aussie.core.service.AccessControlEvaluator;
 import aussie.core.service.ServiceRegistry;
 import aussie.core.service.SourceIdentifierExtractor;
-import aussie.core.service.VisibilityResolver;
 
 /**
  * Reactive access control filter for gateway requests.
  *
- * <p>Uses @ServerRequestFilter with Uni return type to avoid blocking
+ * <p>
+ * Uses @ServerRequestFilter with Uni return type to avoid blocking
  * the Vert.x event loop when performing async service lookups.
  */
 public class AccessControlFilter {
@@ -32,18 +31,15 @@ public class AccessControlFilter {
     private final ServiceRegistry serviceRegistry;
     private final SourceIdentifierExtractor sourceExtractor;
     private final AccessControlEvaluator accessEvaluator;
-    private final VisibilityResolver visibilityResolver;
 
     @Inject
     public AccessControlFilter(
             ServiceRegistry serviceRegistry,
             SourceIdentifierExtractor sourceExtractor,
-            AccessControlEvaluator accessEvaluator,
-            VisibilityResolver visibilityResolver) {
+            AccessControlEvaluator accessEvaluator) {
         this.serviceRegistry = serviceRegistry;
         this.sourceExtractor = sourceExtractor;
         this.accessEvaluator = accessEvaluator;
-        this.visibilityResolver = visibilityResolver;
     }
 
     @ServerRequestFilter
@@ -68,34 +64,23 @@ public class AccessControlFilter {
     private Uni<Response> handleGatewayRequest(ContainerRequestContext requestContext, String path, String method) {
         var gatewayPath = "/" + path.substring("gateway/".length());
 
-        var routeMatch = serviceRegistry.findRoute(gatewayPath, method);
-        if (routeMatch.isEmpty()) {
+        var routeResult = serviceRegistry.findRoute(gatewayPath, method);
+        if (routeResult.isEmpty()) {
             return Uni.createFrom().nullItem();
         }
 
-        return checkAccessControl(requestContext, routeMatch.get());
+        return checkAccessControl(requestContext, routeResult.get());
     }
 
     private Uni<Response> handlePassThroughRequest(ContainerRequestContext requestContext, String path, String method) {
-        var slashIndex = path.indexOf('/');
-        String serviceId;
-        String remainingPath;
+        final var servicePath = ServicePath.parse(path);
 
-        if (slashIndex == -1) {
-            serviceId = path;
-            remainingPath = "/";
-        } else {
-            serviceId = path.substring(0, slashIndex);
-            remainingPath = "/" + path.substring(slashIndex + 1);
-        }
-
-        if (RESERVED_PATHS.contains(serviceId.toLowerCase())) {
+        if (RESERVED_PATHS.contains(servicePath.serviceId().toLowerCase())) {
             return Uni.createFrom().nullItem();
         }
 
         // Use reactive chain - no blocking!
-        final String finalRemainingPath = remainingPath;
-        return serviceRegistry.getService(serviceId).flatMap(serviceOpt -> {
+        return serviceRegistry.getService(servicePath.serviceId()).flatMap(serviceOpt -> {
             if (serviceOpt.isEmpty()) {
                 return Uni.createFrom().nullItem();
             }
@@ -103,25 +88,21 @@ public class AccessControlFilter {
             var service = serviceOpt.get();
 
             // First, try to find a specific route match for this path
-            var routeMatch = serviceRegistry.findRoute(finalRemainingPath, method);
-            if (routeMatch.isPresent() && routeMatch.get().service().serviceId().equals(serviceId)) {
-                return checkAccessControl(requestContext, routeMatch.get());
+            var routeResult = serviceRegistry.findRoute(servicePath.path(), method);
+            if (routeResult.isPresent()
+                    && routeResult.get().service().serviceId().equals(servicePath.serviceId())) {
+                return checkAccessControl(requestContext, routeResult.get());
             }
 
-            // For pass-through, resolve visibility using the VisibilityResolver
-            var visibility = visibilityResolver.resolve(finalRemainingPath, method, service);
-
-            var syntheticEndpoint = new EndpointConfig("/**", Set.of("*"), visibility, Optional.empty());
-            var syntheticRoute = new RouteMatch(service, syntheticEndpoint, finalRemainingPath, Map.of());
-
-            return checkAccessControl(requestContext, syntheticRoute);
+            // For pass-through without a specific route, use ServiceOnlyMatch
+            // which uses service defaults for visibility/authRequired/rateLimitConfig
+            return checkAccessControl(requestContext, new ServiceOnlyMatch(service));
         });
     }
 
-    private Uni<Response> checkAccessControl(ContainerRequestContext requestContext, RouteMatch route) {
+    private Uni<Response> checkAccessControl(ContainerRequestContext requestContext, RouteLookupResult route) {
         var source = sourceExtractor.extract(requestContext);
-        var isAllowed = accessEvaluator.isAllowed(
-                source, route.endpoint(), route.service().accessConfig());
+        var isAllowed = accessEvaluator.isAllowed(source, route, route.service().accessConfig());
 
         if (!isAllowed) {
             // Return 404 to hide resource existence from unauthorized users

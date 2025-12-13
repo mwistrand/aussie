@@ -171,6 +171,11 @@ func ValidateServiceConfig(data []byte) *ValidationResult {
 		validateAccessConfig(config.AccessConfig, "accessConfig", result)
 	}
 
+	// Validate rate limit config
+	if config.RateLimitConfig != nil {
+		validateRateLimitConfig(config.RateLimitConfig, "rateLimitConfig", result)
+	}
+
 	return result
 }
 
@@ -285,4 +290,59 @@ func isValidServiceID(id string) bool {
 
 func isValidURL(url string) bool {
 	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
+}
+
+func validateRateLimitConfig(config *RateLimitConfig, path string, result *ValidationResult) {
+	if config == nil {
+		return
+	}
+
+	if config.RequestsPerWindow != nil && *config.RequestsPerWindow <= 0 {
+		result.AddError(path+".requestsPerWindow", "must be greater than 0")
+	}
+
+	if config.WindowSeconds != nil && *config.WindowSeconds <= 0 {
+		result.AddError(path+".windowSeconds", "must be greater than 0")
+	}
+
+	if config.BurstCapacity != nil && *config.BurstCapacity <= 0 {
+		result.AddError(path+".burstCapacity", "must be greater than 0")
+	}
+
+	// Validate WebSocket config if present
+	if config.WebSocket != nil {
+		validateWebSocketRateLimitConfig(config.WebSocket, path+".websocket", result)
+	}
+}
+
+func validateWebSocketRateLimitConfig(config *WebSocketRateLimitConfig, path string, result *ValidationResult) {
+	if config == nil {
+		return
+	}
+
+	if config.Connection != nil {
+		validateRateLimitValues(config.Connection, path+".connection", result)
+	}
+
+	if config.Message != nil {
+		validateRateLimitValues(config.Message, path+".message", result)
+	}
+}
+
+func validateRateLimitValues(config *RateLimitValues, path string, result *ValidationResult) {
+	if config == nil {
+		return
+	}
+
+	if config.RequestsPerWindow != nil && *config.RequestsPerWindow <= 0 {
+		result.AddError(path+".requestsPerWindow", "must be greater than 0")
+	}
+
+	if config.WindowSeconds != nil && *config.WindowSeconds <= 0 {
+		result.AddError(path+".windowSeconds", "must be greater than 0")
+	}
+
+	if config.BurstCapacity != nil && *config.BurstCapacity <= 0 {
+		result.AddError(path+".burstCapacity", "must be greater than 0")
+	}
 }

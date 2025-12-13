@@ -70,7 +70,11 @@ public class BootstrapIntegrationTest {
                     Map.entry("aussie.session.jws.issuer", "aussie-gateway"),
                     Map.entry("aussie.session.jws.include-claims", "sub,email,name,roles"),
                     // Route auth disabled
-                    Map.entry("aussie.auth.route-auth.enabled", "false"));
+                    Map.entry("aussie.auth.route-auth.enabled", "false"),
+                    // Rate limiting disabled for tests (avoids event loop blocking issues)
+                    Map.entry("aussie.rate-limiting.enabled", "false"),
+                    Map.entry("aussie.rate-limiting.redis.enabled", "false"),
+                    Map.entry("aussie.rate-limiting.redis.key-prefix", "aussie:ratelimit:"));
         }
     }
 

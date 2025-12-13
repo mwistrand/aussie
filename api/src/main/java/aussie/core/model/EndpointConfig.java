@@ -9,7 +9,8 @@ public record EndpointConfig(
         EndpointVisibility visibility,
         Optional<String> pathRewrite,
         boolean authRequired,
-        EndpointType type) {
+        EndpointType type,
+        Optional<EndpointRateLimitConfig> rateLimitConfig) {
 
     public EndpointConfig {
         if (path == null || path.isBlank()) {
@@ -24,6 +25,9 @@ public record EndpointConfig(
         if (type == null) {
             type = EndpointType.HTTP;
         }
+        if (rateLimitConfig == null) {
+            rateLimitConfig = Optional.empty();
+        }
         // For WebSocket endpoints, default methods to GET if not specified
         if (type == EndpointType.WEBSOCKET && (methods == null || methods.isEmpty())) {
             methods = Set.of("GET");
@@ -35,6 +39,19 @@ public record EndpointConfig(
     }
 
     /**
+     * Convenience constructor without rate limit config and type (defaults to HTTP).
+     */
+    public EndpointConfig(
+            String path,
+            Set<String> methods,
+            EndpointVisibility visibility,
+            Optional<String> pathRewrite,
+            boolean authRequired,
+            EndpointType type) {
+        this(path, methods, visibility, pathRewrite, authRequired, type, Optional.empty());
+    }
+
+    /**
      * Convenience constructor without type (defaults to HTTP).
      */
     public EndpointConfig(
@@ -43,7 +60,7 @@ public record EndpointConfig(
             EndpointVisibility visibility,
             Optional<String> pathRewrite,
             boolean authRequired) {
-        this(path, methods, visibility, pathRewrite, authRequired, EndpointType.HTTP);
+        this(path, methods, visibility, pathRewrite, authRequired, EndpointType.HTTP, Optional.empty());
     }
 
     /**
@@ -52,7 +69,7 @@ public record EndpointConfig(
      */
     public EndpointConfig(
             String path, Set<String> methods, EndpointVisibility visibility, Optional<String> pathRewrite) {
-        this(path, methods, visibility, pathRewrite, false, EndpointType.HTTP);
+        this(path, methods, visibility, pathRewrite, false, EndpointType.HTTP, Optional.empty());
     }
 
     public static EndpointConfig publicEndpoint(String path, Set<String> methods) {
@@ -65,7 +82,13 @@ public record EndpointConfig(
 
     public static EndpointConfig publicWebSocket(String path, boolean authRequired) {
         return new EndpointConfig(
-                path, Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty(), authRequired, EndpointType.WEBSOCKET);
+                path,
+                Set.of("GET"),
+                EndpointVisibility.PUBLIC,
+                Optional.empty(),
+                authRequired,
+                EndpointType.WEBSOCKET,
+                Optional.empty());
     }
 
     public static EndpointConfig privateWebSocket(String path, boolean authRequired) {
@@ -75,7 +98,8 @@ public record EndpointConfig(
                 EndpointVisibility.PRIVATE,
                 Optional.empty(),
                 authRequired,
-                EndpointType.WEBSOCKET);
+                EndpointType.WEBSOCKET,
+                Optional.empty());
     }
 
     public boolean isWebSocket() {

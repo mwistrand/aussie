@@ -50,21 +50,28 @@ public class GatewayService implements GatewayUseCase {
     @Override
     public Uni<GatewayResult> forward(GatewayRequest request) {
         long startTime = System.nanoTime();
-        var routeMatch = serviceRegistry.findRoute(request.path(), request.method());
+        var routeResult = serviceRegistry.findRoute(request.path(), request.method());
 
-        if (routeMatch.isEmpty()) {
+        if (routeResult.isEmpty()) {
             var result = new GatewayResult.RouteNotFound(request.path());
             metrics.recordGatewayResult(null, result);
             return Uni.createFrom().item(result);
         }
 
-        var service = routeMatch.get().service();
+        // Gateway requires a RouteMatch (with endpoint) to forward requests
+        if (!(routeResult.get() instanceof RouteMatch routeMatch)) {
+            var result = new GatewayResult.RouteNotFound(request.path());
+            metrics.recordGatewayResult(null, result);
+            return Uni.createFrom().item(result);
+        }
+
+        var service = routeMatch.service();
         var serviceId = service.serviceId();
 
         // Check route authentication requirements
         return routeAuthService
-                .authenticate(request, routeMatch.get())
-                .flatMap(authResult -> handleAuthResult(authResult, request, routeMatch.get()))
+                .authenticate(request, routeMatch)
+                .flatMap(authResult -> handleAuthResult(authResult, request, routeMatch))
                 .invoke(result -> recordMetrics(request, service, result, startTime));
     }
 

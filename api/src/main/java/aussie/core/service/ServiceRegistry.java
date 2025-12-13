@@ -1,14 +1,11 @@
 package aussie.core.service;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -18,7 +15,8 @@ import io.smallrye.mutiny.Uni;
 import aussie.core.model.EndpointConfig;
 import aussie.core.model.Permission;
 import aussie.core.model.RegistrationResult;
-import aussie.core.model.RouteMatch;
+import aussie.core.model.RouteLookupResult;
+import aussie.core.model.ServiceOnlyMatch;
 import aussie.core.model.ServicePermissionPolicy;
 import aussie.core.model.ServiceRegistration;
 import aussie.core.model.ValidationResult;
@@ -28,14 +26,16 @@ import aussie.core.port.out.ServiceRegistrationRepository;
 /**
  * Service registry coordinating service registrations and route matching.
  *
- * <p>Uses repository port for persistence. Optionally uses cache if configured.
+ * <p>
+ * Uses repository port for persistence. Optionally uses cache if configured.
  * Maintains local compiled route patterns for fast request matching.
  *
- * <p>This service is responsible for:
+ * <p>
+ * This service is responsible for:
  * <ul>
- *   <li>Validating all registration requests before persisting</li>
- *   <li>Enforcing authorization for service operations</li>
- *   <li>Detecting permission policy changes that require elevated privileges</li>
+ * <li>Validating all registration requests before persisting</li>
+ * <li>Enforcing authorization for service operations</li>
+ * <li>Detecting permission policy changes that require elevated privileges</li>
  * </ul>
  */
 @ApplicationScoped
@@ -80,11 +80,13 @@ public class ServiceRegistry {
     /**
      * Register a new service or update an existing one.
      *
-     * <p>Validates the registration against gateway policies before persisting.
+     * <p>
+     * Validates the registration against gateway policies before persisting.
      * For new services, the version must be 1. For updates, the version must be
      * exactly the current stored version plus one (optimistic locking).
      *
-     * <p>This method does NOT enforce authorization. Use
+     * <p>
+     * This method does NOT enforce authorization. Use
      * {@link #register(ServiceRegistration, Set)} for authorized registration.
      *
      * @param service The service registration to save
@@ -97,19 +99,24 @@ public class ServiceRegistry {
     /**
      * Register a new service or update an existing one with authorization.
      *
-     * <p>Validates the registration against gateway policies before persisting.
+     * <p>
+     * Validates the registration against gateway policies before persisting.
      * For new services, the version must be 1. For updates, the version must be
      * exactly the current stored version plus one (optimistic locking).
      *
-     * <p>Authorization is enforced based on the operation:
+     * <p>
+     * Authorization is enforced based on the operation:
      * <ul>
-     *   <li>New service: requires service.config.create permission</li>
-     *   <li>Update: requires service.config.update permission on the existing service</li>
-     *   <li>Permission policy change: requires service.permissions.write permission</li>
+     * <li>New service: requires service.config.create permission</li>
+     * <li>Update: requires service.config.update permission on the existing
+     * service</li>
+     * <li>Permission policy change: requires service.permissions.write
+     * permission</li>
      * </ul>
      *
      * @param service The service registration to save
-     * @param claims The claims from the authenticated principal (null to skip authorization)
+     * @param claims  The claims from the authenticated principal (null to skip
+     *                authorization)
      * @return Uni with the registration result (success or failure with reason)
      */
     public Uni<RegistrationResult> register(ServiceRegistration service, Set<String> claims) {
@@ -179,7 +186,7 @@ public class ServiceRegistry {
      * Checks if the permission policy has changed between existing and new service.
      *
      * @param existing The existing service registration
-     * @param updated The updated service registration
+     * @param updated  The updated service registration
      * @return true if the permission policy has changed
      */
     private boolean hasPermissionPolicyChanged(ServiceRegistration existing, ServiceRegistration updated) {
@@ -203,7 +210,8 @@ public class ServiceRegistry {
     /**
      * Unregister a service by ID.
      *
-     * <p>This method does NOT enforce authorization. Use
+     * <p>
+     * This method does NOT enforce authorization. Use
      * {@link #unregisterAuthorized(String, Set)} for authorized unregistration.
      *
      * @param serviceId The service ID to remove
@@ -220,7 +228,7 @@ public class ServiceRegistry {
      * Unregister a service by ID with authorization.
      *
      * @param serviceId The service ID to remove
-     * @param claims The claims from the authenticated principal
+     * @param claims    The claims from the authenticated principal
      * @return Uni with the unregistration result
      */
     public Uni<RegistrationResult> unregisterAuthorized(String serviceId, Set<String> claims) {
@@ -247,7 +255,8 @@ public class ServiceRegistry {
     /**
      * Get a service by ID.
      *
-     * <p>This method does NOT enforce authorization. Use
+     * <p>
+     * This method does NOT enforce authorization. Use
      * {@link #getServiceAuthorized(String, Set)} for authorized retrieval.
      *
      * @param serviceId The service ID to find
@@ -268,7 +277,7 @@ public class ServiceRegistry {
      * Get a service by ID with authorization.
      *
      * @param serviceId The service ID to find
-     * @param claims The claims from the authenticated principal
+     * @param claims    The claims from the authenticated principal
      * @return Uni with the result containing the service or an error
      */
     public Uni<RegistrationResult> getServiceAuthorized(String serviceId, Set<String> claims) {
@@ -300,8 +309,11 @@ public class ServiceRegistry {
     /**
      * Update an existing service registration.
      *
-     * <p>This method is for updating existing services (e.g., changing permission policy).
-     * For full re-registration with validation, use {@link #register(ServiceRegistration)}.
+     * <p>
+     * This method is for updating existing services (e.g., changing permission
+     * policy).
+     * For full re-registration with validation, use
+     * {@link #register(ServiceRegistration)}.
      *
      * @param service The updated service registration
      * @return Uni completing when the update is persisted
@@ -314,34 +326,25 @@ public class ServiceRegistry {
     }
 
     /**
-     * Find a route matching the given path and method.
+     * Find a route matching the given path and method across all registered
+     * services.
      *
-     * <p>This is a synchronous operation using local compiled routes for performance.
+     * <p>
+     * This is a synchronous operation that checks each registered service's
+     * endpoints for a matching route.
      *
-     * @param path The request path
+     * @param path   The request path
      * @param method The HTTP method
-     * @return Optional containing the route match if found
+     * @return Optional containing the route lookup result if found
      */
-    public Optional<RouteMatch> findRoute(String path, String method) {
-        var normalizedPath = normalizePath(path);
-        var upperMethod = method.toUpperCase();
-
+    public Optional<RouteLookupResult> findRoute(String path, String method) {
+        // Iterate through all cached services to find a matching route
         for (var route : compiledRoutes.values()) {
-            if (!route.endpoint().methods().contains(upperMethod)
-                    && !route.endpoint().methods().contains("*")) {
-                continue;
-            }
-
-            var matcher = route.pattern().matcher(normalizedPath);
-            if (matcher.matches()) {
-                var pathVariables = extractPathVariables(route.endpoint().path(), matcher);
-                var targetPath = route.endpoint()
-                        .pathRewrite()
-                        .map(rewrite -> applyPathRewrite(rewrite, pathVariables, normalizedPath))
-                        .orElse(normalizedPath);
-
-                return Optional.of(new RouteMatch(route.service(), route.endpoint(), targetPath, pathVariables));
-            }
+            var serviceRegistration = route.service();
+            var routeMatch = serviceRegistration.findRoute(path, method);
+            return routeMatch.isPresent()
+                    ? routeMatch.map(r -> r) // Widen type from RouteMatch to RouteLookupResult
+                    : Optional.of(new ServiceOnlyMatch(serviceRegistration));
         }
 
         return Optional.empty();
@@ -350,8 +353,7 @@ public class ServiceRegistry {
     private void compileAndCacheRoutes(ServiceRegistration service) {
         for (var endpoint : service.endpoints()) {
             var routeKey = buildRouteKey(service.serviceId(), endpoint.path());
-            var pattern = compilePathPattern(endpoint.path());
-            compiledRoutes.put(routeKey, new CompiledRoute(service, endpoint, pattern));
+            compiledRoutes.put(routeKey, new CompiledRoute(service, endpoint));
         }
     }
 
@@ -366,53 +368,5 @@ public class ServiceRegistry {
         return serviceId + ":" + path;
     }
 
-    private String normalizePath(String path) {
-        if (path == null || path.isEmpty()) {
-            return "/";
-        }
-        if (!path.startsWith("/")) {
-            path = "/" + path;
-        }
-        return path;
-    }
-
-    private Pattern compilePathPattern(String pathTemplate) {
-        // Convert path template with {param} placeholders to regex
-        var regex = pathTemplate
-                .replaceAll("\\{([^/]+)\\}", "(?<$1>[^/]+)")
-                .replaceAll("\\*\\*", ".*")
-                .replaceAll("(?<!\\.)\\*", "[^/]*");
-
-        return Pattern.compile("^" + regex + "$");
-    }
-
-    private Map<String, String> extractPathVariables(String pathTemplate, Matcher matcher) {
-        var variables = new HashMap<String, String>();
-        var paramPattern = Pattern.compile("\\{([^/]+)\\}");
-        var paramMatcher = paramPattern.matcher(pathTemplate);
-
-        while (paramMatcher.find()) {
-            var paramName = paramMatcher.group(1);
-            try {
-                var value = matcher.group(paramName);
-                if (value != null) {
-                    variables.put(paramName, value);
-                }
-            } catch (IllegalArgumentException e) {
-                // Group not found, skip
-            }
-        }
-
-        return variables;
-    }
-
-    private String applyPathRewrite(String rewritePattern, Map<String, String> pathVariables, String originalPath) {
-        var result = rewritePattern;
-        for (var entry : pathVariables.entrySet()) {
-            result = result.replace("{" + entry.getKey() + "}", entry.getValue());
-        }
-        return result;
-    }
-
-    private record CompiledRoute(ServiceRegistration service, EndpointConfig endpoint, Pattern pattern) {}
+    private record CompiledRoute(ServiceRegistration service, EndpointConfig endpoint) {}
 }

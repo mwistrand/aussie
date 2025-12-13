@@ -108,6 +108,7 @@ class ServiceRegistrationTest {
                     Optional.empty(),
                     Optional.empty(), // corsConfig
                     Optional.empty(), // permissionPolicy
+                    Optional.empty(), // rateLimitConfig
                     1L); // version
 
             assertNotNull(service);
@@ -131,6 +132,101 @@ class ServiceRegistrationTest {
 
             assertEquals(service1, service2);
             assertEquals(service1.hashCode(), service2.hashCode());
+        }
+    }
+
+    @Nested
+    @DisplayName("Route Matching")
+    class RouteMatchingTests {
+
+        @Test
+        @DisplayName("Should find route for exact path match")
+        void shouldFindRouteForExactPath() {
+            var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var service = ServiceRegistration.builder("my-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
+
+            var result = service.findRoute("/api/users", "GET");
+
+            assertTrue(result.isPresent());
+            assertEquals("/api/users", result.get().targetPath());
+            assertEquals(service, result.get().service());
+        }
+
+        @Test
+        @DisplayName("Should find route with path variables")
+        void shouldFindRouteWithPathVariables() {
+            var endpoint = new EndpointConfig(
+                    "/api/users/{userId}", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var service = ServiceRegistration.builder("my-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
+
+            var result = service.findRoute("/api/users/123", "GET");
+
+            assertTrue(result.isPresent());
+            assertEquals("123", result.get().pathVariables().get("userId"));
+        }
+
+        @Test
+        @DisplayName("Should apply path rewrite")
+        void shouldApplyPathRewrite() {
+            var endpoint = new EndpointConfig(
+                    "/api/v1/users/{userId}", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.of("/users/{userId}"));
+            var service = ServiceRegistration.builder("my-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
+
+            var result = service.findRoute("/api/v1/users/456", "GET");
+
+            assertTrue(result.isPresent());
+            assertEquals("/users/456", result.get().targetPath());
+        }
+
+        @Test
+        @DisplayName("Should not match wrong HTTP method")
+        void shouldNotMatchWrongMethod() {
+            var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var service = ServiceRegistration.builder("my-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
+
+            var result = service.findRoute("/api/users", "POST");
+
+            assertFalse(result.isPresent());
+        }
+
+        @Test
+        @DisplayName("Should match wildcard method")
+        void shouldMatchWildcardMethod() {
+            var endpoint = new EndpointConfig("/api/data", Set.of("*"), EndpointVisibility.PUBLIC, Optional.empty());
+            var service = ServiceRegistration.builder("my-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
+
+            assertTrue(service.findRoute("/api/data", "GET").isPresent());
+            assertTrue(service.findRoute("/api/data", "POST").isPresent());
+            assertTrue(service.findRoute("/api/data", "DELETE").isPresent());
+        }
+
+        @Test
+        @DisplayName("Should return empty for unmatched path")
+        void shouldReturnEmptyForUnmatchedPath() {
+            var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var service = ServiceRegistration.builder("my-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
+
+            var result = service.findRoute("/api/products", "GET");
+
+            assertFalse(result.isPresent());
         }
     }
 }

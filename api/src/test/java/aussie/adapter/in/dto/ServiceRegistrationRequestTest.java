@@ -36,6 +36,7 @@ class ServiceRegistrationRequestTest {
                     List.of(endpoint),
                     null,
                     null,
+                    null,
                     null);
 
             var model = request.toModel();
@@ -58,6 +59,7 @@ class ServiceRegistrationRequestTest {
                     false,
                     null,
                     List.of(endpoint),
+                    null,
                     null,
                     null,
                     null);
@@ -85,6 +87,7 @@ class ServiceRegistrationRequestTest {
                     List.of(publicEndpoint, protectedEndpoint),
                     null,
                     null,
+                    null,
                     null);
 
             var model = request.toModel();
@@ -110,6 +113,7 @@ class ServiceRegistrationRequestTest {
                     List.of(endpoint),
                     null,
                     null,
+                    null,
                     null);
 
             var model = request.toModel();
@@ -127,7 +131,19 @@ class ServiceRegistrationRequestTest {
         @DisplayName("Should default visibility to PRIVATE when not specified")
         void shouldDefaultVisibilityToPrivate() {
             var request = new ServiceRegistrationRequest(
-                    1L, "test-service", null, "http://localhost:8080", null, null, null, null, null, null, null, null);
+                    1L,
+                    "test-service",
+                    null,
+                    "http://localhost:8080",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null);
 
             var model = request.toModel();
 
@@ -138,7 +154,19 @@ class ServiceRegistrationRequestTest {
         @DisplayName("Should use serviceId as displayName when not specified")
         void shouldUseServiceIdAsDisplayName() {
             var request = new ServiceRegistrationRequest(
-                    1L, "my-service", null, "http://localhost:8080", null, null, null, null, null, null, null, null);
+                    1L,
+                    "my-service",
+                    null,
+                    "http://localhost:8080",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null);
 
             var model = request.toModel();
 
@@ -155,6 +183,7 @@ class ServiceRegistrationRequestTest {
                     "http://localhost:8080",
                     null,
                     "public",
+                    null,
                     null,
                     null,
                     null,

@@ -50,9 +50,20 @@ public class BootstrapInitializer {
     /**
      * Bootstrap initialization runs at startup.
      *
-     * <p>Note: This method blocks on reactive calls because Quarkus startup events
-     * are inherently synchronous. The bootstrap process must complete before the
-     * application is ready to serve requests.
+     * <p><strong>Note on blocking behavior:</strong> This method intentionally uses
+     * {@code .await().indefinitely()} to block on reactive calls. This is required
+     * because Quarkus {@link StartupEvent} observers must be synchronous - the
+     * bootstrap process must complete before the application can accept requests.
+     *
+     * <p>This is an acceptable use of blocking because:
+     * <ul>
+     *   <li>It only runs once during application startup</li>
+     *   <li>The application is not yet serving traffic</li>
+     *   <li>Startup events have no alternative async mechanism</li>
+     * </ul>
+     *
+     * <p>All other code in the application should use reactive patterns and avoid
+     * blocking calls.
      */
     void onStart(@Observes StartupEvent event) {
         if (!config.enabled()) {
@@ -71,7 +82,7 @@ public class BootstrapInitializer {
             throw new BootstrapException("Bootstrap is enabled but no key provided. Set AUSSIE_BOOTSTRAP_KEY.");
         }
 
-        // Block on reactive call - startup must complete synchronously
+        // INTENTIONAL BLOCKING: Startup events must be synchronous
         if (!bootstrapService.shouldBootstrap().await().indefinitely()) {
             LOG.info("Bootstrap skipped: admin keys already exist (use recovery mode to override)");
             AUDIT.infof("BOOTSTRAP_SKIPPED reason=admin_keys_exist recovery_mode=%s", config.recoveryMode());
@@ -81,7 +92,7 @@ public class BootstrapInitializer {
         LOG.info("Creating bootstrap admin key...");
 
         try {
-            // Block on reactive call - startup must complete synchronously
+            // INTENTIONAL BLOCKING: Startup events must be synchronous
             BootstrapResult result = bootstrapService.bootstrap().await().indefinitely();
             logBootstrapResult(result);
         } catch (BootstrapException e) {

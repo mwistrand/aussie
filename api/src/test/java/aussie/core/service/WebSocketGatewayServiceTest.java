@@ -24,6 +24,7 @@ import aussie.core.model.EndpointType;
 import aussie.core.model.EndpointVisibility;
 import aussie.core.model.GatewayRequest;
 import aussie.core.model.GatewaySecurityConfig;
+import aussie.core.model.RateLimitDecision;
 import aussie.core.model.RouteAuthResult;
 import aussie.core.model.RouteMatch;
 import aussie.core.model.ServiceRegistration;
@@ -37,6 +38,7 @@ class WebSocketGatewayServiceTest {
     private ServiceRegistry serviceRegistry;
     private RouteAuthenticationService routeAuthService;
     private EndpointMatcher endpointMatcher;
+    private WebSocketRateLimitService rateLimitService;
     private WebSocketGatewayService webSocketGatewayService;
 
     // Permissive security config for testing
@@ -51,7 +53,9 @@ class WebSocketGatewayServiceTest {
                 new InMemoryServiceRegistrationRepository(), NoOpConfigurationCache.INSTANCE, validator, authService);
         routeAuthService = new NoOpRouteAuthService();
         endpointMatcher = new EndpointMatcher(new GlobPatternMatcher());
-        webSocketGatewayService = new WebSocketGatewayService(serviceRegistry, routeAuthService, endpointMatcher);
+        rateLimitService = new NoOpWebSocketRateLimitService();
+        webSocketGatewayService =
+                new WebSocketGatewayService(serviceRegistry, routeAuthService, endpointMatcher, rateLimitService);
     }
 
     private WebSocketUpgradeRequest createRequest(String path) {
@@ -270,7 +274,8 @@ class WebSocketGatewayServiceTest {
         @DisplayName("Should return Unauthorized when auth fails")
         void shouldReturnUnauthorizedWhenAuthFails() {
             var failingAuthService = new FailingAuthService("Token expired");
-            webSocketGatewayService = new WebSocketGatewayService(serviceRegistry, failingAuthService, endpointMatcher);
+            webSocketGatewayService =
+                    new WebSocketGatewayService(serviceRegistry, failingAuthService, endpointMatcher, rateLimitService);
 
             registerWebSocketService("test-service", "http://backend:9090", "/ws/protected", true);
 
@@ -287,8 +292,8 @@ class WebSocketGatewayServiceTest {
         @DisplayName("Should return Forbidden when access denied")
         void shouldReturnForbiddenWhenAccessDenied() {
             var forbiddingAuthService = new ForbiddingAuthService("Insufficient permissions");
-            webSocketGatewayService =
-                    new WebSocketGatewayService(serviceRegistry, forbiddingAuthService, endpointMatcher);
+            webSocketGatewayService = new WebSocketGatewayService(
+                    serviceRegistry, forbiddingAuthService, endpointMatcher, rateLimitService);
 
             registerWebSocketService("test-service", "http://backend:9090", "/ws/admin", true);
 
@@ -372,6 +377,35 @@ class WebSocketGatewayServiceTest {
         @Override
         public Uni<RouteAuthResult> authenticate(GatewayRequest request, RouteMatch route) {
             return Uni.createFrom().item(new RouteAuthResult.Forbidden(reason));
+        }
+    }
+
+    /**
+     * A WebSocket rate limit service that always allows connections and messages.
+     */
+    private static class NoOpWebSocketRateLimitService extends WebSocketRateLimitService {
+        NoOpWebSocketRateLimitService() {
+            super(null, null, null);
+        }
+
+        @Override
+        public Uni<RateLimitDecision> checkConnectionLimit(String serviceId, String clientId) {
+            return Uni.createFrom().item(RateLimitDecision.allow());
+        }
+
+        @Override
+        public Uni<RateLimitDecision> checkMessageLimit(String serviceId, String clientId, String connectionId) {
+            return Uni.createFrom().item(RateLimitDecision.allow());
+        }
+
+        @Override
+        public Uni<Void> cleanupConnection(String serviceId, String clientId, String connectionId) {
+            return Uni.createFrom().voidItem();
+        }
+
+        @Override
+        public boolean isEnabled() {
+            return false;
         }
     }
 }

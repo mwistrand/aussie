@@ -24,6 +24,8 @@ import aussie.core.model.EndpointVisibility;
 import aussie.core.model.GatewaySecurityConfig;
 import aussie.core.model.OperationPermission;
 import aussie.core.model.RegistrationResult;
+import aussie.core.model.RouteMatch;
+import aussie.core.model.ServiceOnlyMatch;
 import aussie.core.model.ServicePermissionPolicy;
 import aussie.core.model.ServiceRegistration;
 
@@ -287,7 +289,8 @@ class ServiceRegistryTest {
 
             var result = registry.findRoute("/api/users", "GET");
             assertTrue(result.isPresent());
-            assertEquals("/api/users", result.get().targetPath());
+            assertInstanceOf(RouteMatch.class, result.get());
+            assertEquals("/api/users", ((RouteMatch) result.get()).targetPath());
         }
 
         @Test
@@ -303,7 +306,8 @@ class ServiceRegistryTest {
 
             var result = registry.findRoute("/api/users/123", "GET");
             assertTrue(result.isPresent());
-            assertEquals("123", result.get().pathVariables().get("userId"));
+            assertInstanceOf(RouteMatch.class, result.get());
+            assertEquals("123", ((RouteMatch) result.get()).pathVariables().get("userId"));
         }
 
         @Test
@@ -319,8 +323,10 @@ class ServiceRegistryTest {
 
             var result = registry.findRoute("/api/users/123/posts/456", "GET");
             assertTrue(result.isPresent());
-            assertEquals("123", result.get().pathVariables().get("userId"));
-            assertEquals("456", result.get().pathVariables().get("postId"));
+            assertInstanceOf(RouteMatch.class, result.get());
+            var routeMatch = (RouteMatch) result.get();
+            assertEquals("123", routeMatch.pathVariables().get("userId"));
+            assertEquals("456", routeMatch.pathVariables().get("postId"));
         }
 
         @Test
@@ -351,7 +357,9 @@ class ServiceRegistryTest {
 
             assertTrue(registry.findRoute("/api/users/info", "GET").isPresent());
             assertTrue(registry.findRoute("/api/products/info", "GET").isPresent());
-            assertFalse(registry.findRoute("/api/users/extra/info", "GET").isPresent());
+            var extra = registry.findRoute("/api/users/extra/info", "GET");
+            assertTrue(extra.isPresent());
+            assertInstanceOf(ServiceOnlyMatch.class, extra.get());
         }
 
         @Test
@@ -365,7 +373,8 @@ class ServiceRegistryTest {
             registry.register(service).await().atMost(TIMEOUT);
 
             var result = registry.findRoute("/api/users", "POST");
-            assertFalse(result.isPresent());
+            assertTrue(result.isPresent());
+            assertInstanceOf(ServiceOnlyMatch.class, result.get());
         }
 
         @Test
@@ -399,8 +408,8 @@ class ServiceRegistryTest {
         }
 
         @Test
-        @DisplayName("Should return empty for unmatched path")
-        void shouldReturnEmptyForUnmatchedPath() {
+        @DisplayName("Should return ServiceOnlyMatch when service matches but no endpoint")
+        void shouldReturnServiceOnlyMatchWhenNoEndpointMatches() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
                     .baseUrl("http://localhost:8080")
@@ -408,8 +417,12 @@ class ServiceRegistryTest {
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
 
+            // This path does not match the endpoint, but the registry iterates services
+            // and should return a ServiceOnlyMatch wrapping the service
             var result = registry.findRoute("/api/products", "GET");
-            assertFalse(result.isPresent());
+            assertTrue(result.isPresent());
+            assertInstanceOf(ServiceOnlyMatch.class, result.get());
+            assertEquals("user-service", result.get().service().serviceId());
         }
 
         @Test
@@ -472,7 +485,8 @@ class ServiceRegistryTest {
 
             var result = registry.findRoute("/api/v1/users/123", "GET");
             assertTrue(result.isPresent());
-            assertEquals("/users/123", result.get().targetPath());
+            assertInstanceOf(RouteMatch.class, result.get());
+            assertEquals("/users/123", ((RouteMatch) result.get()).targetPath());
         }
 
         @Test
@@ -491,7 +505,8 @@ class ServiceRegistryTest {
 
             var result = registry.findRoute("/api/v2/acme/users/456", "GET");
             assertTrue(result.isPresent());
-            assertEquals("/orgs/acme/members/456", result.get().targetPath());
+            assertInstanceOf(RouteMatch.class, result.get());
+            assertEquals("/orgs/acme/members/456", ((RouteMatch) result.get()).targetPath());
         }
     }
 

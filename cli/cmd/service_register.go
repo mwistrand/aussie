@@ -41,6 +41,11 @@ var (
 
 	// Permission policy options
 	permissionPolicyFile string
+
+	// Rate limit options
+	rateLimitRequestsPerWindow int64
+	rateLimitWindowSeconds     int64
+	rateLimitBurstCapacity     int64
 )
 
 var serviceRegisterCmd = &cobra.Command{
@@ -79,6 +84,11 @@ CORS Configuration:
   --cors-exposed-headers  Headers exposed to the browser
   --cors-credentials      Allow credentials (true/false)
   --cors-max-age          Max age for preflight cache (seconds)
+
+Rate Limiting:
+  --rate-limit-requests   Max requests per window
+  --rate-limit-window     Rate limit window duration in seconds
+  --rate-limit-burst      Burst capacity for rate limiting
 
 Permission Policy:
   --permission-policy-file  Path to JSON file containing permission policy
@@ -132,6 +142,11 @@ func init() {
 
 	// Permission policy options
 	serviceRegisterCmd.Flags().StringVar(&permissionPolicyFile, "permission-policy-file", "", "Path to JSON file containing permission policy")
+
+	// Rate limit options
+	serviceRegisterCmd.Flags().Int64Var(&rateLimitRequestsPerWindow, "rate-limit-requests", 0, "Max requests per rate limit window")
+	serviceRegisterCmd.Flags().Int64Var(&rateLimitWindowSeconds, "rate-limit-window", 0, "Rate limit window duration in seconds")
+	serviceRegisterCmd.Flags().Int64Var(&rateLimitBurstCapacity, "rate-limit-burst", 0, "Burst capacity for rate limiting")
 }
 
 func runRegister(cmd *cobra.Command, args []string) error {
@@ -316,6 +331,22 @@ func buildServiceRegistration(cmd *cobra.Command) (*ServiceRegistration, error) 
 		registration.PermissionPolicy = &policy
 	}
 
+	// Rate limit config - build if any rate limit flags are set
+	if hasRateLimitFlags(cmd) {
+		if registration.RateLimitConfig == nil {
+			registration.RateLimitConfig = &RateLimitConfig{}
+		}
+		if cmd.Flags().Changed("rate-limit-requests") && rateLimitRequestsPerWindow > 0 {
+			registration.RateLimitConfig.RequestsPerWindow = &rateLimitRequestsPerWindow
+		}
+		if cmd.Flags().Changed("rate-limit-window") && rateLimitWindowSeconds > 0 {
+			registration.RateLimitConfig.WindowSeconds = &rateLimitWindowSeconds
+		}
+		if cmd.Flags().Changed("rate-limit-burst") && rateLimitBurstCapacity > 0 {
+			registration.RateLimitConfig.BurstCapacity = &rateLimitBurstCapacity
+		}
+	}
+
 	return &registration, nil
 }
 
@@ -326,4 +357,10 @@ func hasCorsFlags(cmd *cobra.Command) bool {
 		cmd.Flags().Changed("cors-exposed-headers") ||
 		cmd.Flags().Changed("cors-credentials") ||
 		cmd.Flags().Changed("cors-max-age")
+}
+
+func hasRateLimitFlags(cmd *cobra.Command) bool {
+	return cmd.Flags().Changed("rate-limit-requests") ||
+		cmd.Flags().Changed("rate-limit-window") ||
+		cmd.Flags().Changed("rate-limit-burst")
 }

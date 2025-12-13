@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
@@ -38,8 +39,10 @@ public class WebSocketProxySession {
     private final WebSocketConfigMapping config;
     private final Optional<String> authSessionId;
     private final Optional<String> userId;
+    private final MessageRateLimitHandler messageRateLimitHandler;
 
     private final AtomicBoolean closing = new AtomicBoolean();
+    private final AtomicLong rateLimitedMessages = new AtomicLong(0);
     private long idleTimerId = -1;
     private long maxLifetimeTimerId = -1;
     private long pingTimerId = -1;
@@ -53,7 +56,15 @@ public class WebSocketProxySession {
             WebSocket backendSocket,
             Vertx vertx,
             WebSocketConfigMapping config) {
-        this(sessionId, clientSocket, backendSocket, vertx, config, Optional.empty(), Optional.empty());
+        this(
+                sessionId,
+                clientSocket,
+                backendSocket,
+                vertx,
+                config,
+                Optional.empty(),
+                Optional.empty(),
+                MessageRateLimitHandler.noOp());
     }
 
     public WebSocketProxySession(
@@ -64,6 +75,26 @@ public class WebSocketProxySession {
             WebSocketConfigMapping config,
             Optional<String> authSessionId,
             Optional<String> userId) {
+        this(
+                sessionId,
+                clientSocket,
+                backendSocket,
+                vertx,
+                config,
+                authSessionId,
+                userId,
+                MessageRateLimitHandler.noOp());
+    }
+
+    public WebSocketProxySession(
+            String sessionId,
+            ServerWebSocket clientSocket,
+            WebSocket backendSocket,
+            Vertx vertx,
+            WebSocketConfigMapping config,
+            Optional<String> authSessionId,
+            Optional<String> userId,
+            MessageRateLimitHandler messageRateLimitHandler) {
         this.sessionId = sessionId;
         this.clientSocket = clientSocket;
         this.backendSocket = backendSocket;
@@ -71,6 +102,7 @@ public class WebSocketProxySession {
         this.config = config;
         this.authSessionId = authSessionId;
         this.userId = userId;
+        this.messageRateLimitHandler = messageRateLimitHandler;
         this.connectedAt = Instant.now();
         this.lastActivity = Instant.now();
     }
@@ -81,10 +113,22 @@ public class WebSocketProxySession {
      * <p>Enables bidirectional message forwarding and starts lifecycle timers.
      */
     public void start() {
-        // Set up bidirectional message forwarding (non-blocking writes)
+        // Set up bidirectional message forwarding with rate limiting (non-blocking)
         clientSocket.handler(buffer -> {
-            resetIdleTimer();
-            backendSocket.write(buffer); // Returns Future, non-blocking
+            messageRateLimitHandler
+                    .checkAndProceed(() -> {
+                        resetIdleTimer();
+                        backendSocket.write(buffer); // Returns Future, non-blocking
+                    })
+                    .subscribe()
+                    .with(
+                            v -> {
+                                /* success, message forwarded */
+                            },
+                            err -> {
+                                rateLimitedMessages.incrementAndGet();
+                                closeWithReason((short) 1008, "Message rate limit exceeded");
+                            });
         });
 
         backendSocket.handler(buffer -> {
@@ -228,5 +272,14 @@ public class WebSocketProxySession {
             return false;
         }
         return event.appliesTo(authSessionId.get(), userId.orElse(null));
+    }
+
+    /**
+     * Get the count of rate-limited messages for this session.
+     *
+     * @return rate limited message count
+     */
+    public long rateLimitedMessageCount() {
+        return rateLimitedMessages.get();
     }
 }

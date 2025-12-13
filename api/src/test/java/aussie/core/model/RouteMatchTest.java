@@ -1,6 +1,7 @@
 package aussie.core.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -31,7 +32,7 @@ class RouteMatchTest {
             var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of("id", "123"));
 
             assertEquals(service, routeMatch.service());
-            assertEquals(endpoint, routeMatch.endpoint());
+            assertEquals(endpoint, routeMatch.endpointConfig());
             assertEquals("/api/users", routeMatch.targetPath());
             assertEquals("123", routeMatch.pathVariables().get("id"));
         }
@@ -134,6 +135,125 @@ class RouteMatchTest {
             var routeMatch = new RouteMatch(service, endpoint, "/", Map.of());
 
             assertEquals(URI.create("http://backend:8080/"), routeMatch.targetUri());
+        }
+    }
+
+    @Nested
+    @DisplayName("RouteLookupResult Implementation")
+    class RouteLookupResultTests {
+
+        @Test
+        @DisplayName("Should return endpoint as Optional")
+        void shouldReturnEndpointAsOptional() {
+            var service = createTestService();
+            var endpoint = createTestEndpoint();
+
+            var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
+
+            assertTrue(routeMatch.endpoint().isPresent());
+            assertEquals(endpoint, routeMatch.endpoint().get());
+        }
+
+        @Test
+        @DisplayName("Should return endpoint visibility")
+        void shouldReturnEndpointVisibility() {
+            var service = ServiceRegistration.builder("test")
+                    .baseUrl("http://localhost:8080")
+                    .defaultVisibility(EndpointVisibility.PRIVATE)
+                    .endpoints(List.of())
+                    .build();
+            var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+
+            var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
+
+            assertEquals(EndpointVisibility.PUBLIC, routeMatch.visibility());
+        }
+
+        @Test
+        @DisplayName("Should return endpoint authRequired")
+        void shouldReturnEndpointAuthRequired() {
+            var service = ServiceRegistration.builder("test")
+                    .baseUrl("http://localhost:8080")
+                    .defaultAuthRequired(false)
+                    .endpoints(List.of())
+                    .build();
+            var endpoint =
+                    new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty(), true);
+
+            var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
+
+            assertTrue(routeMatch.authRequired());
+        }
+
+        @Test
+        @DisplayName("Should return endpoint authRequired false")
+        void shouldReturnEndpointAuthRequiredFalse() {
+            var service = ServiceRegistration.builder("test")
+                    .baseUrl("http://localhost:8080")
+                    .defaultAuthRequired(true)
+                    .endpoints(List.of())
+                    .build();
+            var endpoint = new EndpointConfig(
+                    "/api/public", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty(), false);
+
+            var routeMatch = new RouteMatch(service, endpoint, "/api/public", Map.of());
+
+            assertFalse(routeMatch.authRequired());
+        }
+
+        @Test
+        @DisplayName("Should return endpoint rate limit config when set")
+        void shouldReturnEndpointRateLimitConfig() {
+            var endpointRateLimit = EndpointRateLimitConfig.of(50, 30, 100);
+            var serviceRateLimit = ServiceRateLimitConfig.of(100, 60, 200);
+            var endpoint = new EndpointConfig(
+                    "/api/users",
+                    Set.of("GET"),
+                    EndpointVisibility.PUBLIC,
+                    Optional.empty(),
+                    false,
+                    EndpointType.HTTP,
+                    Optional.of(endpointRateLimit));
+            var service = ServiceRegistration.builder("test")
+                    .baseUrl("http://localhost:8080")
+                    .rateLimitConfig(serviceRateLimit)
+                    .endpoints(List.of())
+                    .build();
+
+            var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
+
+            assertTrue(routeMatch.rateLimitConfig().isPresent());
+            assertEquals(Optional.of(50L), routeMatch.rateLimitConfig().get().requestsPerWindow());
+            assertEquals(Optional.of(30L), routeMatch.rateLimitConfig().get().windowSeconds());
+        }
+
+        @Test
+        @DisplayName("Should fall back to service rate limit config when endpoint has none")
+        void shouldFallBackToServiceRateLimitConfig() {
+            var serviceRateLimit = ServiceRateLimitConfig.of(100, 60, 200);
+            var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var service = ServiceRegistration.builder("test")
+                    .baseUrl("http://localhost:8080")
+                    .rateLimitConfig(serviceRateLimit)
+                    .endpoints(List.of())
+                    .build();
+
+            var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
+
+            assertTrue(routeMatch.rateLimitConfig().isPresent());
+            assertEquals(Optional.of(100L), routeMatch.rateLimitConfig().get().requestsPerWindow());
+            assertEquals(Optional.of(60L), routeMatch.rateLimitConfig().get().windowSeconds());
+        }
+
+        @Test
+        @DisplayName("Should return empty when no rate limit config is set")
+        void shouldReturnEmptyWhenNoRateLimitConfig() {
+            var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var service = createTestService();
+
+            var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
+
+            assertFalse(routeMatch.rateLimitConfig().isPresent());
         }
     }
 

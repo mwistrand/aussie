@@ -21,7 +21,8 @@ public record ServiceRegistrationRequest(
         List<EndpointConfigDto> endpoints,
         ServiceAccessConfigDto accessConfig,
         CorsConfigDto cors,
-        ServicePermissionPolicyDto permissionPolicy) {
+        ServicePermissionPolicyDto permissionPolicy,
+        ServiceRateLimitConfigDto rateLimitConfig) {
     public ServiceRegistration toModel() {
         var defaultVis = defaultVisibility != null
                 ? EndpointVisibility.valueOf(defaultVisibility.toUpperCase())
@@ -47,6 +48,10 @@ public record ServiceRegistrationRequest(
                 ? Optional.of(permissionPolicy.toModel())
                 : Optional.<aussie.core.model.ServicePermissionPolicy>empty();
 
+        var rateLimitConfigModel = rateLimitConfig != null
+                ? Optional.of(rateLimitConfig.toModel())
+                : Optional.<aussie.core.model.ServiceRateLimitConfig>empty();
+
         return new ServiceRegistration(
                 serviceId,
                 displayName != null ? displayName : serviceId,
@@ -59,7 +64,7 @@ public record ServiceRegistrationRequest(
                 accessConfigModel,
                 corsConfigModel,
                 permissionPolicyModel,
-                version == null ? 1L : version); // New registrations
-        // start at version 1
+                rateLimitConfigModel,
+                version == null ? 1L : version); // New registrations start at version 1
     }
 }

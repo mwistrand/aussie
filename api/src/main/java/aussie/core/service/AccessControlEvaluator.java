@@ -8,8 +8,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import aussie.core.model.AccessControlConfig;
-import aussie.core.model.EndpointConfig;
 import aussie.core.model.EndpointVisibility;
+import aussie.core.model.RouteLookupResult;
 import aussie.core.model.ServiceAccessConfig;
 import aussie.core.model.SourceIdentifier;
 
@@ -24,10 +24,10 @@ public class AccessControlEvaluator {
     }
 
     public boolean isAllowed(
-            SourceIdentifier source, EndpointConfig endpoint, Optional<ServiceAccessConfig> serviceConfig) {
+            SourceIdentifier source, RouteLookupResult route, Optional<ServiceAccessConfig> serviceConfig) {
 
         // Public endpoints are always accessible
-        if (endpoint.visibility() == EndpointVisibility.PUBLIC) {
+        if (route.visibility() == EndpointVisibility.PUBLIC) {
             return true;
         }
 

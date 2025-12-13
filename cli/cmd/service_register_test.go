@@ -282,6 +282,9 @@ func TestRegisterCmd_HasAllFlags(t *testing.T) {
 		"cors-credentials",
 		"cors-max-age",
 		"permission-policy-file",
+		"rate-limit-requests",
+		"rate-limit-window",
+		"rate-limit-burst",
 	}
 
 	for _, flagName := range expectedFlags {
@@ -408,6 +411,7 @@ func TestServiceRegistration_OmitEmptyFields(t *testing.T) {
 		"accessConfig",
 		"cors",
 		"permissionPolicy",
+		"rateLimitConfig",
 	}
 
 	for _, field := range omittedFields {
@@ -1036,5 +1040,355 @@ func TestRegisterCmd_HasPermissionPolicyFlag(t *testing.T) {
 	flag := serviceRegisterCmd.Flags().Lookup("permission-policy-file")
 	if flag == nil {
 		t.Error("serviceRegisterCmd should have 'permission-policy-file' flag")
+	}
+}
+
+func TestRegisterCmd_HasRateLimitFlags(t *testing.T) {
+	rateLimitFlags := []string{
+		"rate-limit-requests",
+		"rate-limit-window",
+		"rate-limit-burst",
+	}
+
+	for _, flagName := range rateLimitFlags {
+		flag := serviceRegisterCmd.Flags().Lookup(flagName)
+		if flag == nil {
+			t.Errorf("serviceRegisterCmd should have '%s' flag", flagName)
+		}
+	}
+}
+
+func TestRateLimitConfig_JSONRoundTrip(t *testing.T) {
+	requests := int64(100)
+	window := int64(60)
+	burst := int64(50)
+
+	config := RateLimitConfig{
+		RequestsPerWindow: &requests,
+		WindowSeconds:     &window,
+		BurstCapacity:     &burst,
+	}
+
+	data, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("Marshal error: %v", err)
+	}
+
+	var unmarshaled RateLimitConfig
+	if err := json.Unmarshal(data, &unmarshaled); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+
+	if unmarshaled.RequestsPerWindow == nil || *unmarshaled.RequestsPerWindow != requests {
+		t.Errorf("RequestsPerWindow = %v, want %d", unmarshaled.RequestsPerWindow, requests)
+	}
+	if unmarshaled.WindowSeconds == nil || *unmarshaled.WindowSeconds != window {
+		t.Errorf("WindowSeconds = %v, want %d", unmarshaled.WindowSeconds, window)
+	}
+	if unmarshaled.BurstCapacity == nil || *unmarshaled.BurstCapacity != burst {
+		t.Errorf("BurstCapacity = %v, want %d", unmarshaled.BurstCapacity, burst)
+	}
+}
+
+func TestRateLimitConfig_WithWebSocket_JSONRoundTrip(t *testing.T) {
+	requests := int64(100)
+	connRequests := int64(5)
+	connBurst := int64(3)
+	msgRequests := int64(200)
+	msgBurst := int64(100)
+
+	config := RateLimitConfig{
+		RequestsPerWindow: &requests,
+		WebSocket: &WebSocketRateLimitConfig{
+			Connection: &RateLimitValues{
+				RequestsPerWindow: &connRequests,
+				BurstCapacity:     &connBurst,
+			},
+			Message: &RateLimitValues{
+				RequestsPerWindow: &msgRequests,
+				BurstCapacity:     &msgBurst,
+			},
+		},
+	}
+
+	data, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("Marshal error: %v", err)
+	}
+
+	var unmarshaled RateLimitConfig
+	if err := json.Unmarshal(data, &unmarshaled); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+
+	if unmarshaled.WebSocket == nil {
+		t.Fatal("WebSocket config should not be nil")
+	}
+	if unmarshaled.WebSocket.Connection == nil {
+		t.Fatal("WebSocket.Connection should not be nil")
+	}
+	if *unmarshaled.WebSocket.Connection.RequestsPerWindow != connRequests {
+		t.Errorf("Connection.RequestsPerWindow = %d, want %d",
+			*unmarshaled.WebSocket.Connection.RequestsPerWindow, connRequests)
+	}
+	if unmarshaled.WebSocket.Message == nil {
+		t.Fatal("WebSocket.Message should not be nil")
+	}
+	if *unmarshaled.WebSocket.Message.RequestsPerWindow != msgRequests {
+		t.Errorf("Message.RequestsPerWindow = %d, want %d",
+			*unmarshaled.WebSocket.Message.RequestsPerWindow, msgRequests)
+	}
+}
+
+func TestValidateServiceConfig_WithRateLimitConfig(t *testing.T) {
+	configJSON := `{
+		"version": 1,
+		"serviceId": "test-service",
+		"displayName": "Test Service",
+		"baseUrl": "http://localhost:9090",
+		"rateLimitConfig": {
+			"requestsPerWindow": 100,
+			"windowSeconds": 60,
+			"burstCapacity": 50
+		}
+	}`
+
+	result := ValidateServiceConfig([]byte(configJSON))
+	if !result.IsValid() {
+		t.Errorf("Expected valid config, got errors: %v", result.Errors)
+	}
+}
+
+func TestValidateServiceConfig_WithFullRateLimitConfig(t *testing.T) {
+	configJSON := `{
+		"version": 1,
+		"serviceId": "test-service",
+		"displayName": "Test Service",
+		"baseUrl": "http://localhost:9090",
+		"rateLimitConfig": {
+			"requestsPerWindow": 100,
+			"burstCapacity": 5,
+			"websocket": {
+				"connection": {
+					"requestsPerWindow": 5,
+					"burstCapacity": 3
+				},
+				"message": {
+					"requestsPerWindow": 200,
+					"burstCapacity": 100
+				}
+			}
+		}
+	}`
+
+	result := ValidateServiceConfig([]byte(configJSON))
+	if !result.IsValid() {
+		t.Errorf("Expected valid config, got errors: %v", result.Errors)
+	}
+}
+
+func TestValidateServiceConfig_InvalidRateLimitConfig(t *testing.T) {
+	configJSON := `{
+		"version": 1,
+		"serviceId": "test-service",
+		"displayName": "Test Service",
+		"baseUrl": "http://localhost:9090",
+		"rateLimitConfig": {
+			"requestsPerWindow": -1,
+			"windowSeconds": 0,
+			"burstCapacity": -5
+		}
+	}`
+
+	result := ValidateServiceConfig([]byte(configJSON))
+	if result.IsValid() {
+		t.Error("Expected validation errors for invalid rate limit values")
+	}
+	if len(result.Errors) != 3 {
+		t.Errorf("Expected 3 validation errors, got %d", len(result.Errors))
+	}
+}
+
+func TestBuildServiceRegistration_RateLimitFlags(t *testing.T) {
+	// Save and restore global state
+	oldRegisterFile := registerFile
+	oldRateLimitRequestsPerWindow := rateLimitRequestsPerWindow
+	oldRateLimitWindowSeconds := rateLimitWindowSeconds
+	oldRateLimitBurstCapacity := rateLimitBurstCapacity
+	defer func() {
+		registerFile = oldRegisterFile
+		rateLimitRequestsPerWindow = oldRateLimitRequestsPerWindow
+		rateLimitWindowSeconds = oldRateLimitWindowSeconds
+		rateLimitBurstCapacity = oldRateLimitBurstCapacity
+	}()
+
+	registerFile = ""
+	rateLimitRequestsPerWindow = 100
+	rateLimitWindowSeconds = 60
+	rateLimitBurstCapacity = 50
+
+	cmd := &cobra.Command{}
+	cmd.Flags().StringVarP(&registerFile, "file", "f", "", "")
+	cmd.Flags().StringVar(&serviceID, "service-id", "", "")
+	cmd.Flags().StringVar(&baseURL, "base-url", "", "")
+	cmd.Flags().Int64Var(&rateLimitRequestsPerWindow, "rate-limit-requests", 100, "")
+	cmd.Flags().Int64Var(&rateLimitWindowSeconds, "rate-limit-window", 60, "")
+	cmd.Flags().Int64Var(&rateLimitBurstCapacity, "rate-limit-burst", 50, "")
+
+	cmd.Flags().Set("rate-limit-requests", "100")
+	cmd.Flags().Set("rate-limit-window", "60")
+	cmd.Flags().Set("rate-limit-burst", "50")
+
+	reg, err := buildServiceRegistration(cmd)
+	if err != nil {
+		t.Fatalf("buildServiceRegistration() error: %v", err)
+	}
+
+	if reg.RateLimitConfig == nil {
+		t.Fatal("RateLimitConfig should not be nil when rate limit flags are set")
+	}
+	if reg.RateLimitConfig.RequestsPerWindow == nil || *reg.RateLimitConfig.RequestsPerWindow != 100 {
+		t.Errorf("RequestsPerWindow = %v, want 100", reg.RateLimitConfig.RequestsPerWindow)
+	}
+	if reg.RateLimitConfig.WindowSeconds == nil || *reg.RateLimitConfig.WindowSeconds != 60 {
+		t.Errorf("WindowSeconds = %v, want 60", reg.RateLimitConfig.WindowSeconds)
+	}
+	if reg.RateLimitConfig.BurstCapacity == nil || *reg.RateLimitConfig.BurstCapacity != 50 {
+		t.Errorf("BurstCapacity = %v, want 50", reg.RateLimitConfig.BurstCapacity)
+	}
+}
+
+func TestBuildServiceRegistration_RateLimitFromFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "service.json")
+
+	content := `{
+		"version": 1,
+		"serviceId": "file-service",
+		"baseUrl": "http://file-host:8080",
+		"rateLimitConfig": {
+			"requestsPerWindow": 200,
+			"windowSeconds": 120,
+			"burstCapacity": 100,
+			"websocket": {
+				"connection": {
+					"requestsPerWindow": 10,
+					"burstCapacity": 5
+				}
+			}
+		}
+	}`
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write test file: %v", err)
+	}
+
+	// Save and restore global state
+	oldRegisterFile := registerFile
+	defer func() { registerFile = oldRegisterFile }()
+	registerFile = filePath
+
+	cmd := &cobra.Command{}
+	cmd.Flags().StringVarP(&registerFile, "file", "f", filePath, "")
+	cmd.Flags().StringVar(&serviceID, "service-id", "", "")
+	cmd.Flags().StringVar(&baseURL, "base-url", "", "")
+	cmd.Flags().Int64Var(&rateLimitRequestsPerWindow, "rate-limit-requests", 0, "")
+	cmd.Flags().Int64Var(&rateLimitWindowSeconds, "rate-limit-window", 0, "")
+	cmd.Flags().Int64Var(&rateLimitBurstCapacity, "rate-limit-burst", 0, "")
+
+	reg, err := buildServiceRegistration(cmd)
+	if err != nil {
+		t.Fatalf("buildServiceRegistration() error: %v", err)
+	}
+
+	if reg.RateLimitConfig == nil {
+		t.Fatal("RateLimitConfig should not be nil when provided in file")
+	}
+	if reg.RateLimitConfig.RequestsPerWindow == nil || *reg.RateLimitConfig.RequestsPerWindow != 200 {
+		t.Errorf("RequestsPerWindow = %v, want 200", reg.RateLimitConfig.RequestsPerWindow)
+	}
+	if reg.RateLimitConfig.WebSocket == nil {
+		t.Fatal("WebSocket config should not be nil")
+	}
+	if reg.RateLimitConfig.WebSocket.Connection == nil {
+		t.Fatal("WebSocket.Connection should not be nil")
+	}
+	if *reg.RateLimitConfig.WebSocket.Connection.RequestsPerWindow != 10 {
+		t.Errorf("WebSocket.Connection.RequestsPerWindow = %d, want 10",
+			*reg.RateLimitConfig.WebSocket.Connection.RequestsPerWindow)
+	}
+}
+
+func TestServiceRegistration_WithRateLimitConfig(t *testing.T) {
+	requests := int64(100)
+	window := int64(60)
+	burst := int64(50)
+
+	reg := ServiceRegistration{
+		Version:   1,
+		ServiceID: "test-service",
+		BaseURL:   "http://localhost:9090",
+		RateLimitConfig: &RateLimitConfig{
+			RequestsPerWindow: &requests,
+			WindowSeconds:     &window,
+			BurstCapacity:     &burst,
+		},
+	}
+
+	data, err := json.Marshal(reg)
+	if err != nil {
+		t.Fatalf("Failed to marshal ServiceRegistration: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("Failed to unmarshal to map: %v", err)
+	}
+
+	if _, exists := result["rateLimitConfig"]; !exists {
+		t.Error("rateLimitConfig should be present when set")
+	}
+
+	var unmarshaled ServiceRegistration
+	if err := json.Unmarshal(data, &unmarshaled); err != nil {
+		t.Fatalf("Failed to unmarshal ServiceRegistration: %v", err)
+	}
+
+	if unmarshaled.RateLimitConfig == nil {
+		t.Fatal("RateLimitConfig should not be nil")
+	}
+	if *unmarshaled.RateLimitConfig.RequestsPerWindow != requests {
+		t.Errorf("RequestsPerWindow = %d, want %d", *unmarshaled.RateLimitConfig.RequestsPerWindow, requests)
+	}
+}
+
+func TestHasRateLimitFlags(t *testing.T) {
+	tests := []struct {
+		name     string
+		setFlags []string
+		want     bool
+	}{
+		{"no flags", []string{}, false},
+		{"rate-limit-requests", []string{"rate-limit-requests"}, true},
+		{"rate-limit-window", []string{"rate-limit-window"}, true},
+		{"rate-limit-burst", []string{"rate-limit-burst"}, true},
+		{"multiple", []string{"rate-limit-requests", "rate-limit-burst"}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().Int64Var(&rateLimitRequestsPerWindow, "rate-limit-requests", 0, "")
+			cmd.Flags().Int64Var(&rateLimitWindowSeconds, "rate-limit-window", 0, "")
+			cmd.Flags().Int64Var(&rateLimitBurstCapacity, "rate-limit-burst", 0, "")
+
+			for _, flag := range tt.setFlags {
+				cmd.Flags().Set(flag, "100")
+			}
+
+			got := hasRateLimitFlags(cmd)
+			if got != tt.want {
+				t.Errorf("hasRateLimitFlags() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

@@ -2,14 +2,30 @@ package aussie.core.model;
 
 import java.net.URI;
 import java.util.Map;
+import java.util.Optional;
 
+/**
+ * Represents a route lookup result where a specific endpoint was matched.
+ *
+ * <p>
+ * Contains the matched service, endpoint, resolved target path, and any path
+ * variables extracted from the request path.
+ *
+ * <p>
+ * Configuration values (visibility, authRequired, rateLimitConfig) are resolved
+ * from the endpoint when available, falling back to service defaults otherwise.
+ */
 public record RouteMatch(
-        ServiceRegistration service, EndpointConfig endpoint, String targetPath, Map<String, String> pathVariables) {
+        ServiceRegistration service,
+        EndpointConfig endpointConfig,
+        String targetPath,
+        Map<String, String> pathVariables)
+        implements RouteLookupResult {
     public RouteMatch {
         if (service == null) {
             throw new IllegalArgumentException("Service cannot be null");
         }
-        if (endpoint == null) {
+        if (endpointConfig == null) {
             throw new IllegalArgumentException("Endpoint cannot be null");
         }
         if (targetPath == null) {
@@ -18,6 +34,11 @@ public record RouteMatch(
         if (pathVariables == null) {
             pathVariables = Map.of();
         }
+    }
+
+    @Override
+    public Optional<EndpointConfig> endpoint() {
+        return Optional.of(endpointConfig);
     }
 
     /**

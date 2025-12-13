@@ -22,6 +22,7 @@ import aussie.core.model.CorsConfig;
 import aussie.core.model.EndpointVisibility;
 import aussie.core.model.ServiceAccessConfig;
 import aussie.core.model.ServicePermissionPolicy;
+import aussie.core.model.ServiceRateLimitConfig;
 import aussie.core.model.ServiceRegistration;
 import aussie.core.port.out.ServiceRegistrationRepository;
 
@@ -60,8 +61,8 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                         INSERT INTO service_registrations
                         (service_id, display_name, base_url, route_prefix,
                          default_visibility, default_auth_required, visibility_rules, endpoints, access_config,
-                         cors_config, permission_policy, version, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
+                         cors_config, permission_policy, rate_limit_config, version, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
                         """);
     }
 
@@ -102,6 +103,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                             registration.accessConfig().map(this::toJson).orElse(null),
                             registration.corsConfig().map(this::toJson).orElse(null),
                             registration.permissionPolicy().map(this::toJson).orElse(null),
+                            registration.rateLimitConfig().map(this::toJson).orElse(null),
                             registration.version());
                     return session.executeAsync(bound).toCompletableFuture();
                 })
@@ -200,6 +202,8 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                 Optional.ofNullable(row.getString("cors_config")).map(json -> fromJson(json, CorsConfig.class)),
                 Optional.ofNullable(row.getString("permission_policy"))
                         .map(json -> fromJson(json, ServicePermissionPolicy.class)),
+                Optional.ofNullable(row.getString("rate_limit_config"))
+                        .map(json -> fromJson(json, ServiceRateLimitConfig.class)),
                 version);
     }
 
@@ -234,7 +238,8 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
      * Gets an executor that will run on the Vert.x context if available,
      * otherwise falls back to the default worker pool.
      *
-     * <p>This is necessary because the Cassandra driver completes its futures
+     * <p>
+     * This is necessary because the Cassandra driver completes its futures
      * on Netty I/O threads, which don't have a Vert.x context. When Quarkus
      * RESTEasy Reactive tries to resume processing, it expects a Vert.x context.
      */

@@ -14,6 +14,7 @@ type ServiceRegistration struct {
 	AccessConfig        *ServiceAccessConfig     `json:"accessConfig,omitempty"`
 	Cors                *CorsConfig              `json:"cors,omitempty"`
 	PermissionPolicy    *ServicePermissionPolicy `json:"permissionPolicy,omitempty"`
+	RateLimitConfig     *RateLimitConfig         `json:"rateLimitConfig,omitempty"`
 }
 
 // VisibilityRule defines visibility for a path pattern
@@ -64,4 +65,25 @@ type OperationPermission struct {
 type PermissionPolicyResponse struct {
 	PermissionPolicy *ServicePermissionPolicy `json:"permissionPolicy"`
 	Version          int64                    `json:"version"`
+}
+
+// RateLimitConfig defines rate limiting configuration for a service
+type RateLimitConfig struct {
+	RequestsPerWindow *int64                    `json:"requestsPerWindow,omitempty"`
+	WindowSeconds     *int64                    `json:"windowSeconds,omitempty"`
+	BurstCapacity     *int64                    `json:"burstCapacity,omitempty"`
+	WebSocket         *WebSocketRateLimitConfig `json:"websocket,omitempty"`
+}
+
+// WebSocketRateLimitConfig defines rate limiting for WebSocket connections and messages
+type WebSocketRateLimitConfig struct {
+	Connection *RateLimitValues `json:"connection,omitempty"`
+	Message    *RateLimitValues `json:"message,omitempty"`
+}
+
+// RateLimitValues defines the rate limit values for a specific context
+type RateLimitValues struct {
+	RequestsPerWindow *int64 `json:"requestsPerWindow,omitempty"`
+	WindowSeconds     *int64 `json:"windowSeconds,omitempty"`
+	BurstCapacity     *int64 `json:"burstCapacity,omitempty"`
 }
