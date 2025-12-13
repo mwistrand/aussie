@@ -16,6 +16,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import io.quarkiverse.resteasy.problem.HttpProblem;
 import io.quarkus.security.identity.CurrentIdentityAssociation;
 import io.smallrye.mutiny.Uni;
 
@@ -133,9 +134,9 @@ public class AdminResource {
     }
 
     /**
-     * Converts a RegistrationResult.Failure to the appropriate GatewayProblem exception.
+     * Converts a RegistrationResult.Failure to the appropriate HttpProblem exception.
      */
-    private GatewayProblem toGatewayProblem(RegistrationResult.Failure failure) {
+    private HttpProblem toGatewayProblem(RegistrationResult.Failure failure) {
         return switch (failure.statusCode()) {
             case 403 -> GatewayProblem.forbidden(failure.reason());
             case 404 -> GatewayProblem.resourceNotFound("Service", failure.reason());

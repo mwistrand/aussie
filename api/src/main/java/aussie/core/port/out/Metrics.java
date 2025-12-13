@@ -123,4 +123,23 @@ public interface Metrics {
      * Record WebSocket connection limit reached.
      */
     void recordWebSocketLimitReached();
+
+    // ========== Rate Limiting Metrics ==========
+
+    /**
+     * Record a rate limit check.
+     *
+     * @param serviceId the target service ID
+     * @param allowed whether the request was allowed
+     * @param remaining remaining requests in window
+     */
+    void recordRateLimitCheck(String serviceId, boolean allowed, long remaining);
+
+    /**
+     * Record a rate limit exceeded event.
+     *
+     * @param serviceId the target service ID
+     * @param limitType the type of limit (http, ws_connection, ws_message)
+     */
+    void recordRateLimitExceeded(String serviceId, String limitType);
 }

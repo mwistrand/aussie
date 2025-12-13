@@ -59,7 +59,7 @@ public record ServiceRegistrationRequest(
                 accessConfigModel,
                 corsConfigModel,
                 permissionPolicyModel,
-                version == null ? 1L : version); // New registrations
-        // start at version 1
+                Optional.empty(), // rateLimitConfig - not configurable via API request for now
+                version == null ? 1L : version); // New registrations start at version 1
     }
 }

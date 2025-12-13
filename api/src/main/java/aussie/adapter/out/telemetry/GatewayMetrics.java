@@ -391,6 +391,51 @@ public class GatewayMetrics implements Metrics {
     }
 
     // -------------------------------------------------------------------------
+    // Rate Limiting Metrics
+    // -------------------------------------------------------------------------
+
+    /**
+     * Record a rate limit check.
+     *
+     * @param serviceId the target service ID
+     * @param allowed whether the request was allowed
+     * @param remaining remaining requests in window
+     */
+    @Override
+    public void recordRateLimitCheck(String serviceId, boolean allowed, long remaining) {
+        if (!enabled) {
+            return;
+        }
+
+        Counter.builder("aussie.ratelimit.checks.total")
+                .description("Total rate limit checks")
+                .tag("service_id", nullSafe(serviceId))
+                .tag("allowed", String.valueOf(allowed))
+                .register(registry)
+                .increment();
+    }
+
+    /**
+     * Record a rate limit exceeded event.
+     *
+     * @param serviceId the target service ID
+     * @param limitType the type of limit (http, ws_connection, ws_message)
+     */
+    @Override
+    public void recordRateLimitExceeded(String serviceId, String limitType) {
+        if (!enabled) {
+            return;
+        }
+
+        Counter.builder("aussie.ratelimit.exceeded.total")
+                .description("Rate limit exceeded events")
+                .tag("service_id", nullSafe(serviceId))
+                .tag("limit_type", limitType)
+                .register(registry)
+                .increment();
+    }
+
+    // -------------------------------------------------------------------------
     // Helper Methods
     // -------------------------------------------------------------------------
 

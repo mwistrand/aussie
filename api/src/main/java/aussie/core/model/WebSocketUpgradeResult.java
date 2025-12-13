@@ -51,4 +51,14 @@ public sealed interface WebSocketUpgradeResult {
      * Path matches but endpoint is not a WebSocket endpoint.
      */
     record NotWebSocket(String path) implements WebSocketUpgradeResult {}
+
+    /**
+     * Connection rate limit exceeded.
+     *
+     * @param retryAfterSeconds seconds until the client can retry
+     * @param limit             the rate limit
+     * @param resetAtEpochSeconds Unix timestamp when limit resets
+     */
+    record RateLimited(long retryAfterSeconds, long limit, long resetAtEpochSeconds)
+            implements WebSocketUpgradeResult {}
 }

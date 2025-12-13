@@ -1,0 +1,228 @@
+package aussie.core.service;
+
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+
+import aussie.config.RateLimitingConfig;
+import aussie.core.model.EffectiveRateLimit;
+import aussie.core.model.EndpointRateLimitConfig;
+import aussie.core.model.RouteMatch;
+import aussie.core.model.ServiceRateLimitConfig;
+import aussie.core.model.ServiceRegistration;
+import aussie.core.port.out.ServiceRegistrationRepository;
+
+/**
+ * Resolves effective rate limits based on the configuration hierarchy.
+ *
+ * <p>Resolution priority (highest to lowest):
+ * <ol>
+ *   <li>Endpoint-specific configuration</li>
+ *   <li>Service-level configuration</li>
+ *   <li>Platform defaults</li>
+ * </ol>
+ *
+ * <p>All resolved limits are capped at the platform maximum to ensure
+ * no service or endpoint can exceed platform-wide limits.
+ */
+@ApplicationScoped
+public class RateLimitResolver {
+
+    private final RateLimitingConfig config;
+    private final ServiceRegistrationRepository repository;
+
+    // Cache for service rate limit configs to avoid repeated lookups
+    private final ConcurrentMap<String, Optional<ServiceRateLimitConfig>> serviceConfigCache =
+            new ConcurrentHashMap<>();
+
+    @Inject
+    public RateLimitResolver(RateLimitingConfig config, ServiceRegistrationRepository repository) {
+        this.config = config;
+        this.repository = repository;
+    }
+
+    /**
+     * Resolves the effective rate limit for an HTTP request.
+     *
+     * @param route the matched route (service + endpoint)
+     * @return the effective rate limit, capped at platform maximum
+     */
+    public EffectiveRateLimit resolveHttpLimit(RouteMatch route) {
+        final var service = route.service();
+        final var endpoint = route.endpoint();
+
+        return resolveLimit(
+                endpoint.rateLimitConfig(),
+                service.rateLimitConfig(),
+                config.defaultRequestsPerWindow(),
+                config.windowSeconds(),
+                config.burstCapacity());
+    }
+
+    /**
+     * Resolves the effective rate limit for a service without a specific endpoint.
+     *
+     * @param service the service registration
+     * @return the effective rate limit, capped at platform maximum
+     */
+    public EffectiveRateLimit resolveServiceLimit(ServiceRegistration service) {
+        return resolveLimit(
+                Optional.empty(),
+                service.rateLimitConfig(),
+                config.defaultRequestsPerWindow(),
+                config.windowSeconds(),
+                config.burstCapacity());
+    }
+
+    /**
+     * Resolves the effective rate limit using only service ID (for pass-through mode).
+     *
+     * <p>Looks up the service registration to honor service-specific rate limit
+     * configuration. Falls back to platform defaults if service not found.
+     *
+     * @param serviceId the service ID
+     * @return the effective rate limit, capped at platform maximum
+     */
+    public EffectiveRateLimit resolveByServiceId(String serviceId) {
+        if (serviceId == null || "unknown".equals(serviceId)) {
+            return resolvePlatformDefaults();
+        }
+
+        // Check cache first
+        final var cachedConfig = serviceConfigCache.get(serviceId);
+        if (cachedConfig != null) {
+            return resolveLimit(
+                    Optional.empty(),
+                    cachedConfig,
+                    config.defaultRequestsPerWindow(),
+                    config.windowSeconds(),
+                    config.burstCapacity());
+        }
+
+        // Look up service registration (blocking call - cached results mitigate impact)
+        final var serviceOpt = repository.findById(serviceId).await().indefinitely();
+        final var serviceConfig =
+                serviceOpt.map(ServiceRegistration::rateLimitConfig).orElse(Optional.empty());
+
+        // Cache the result (including empty for unknown services)
+        serviceConfigCache.put(serviceId, serviceConfig);
+
+        return resolveLimit(
+                Optional.empty(),
+                serviceConfig,
+                config.defaultRequestsPerWindow(),
+                config.windowSeconds(),
+                config.burstCapacity());
+    }
+
+    /**
+     * Invalidates the cached rate limit config for a service.
+     *
+     * <p>Call this when a service registration is updated or deleted.
+     *
+     * @param serviceId the service ID to invalidate
+     */
+    public void invalidateCache(String serviceId) {
+        serviceConfigCache.remove(serviceId);
+    }
+
+    /**
+     * Resolves the effective WebSocket connection rate limit.
+     *
+     * @param service the service registration (optional)
+     * @return the effective rate limit for WebSocket connections
+     */
+    public EffectiveRateLimit resolveWebSocketConnectionLimit(Optional<ServiceRegistration> service) {
+        // WebSocket connection limits use the dedicated WS config
+        final var wsConfig = config.websocket().connection();
+
+        // Service-level WS rate limits could be added in the future
+        // For now, use platform WebSocket defaults
+        return new EffectiveRateLimit(wsConfig.requestsPerWindow(), wsConfig.windowSeconds(), wsConfig.burstCapacity())
+                .capAtPlatformMax(config.platformMaxRequestsPerWindow());
+    }
+
+    /**
+     * Resolves the effective WebSocket message rate limit.
+     *
+     * @param service the service registration (optional)
+     * @return the effective rate limit for WebSocket messages
+     */
+    public EffectiveRateLimit resolveWebSocketMessageLimit(Optional<ServiceRegistration> service) {
+        // WebSocket message limits use the dedicated WS config
+        final var wsConfig = config.websocket().message();
+
+        // Service-level WS rate limits could be added in the future
+        // For now, use platform WebSocket defaults
+        return new EffectiveRateLimit(wsConfig.requestsPerWindow(), wsConfig.windowSeconds(), wsConfig.burstCapacity())
+                .capAtPlatformMax(config.platformMaxRequestsPerWindow());
+    }
+
+    /**
+     * Resolves platform default limits.
+     *
+     * @return the platform default rate limit
+     */
+    public EffectiveRateLimit resolvePlatformDefaults() {
+        return new EffectiveRateLimit(config.defaultRequestsPerWindow(), config.windowSeconds(), config.burstCapacity())
+                .capAtPlatformMax(config.platformMaxRequestsPerWindow());
+    }
+
+    /**
+     * Checks if rate limiting is enabled.
+     *
+     * @return true if enabled
+     */
+    public boolean isEnabled() {
+        return config.enabled();
+    }
+
+    /**
+     * Gets the platform maximum requests per window.
+     *
+     * @return platform maximum
+     */
+    public long getPlatformMax() {
+        return config.platformMaxRequestsPerWindow();
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal Resolution Logic
+    // -------------------------------------------------------------------------
+
+    private EffectiveRateLimit resolveLimit(
+            Optional<EndpointRateLimitConfig> endpointConfig,
+            Optional<ServiceRateLimitConfig> serviceConfig,
+            long defaultRequests,
+            long defaultWindow,
+            long defaultBurst) {
+
+        // Start with platform defaults
+        long requestsPerWindow = defaultRequests;
+        long windowSeconds = defaultWindow;
+        long burstCapacity = defaultBurst;
+
+        // Apply service-level overrides
+        if (serviceConfig.isPresent()) {
+            final var svc = serviceConfig.get();
+            requestsPerWindow = svc.requestsPerWindow().orElse(requestsPerWindow);
+            windowSeconds = svc.windowSeconds().orElse(windowSeconds);
+            burstCapacity = svc.burstCapacity().orElse(burstCapacity);
+        }
+
+        // Apply endpoint-level overrides (highest priority)
+        if (endpointConfig.isPresent()) {
+            final var ep = endpointConfig.get();
+            requestsPerWindow = ep.requestsPerWindow().orElse(requestsPerWindow);
+            windowSeconds = ep.windowSeconds().orElse(windowSeconds);
+            burstCapacity = ep.burstCapacity().orElse(burstCapacity);
+        }
+
+        // Create and cap at platform maximum
+        return new EffectiveRateLimit(requestsPerWindow, windowSeconds, burstCapacity)
+                .capAtPlatformMax(config.platformMaxRequestsPerWindow());
+    }
+}

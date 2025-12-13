@@ -123,3 +123,71 @@ groups:
         annotations:
           summary: "High traffic volume"
           description: "Traffic volume is {{ $value }} requests/second."
+
+  - name: aussie-ratelimit
+    interval: 30s
+    rules:
+      # HTTP Rate Limiting Alerts
+      - alert: RateLimitExceededSpike
+        expr: |
+          sum(rate(aussie_ratelimit_exceeded_total{limit_type="http"}[5m])) by (service_id) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP rate limit exceeded spike for {{ $labels.service_id }}"
+          description: "{{ $value | humanize }} rate limit exceeded events/second for service {{ $labels.service_id }}."
+
+      - alert: RateLimitExceededCritical
+        expr: |
+          sum(rate(aussie_ratelimit_exceeded_total{limit_type="http"}[5m])) by (service_id) > 50
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical HTTP rate limit exceeded for {{ $labels.service_id }}"
+          description: "{{ $value | humanize }} rate limit exceeded events/second for service {{ $labels.service_id }}. Possible abuse or misconfigured client."
+
+      # WebSocket Rate Limiting Alerts
+      - alert: WebSocketConnectionRateLimitSpike
+        expr: |
+          sum(rate(aussie_ratelimit_exceeded_total{limit_type="ws_connection"}[5m])) > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WebSocket connection rate limit exceeded"
+          description: "{{ $value | humanize }} WebSocket connection rate limit events/second."
+
+      - alert: WebSocketMessageRateLimitSpike
+        expr: |
+          sum(rate(aussie_ratelimit_exceeded_total{limit_type="ws_message"}[5m])) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WebSocket message rate limit exceeded"
+          description: "{{ $value | humanize }} WebSocket message rate limit events/second."
+
+      # Rate Limit Effectiveness
+      - alert: HighRateLimitRatio
+        expr: |
+          sum(rate(aussie_ratelimit_exceeded_total[5m])) by (service_id)
+          / sum(rate(aussie_ratelimit_checks_total[5m])) by (service_id) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate limit rejection ratio for {{ $labels.service_id }}"
+          description: "{{ $value | humanizePercentage }} of requests are being rate limited for service {{ $labels.service_id }}. Consider adjusting limits or investigating traffic patterns."
+
+      # Potential DoS via Rate Limiting
+      - alert: PotentialDoSViaRateLimiting
+        expr: |
+          sum(rate(aussie_ratelimit_exceeded_total[1m])) > 100
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Potential DoS attack detected via rate limiting"
+          description: "{{ $value | humanize }} rate limit events/second across all services. This may indicate a coordinated attack."

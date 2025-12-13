@@ -16,6 +16,7 @@ public record ServiceRegistration(
         Optional<ServiceAccessConfig> accessConfig,
         Optional<CorsConfig> corsConfig,
         Optional<ServicePermissionPolicy> permissionPolicy,
+        Optional<ServiceRateLimitConfig> rateLimitConfig,
         long version) {
     public ServiceRegistration {
         if (serviceId == null || serviceId.isBlank()) {
@@ -48,6 +49,9 @@ public record ServiceRegistration(
         if (permissionPolicy == null) {
             permissionPolicy = Optional.empty();
         }
+        if (rateLimitConfig == null) {
+            rateLimitConfig = Optional.empty();
+        }
         if (version < 0) {
             version = 1;
         }
@@ -69,6 +73,7 @@ public record ServiceRegistration(
                 accessConfig,
                 corsConfig,
                 permissionPolicy,
+                rateLimitConfig,
                 version + 1);
     }
 
@@ -88,6 +93,27 @@ public record ServiceRegistration(
                 accessConfig,
                 corsConfig,
                 Optional.ofNullable(policy),
+                rateLimitConfig,
+                version);
+    }
+
+    /**
+     * Creates a new ServiceRegistration with the given rate limit config.
+     */
+    public ServiceRegistration withRateLimitConfig(ServiceRateLimitConfig config) {
+        return new ServiceRegistration(
+                serviceId,
+                displayName,
+                baseUrl,
+                routePrefix,
+                defaultVisibility,
+                defaultAuthRequired,
+                visibilityRules,
+                endpoints,
+                accessConfig,
+                corsConfig,
+                permissionPolicy,
+                Optional.ofNullable(config),
                 version);
     }
 
@@ -107,6 +133,7 @@ public record ServiceRegistration(
         private ServiceAccessConfig accessConfig;
         private CorsConfig corsConfig;
         private ServicePermissionPolicy permissionPolicy;
+        private ServiceRateLimitConfig rateLimitConfig;
         private long version = 1;
 
         private Builder(String serviceId) {
@@ -168,6 +195,11 @@ public record ServiceRegistration(
             return this;
         }
 
+        public Builder rateLimitConfig(ServiceRateLimitConfig rateLimitConfig) {
+            this.rateLimitConfig = rateLimitConfig;
+            return this;
+        }
+
         public Builder version(long version) {
             this.version = version;
             return this;
@@ -186,6 +218,7 @@ public record ServiceRegistration(
                     Optional.ofNullable(accessConfig),
                     Optional.ofNullable(corsConfig),
                     Optional.ofNullable(permissionPolicy),
+                    Optional.ofNullable(rateLimitConfig),
                     version);
         }
     }

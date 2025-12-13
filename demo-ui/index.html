@@ -328,6 +328,136 @@
             gap: 0.5rem;
             flex-wrap: wrap;
         }
+        /* Rate Limit Test styles */
+        .rate-limit-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        @media (min-width: 600px) {
+            .rate-limit-stats {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+        .stat-box {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 1rem;
+            text-align: center;
+        }
+        .stat-box .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+        .stat-box .stat-label {
+            font-size: 0.75rem;
+            color: #666;
+            text-transform: uppercase;
+        }
+        .stat-box.success .stat-value {
+            color: #28a745;
+        }
+        .stat-box.warning .stat-value {
+            color: #ffc107;
+        }
+        .stat-box.danger .stat-value {
+            color: #dc3545;
+        }
+        .live-counter {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            background: #e7f3ff;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+        }
+        .live-counter .pulse {
+            width: 10px;
+            height: 10px;
+            background: #28a745;
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+        }
+        .request-log {
+            max-height: 200px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.8rem;
+        }
+        .request-log table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .request-log th,
+        .request-log td {
+            padding: 0.5rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        .request-log th {
+            background: #e9ecef;
+            position: sticky;
+            top: 0;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .status-badge.status-200 {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-badge.status-429 {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-badge.status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .headers-display {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 0.8rem;
+            margin-top: 1rem;
+        }
+        .headers-display dt {
+            color: #666;
+        }
+        .headers-display dd {
+            color: #333;
+            margin-left: 0;
+            margin-bottom: 0.5rem;
+        }
+        .info-banner {
+            background: #e7f3ff;
+            border: 1px solid #b3d4fc;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .info-banner h4 {
+            color: #0066cc;
+            margin-bottom: 0.5rem;
+        }
+        .info-banner ul {
+            margin: 0;
+            padding-left: 1.5rem;
+            color: #333;
+        }
     </style>
 </head>
 <body>
@@ -405,6 +535,7 @@
                 <button class="endpoint-btn" onclick="testEndpoint('/api/users', 'GET')">GET /api/users</button>
                 <button class="endpoint-btn" onclick="testEndpoint('/api/users', 'POST')">POST /api/users</button>
                 <button class="endpoint-btn" onclick="testEndpoint('/api/admin/stats', 'GET')">GET /api/admin/stats (requires auth)</button>
+                <button class="endpoint-btn" onclick="testEndpoint('/api/rate-limit-test', 'GET')">GET /api/rate-limit-test</button>
             </div>
 
             <div>
@@ -487,6 +618,71 @@
                         <button class="btn btn-secondary btn-small" onclick="clearChatMessages()">Clear</button>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Rate Limit Testing</h2>
+            <p style="margin-bottom: 1rem; color: #666;">
+                Send rapid requests to observe rate limiting behavior. The test stops when a 429 response is received.
+            </p>
+
+            <div class="info-banner">
+                <h4>Endpoint Configuration</h4>
+                <p style="margin-bottom: 0.5rem;"><code>/api/rate-limit-test</code> is configured with:</p>
+                <ul>
+                    <li>50 requests per minute</li>
+                    <li>Burst capacity: 25</li>
+                </ul>
+            </div>
+
+            <div id="rateLimitLiveCounter" class="live-counter" style="display: none;">
+                <div class="pulse"></div>
+                <span>Requests sent: <strong id="rateLimitLiveCount">0</strong></span>
+            </div>
+
+            <div id="rateLimitStats" class="rate-limit-stats" style="display: none;">
+                <div class="stat-box success">
+                    <div class="stat-value" id="statSuccessCount">0</div>
+                    <div class="stat-label">Successful</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="statTotalCount">0</div>
+                    <div class="stat-label">Total Sent</div>
+                </div>
+                <div class="stat-box warning">
+                    <div class="stat-value" id="statRateLimitedAt">-</div>
+                    <div class="stat-label">Rate Limited At</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="statDuration">0ms</div>
+                    <div class="stat-label">Duration</div>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+                <button id="rateLimitStartBtn" class="btn btn-success" onclick="startRateLimitTest()">Start Test</button>
+                <button id="rateLimitStopBtn" class="btn btn-danger" onclick="stopRateLimitTest()" style="margin-left: 0.5rem; display: none;">Stop</button>
+                <button id="rateLimitClearBtn" class="btn btn-secondary" onclick="clearRateLimitResults()" style="margin-left: 0.5rem; display: none;">Clear</button>
+            </div>
+
+            <div id="rateLimitHeaders" class="headers-display" style="display: none;">
+                <h4 style="margin-top: 0; margin-bottom: 0.5rem;">Last Response Headers</h4>
+                <dl id="rateLimitHeadersList"></dl>
+            </div>
+
+            <div id="rateLimitLog" class="request-log" style="display: none; margin-top: 1rem;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Status</th>
+                            <th>Remaining</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rateLimitLogBody"></tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -1009,6 +1205,147 @@
                 if (e.key === 'Enter') sendChatMessage();
             });
         });
+
+        // ========== Rate Limit Test Functions ==========
+
+        let rateLimitAbortController = null;
+        let rateLimitRequests = [];
+
+        async function startRateLimitTest() {
+            const config = getConfig();
+            const url = `${config.aussieUrl}/${config.serviceId}/api/rate-limit-test`;
+
+            // Reset state
+            rateLimitRequests = [];
+            rateLimitAbortController = new AbortController();
+
+            // Update UI
+            document.getElementById('rateLimitStartBtn').disabled = true;
+            document.getElementById('rateLimitStopBtn').style.display = 'inline-block';
+            document.getElementById('rateLimitLiveCounter').style.display = 'flex';
+            document.getElementById('rateLimitStats').style.display = 'none';
+            document.getElementById('rateLimitClearBtn').style.display = 'none';
+            document.getElementById('rateLimitHeaders').style.display = 'none';
+            document.getElementById('rateLimitLog').style.display = 'none';
+            document.getElementById('rateLimitLogBody').innerHTML = '';
+
+            const startTime = Date.now();
+            let successCount = 0;
+            let totalAttempted = 0;
+            let rateLimitedAt = null;
+            let lastHeaders = {};
+
+            try {
+                // Send requests until rate limited or max 200 requests
+                while (!rateLimitAbortController.signal.aborted && totalAttempted < 200) {
+                    totalAttempted++;
+                    document.getElementById('rateLimitLiveCount').textContent = totalAttempted;
+
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        credentials: 'include',
+                        signal: rateLimitAbortController.signal
+                    });
+
+                    const requestResult = {
+                        requestNumber: totalAttempted,
+                        status: response.status,
+                        timestamp: new Date(),
+                        rateLimitRemaining: response.headers.get('X-RateLimit-Remaining'),
+                        rateLimitLimit: response.headers.get('X-RateLimit-Limit'),
+                        rateLimitReset: response.headers.get('X-RateLimit-Reset'),
+                        retryAfter: response.headers.get('Retry-After')
+                    };
+
+                    rateLimitRequests.push(requestResult);
+                    lastHeaders = {
+                        'X-RateLimit-Limit': requestResult.rateLimitLimit,
+                        'X-RateLimit-Remaining': requestResult.rateLimitRemaining,
+                        'X-RateLimit-Reset': requestResult.rateLimitReset,
+                        'Retry-After': requestResult.retryAfter
+                    };
+
+                    if (response.status === 429) {
+                        rateLimitedAt = totalAttempted;
+                        break;
+                    }
+
+                    if (response.ok) {
+                        successCount++;
+                    }
+
+                    // Brief delay to achieve ~100 req/sec
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error('Rate limit test error:', err);
+                }
+            }
+
+            const durationMs = Date.now() - startTime;
+
+            // Update stats
+            document.getElementById('statSuccessCount').textContent = successCount;
+            document.getElementById('statTotalCount').textContent = totalAttempted;
+            document.getElementById('statRateLimitedAt').textContent = rateLimitedAt ? `#${rateLimitedAt}` : '-';
+            document.getElementById('statDuration').textContent = `${durationMs}ms`;
+
+            // Show headers
+            const headersList = document.getElementById('rateLimitHeadersList');
+            headersList.innerHTML = '';
+            Object.entries(lastHeaders).forEach(([key, value]) => {
+                if (value) {
+                    const dt = document.createElement('dt');
+                    dt.textContent = `${key}:`;
+                    const dd = document.createElement('dd');
+                    dd.textContent = value;
+                    if (key === 'X-RateLimit-Reset' && value) {
+                        dd.textContent += ` (${new Date(parseInt(value) * 1000).toLocaleTimeString()})`;
+                    }
+                    headersList.appendChild(dt);
+                    headersList.appendChild(dd);
+                }
+            });
+
+            // Show request log (last 20)
+            const logBody = document.getElementById('rateLimitLogBody');
+            rateLimitRequests.slice(-20).forEach(req => {
+                const row = document.createElement('tr');
+                const statusClass = req.status === 200 ? 'status-200' : req.status === 429 ? 'status-429' : 'status-error';
+                row.innerHTML = `
+                    <td>${req.requestNumber}</td>
+                    <td><span class="status-badge ${statusClass}">${req.status}</span></td>
+                    <td>${req.rateLimitRemaining || '-'}</td>
+                    <td>${req.timestamp.toLocaleTimeString()}</td>
+                `;
+                logBody.appendChild(row);
+            });
+
+            // Update UI
+            document.getElementById('rateLimitStartBtn').disabled = false;
+            document.getElementById('rateLimitStopBtn').style.display = 'none';
+            document.getElementById('rateLimitLiveCounter').style.display = 'none';
+            document.getElementById('rateLimitStats').style.display = 'grid';
+            document.getElementById('rateLimitClearBtn').style.display = 'inline-block';
+            document.getElementById('rateLimitHeaders').style.display = 'block';
+            document.getElementById('rateLimitLog').style.display = 'block';
+        }
+
+        function stopRateLimitTest() {
+            if (rateLimitAbortController) {
+                rateLimitAbortController.abort();
+            }
+        }
+
+        function clearRateLimitResults() {
+            rateLimitRequests = [];
+            document.getElementById('rateLimitStats').style.display = 'none';
+            document.getElementById('rateLimitClearBtn').style.display = 'none';
+            document.getElementById('rateLimitHeaders').style.display = 'none';
+            document.getElementById('rateLimitLog').style.display = 'none';
+            document.getElementById('rateLimitLogBody').innerHTML = '';
+        }
     </script>
 </body>
 </html>

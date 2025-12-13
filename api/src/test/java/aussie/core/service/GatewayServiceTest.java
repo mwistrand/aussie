@@ -346,6 +346,12 @@ class GatewayServiceTest {
 
         @Override
         public void recordWebSocketLimitReached() {}
+
+        @Override
+        public void recordRateLimitCheck(String serviceId, boolean allowed, long remaining) {}
+
+        @Override
+        public void recordRateLimitExceeded(String serviceId, String limitType) {}
     }
 
     /**

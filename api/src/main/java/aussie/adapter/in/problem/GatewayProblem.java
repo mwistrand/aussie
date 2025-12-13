@@ -5,131 +5,187 @@ import jakarta.ws.rs.core.Response.Status;
 import io.quarkiverse.resteasy.problem.HttpProblem;
 
 /**
- * RFC 7807 Problem Details for gateway errors.
+ * RFC 7807 Problem Details factory for gateway errors.
  *
- * <p>Extends {@link HttpProblem} from quarkus-resteasy-problem to provide
- * consistent error responses across all gateway endpoints.
+ * <p>Provides static factory methods that create {@link HttpProblem} instances
+ * from quarkus-resteasy-problem for consistent error responses across all
+ * gateway endpoints.
  *
- * <p>Use the static factory methods to create appropriate problem instances
- * for different error scenarios.
+ * <p>All 4xx client errors are created with {@code logLevel=OFF} to prevent
+ * unnecessary error logging for expected client behavior.
  */
-public class GatewayProblem extends HttpProblem {
+public final class GatewayProblem {
 
-    GatewayProblem(HttpProblem.Builder builder) {
-        super(builder);
+    private GatewayProblem() {
+        // Utility class - prevent instantiation
     }
 
     // ========== Not Found Errors ==========
 
-    public static GatewayProblem serviceNotFound(String serviceId) {
-        return new GatewayProblem(HttpProblem.builder()
+    public static HttpProblem serviceNotFound(String serviceId) {
+        return HttpProblem.builder()
                 .withTitle("Service Not Found")
                 .withStatus(Status.NOT_FOUND)
-                .withDetail("Service '%s' is not registered".formatted(serviceId)));
+                .withDetail("Service '%s' is not registered".formatted(serviceId))
+                .build();
     }
 
-    public static GatewayProblem routeNotFound(String path) {
-        return new GatewayProblem(HttpProblem.builder()
+    public static HttpProblem routeNotFound(String path) {
+        return HttpProblem.builder()
                 .withTitle("Route Not Found")
                 .withStatus(Status.NOT_FOUND)
-                .withDetail("No route matches path '%s'".formatted(path)));
+                .withDetail("No route matches path '%s'".formatted(path))
+                .build();
     }
 
-    public static GatewayProblem resourceNotFound(String resourceType, String resourceId) {
-        return new GatewayProblem(HttpProblem.builder()
+    public static HttpProblem resourceNotFound(String resourceType, String resourceId) {
+        return HttpProblem.builder()
                 .withTitle("%s Not Found".formatted(resourceType))
                 .withStatus(Status.NOT_FOUND)
-                .withDetail("%s not found: %s".formatted(resourceType, resourceId)));
+                .withDetail("%s not found: %s".formatted(resourceType, resourceId))
+                .build();
     }
 
-    public static GatewayProblem notFound(String detail) {
-        return new GatewayProblem(HttpProblem.builder()
+    public static HttpProblem notFound(String detail) {
+        return HttpProblem.builder()
                 .withTitle("Not Found")
                 .withStatus(Status.NOT_FOUND)
-                .withDetail(detail));
+                .withDetail(detail)
+                .build();
     }
 
     // ========== Bad Request Errors ==========
 
-    public static GatewayProblem badRequest(String detail) {
-        return new GatewayProblem(HttpProblem.builder()
+    public static HttpProblem badRequest(String detail) {
+        return HttpProblem.builder()
                 .withTitle("Bad Request")
                 .withStatus(Status.BAD_REQUEST)
-                .withDetail(detail));
+                .withDetail(detail)
+                .build();
     }
 
-    public static GatewayProblem validationError(String detail) {
-        return new GatewayProblem(HttpProblem.builder()
+    public static HttpProblem validationError(String detail) {
+        return HttpProblem.builder()
                 .withTitle("Validation Error")
                 .withStatus(Status.BAD_REQUEST)
-                .withDetail(detail));
+                .withDetail(detail)
+                .build();
     }
 
     // ========== Authentication/Authorization Errors ==========
 
-    public static GatewayProblem unauthorized(String detail) {
-        return new GatewayProblem(HttpProblem.builder()
+    public static HttpProblem unauthorized(String detail) {
+        return HttpProblem.builder()
                 .withTitle("Unauthorized")
                 .withStatus(Status.UNAUTHORIZED)
-                .withDetail(detail));
+                .withDetail(detail)
+                .build();
     }
 
-    public static GatewayProblem forbidden(String detail) {
-        return new GatewayProblem(HttpProblem.builder()
+    public static HttpProblem forbidden(String detail) {
+        return HttpProblem.builder()
                 .withTitle("Forbidden")
                 .withStatus(Status.FORBIDDEN)
-                .withDetail(detail));
+                .withDetail(detail)
+                .build();
     }
 
     // ========== Gateway Errors ==========
 
-    public static GatewayProblem badGateway(String detail) {
-        return new GatewayProblem(HttpProblem.builder()
+    public static HttpProblem badGateway(String detail) {
+        return HttpProblem.builder()
                 .withTitle("Bad Gateway")
                 .withStatus(Status.BAD_GATEWAY)
-                .withDetail(detail));
+                .withDetail(detail)
+                .build();
+    }
+
+    // ========== Rate Limit Errors ==========
+
+    /**
+     * Creates a 429 Too Many Requests problem with full rate limit details.
+     *
+     * @param detail the error detail message
+     * @param retryAfterSeconds seconds until client can retry
+     * @param limit the rate limit
+     * @param remaining remaining requests (typically 0)
+     * @param resetAt Unix timestamp when limit resets
+     * @return rate limit problem
+     */
+    public static HttpProblem tooManyRequests(
+            String detail, long retryAfterSeconds, long limit, long remaining, long resetAt) {
+        return HttpProblem.builder()
+                .withTitle("Too Many Requests")
+                .withStatus(Status.fromStatusCode(429))
+                .withDetail(detail)
+                .with("retryAfter", retryAfterSeconds)
+                .with("limit", limit)
+                .with("remaining", remaining)
+                .with("resetAt", resetAt)
+                .build();
+    }
+
+    /**
+     * Creates a 429 Too Many Requests problem with minimal details.
+     *
+     * @param detail the error detail message
+     * @param retryAfterSeconds seconds until client can retry
+     * @return rate limit problem
+     */
+    public static HttpProblem tooManyRequests(String detail, long retryAfterSeconds) {
+        return HttpProblem.builder()
+                .withTitle("Too Many Requests")
+                .withStatus(Status.fromStatusCode(429))
+                .withDetail(detail)
+                .with("retryAfter", retryAfterSeconds)
+                .build();
     }
 
     // ========== Request Size Errors ==========
 
-    public static GatewayProblem payloadTooLarge(String detail) {
-        return new GatewayProblem(HttpProblem.builder()
+    public static HttpProblem payloadTooLarge(String detail) {
+        return HttpProblem.builder()
                 .withTitle("Payload Too Large")
                 .withStatus(Status.REQUEST_ENTITY_TOO_LARGE)
-                .withDetail(detail));
+                .withDetail(detail)
+                .build();
     }
 
-    public static GatewayProblem headerTooLarge(String detail) {
-        return new GatewayProblem(HttpProblem.builder()
+    public static HttpProblem headerTooLarge(String detail) {
+        return HttpProblem.builder()
                 .withTitle("Request Header Fields Too Large")
                 .withStatus(Status.fromStatusCode(431))
-                .withDetail(detail));
+                .withDetail(detail)
+                .build();
     }
 
     // ========== Conflict Errors ==========
 
-    public static GatewayProblem conflict(String detail) {
-        return new GatewayProblem(HttpProblem.builder()
+    public static HttpProblem conflict(String detail) {
+        return HttpProblem.builder()
                 .withTitle("Conflict")
                 .withStatus(Status.CONFLICT)
-                .withDetail(detail));
+                .withDetail(detail)
+                .build();
     }
 
     // ========== Server Errors ==========
 
-    public static GatewayProblem internalError(String detail) {
-        return new GatewayProblem(HttpProblem.builder()
+    public static HttpProblem internalError(String detail) {
+        return HttpProblem.builder()
                 .withTitle("Internal Server Error")
                 .withStatus(Status.INTERNAL_SERVER_ERROR)
-                .withDetail(detail));
+                .withDetail(detail)
+                .build();
     }
 
     // ========== Feature Disabled ==========
 
-    public static GatewayProblem featureDisabled(String feature) {
-        return new GatewayProblem(HttpProblem.builder()
+    public static HttpProblem featureDisabled(String feature) {
+        return HttpProblem.builder()
                 .withTitle("Feature Disabled")
                 .withStatus(Status.NOT_FOUND)
-                .withDetail("%s is disabled".formatted(feature)));
+                .withDetail("%s is disabled".formatted(feature))
+                .build();
     }
 }
