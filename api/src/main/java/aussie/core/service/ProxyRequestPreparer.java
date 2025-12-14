@@ -1,7 +1,6 @@
 package aussie.core.service;
 
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,14 +82,15 @@ public class ProxyRequestPreparer {
 
     private void copyFilteredHeaders(GatewayRequest request, Map<String, List<String>> headers) {
         for (var entry : request.headers().entrySet()) {
-            var headerName = entry.getKey();
-            var lowerName = headerName.toLowerCase();
+            final var headerName = entry.getKey();
+            final var lowerName = headerName.toLowerCase();
 
             if (shouldSkipHeader(lowerName)) {
                 continue;
             }
 
-            headers.put(headerName, new ArrayList<>(entry.getValue()));
+            // Use List.copyOf for efficient immutable copy - lists are only read, not modified
+            headers.put(headerName, List.copyOf(entry.getValue()));
         }
     }
 

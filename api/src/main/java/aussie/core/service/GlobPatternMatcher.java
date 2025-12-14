@@ -5,17 +5,22 @@ import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 import jakarta.enterprise.context.ApplicationScoped;
 
 /**
  * Matches paths against glob patterns using Java's built-in PathMatcher.
- * Caches compiled patterns for performance.
+ * Caches compiled patterns and normalized paths for performance.
  */
 @ApplicationScoped
 public class GlobPatternMatcher {
 
+    // Pre-compiled pattern for collapsing multiple slashes
+    private static final Pattern MULTIPLE_SLASHES = Pattern.compile("/+");
+
     private final Map<String, PathMatcher> matcherCache = new ConcurrentHashMap<>();
+    private final Map<String, String> normalizedPathCache = new ConcurrentHashMap<>();
 
     /**
      * Tests if a path matches a glob pattern.
@@ -25,8 +30,8 @@ public class GlobPatternMatcher {
      * @return true if the path matches the pattern
      */
     public boolean matches(String glob, String path) {
-        var normalizedPath = normalizePath(path);
-        var matcher = matcherCache.computeIfAbsent(glob, this::createMatcher);
+        final var normalizedPath = normalizedPathCache.computeIfAbsent(path, this::normalizePath);
+        final var matcher = matcherCache.computeIfAbsent(glob, this::createMatcher);
         return matcher.matches(Path.of(normalizedPath));
     }
 
@@ -42,8 +47,8 @@ public class GlobPatternMatcher {
             return "/";
         }
 
-        // Collapse multiple slashes
-        var normalized = path.replaceAll("/+", "/");
+        // Collapse multiple slashes using pre-compiled pattern
+        var normalized = MULTIPLE_SLASHES.matcher(path).replaceAll("/");
 
         // Remove trailing slash (but keep root slash)
         if (normalized.length() > 1 && normalized.endsWith("/")) {

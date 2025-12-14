@@ -20,6 +20,15 @@ import io.smallrye.config.WithDefault;
  *   <li>{@code aussie.cache.local.service-routes-ttl} - TTL for service route cache</li>
  *   <li>{@code aussie.cache.local.rate-limit-config-ttl} - TTL for rate limit config cache</li>
  *   <li>{@code aussie.cache.local.max-entries} - Maximum entries per cache</li>
+ *   <li>{@code aussie.cache.local.jitter-factor} - TTL jitter factor (0.0-0.5)</li>
+ * </ul>
+ *
+ * <h2>Environment Variables</h2>
+ * <ul>
+ *   <li>{@code AUSSIE_CACHE_LOCAL_SERVICE_ROUTES_TTL} - e.g., "PT30S" for 30 seconds</li>
+ *   <li>{@code AUSSIE_CACHE_LOCAL_RATE_LIMIT_CONFIG_TTL} - e.g., "PT30S" for 30 seconds</li>
+ *   <li>{@code AUSSIE_CACHE_LOCAL_MAX_ENTRIES} - e.g., "10000"</li>
+ *   <li>{@code AUSSIE_CACHE_LOCAL_JITTER_FACTOR} - e.g., "0.1" for ±10% jitter</li>
  * </ul>
  */
 @ConfigMapping(prefix = "aussie.cache.local")
@@ -58,4 +67,21 @@ public interface LocalCacheConfig {
      */
     @WithDefault("10000")
     long maxEntries();
+
+    /**
+     * TTL jitter factor for cache entries.
+     *
+     * <p>To prevent cache refresh storms in multi-instance deployments,
+     * each entry's TTL is varied by ±(jitterFactor * 100)%. For example,
+     * a jitter factor of 0.1 means TTLs vary by ±10%.
+     *
+     * <p>This prevents all instances from refreshing their caches at the
+     * same time, reducing load spikes on backend storage.
+     *
+     * <p>Set to 0 to disable jitter (not recommended for production).
+     *
+     * @return jitter factor between 0.0 and 0.5 (default: 0.1 = ±10%)
+     */
+    @WithDefault("0.1")
+    double jitterFactor();
 }

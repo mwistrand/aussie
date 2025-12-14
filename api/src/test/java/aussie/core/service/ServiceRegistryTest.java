@@ -56,6 +56,11 @@ class ServiceRegistryTest {
         public long maxEntries() {
             return 1000;
         }
+
+        @Override
+        public double jitterFactor() {
+            return 0.0; // No jitter in tests for predictable behavior
+        }
     };
 
     @BeforeEach

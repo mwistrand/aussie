@@ -50,7 +50,8 @@ public class RateLimitResolver {
     public RateLimitResolver(RateLimitingConfig config, ServiceRegistry serviceRegistry, LocalCacheConfig cacheConfig) {
         this.config = config;
         this.serviceRegistry = serviceRegistry;
-        this.serviceConfigCache = new CaffeineLocalCache<>(cacheConfig.rateLimitConfigTtl(), cacheConfig.maxEntries());
+        this.serviceConfigCache = new CaffeineLocalCache<>(
+                cacheConfig.rateLimitConfigTtl(), cacheConfig.maxEntries(), cacheConfig.jitterFactor());
     }
 
     /**

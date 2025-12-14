@@ -1,8 +1,11 @@
 package aussie.core.service;
 
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -18,16 +21,28 @@ public class AccessControlEvaluator {
 
     private final AccessControlConfig config;
 
+    // Cache for parsed CIDR network addresses - computed once per unique CIDR
+    // pattern
+    private final Map<String, ParsedCidr> cidrCache = new ConcurrentHashMap<>();
+
+    // Cache for parsed source IP addresses - computed once per unique IP string
+    private final Map<String, byte[]> ipAddressCache = new ConcurrentHashMap<>();
+
     @Inject
     public AccessControlEvaluator(AccessControlConfig config) {
         this.config = config;
     }
 
+    /**
+     * Pre-parsed CIDR network for fast matching.
+     */
+    private record ParsedCidr(byte[] networkBytes, int prefixLength) {}
+
     public boolean isAllowed(
             SourceIdentifier source, RouteLookupResult route, Optional<ServiceAccessConfig> serviceConfig) {
 
         // Public endpoints are always accessible
-        if (route.visibility() == EndpointVisibility.PUBLIC) {
+        if (EndpointVisibility.PUBLIC.equals(route.visibility())) {
             return true;
         }
 
@@ -121,24 +136,27 @@ public class AccessControlEvaluator {
 
     private boolean matchesCidr(String sourceIp, String cidr) {
         try {
-            var parts = cidr.split("/");
-            if (parts.length != 2) {
+            // Get cached parsed CIDR or parse and cache it
+            final var parsedCidr = cidrCache.computeIfAbsent(cidr, this::parseCidr);
+            if (parsedCidr == null) {
                 return false;
             }
 
-            var networkAddress = InetAddress.getByName(parts[0]);
-            var prefixLength = Integer.parseInt(parts[1]);
-            var sourceAddress = InetAddress.getByName(sourceIp);
+            // Get cached parsed source IP or parse and cache it
+            final var sourceBytes = ipAddressCache.computeIfAbsent(sourceIp, this::parseIpAddress);
+            if (sourceBytes == null) {
+                return false;
+            }
 
-            var networkBytes = networkAddress.getAddress();
-            var sourceBytes = sourceAddress.getAddress();
+            final var networkBytes = parsedCidr.networkBytes();
+            final var prefixLength = parsedCidr.prefixLength();
 
             if (networkBytes.length != sourceBytes.length) {
                 return false;
             }
 
-            var fullBytes = prefixLength / 8;
-            var remainingBits = prefixLength % 8;
+            final var fullBytes = prefixLength / 8;
+            final var remainingBits = prefixLength % 8;
 
             // Compare full bytes
             for (var i = 0; i < fullBytes; i++) {
@@ -149,7 +167,7 @@ public class AccessControlEvaluator {
 
             // Compare remaining bits
             if (remainingBits > 0 && fullBytes < networkBytes.length) {
-                var mask = (byte) (0xFF << (8 - remainingBits));
+                final var mask = (byte) (0xFF << (8 - remainingBits));
                 if ((networkBytes[fullBytes] & mask) != (sourceBytes[fullBytes] & mask)) {
                     return false;
                 }
@@ -158,6 +176,36 @@ public class AccessControlEvaluator {
             return true;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /**
+     * Parses a CIDR pattern into network bytes and prefix length.
+     * Returns null if the pattern is invalid.
+     */
+    private ParsedCidr parseCidr(String cidr) {
+        try {
+            final var parts = cidr.split("/");
+            if (parts.length != 2) {
+                return null;
+            }
+            final var networkAddress = InetAddress.getByName(parts[0]);
+            final var prefixLength = Integer.parseInt(parts[1]);
+            return new ParsedCidr(networkAddress.getAddress(), prefixLength);
+        } catch (UnknownHostException | NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Parses an IP address string into bytes.
+     * Returns null if the address is invalid.
+     */
+    private byte[] parseIpAddress(String ip) {
+        try {
+            return InetAddress.getByName(ip).getAddress();
+        } catch (UnknownHostException e) {
+            return null;
         }
     }
 
