@@ -72,12 +72,12 @@
     "burstCapacity": 25,
     "websocket": {
       "connection": {
-        "requestsPerWindow": 5,
-        "burstCapacity": 3
+        "requestsPerWindow": 10,
+        "burstCapacity": 5
       },
       "message": {
-        "requestsPerWindow": 200,
-        "burstCapacity": 100
+        "requestsPerWindow": 100,
+        "burstCapacity": 50
       }
     }
   },

@@ -33,9 +33,11 @@ Add rate limit configuration to your service registration:
 | `burstCapacity` | Maximum burst size (bucket algorithm) | Platform default |
 | `endpoints` | Per-endpoint overrides | None |
 
-### Per-Endpoint Configuration
+### Per-HTTP Endpoint Configuration
 
-Configure different limits for different endpoints based on their characteristics:
+Configure different limits for different HTTP endpoints based on their characteristics:
+
+Note that per-endpoint configurations for WebSocket connections are not yet supported.
 
 | Endpoint Type | Recommended Limit | Reasoning |
 |---------------|-------------------|-----------|

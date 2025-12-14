@@ -622,7 +622,88 @@
         </div>
 
         <div class="card">
-            <h2>Rate Limit Testing</h2>
+            <h2>WebSocket Rate Limit Testing</h2>
+            <p style="margin-bottom: 1rem; color: #666;">
+                Test WebSocket rate limiting by rapidly establishing connections or sending messages.
+            </p>
+
+            <div class="ws-panel">
+                <!-- Connection Rate Limit Test -->
+                <div class="ws-card">
+                    <h3>Connection Rate Limit</h3>
+                    <p style="font-size: 0.8rem; color: #666; margin-bottom: 0.5rem;">
+                        Rapidly open WebSocket connections until rate limited (HTTP 429)
+                    </p>
+
+                    <div class="info-banner" style="margin-bottom: 0.5rem; padding: 0.5rem;">
+                        <p style="font-size: 0.75rem; margin: 0;"><strong>Default:</strong> 10 connections/minute, burst: 5</p>
+                    </div>
+
+                    <div id="wsConnLiveCounter" class="live-counter" style="display: none; margin-bottom: 0.5rem;">
+                        <div class="pulse"></div>
+                        <span>Connections attempted: <strong id="wsConnLiveCount">0</strong></span>
+                    </div>
+
+                    <div id="wsConnStats" class="rate-limit-stats" style="display: none; grid-template-columns: repeat(2, 1fr); margin-bottom: 0.5rem;">
+                        <div class="stat-box success">
+                            <div class="stat-value" id="wsConnSuccessCount">0</div>
+                            <div class="stat-label">Connected</div>
+                        </div>
+                        <div class="stat-box warning">
+                            <div class="stat-value" id="wsConnRateLimitedAt">-</div>
+                            <div class="stat-label">Rate Limited At</div>
+                        </div>
+                    </div>
+
+                    <div id="wsConnMessages" class="ws-messages" style="height: 120px; display: none;"></div>
+
+                    <div class="ws-btn-row" style="margin-top: 0.5rem;">
+                        <button id="wsConnStartBtn" class="btn btn-success btn-small" onclick="startWsConnectionTest()">Start Test</button>
+                        <button id="wsConnStopBtn" class="btn btn-danger btn-small" onclick="stopWsConnectionTest()" style="display: none;">Stop</button>
+                        <button id="wsConnClearBtn" class="btn btn-secondary btn-small" onclick="clearWsConnectionResults()" style="display: none;">Clear</button>
+                    </div>
+                </div>
+
+                <!-- Message Rate Limit Test -->
+                <div class="ws-card">
+                    <h3>Message Rate Limit</h3>
+                    <p style="font-size: 0.8rem; color: #666; margin-bottom: 0.5rem;">
+                        Send rapid messages until rate limited (connection closed with code 4429)
+                    </p>
+
+                    <div class="info-banner" style="margin-bottom: 0.5rem; padding: 0.5rem;">
+                        <p style="font-size: 0.75rem; margin: 0;"><strong>Default:</strong> 100 messages/second, burst: 50</p>
+                    </div>
+
+                    <div id="wsMsgLiveCounter" class="live-counter" style="display: none; margin-bottom: 0.5rem;">
+                        <div class="pulse"></div>
+                        <span>Messages sent: <strong id="wsMsgLiveCount">0</strong></span>
+                    </div>
+
+                    <div id="wsMsgStats" class="rate-limit-stats" style="display: none; grid-template-columns: repeat(2, 1fr); margin-bottom: 0.5rem;">
+                        <div class="stat-box success">
+                            <div class="stat-value" id="wsMsgSuccessCount">0</div>
+                            <div class="stat-label">Sent</div>
+                        </div>
+                        <div class="stat-box warning">
+                            <div class="stat-value" id="wsMsgCloseCode">-</div>
+                            <div class="stat-label">Close Code</div>
+                        </div>
+                    </div>
+
+                    <div id="wsMsgMessages" class="ws-messages" style="height: 120px; display: none;"></div>
+
+                    <div class="ws-btn-row" style="margin-top: 0.5rem;">
+                        <button id="wsMsgStartBtn" class="btn btn-success btn-small" onclick="startWsMessageTest()">Start Test</button>
+                        <button id="wsMsgStopBtn" class="btn btn-danger btn-small" onclick="stopWsMessageTest()" style="display: none;">Stop</button>
+                        <button id="wsMsgClearBtn" class="btn btn-secondary btn-small" onclick="clearWsMessageResults()" style="display: none;">Clear</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>HTTP Rate Limit Testing</h2>
             <p style="margin-bottom: 1rem; color: #666;">
                 Send rapid requests to observe rate limiting behavior. The test stops when a 429 response is received.
             </p>
@@ -1145,7 +1226,7 @@
                     updateStatus('chat', false, 'Disconnected');
                     const reason = event.reason || getCloseReason(event.code);
                     addMessage('chatMessages', `Disconnected: ${reason} (code: ${event.code})`, 'system');
-                    if (event.code === 1008 || event.code === 4001) {
+                    if (event.code === 4429 || event.code === 1008 || event.code === 4001) {
                         addMessage('chatMessages', 'Hint: Try logging in first using the Authentication section above', 'error');
                     }
                     chatSocket = null;
@@ -1191,7 +1272,8 @@
                 1011: 'Internal error',
                 1015: 'TLS handshake failure',
                 4001: 'Unauthorized',
-                4003: 'Forbidden'
+                4003: 'Forbidden',
+                4429: 'Rate limit exceeded'
             };
             return reasons[code] || 'Unknown reason';
         }
@@ -1345,6 +1427,279 @@
             document.getElementById('rateLimitHeaders').style.display = 'none';
             document.getElementById('rateLimitLog').style.display = 'none';
             document.getElementById('rateLimitLogBody').innerHTML = '';
+        }
+
+        // ========== WebSocket Rate Limit Test Functions ==========
+
+        let wsConnTestRunning = false;
+        let wsConnTestSockets = [];
+        let wsMsgTestSocket = null;
+        let wsMsgTestRunning = false;
+
+        function addWsRateLimitMessage(containerId, message, type = 'system') {
+            const container = document.getElementById(containerId);
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `ws-message ${type}`;
+            msgDiv.textContent = `[${formatTimestamp()}] ${message}`;
+            container.appendChild(msgDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // ========== Connection Rate Limit Test ==========
+
+        async function startWsConnectionTest() {
+            const config = getConfig();
+            const wsUrl = getWebSocketUrl('/ws/echo');
+
+            // Reset state
+            wsConnTestRunning = true;
+            wsConnTestSockets = [];
+            let successCount = 0;
+            let totalAttempted = 0;
+            let rateLimitedAt = null;
+
+            // Update UI
+            document.getElementById('wsConnStartBtn').disabled = true;
+            document.getElementById('wsConnStopBtn').style.display = 'inline-block';
+            document.getElementById('wsConnLiveCounter').style.display = 'flex';
+            document.getElementById('wsConnStats').style.display = 'none';
+            document.getElementById('wsConnClearBtn').style.display = 'none';
+            document.getElementById('wsConnMessages').style.display = 'block';
+            document.getElementById('wsConnMessages').innerHTML = '';
+
+            addWsRateLimitMessage('wsConnMessages', `Starting connection rate limit test to ${wsUrl}`, 'system');
+
+            // Rapidly attempt connections
+            while (wsConnTestRunning && totalAttempted < 50 && !rateLimitedAt) {
+                totalAttempted++;
+                document.getElementById('wsConnLiveCount').textContent = totalAttempted;
+
+                try {
+                    const result = await attemptWebSocketConnection(wsUrl, totalAttempted);
+                    if (result.success) {
+                        successCount++;
+                        wsConnTestSockets.push(result.socket);
+                        addWsRateLimitMessage('wsConnMessages', `#${totalAttempted}: Connected`, 'received');
+                    } else if (result.rateLimited) {
+                        rateLimitedAt = totalAttempted;
+                        addWsRateLimitMessage('wsConnMessages', `#${totalAttempted}: Rate limited (429)`, 'error');
+                    } else {
+                        addWsRateLimitMessage('wsConnMessages', `#${totalAttempted}: Failed - ${result.error}`, 'error');
+                    }
+                } catch (err) {
+                    addWsRateLimitMessage('wsConnMessages', `#${totalAttempted}: Error - ${err.message}`, 'error');
+                }
+
+                // Brief delay between attempts
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+            // Clean up - close all connections
+            addWsRateLimitMessage('wsConnMessages', `Closing ${wsConnTestSockets.length} connections...`, 'system');
+            wsConnTestSockets.forEach(socket => {
+                try { socket.close(1000, 'Test complete'); } catch (e) {}
+            });
+            wsConnTestSockets = [];
+
+            // Update stats
+            document.getElementById('wsConnSuccessCount').textContent = successCount;
+            document.getElementById('wsConnRateLimitedAt').textContent = rateLimitedAt ? `#${rateLimitedAt}` : '-';
+
+            // Update UI
+            document.getElementById('wsConnStartBtn').disabled = false;
+            document.getElementById('wsConnStopBtn').style.display = 'none';
+            document.getElementById('wsConnLiveCounter').style.display = 'none';
+            document.getElementById('wsConnStats').style.display = 'grid';
+            document.getElementById('wsConnClearBtn').style.display = 'inline-block';
+
+            addWsRateLimitMessage('wsConnMessages',
+                rateLimitedAt
+                    ? `Test complete: Rate limited after ${rateLimitedAt} attempts (${successCount} successful)`
+                    : `Test complete: ${successCount} successful connections (no rate limit hit)`,
+                'system');
+
+            wsConnTestRunning = false;
+        }
+
+        function attemptWebSocketConnection(url, attemptNum) {
+            return new Promise((resolve) => {
+                // For WebSocket rate limiting, the 429 comes during the HTTP upgrade
+                // We need to use fetch to check for 429 before attempting WebSocket
+                const config = getConfig();
+                const httpUrl = url.replace('ws://', 'http://').replace('wss://', 'https://');
+
+                // First, try a regular WebSocket connection
+                // If the server returns 429, the onerror will fire
+                const socket = new WebSocket(url);
+                let resolved = false;
+
+                socket.onopen = () => {
+                    if (!resolved) {
+                        resolved = true;
+                        resolve({ success: true, socket });
+                    }
+                };
+
+                socket.onerror = (error) => {
+                    if (!resolved) {
+                        resolved = true;
+                        // WebSocket errors don't expose HTTP status codes directly
+                        // We need to check if it was a rate limit by attempting an HTTP request
+                        resolve({ success: false, error: 'Connection failed', rateLimited: false });
+                    }
+                };
+
+                socket.onclose = (event) => {
+                    if (!resolved) {
+                        resolved = true;
+                        // Check close code and reason
+                        if (event.code === 4429 || event.reason.includes('rate limit')) {
+                            resolve({ success: false, rateLimited: true });
+                        } else {
+                            resolve({ success: false, error: `Closed: ${event.code} - ${event.reason || 'Unknown'}`, rateLimited: false });
+                        }
+                    }
+                };
+
+                // Timeout after 5 seconds
+                setTimeout(() => {
+                    if (!resolved) {
+                        resolved = true;
+                        try { socket.close(); } catch (e) {}
+                        resolve({ success: false, error: 'Timeout' });
+                    }
+                }, 5000);
+            });
+        }
+
+        function stopWsConnectionTest() {
+            wsConnTestRunning = false;
+            addWsRateLimitMessage('wsConnMessages', 'Test stopped by user', 'system');
+        }
+
+        function clearWsConnectionResults() {
+            document.getElementById('wsConnStats').style.display = 'none';
+            document.getElementById('wsConnClearBtn').style.display = 'none';
+            document.getElementById('wsConnMessages').style.display = 'none';
+            document.getElementById('wsConnMessages').innerHTML = '';
+        }
+
+        // ========== Message Rate Limit Test ==========
+
+        async function startWsMessageTest() {
+            const wsUrl = getWebSocketUrl('/ws/echo');
+
+            // Reset state
+            wsMsgTestRunning = true;
+            let successCount = 0;
+            let closeCode = null;
+            let closeReason = null;
+
+            // Update UI
+            document.getElementById('wsMsgStartBtn').disabled = true;
+            document.getElementById('wsMsgStopBtn').style.display = 'inline-block';
+            document.getElementById('wsMsgLiveCounter').style.display = 'flex';
+            document.getElementById('wsMsgStats').style.display = 'none';
+            document.getElementById('wsMsgClearBtn').style.display = 'none';
+            document.getElementById('wsMsgMessages').style.display = 'block';
+            document.getElementById('wsMsgMessages').innerHTML = '';
+
+            addWsRateLimitMessage('wsMsgMessages', `Connecting to ${wsUrl}...`, 'system');
+
+            // First, establish a connection
+            try {
+                wsMsgTestSocket = await new Promise((resolve, reject) => {
+                    const socket = new WebSocket(wsUrl);
+                    socket.onopen = () => resolve(socket);
+                    socket.onerror = () => reject(new Error('Connection failed'));
+                    setTimeout(() => reject(new Error('Connection timeout')), 5000);
+                });
+
+                addWsRateLimitMessage('wsMsgMessages', 'Connected! Sending rapid messages...', 'received');
+
+                // Set up message handlers
+                wsMsgTestSocket.onmessage = (event) => {
+                    // Received echo response (we don't need to count these)
+                };
+
+                wsMsgTestSocket.onclose = (event) => {
+                    closeCode = event.code;
+                    closeReason = event.reason;
+                    wsMsgTestRunning = false;
+                    addWsRateLimitMessage('wsMsgMessages',
+                        `Connection closed: ${event.code} - ${event.reason || getCloseReason(event.code)}`,
+                        event.code === 4429 ? 'error' : 'system');
+                };
+
+                wsMsgTestSocket.onerror = () => {
+                    addWsRateLimitMessage('wsMsgMessages', 'WebSocket error occurred', 'error');
+                };
+
+                // Send rapid messages until rate limited or max 500 messages
+                while (wsMsgTestRunning && successCount < 500 && wsMsgTestSocket.readyState === WebSocket.OPEN) {
+                    try {
+                        wsMsgTestSocket.send(`Test message #${successCount + 1}`);
+                        successCount++;
+                        document.getElementById('wsMsgLiveCount').textContent = successCount;
+                    } catch (err) {
+                        addWsRateLimitMessage('wsMsgMessages', `Send error: ${err.message}`, 'error');
+                        break;
+                    }
+
+                    // Very brief delay to allow rate limiting to kick in
+                    if (successCount % 10 === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 1));
+                    }
+                }
+
+                // Give a moment for the close event to fire
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+            } catch (err) {
+                addWsRateLimitMessage('wsMsgMessages', `Error: ${err.message}`, 'error');
+            }
+
+            // Clean up
+            if (wsMsgTestSocket && wsMsgTestSocket.readyState === WebSocket.OPEN) {
+                addWsRateLimitMessage('wsMsgMessages', 'Closing connection...', 'system');
+                wsMsgTestSocket.close(1000, 'Test complete');
+            }
+            wsMsgTestSocket = null;
+
+            // Update stats
+            document.getElementById('wsMsgSuccessCount').textContent = successCount;
+            document.getElementById('wsMsgCloseCode').textContent = closeCode || '-';
+
+            // Update UI
+            document.getElementById('wsMsgStartBtn').disabled = false;
+            document.getElementById('wsMsgStopBtn').style.display = 'none';
+            document.getElementById('wsMsgLiveCounter').style.display = 'none';
+            document.getElementById('wsMsgStats').style.display = 'grid';
+            document.getElementById('wsMsgClearBtn').style.display = 'inline-block';
+
+            const wasRateLimited = closeCode === 4429;
+            addWsRateLimitMessage('wsMsgMessages',
+                wasRateLimited
+                    ? `Test complete: Rate limited after ${successCount} messages (close code: 4429)`
+                    : `Test complete: ${successCount} messages sent${closeCode ? ` (close code: ${closeCode})` : ''}`,
+                'system');
+
+            wsMsgTestRunning = false;
+        }
+
+        function stopWsMessageTest() {
+            wsMsgTestRunning = false;
+            if (wsMsgTestSocket && wsMsgTestSocket.readyState === WebSocket.OPEN) {
+                wsMsgTestSocket.close(1000, 'Test stopped');
+            }
+            addWsRateLimitMessage('wsMsgMessages', 'Test stopped by user', 'system');
+        }
+
+        function clearWsMessageResults() {
+            document.getElementById('wsMsgStats').style.display = 'none';
+            document.getElementById('wsMsgClearBtn').style.display = 'none';
+            document.getElementById('wsMsgMessages').style.display = 'none';
+            document.getElementById('wsMsgMessages').innerHTML = '';
         }
     </script>
 </body>

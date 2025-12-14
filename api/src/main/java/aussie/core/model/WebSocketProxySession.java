@@ -127,7 +127,8 @@ public class WebSocketProxySession {
                             },
                             err -> {
                                 rateLimitedMessages.incrementAndGet();
-                                closeWithReason((short) 1008, "Message rate limit exceeded");
+                                // 4429 mirrors HTTP 429 (Too Many Requests)
+                                closeWithReason((short) 4429, "Message rate limit exceeded");
                             });
         });
 

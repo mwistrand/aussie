@@ -145,12 +145,25 @@ public class RateLimitResolver {
      * @return the effective rate limit for WebSocket connections
      */
     public EffectiveRateLimit resolveWebSocketConnectionLimit(Optional<ServiceRegistration> service) {
-        // WebSocket connection limits use the dedicated WS config
-        final var wsConfig = config.websocket().connection();
+        // Start with platform WebSocket defaults
+        final var platformConfig = config.websocket().connection();
+        var requestsPerWindow = platformConfig.requestsPerWindow();
+        var windowSeconds = platformConfig.windowSeconds();
+        var burstCapacity = platformConfig.burstCapacity();
 
-        // Service-level WS rate limits could be added in the future
-        // For now, use platform WebSocket defaults
-        return new EffectiveRateLimit(wsConfig.requestsPerWindow(), wsConfig.windowSeconds(), wsConfig.burstCapacity())
+        // Apply service-level WebSocket connection overrides if present
+        final var serviceWsConfig = service.flatMap(ServiceRegistration::rateLimitConfig)
+                .flatMap(ServiceRateLimitConfig::websocket)
+                .flatMap(ws -> ws.connection());
+
+        if (serviceWsConfig.isPresent()) {
+            final var svcConfig = serviceWsConfig.get();
+            requestsPerWindow = svcConfig.requestsPerWindow().orElse(requestsPerWindow);
+            windowSeconds = svcConfig.windowSeconds().orElse(windowSeconds);
+            burstCapacity = svcConfig.burstCapacity().orElse(burstCapacity);
+        }
+
+        return new EffectiveRateLimit(requestsPerWindow, windowSeconds, burstCapacity)
                 .capAtPlatformMax(config.platformMaxRequestsPerWindow());
     }
 
@@ -161,12 +174,25 @@ public class RateLimitResolver {
      * @return the effective rate limit for WebSocket messages
      */
     public EffectiveRateLimit resolveWebSocketMessageLimit(Optional<ServiceRegistration> service) {
-        // WebSocket message limits use the dedicated WS config
-        final var wsConfig = config.websocket().message();
+        // Start with platform WebSocket defaults
+        final var platformConfig = config.websocket().message();
+        var requestsPerWindow = platformConfig.requestsPerWindow();
+        var windowSeconds = platformConfig.windowSeconds();
+        var burstCapacity = platformConfig.burstCapacity();
 
-        // Service-level WS rate limits could be added in the future
-        // For now, use platform WebSocket defaults
-        return new EffectiveRateLimit(wsConfig.requestsPerWindow(), wsConfig.windowSeconds(), wsConfig.burstCapacity())
+        // Apply service-level WebSocket message overrides if present
+        final var serviceWsConfig = service.flatMap(ServiceRegistration::rateLimitConfig)
+                .flatMap(ServiceRateLimitConfig::websocket)
+                .flatMap(ws -> ws.message());
+
+        if (serviceWsConfig.isPresent()) {
+            final var svcConfig = serviceWsConfig.get();
+            requestsPerWindow = svcConfig.requestsPerWindow().orElse(requestsPerWindow);
+            windowSeconds = svcConfig.windowSeconds().orElse(windowSeconds);
+            burstCapacity = svcConfig.burstCapacity().orElse(burstCapacity);
+        }
+
+        return new EffectiveRateLimit(requestsPerWindow, windowSeconds, burstCapacity)
                 .capAtPlatformMax(config.platformMaxRequestsPerWindow());
     }
 

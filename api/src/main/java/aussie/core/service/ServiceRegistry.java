@@ -369,4 +369,20 @@ public class ServiceRegistry {
     }
 
     private record CompiledRoute(ServiceRegistration service, EndpointConfig endpoint) {}
+
+    /**
+     * Get a service by ID for WebSocket rate limiting.
+     *
+     * <p>This is a convenience method that returns the service registration
+     * for use in WebSocket rate limit resolution.
+     *
+     * @param serviceId The service ID
+     * @return Uni with Optional containing the service if found
+     */
+    public Uni<Optional<ServiceRegistration>> getServiceForRateLimiting(String serviceId) {
+        if (serviceId == null || "unknown".equals(serviceId)) {
+            return Uni.createFrom().item(Optional.empty());
+        }
+        return getService(serviceId);
+    }
 }

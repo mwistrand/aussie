@@ -23,6 +23,8 @@ import aussie.core.model.RouteMatch;
 import aussie.core.model.ServiceOnlyMatch;
 import aussie.core.model.ServiceRateLimitConfig;
 import aussie.core.model.ServiceRegistration;
+import aussie.core.model.ServiceWebSocketRateLimitConfig;
+import aussie.core.model.ServiceWebSocketRateLimitConfig.RateLimitValues;
 import aussie.core.port.out.ServiceRegistrationRepository;
 
 @DisplayName("RateLimitResolver")
@@ -192,13 +194,58 @@ class RateLimitResolverTest {
     class ResolveWebSocketConnectionLimit {
 
         @Test
-        @DisplayName("should return WebSocket connection limits")
+        @DisplayName("should return platform defaults when no service provided")
         void shouldReturnWebSocketConnectionLimits() {
             var limit = resolver.resolveWebSocketConnectionLimit(Optional.empty());
 
             assertEquals(10, limit.requestsPerWindow());
             assertEquals(60, limit.windowSeconds());
             assertEquals(15, limit.burstCapacity());
+        }
+
+        @Test
+        @DisplayName("should return platform defaults when service has no WebSocket config")
+        void shouldReturnPlatformDefaultsWhenServiceHasNoWsConfig() {
+            var service = createService("test-service", null);
+
+            var limit = resolver.resolveWebSocketConnectionLimit(Optional.of(service));
+
+            assertEquals(10, limit.requestsPerWindow());
+            assertEquals(60, limit.windowSeconds());
+            assertEquals(15, limit.burstCapacity());
+        }
+
+        @Test
+        @DisplayName("should apply service-level WebSocket connection config")
+        void shouldApplyServiceLevelWsConnectionConfig() {
+            var wsConfig =
+                    new ServiceWebSocketRateLimitConfig(Optional.of(RateLimitValues.of(20, 30, 25)), Optional.empty());
+            var serviceConfig = new ServiceRateLimitConfig(
+                    Optional.empty(), Optional.empty(), Optional.empty(), Optional.of(wsConfig));
+            var service = createService("test-service", serviceConfig);
+
+            var limit = resolver.resolveWebSocketConnectionLimit(Optional.of(service));
+
+            assertEquals(20, limit.requestsPerWindow());
+            assertEquals(30, limit.windowSeconds());
+            assertEquals(25, limit.burstCapacity());
+        }
+
+        @Test
+        @DisplayName("should use platform defaults for unspecified values in service config")
+        void shouldUsePlatformDefaultsForUnspecifiedValues() {
+            // Only specify requestsPerWindow, use platform defaults for window and burst
+            var connectionConfig = new RateLimitValues(Optional.of(50L), Optional.empty(), Optional.empty());
+            var wsConfig = new ServiceWebSocketRateLimitConfig(Optional.of(connectionConfig), Optional.empty());
+            var serviceConfig = new ServiceRateLimitConfig(
+                    Optional.empty(), Optional.empty(), Optional.empty(), Optional.of(wsConfig));
+            var service = createService("test-service", serviceConfig);
+
+            var limit = resolver.resolveWebSocketConnectionLimit(Optional.of(service));
+
+            assertEquals(50, limit.requestsPerWindow()); // From service config
+            assertEquals(60, limit.windowSeconds()); // Platform default
+            assertEquals(15, limit.burstCapacity()); // Platform default
         }
     }
 
@@ -207,13 +254,58 @@ class RateLimitResolverTest {
     class ResolveWebSocketMessageLimit {
 
         @Test
-        @DisplayName("should return WebSocket message limits")
+        @DisplayName("should return platform defaults when no service provided")
         void shouldReturnWebSocketMessageLimits() {
             var limit = resolver.resolveWebSocketMessageLimit(Optional.empty());
 
             assertEquals(100, limit.requestsPerWindow());
             assertEquals(1, limit.windowSeconds());
             assertEquals(100, limit.burstCapacity());
+        }
+
+        @Test
+        @DisplayName("should return platform defaults when service has no WebSocket config")
+        void shouldReturnPlatformDefaultsWhenServiceHasNoWsConfig() {
+            var service = createService("test-service", null);
+
+            var limit = resolver.resolveWebSocketMessageLimit(Optional.of(service));
+
+            assertEquals(100, limit.requestsPerWindow());
+            assertEquals(1, limit.windowSeconds());
+            assertEquals(100, limit.burstCapacity());
+        }
+
+        @Test
+        @DisplayName("should apply service-level WebSocket message config")
+        void shouldApplyServiceLevelWsMessageConfig() {
+            var wsConfig =
+                    new ServiceWebSocketRateLimitConfig(Optional.empty(), Optional.of(RateLimitValues.of(200, 2, 150)));
+            var serviceConfig = new ServiceRateLimitConfig(
+                    Optional.empty(), Optional.empty(), Optional.empty(), Optional.of(wsConfig));
+            var service = createService("test-service", serviceConfig);
+
+            var limit = resolver.resolveWebSocketMessageLimit(Optional.of(service));
+
+            assertEquals(200, limit.requestsPerWindow());
+            assertEquals(2, limit.windowSeconds());
+            assertEquals(150, limit.burstCapacity());
+        }
+
+        @Test
+        @DisplayName("should use platform defaults for unspecified values in service config")
+        void shouldUsePlatformDefaultsForUnspecifiedValues() {
+            // Only specify burstCapacity, use platform defaults for requests and window
+            var messageConfig = new RateLimitValues(Optional.empty(), Optional.empty(), Optional.of(75L));
+            var wsConfig = new ServiceWebSocketRateLimitConfig(Optional.empty(), Optional.of(messageConfig));
+            var serviceConfig = new ServiceRateLimitConfig(
+                    Optional.empty(), Optional.empty(), Optional.empty(), Optional.of(wsConfig));
+            var service = createService("test-service", serviceConfig);
+
+            var limit = resolver.resolveWebSocketMessageLimit(Optional.of(service));
+
+            assertEquals(100, limit.requestsPerWindow()); // Platform default
+            assertEquals(1, limit.windowSeconds()); // Platform default
+            assertEquals(75, limit.burstCapacity()); // From service config
         }
     }
 

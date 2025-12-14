@@ -1,7 +1,5 @@
 package aussie.core.service;
 
-import java.util.Optional;
-
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -21,39 +19,34 @@ import aussie.core.port.out.RateLimiter;
  *   <li>Message throughput - limits messages per second per connection</li>
  * </ul>
  *
+ * <p>Connection rate limiting is handled by {@code WebSocketRateLimitFilter}.
+ * This service is primarily used for message rate limiting within established connections.
+ *
  * <p>All operations are fully reactive and never block.
  */
 @ApplicationScoped
 public class WebSocketRateLimitService {
 
+    /**
+     * WebSocket close code for rate limiting (4429 mirrors HTTP 429).
+     */
+    public static final short WS_CLOSE_CODE_RATE_LIMITED = 4429;
+
     private final RateLimiter rateLimiter;
     private final RateLimitingConfig config;
     private final RateLimitResolver rateLimitResolver;
+    private final ServiceRegistry serviceRegistry;
 
     @Inject
     public WebSocketRateLimitService(
-            RateLimiter rateLimiter, RateLimitingConfig config, RateLimitResolver rateLimitResolver) {
+            RateLimiter rateLimiter,
+            RateLimitingConfig config,
+            RateLimitResolver rateLimitResolver,
+            ServiceRegistry serviceRegistry) {
         this.rateLimiter = rateLimiter;
         this.config = config;
         this.rateLimitResolver = rateLimitResolver;
-    }
-
-    /**
-     * Check if a new WebSocket connection is allowed.
-     *
-     * @param serviceId the target service ID
-     * @param clientId  the client identifier
-     * @return rate limit decision
-     */
-    public Uni<RateLimitDecision> checkConnectionLimit(String serviceId, String clientId) {
-        if (!isConnectionRateLimitEnabled()) {
-            return Uni.createFrom().item(RateLimitDecision.allow());
-        }
-
-        final var key = RateLimitKey.wsConnection(clientId, serviceId);
-        final var limit = rateLimitResolver.resolveWebSocketConnectionLimit(Optional.empty());
-
-        return rateLimiter.checkAndConsume(key, limit);
+        this.serviceRegistry = serviceRegistry;
     }
 
     /**
@@ -70,9 +63,12 @@ public class WebSocketRateLimitService {
         }
 
         final var key = RateLimitKey.wsMessage(clientId, serviceId, connectionId);
-        final var limit = rateLimitResolver.resolveWebSocketMessageLimit(Optional.empty());
 
-        return rateLimiter.checkAndConsume(key, limit);
+        // Look up service to get service-specific rate limit config
+        return serviceRegistry.getServiceForRateLimiting(serviceId).flatMap(service -> {
+            final var limit = rateLimitResolver.resolveWebSocketMessageLimit(service);
+            return rateLimiter.checkAndConsume(key, limit);
+        });
     }
 
     /**

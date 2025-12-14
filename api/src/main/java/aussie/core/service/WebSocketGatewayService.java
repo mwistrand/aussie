@@ -1,7 +1,6 @@
 package aussie.core.service;
 
 import java.net.URI;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -12,7 +11,6 @@ import io.smallrye.mutiny.Uni;
 
 import aussie.core.model.EndpointType;
 import aussie.core.model.GatewayRequest;
-import aussie.core.model.RateLimitDecision;
 import aussie.core.model.RouteAuthResult;
 import aussie.core.model.RouteMatch;
 import aussie.core.model.WebSocketUpgradeRequest;
@@ -23,7 +21,10 @@ import aussie.core.port.in.WebSocketGatewayUseCase;
  * Service that handles WebSocket upgrade requests.
  *
  * <p>Supports both gateway mode (route-based) and pass-through mode (service ID based).
- * All operations are fully reactive and never block.
+ * Connection rate limiting is handled by {@code WebSocketRateLimitFilter} before
+ * requests reach this service.
+ *
+ * <p>All operations are fully reactive and never block.
  */
 @ApplicationScoped
 public class WebSocketGatewayService implements WebSocketGatewayUseCase {
@@ -31,18 +32,15 @@ public class WebSocketGatewayService implements WebSocketGatewayUseCase {
     private final ServiceRegistry serviceRegistry;
     private final RouteAuthenticationService routeAuthService;
     private final EndpointMatcher endpointMatcher;
-    private final WebSocketRateLimitService rateLimitService;
 
     @Inject
     public WebSocketGatewayService(
             ServiceRegistry serviceRegistry,
             RouteAuthenticationService routeAuthService,
-            EndpointMatcher endpointMatcher,
-            WebSocketRateLimitService rateLimitService) {
+            EndpointMatcher endpointMatcher) {
         this.serviceRegistry = serviceRegistry;
         this.routeAuthService = routeAuthService;
         this.endpointMatcher = endpointMatcher;
-        this.rateLimitService = rateLimitService;
     }
 
     @Override
@@ -64,11 +62,9 @@ public class WebSocketGatewayService implements WebSocketGatewayUseCase {
             return Uni.createFrom().item(new WebSocketUpgradeResult.NotWebSocket(request.path()));
         }
 
-        final var serviceId = route.service().serviceId();
-        final var clientId = extractClientId(request);
-
-        // Check rate limit before proceeding with authentication
-        return checkRateLimitAndProceed(request, route, serviceId, clientId);
+        // Connection rate limiting is handled by WebSocketRateLimitFilter
+        // Proceed directly to authentication
+        return authenticateAndPrepare(request, route);
     }
 
     @Override
@@ -86,8 +82,8 @@ public class WebSocketGatewayService implements WebSocketGatewayUseCase {
                 return Uni.createFrom().item(new WebSocketUpgradeResult.NotWebSocket(request.path()));
             }
 
-            final var clientId = extractClientId(request);
-            return checkRateLimitAndProceed(request, routeMatch.get(), serviceId, clientId);
+            // Connection rate limiting is handled by WebSocketRateLimitFilter
+            return authenticateAndPrepare(request, routeMatch.get());
         });
     }
 
@@ -110,90 +106,8 @@ public class WebSocketGatewayService implements WebSocketGatewayUseCase {
     }
 
     // -------------------------------------------------------------------------
-    // Rate Limiting
+    // Authentication and Backend URI
     // -------------------------------------------------------------------------
-
-    private Uni<WebSocketUpgradeResult> checkRateLimitAndProceed(
-            WebSocketUpgradeRequest request, RouteMatch route, String serviceId, String clientId) {
-
-        return rateLimitService
-                .checkConnectionLimit(serviceId, clientId)
-                .flatMap(decision -> handleRateLimitDecision(decision, request, route));
-    }
-
-    private Uni<WebSocketUpgradeResult> handleRateLimitDecision(
-            RateLimitDecision decision, WebSocketUpgradeRequest request, RouteMatch route) {
-
-        if (!decision.allowed()) {
-            return Uni.createFrom()
-                    .item(new WebSocketUpgradeResult.RateLimited(
-                            decision.retryAfterSeconds(), decision.limit(), decision.resetAtEpochSeconds()));
-        }
-        return authenticateAndPrepare(request, route);
-    }
-
-    // -------------------------------------------------------------------------
-    // Client Identification (priority: session > auth header > api key > IP)
-    // -------------------------------------------------------------------------
-
-    private String extractClientId(WebSocketUpgradeRequest request) {
-        return extractSessionId(request)
-                .or(() -> extractAuthHeaderHash(request))
-                .or(() -> extractApiKeyId(request))
-                .orElseGet(() -> extractClientIp(request));
-    }
-
-    private Optional<String> extractSessionId(WebSocketUpgradeRequest request) {
-        // Check for session ID in headers (cookies parsed as Cookie header)
-        final var cookieHeader = getFirstHeader(request, "Cookie");
-        if (cookieHeader != null && cookieHeader.contains("aussie_session=")) {
-            final var start = cookieHeader.indexOf("aussie_session=") + 15;
-            final var end = cookieHeader.indexOf(";", start);
-            final var sessionId = end > 0 ? cookieHeader.substring(start, end) : cookieHeader.substring(start);
-            return Optional.of("session:" + sessionId);
-        }
-        final var header = getFirstHeader(request, "X-Session-ID");
-        return Optional.ofNullable(header).map(h -> "session:" + h);
-    }
-
-    private Optional<String> extractAuthHeaderHash(WebSocketUpgradeRequest request) {
-        final var auth = getFirstHeader(request, "Authorization");
-        if (auth != null && auth.startsWith("Bearer ")) {
-            return Optional.of("bearer:" + hashToken(auth.substring(7)));
-        }
-        return Optional.empty();
-    }
-
-    private Optional<String> extractApiKeyId(WebSocketUpgradeRequest request) {
-        return Optional.ofNullable(getFirstHeader(request, "X-API-Key-ID")).map(id -> "apikey:" + id);
-    }
-
-    private String extractClientIp(WebSocketUpgradeRequest request) {
-        final var forwarded = getFirstHeader(request, "X-Forwarded-For");
-        if (forwarded != null) {
-            return "ip:" + forwarded.split(",")[0].trim();
-        }
-        return "ip:unknown";
-    }
-
-    private String getFirstHeader(WebSocketUpgradeRequest request, String headerName) {
-        final var values = request.headers().get(headerName);
-        if (values == null || values.isEmpty()) {
-            // Try case-insensitive lookup
-            return request.headers().entrySet().stream()
-                    .filter(e -> e.getKey().equalsIgnoreCase(headerName))
-                    .map(Map.Entry::getValue)
-                    .filter(v -> !v.isEmpty())
-                    .map(List::getFirst)
-                    .findFirst()
-                    .orElse(null);
-        }
-        return values.getFirst();
-    }
-
-    private String hashToken(String token) {
-        return Integer.toHexString(token.hashCode());
-    }
 
     private Uni<WebSocketUpgradeResult> authenticateAndPrepare(WebSocketUpgradeRequest request, RouteMatch route) {
 
