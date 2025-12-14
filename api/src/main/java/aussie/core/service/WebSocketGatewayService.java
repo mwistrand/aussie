@@ -45,26 +45,26 @@ public class WebSocketGatewayService implements WebSocketGatewayUseCase {
 
     @Override
     public Uni<WebSocketUpgradeResult> upgradeGateway(WebSocketUpgradeRequest request) {
-        // Find route by path pattern (like GatewayService) - synchronous lookup on local cache
-        final var routeResultOpt = serviceRegistry.findRoute(request.path(), "GET");
+        // Use async route lookup to ensure cache freshness in multi-instance deployments
+        return serviceRegistry.findRouteAsync(request.path(), "GET").flatMap(routeResultOpt -> {
+            if (routeResultOpt.isEmpty()) {
+                return Uni.createFrom().item(new WebSocketUpgradeResult.RouteNotFound(request.path()));
+            }
 
-        if (routeResultOpt.isEmpty()) {
-            return Uni.createFrom().item(new WebSocketUpgradeResult.RouteNotFound(request.path()));
-        }
+            // WebSocket gateway requires a RouteMatch (with endpoint) to proceed
+            if (!(routeResultOpt.get() instanceof RouteMatch route)) {
+                return Uni.createFrom().item(new WebSocketUpgradeResult.RouteNotFound(request.path()));
+            }
 
-        // WebSocket gateway requires a RouteMatch (with endpoint) to proceed
-        if (!(routeResultOpt.get() instanceof RouteMatch route)) {
-            return Uni.createFrom().item(new WebSocketUpgradeResult.RouteNotFound(request.path()));
-        }
+            // Verify this is a WebSocket endpoint
+            if (route.endpointConfig().type() != EndpointType.WEBSOCKET) {
+                return Uni.createFrom().item(new WebSocketUpgradeResult.NotWebSocket(request.path()));
+            }
 
-        // Verify this is a WebSocket endpoint
-        if (route.endpointConfig().type() != EndpointType.WEBSOCKET) {
-            return Uni.createFrom().item(new WebSocketUpgradeResult.NotWebSocket(request.path()));
-        }
-
-        // Connection rate limiting is handled by WebSocketRateLimitFilter
-        // Proceed directly to authentication
-        return authenticateAndPrepare(request, route);
+            // Connection rate limiting is handled by WebSocketRateLimitFilter
+            // Proceed directly to authentication
+            return authenticateAndPrepare(request, route);
+        });
     }
 
     @Override

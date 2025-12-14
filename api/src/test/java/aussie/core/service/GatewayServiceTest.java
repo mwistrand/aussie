@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 
 import aussie.adapter.out.storage.NoOpConfigurationCache;
 import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
+import aussie.config.LocalCacheConfig;
 import aussie.core.model.EndpointConfig;
 import aussie.core.model.EndpointVisibility;
 import aussie.core.model.GatewayRequest;
@@ -50,13 +51,35 @@ class GatewayServiceTest {
     // Permissive security config for testing
     private static final GatewaySecurityConfig PERMISSIVE_CONFIG = () -> true;
 
+    // Test cache config
+    private static final LocalCacheConfig TEST_CACHE_CONFIG = new LocalCacheConfig() {
+        @Override
+        public Duration serviceRoutesTtl() {
+            return Duration.ofMinutes(5);
+        }
+
+        @Override
+        public Duration rateLimitConfigTtl() {
+            return Duration.ofMinutes(5);
+        }
+
+        @Override
+        public long maxEntries() {
+            return 1000;
+        }
+    };
+
     @BeforeEach
     void setUp() {
         var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG);
         var defaultPolicy = new DefaultPermissionPolicy();
         var authService = new ServiceAuthorizationService(defaultPolicy);
         serviceRegistry = new ServiceRegistry(
-                new InMemoryServiceRegistrationRepository(), NoOpConfigurationCache.INSTANCE, validator, authService);
+                new InMemoryServiceRegistrationRepository(),
+                NoOpConfigurationCache.INSTANCE,
+                validator,
+                authService,
+                TEST_CACHE_CONFIG);
         requestPreparer = new ProxyRequestPreparer(() -> (req, uri) -> Map.of());
         proxyClient = new TestProxyClient();
         routeAuthService = new NoOpRouteAuthService();

@@ -49,30 +49,31 @@ public class GatewayService implements GatewayUseCase {
 
     @Override
     public Uni<GatewayResult> forward(GatewayRequest request) {
-        long startTime = System.nanoTime();
-        var routeResult = serviceRegistry.findRoute(request.path(), request.method());
+        final long startTime = System.nanoTime();
 
-        if (routeResult.isEmpty()) {
-            var result = new GatewayResult.RouteNotFound(request.path());
-            metrics.recordGatewayResult(null, result);
-            return Uni.createFrom().item(result);
-        }
+        // Use async route lookup to ensure cache freshness in multi-instance deployments
+        return serviceRegistry.findRouteAsync(request.path(), request.method()).flatMap(routeResult -> {
+            if (routeResult.isEmpty()) {
+                var result = new GatewayResult.RouteNotFound(request.path());
+                metrics.recordGatewayResult(null, result);
+                return Uni.createFrom().item(result);
+            }
 
-        // Gateway requires a RouteMatch (with endpoint) to forward requests
-        if (!(routeResult.get() instanceof RouteMatch routeMatch)) {
-            var result = new GatewayResult.RouteNotFound(request.path());
-            metrics.recordGatewayResult(null, result);
-            return Uni.createFrom().item(result);
-        }
+            // Gateway requires a RouteMatch (with endpoint) to forward requests
+            if (!(routeResult.get() instanceof RouteMatch routeMatch)) {
+                var result = new GatewayResult.RouteNotFound(request.path());
+                metrics.recordGatewayResult(null, result);
+                return Uni.createFrom().item(result);
+            }
 
-        var service = routeMatch.service();
-        var serviceId = service.serviceId();
+            var service = routeMatch.service();
 
-        // Check route authentication requirements
-        return routeAuthService
-                .authenticate(request, routeMatch)
-                .flatMap(authResult -> handleAuthResult(authResult, request, routeMatch))
-                .invoke(result -> recordMetrics(request, service, result, startTime));
+            // Check route authentication requirements
+            return routeAuthService
+                    .authenticate(request, routeMatch)
+                    .flatMap(authResult -> handleAuthResult(authResult, request, routeMatch))
+                    .invoke(result -> recordMetrics(request, service, result, startTime));
+        });
     }
 
     private void recordMetrics(

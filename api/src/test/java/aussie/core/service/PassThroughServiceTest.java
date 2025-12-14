@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import aussie.adapter.out.storage.NoOpConfigurationCache;
 import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
+import aussie.config.LocalCacheConfig;
 import aussie.core.model.AussieToken;
 import aussie.core.model.GatewayRequest;
 import aussie.core.model.GatewayResult;
@@ -51,13 +53,35 @@ class PassThroughServiceTest {
     // Permissive security config for testing
     private static final GatewaySecurityConfig PERMISSIVE_CONFIG = () -> true;
 
+    // Test cache config
+    private static final LocalCacheConfig TEST_CACHE_CONFIG = new LocalCacheConfig() {
+        @Override
+        public Duration serviceRoutesTtl() {
+            return Duration.ofMinutes(5);
+        }
+
+        @Override
+        public Duration rateLimitConfigTtl() {
+            return Duration.ofMinutes(5);
+        }
+
+        @Override
+        public long maxEntries() {
+            return 1000;
+        }
+    };
+
     @BeforeEach
     void setUp() {
         var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG);
         var defaultPolicy = new DefaultPermissionPolicy();
         var authService = new ServiceAuthorizationService(defaultPolicy);
         serviceRegistry = new ServiceRegistry(
-                new InMemoryServiceRegistrationRepository(), NoOpConfigurationCache.INSTANCE, validator, authService);
+                new InMemoryServiceRegistrationRepository(),
+                NoOpConfigurationCache.INSTANCE,
+                validator,
+                authService,
+                TEST_CACHE_CONFIG);
         requestPreparer = new ProxyRequestPreparer(() -> (req, uri) -> Map.of());
         proxyClient = new TestProxyClient();
         var patternMatcher = new GlobPatternMatcher();

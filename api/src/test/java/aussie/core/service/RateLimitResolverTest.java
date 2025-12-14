@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import aussie.config.LocalCacheConfig;
 import aussie.config.RateLimitingConfig;
 import aussie.core.model.EndpointConfig;
 import aussie.core.model.EndpointRateLimitConfig;
@@ -25,19 +27,36 @@ import aussie.core.model.ServiceRateLimitConfig;
 import aussie.core.model.ServiceRegistration;
 import aussie.core.model.ServiceWebSocketRateLimitConfig;
 import aussie.core.model.ServiceWebSocketRateLimitConfig.RateLimitValues;
-import aussie.core.port.out.ServiceRegistrationRepository;
 
 @DisplayName("RateLimitResolver")
 class RateLimitResolverTest {
 
     private RateLimitResolver resolver;
     private RateLimitingConfig config;
-    private ServiceRegistrationRepository repository;
+    private ServiceRegistry serviceRegistry;
+
+    // Test cache config
+    private static final LocalCacheConfig TEST_CACHE_CONFIG = new LocalCacheConfig() {
+        @Override
+        public Duration serviceRoutesTtl() {
+            return Duration.ofMinutes(5);
+        }
+
+        @Override
+        public Duration rateLimitConfigTtl() {
+            return Duration.ofMinutes(5);
+        }
+
+        @Override
+        public long maxEntries() {
+            return 1000;
+        }
+    };
 
     @BeforeEach
     void setUp() {
         config = mock(RateLimitingConfig.class);
-        repository = mock(ServiceRegistrationRepository.class);
+        serviceRegistry = mock(ServiceRegistry.class);
 
         // Default platform config
         when(config.defaultRequestsPerWindow()).thenReturn(100L);
@@ -60,7 +79,7 @@ class RateLimitResolverTest {
         when(msgConfig.windowSeconds()).thenReturn(1L);
         when(msgConfig.burstCapacity()).thenReturn(100L);
 
-        resolver = new RateLimitResolver(config, repository);
+        resolver = new RateLimitResolver(config, serviceRegistry, TEST_CACHE_CONFIG);
     }
 
     private ServiceRegistration createService(String serviceId, ServiceRateLimitConfig rateLimitConfig) {

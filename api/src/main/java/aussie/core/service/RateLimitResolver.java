@@ -1,21 +1,21 @@
 package aussie.core.service;
 
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 
+import aussie.config.LocalCacheConfig;
 import aussie.config.RateLimitingConfig;
+import aussie.core.cache.CaffeineLocalCache;
+import aussie.core.cache.LocalCache;
 import aussie.core.model.EffectiveRateLimit;
 import aussie.core.model.EndpointRateLimitConfig;
 import aussie.core.model.RouteLookupResult;
 import aussie.core.model.ServiceRateLimitConfig;
 import aussie.core.model.ServiceRegistration;
-import aussie.core.port.out.ServiceRegistrationRepository;
 
 /**
  * Resolves effective rate limits based on the configuration hierarchy.
@@ -31,21 +31,26 @@ import aussie.core.port.out.ServiceRegistrationRepository;
  * <p>
  * All resolved limits are capped at the platform maximum to ensure
  * no service or endpoint can exceed platform-wide limits.
+ *
+ * <p>
+ * <b>Multi-instance safety:</b> The service config cache uses TTL-based expiration
+ * to ensure eventual consistency across instances. When an entry expires, the
+ * next lookup will fetch fresh configuration via the ServiceRegistry.
  */
 @ApplicationScoped
 public class RateLimitResolver {
 
     private final RateLimitingConfig config;
-    private final ServiceRegistrationRepository repository;
+    private final ServiceRegistry serviceRegistry;
 
-    // Cache for service rate limit configs to avoid repeated lookups
-    private final ConcurrentMap<String, Optional<ServiceRateLimitConfig>> serviceConfigCache =
-            new ConcurrentHashMap<>();
+    // TTL-based cache for service rate limit configs
+    private final LocalCache<String, Optional<ServiceRateLimitConfig>> serviceConfigCache;
 
     @Inject
-    public RateLimitResolver(RateLimitingConfig config, ServiceRegistrationRepository repository) {
+    public RateLimitResolver(RateLimitingConfig config, ServiceRegistry serviceRegistry, LocalCacheConfig cacheConfig) {
         this.config = config;
-        this.repository = repository;
+        this.serviceRegistry = serviceRegistry;
+        this.serviceConfigCache = new CaffeineLocalCache<>(cacheConfig.rateLimitConfigTtl(), cacheConfig.maxEntries());
     }
 
     /**
@@ -89,6 +94,11 @@ public class RateLimitResolver {
      * Looks up the service registration to honor service-specific rate limit
      * configuration. Falls back to platform defaults if service not found.
      *
+     * <p>
+     * Uses a TTL-based cache for multi-instance safety. Cache entries
+     * automatically expire after the configured TTL, ensuring eventual
+     * consistency when rate limit configs are updated on other instances.
+     *
      * @param serviceId the service ID
      * @return Uni with the effective rate limit, capped at platform maximum
      */
@@ -97,20 +107,20 @@ public class RateLimitResolver {
             return Uni.createFrom().item(resolvePlatformDefaults());
         }
 
-        // Check cache first
+        // Check TTL-based cache first
         final var cachedConfig = serviceConfigCache.get(serviceId);
-        if (cachedConfig != null && !cachedConfig.isEmpty()) {
+        if (cachedConfig.isPresent()) {
             return Uni.createFrom()
                     .item(resolveLimit(
                             Optional.empty(),
-                            cachedConfig,
+                            cachedConfig.get(),
                             config.defaultRequestsPerWindow(),
                             config.windowSeconds(),
                             config.burstCapacity()));
         }
 
-        // Look up service registration asynchronously
-        return repository.findById(serviceId).map(serviceOpt -> {
+        // Cache miss - look up service registration via ServiceRegistry
+        return serviceRegistry.getServiceForRateLimiting(serviceId).map(serviceOpt -> {
             final var serviceConfig =
                     serviceOpt.map(ServiceRegistration::rateLimitConfig).orElse(Optional.empty());
 
@@ -130,12 +140,14 @@ public class RateLimitResolver {
      * Invalidates the cached rate limit config for a service.
      *
      * <p>
-     * Call this when a service registration is updated or deleted.
+     * Call this when a service registration is updated or deleted on this
+     * instance. This provides immediate consistency for local changes while
+     * the TTL-based expiration handles cross-instance consistency.
      *
      * @param serviceId the service ID to invalidate
      */
     public void invalidateCache(String serviceId) {
-        serviceConfigCache.remove(serviceId);
+        serviceConfigCache.invalidate(serviceId);
     }
 
     /**

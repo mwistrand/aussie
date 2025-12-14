@@ -1,17 +1,21 @@
 package aussie.core.service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 
+import aussie.config.LocalCacheConfig;
 import aussie.core.model.EndpointConfig;
 import aussie.core.model.Permission;
 import aussie.core.model.RegistrationResult;
@@ -37,6 +41,11 @@ import aussie.core.port.out.ServiceRegistrationRepository;
  * <li>Enforcing authorization for service operations</li>
  * <li>Detecting permission policy changes that require elevated privileges</li>
  * </ul>
+ *
+ * <p>
+ * <b>Multi-instance safety:</b> The compiled route cache uses TTL-based refresh
+ * to ensure eventual consistency across instances. When the cache TTL expires,
+ * routes are reloaded from persistent storage.
  */
 @ApplicationScoped
 public class ServiceRegistry {
@@ -45,20 +54,26 @@ public class ServiceRegistry {
     private final ConfigurationCache cache;
     private final ServiceRegistrationValidator validator;
     private final ServiceAuthorizationService authService;
+    private final Duration routeCacheTtl;
 
     // Local cache for compiled route patterns (always in-memory for fast matching)
     private final Map<String, CompiledRoute> compiledRoutes = new ConcurrentHashMap<>();
+
+    // TTL tracking for multi-instance cache refresh
+    private final AtomicReference<Instant> lastRefreshed = new AtomicReference<>(Instant.MIN);
 
     @Inject
     public ServiceRegistry(
             ServiceRegistrationRepository repository,
             ConfigurationCache cache,
             ServiceRegistrationValidator validator,
-            ServiceAuthorizationService authService) {
+            ServiceAuthorizationService authService,
+            LocalCacheConfig cacheConfig) {
         this.repository = repository;
         this.cache = cache;
         this.validator = validator;
         this.authService = authService;
+        this.routeCacheTtl = cacheConfig.serviceRoutesTtl();
     }
 
     /**
@@ -67,14 +82,55 @@ public class ServiceRegistry {
      * @return Uni completing when initialization is done
      */
     public Uni<Void> initialize() {
+        return refreshRouteCache();
+    }
+
+    /**
+     * Refreshes all routes from persistent storage.
+     *
+     * <p>
+     * Clears the local cache and reloads all service registrations from storage.
+     * Updates the last-refreshed timestamp for TTL tracking.
+     *
+     * @return Uni completing when refresh is done
+     */
+    private Uni<Void> refreshRouteCache() {
         return repository
                 .findAll()
                 .invoke(registrations -> {
+                    compiledRoutes.clear();
                     for (ServiceRegistration registration : registrations) {
                         compileAndCacheRoutes(registration);
                     }
+                    lastRefreshed.set(Instant.now());
                 })
                 .replaceWithVoid();
+    }
+
+    /**
+     * Checks if the route cache is stale and needs refresh.
+     *
+     * @return true if cache TTL has expired
+     */
+    private boolean isCacheStale() {
+        final var lastRefresh = lastRefreshed.get();
+        return lastRefresh.plus(routeCacheTtl).isBefore(Instant.now());
+    }
+
+    /**
+     * Ensures the route cache is fresh, refreshing from storage if needed.
+     *
+     * <p>
+     * This method provides eventual consistency for multi-instance deployments.
+     * When the cache TTL expires, routes are reloaded from persistent storage.
+     *
+     * @return Uni completing when cache is ensured fresh
+     */
+    private Uni<Void> ensureCacheFresh() {
+        if (isCacheStale()) {
+            return refreshRouteCache();
+        }
+        return Uni.createFrom().voidItem();
     }
 
     /**
@@ -327,17 +383,43 @@ public class ServiceRegistry {
 
     /**
      * Find a route matching the given path and method across all registered
+     * services (async version with cache freshness).
+     *
+     * <p>
+     * This is the preferred method for multi-instance deployments as it ensures
+     * the route cache is fresh before searching. If the cache TTL has expired,
+     * routes are reloaded from persistent storage first.
+     *
+     * @param path   The request path
+     * @param method The HTTP method
+     * @return Uni with Optional containing the route lookup result if found
+     */
+    public Uni<Optional<RouteLookupResult>> findRouteAsync(String path, String method) {
+        return ensureCacheFresh().map(v -> findRouteInCache(path, method));
+    }
+
+    /**
+     * Find a route matching the given path and method across all registered
      * services.
      *
      * <p>
      * This is a synchronous operation that checks each registered service's
-     * endpoints for a matching route.
+     * endpoints for a matching route. Note: This method does NOT refresh the
+     * cache from storage. For multi-instance safe lookups, use
+     * {@link #findRouteAsync(String, String)}.
      *
      * @param path   The request path
      * @param method The HTTP method
      * @return Optional containing the route lookup result if found
      */
     public Optional<RouteLookupResult> findRoute(String path, String method) {
+        return findRouteInCache(path, method);
+    }
+
+    /**
+     * Internal method to find a route in the local cache.
+     */
+    private Optional<RouteLookupResult> findRouteInCache(String path, String method) {
         // Iterate through all cached services to find a matching route
         for (var route : compiledRoutes.values()) {
             var serviceRegistration = route.service();

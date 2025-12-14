@@ -45,6 +45,9 @@ dependencies {
     // JWT/JOSE library for token validation and issuance
     implementation 'org.bitbucket.b_c:jose4j:0.9.4'
 
+    // High-performance caching with TTL support
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.rest-assured:rest-assured'
     testImplementation 'org.wiremock:wiremock:3.3.1'
