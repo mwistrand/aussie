@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
-import aussie.core.model.Session;
+import aussie.core.model.session.Session;
 import aussie.core.port.out.SessionRepository;
 
 /**

@@ -5,7 +5,7 @@ import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.ServiceRegistration;
+import aussie.core.model.service.ServiceRegistration;
 
 /**
  * Optional port interface for caching service registrations.

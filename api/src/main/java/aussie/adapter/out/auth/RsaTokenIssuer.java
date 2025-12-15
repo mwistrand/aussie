@@ -17,10 +17,10 @@ import org.jose4j.jws.JsonWebSignature;
 import org.jose4j.jwt.JwtClaims;
 import org.jose4j.lang.JoseException;
 
-import aussie.config.RouteAuthConfig;
-import aussie.core.model.AussieToken;
-import aussie.core.model.JwsConfig;
-import aussie.core.model.TokenValidationResult;
+import aussie.core.config.RouteAuthConfig;
+import aussie.core.model.auth.AussieToken;
+import aussie.core.model.auth.TokenValidationResult;
+import aussie.core.model.common.JwsConfig;
 import aussie.spi.TokenIssuerProvider;
 
 /**

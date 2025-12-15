@@ -20,9 +20,9 @@ import org.jboss.logging.Logger;
 
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.adapter.out.telemetry.SecurityMonitor;
-import aussie.config.SessionConfigMapping;
-import aussie.core.model.Permission;
-import aussie.core.model.Session;
+import aussie.core.config.SessionConfig;
+import aussie.core.model.auth.Permission;
+import aussie.core.model.session.Session;
 import aussie.core.port.in.SessionManagement;
 
 /**
@@ -38,7 +38,7 @@ public class SessionAuthenticationMechanism implements HttpAuthenticationMechani
     private static final Logger LOG = Logger.getLogger(SessionAuthenticationMechanism.class);
 
     @Inject
-    SessionConfigMapping config;
+    SessionConfig config;
 
     @Inject
     SessionCookieManager cookieManager;

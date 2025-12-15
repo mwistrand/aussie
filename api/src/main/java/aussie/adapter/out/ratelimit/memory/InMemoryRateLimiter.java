@@ -5,12 +5,12 @@ import java.util.concurrent.ConcurrentMap;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.AlgorithmRegistry;
-import aussie.core.model.EffectiveRateLimit;
-import aussie.core.model.RateLimitAlgorithm;
-import aussie.core.model.RateLimitDecision;
-import aussie.core.model.RateLimitKey;
-import aussie.core.model.RateLimitState;
+import aussie.core.model.ratelimit.AlgorithmRegistry;
+import aussie.core.model.ratelimit.EffectiveRateLimit;
+import aussie.core.model.ratelimit.RateLimitAlgorithm;
+import aussie.core.model.ratelimit.RateLimitDecision;
+import aussie.core.model.ratelimit.RateLimitKey;
+import aussie.core.model.ratelimit.RateLimitState;
 import aussie.core.port.out.RateLimiter;
 
 /**
@@ -123,7 +123,7 @@ public final class InMemoryRateLimiter implements RateLimiter {
 
     private RateLimitDecision computeDecision(
             String cacheKey,
-            aussie.core.model.RateLimitAlgorithmHandler handler,
+            aussie.core.model.ratelimit.RateLimitAlgorithmHandler handler,
             EffectiveRateLimit limit,
             long nowMillis) {
 

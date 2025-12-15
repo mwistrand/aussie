@@ -19,12 +19,14 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import aussie.config.RateLimitingConfig;
-import aussie.core.model.EffectiveRateLimit;
-import aussie.core.model.RateLimitDecision;
-import aussie.core.model.RateLimitKey;
-import aussie.core.model.RateLimitKeyType;
+import aussie.core.config.RateLimitingConfig;
+import aussie.core.model.ratelimit.EffectiveRateLimit;
+import aussie.core.model.ratelimit.RateLimitDecision;
+import aussie.core.model.ratelimit.RateLimitKey;
+import aussie.core.model.ratelimit.RateLimitKeyType;
 import aussie.core.port.out.RateLimiter;
+import aussie.core.service.ratelimit.*;
+import aussie.core.service.routing.*;
 
 @DisplayName("WebSocketRateLimitService")
 class WebSocketRateLimitServiceTest {

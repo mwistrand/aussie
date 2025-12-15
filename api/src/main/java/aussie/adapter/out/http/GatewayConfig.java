@@ -2,8 +2,8 @@ package aussie.adapter.out.http;
 
 import io.smallrye.config.ConfigMapping;
 
-import aussie.core.model.AccessControlConfig;
-import aussie.core.model.LimitsConfig;
+import aussie.core.model.auth.AccessControlConfig;
+import aussie.core.model.common.LimitsConfig;
 
 @ConfigMapping(prefix = "aussie.gateway")
 public interface GatewayConfig {

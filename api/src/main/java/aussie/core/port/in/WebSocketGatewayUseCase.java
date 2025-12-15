@@ -2,8 +2,8 @@ package aussie.core.port.in;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.WebSocketUpgradeRequest;
-import aussie.core.model.WebSocketUpgradeResult;
+import aussie.core.model.websocket.WebSocketUpgradeRequest;
+import aussie.core.model.websocket.WebSocketUpgradeResult;
 
 /**
  * Use case for handling WebSocket upgrade requests.

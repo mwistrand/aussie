@@ -27,8 +27,8 @@ import org.jboss.logging.Logger;
 import aussie.adapter.in.auth.SessionAuthenticationMechanism.SessionPrincipal;
 import aussie.adapter.in.auth.SessionCookieManager;
 import aussie.adapter.in.problem.GatewayProblem;
-import aussie.config.SessionConfigMapping;
-import aussie.core.model.Session;
+import aussie.core.config.SessionConfig;
+import aussie.core.model.session.Session;
 import aussie.core.port.in.SessionManagement;
 
 /**
@@ -47,7 +47,7 @@ public class SessionResource {
     SessionCookieManager cookieManager;
 
     @Inject
-    SessionConfigMapping config;
+    SessionConfig config;
 
     @Inject
     SecurityIdentity securityIdentity;

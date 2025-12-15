@@ -10,8 +10,7 @@ import io.quarkus.vertx.web.RouteFilter;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
-import aussie.config.CorsConfigMapping;
-import aussie.core.model.CorsConfig;
+import aussie.core.model.common.CorsConfig;
 
 /**
  * CORS filter for gateway requests using Vert.x RouteFilter.
@@ -40,7 +39,7 @@ public class CorsFilter {
     private static final String VARY = "Vary";
 
     @Inject
-    Instance<CorsConfigMapping> corsConfigInstance;
+    Instance<GatewayCorsConfig> corsConfigInstance;
 
     /**
      * Route filter that handles CORS for all incoming requests.
@@ -55,7 +54,7 @@ public class CorsFilter {
             return;
         }
 
-        CorsConfigMapping globalConfig = corsConfigInstance.get();
+        GatewayCorsConfig globalConfig = corsConfigInstance.get();
         if (!globalConfig.enabled()) {
             LOG.debug("CORS is disabled, skipping");
             rc.next();
@@ -156,7 +155,7 @@ public class CorsFilter {
         }
     }
 
-    private CorsConfig buildGlobalCorsConfig(CorsConfigMapping globalConfig) {
+    private CorsConfig buildGlobalCorsConfig(GatewayCorsConfig globalConfig) {
         return new CorsConfig(
                 globalConfig.allowedOrigins(),
                 globalConfig.allowedMethods(),

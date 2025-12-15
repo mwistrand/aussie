@@ -12,8 +12,8 @@ import org.jboss.logging.Logger;
 
 import aussie.adapter.out.ratelimit.memory.InMemoryRateLimiterProvider;
 import aussie.adapter.out.ratelimit.redis.RedisRateLimiterProvider;
-import aussie.config.RateLimitingConfig;
-import aussie.core.model.AlgorithmRegistry;
+import aussie.core.config.RateLimitingConfig;
+import aussie.core.model.ratelimit.AlgorithmRegistry;
 import aussie.core.port.out.RateLimiter;
 import aussie.spi.RateLimiterProvider;
 

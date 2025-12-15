@@ -11,11 +11,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.EndpointVisibility;
-import aussie.core.model.GatewaySecurityConfig;
-import aussie.core.model.ServiceRegistration;
-import aussie.core.model.ValidationResult;
-import aussie.core.model.VisibilityRule;
+import aussie.core.model.auth.GatewaySecurityConfig;
+import aussie.core.model.auth.VisibilityRule;
+import aussie.core.model.common.ValidationResult;
+import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.service.ServiceRegistration;
+import aussie.core.service.routing.*;
 
 @DisplayName("ServiceRegistrationValidator")
 class ServiceRegistrationValidatorTest {

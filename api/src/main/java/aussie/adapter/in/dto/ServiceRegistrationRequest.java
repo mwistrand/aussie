@@ -4,10 +4,10 @@ import java.net.URI;
 import java.util.List;
 import java.util.Optional;
 
-import aussie.core.model.CorsConfig;
-import aussie.core.model.EndpointVisibility;
-import aussie.core.model.ServiceRegistration;
-import aussie.core.model.VisibilityRule;
+import aussie.core.model.auth.VisibilityRule;
+import aussie.core.model.common.CorsConfig;
+import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.service.ServiceRegistration;
 
 public record ServiceRegistrationRequest(
         Long version,
@@ -36,21 +36,21 @@ public record ServiceRegistrationRequest(
 
         var endpointModels = endpoints != null
                 ? endpoints.stream().map(e -> e.toModel(defaultAuth)).toList()
-                : List.<aussie.core.model.EndpointConfig>of();
+                : List.<aussie.core.model.routing.EndpointConfig>of();
 
         var accessConfigModel = accessConfig != null
                 ? Optional.of(accessConfig.toModel())
-                : Optional.<aussie.core.model.ServiceAccessConfig>empty();
+                : Optional.<aussie.core.model.auth.ServiceAccessConfig>empty();
 
         var corsConfigModel = cors != null ? Optional.of(cors.toModel()) : Optional.<CorsConfig>empty();
 
         var permissionPolicyModel = permissionPolicy != null
                 ? Optional.of(permissionPolicy.toModel())
-                : Optional.<aussie.core.model.ServicePermissionPolicy>empty();
+                : Optional.<aussie.core.model.auth.ServicePermissionPolicy>empty();
 
         var rateLimitConfigModel = rateLimitConfig != null
                 ? Optional.of(rateLimitConfig.toModel())
-                : Optional.<aussie.core.model.ServiceRateLimitConfig>empty();
+                : Optional.<aussie.core.model.ratelimit.ServiceRateLimitConfig>empty();
 
         return new ServiceRegistration(
                 serviceId,

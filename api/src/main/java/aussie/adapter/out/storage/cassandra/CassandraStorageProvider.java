@@ -15,7 +15,7 @@ import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 import org.jboss.logging.Logger;
 
-import aussie.core.model.StorageHealth;
+import aussie.core.model.common.StorageHealth;
 import aussie.core.port.out.ServiceRegistrationRepository;
 import aussie.core.port.out.StorageHealthIndicator;
 import aussie.spi.StorageAdapterConfig;

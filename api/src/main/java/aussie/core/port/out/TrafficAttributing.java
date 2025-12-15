@@ -1,7 +1,7 @@
 package aussie.core.port.out;
 
-import aussie.core.model.GatewayRequest;
-import aussie.core.model.ServiceRegistration;
+import aussie.core.model.gateway.GatewayRequest;
+import aussie.core.model.service.ServiceRegistration;
 
 /**
  * Port interface for traffic attribution and cost allocation.

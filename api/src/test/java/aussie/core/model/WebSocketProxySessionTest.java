@@ -29,7 +29,10 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import aussie.config.WebSocketConfigMapping;
+import aussie.core.config.*;
+import aussie.core.config.WebSocketConfig;
+import aussie.core.model.session.*;
+import aussie.core.model.websocket.*;
 
 @DisplayName("WebSocketProxySession")
 class WebSocketProxySessionTest {
@@ -37,16 +40,16 @@ class WebSocketProxySessionTest {
     private Vertx vertx;
     private ServerWebSocket clientSocket;
     private WebSocket backendSocket;
-    private WebSocketConfigMapping config;
-    private WebSocketConfigMapping.PingConfig pingConfig;
+    private WebSocketConfig config;
+    private WebSocketConfig.PingConfig pingConfig;
 
     @BeforeEach
     void setUp() {
         vertx = mock(Vertx.class);
         clientSocket = mock(ServerWebSocket.class);
         backendSocket = mock(WebSocket.class);
-        config = mock(WebSocketConfigMapping.class);
-        pingConfig = mock(WebSocketConfigMapping.PingConfig.class);
+        config = mock(WebSocketConfig.class);
+        pingConfig = mock(WebSocketConfig.PingConfig.class);
 
         // Default config values
         when(config.idleTimeout()).thenReturn(Duration.ofMinutes(5));

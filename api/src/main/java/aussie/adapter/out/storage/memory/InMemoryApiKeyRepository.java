@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.ApiKey;
+import aussie.core.model.auth.ApiKey;
 import aussie.core.port.out.ApiKeyRepository;
 
 /**

@@ -3,7 +3,7 @@ package aussie.core.port.out;
 import java.net.URI;
 import java.util.Map;
 
-import aussie.core.model.GatewayRequest;
+import aussie.core.model.gateway.GatewayRequest;
 
 public interface ForwardedHeaderBuilder {
 

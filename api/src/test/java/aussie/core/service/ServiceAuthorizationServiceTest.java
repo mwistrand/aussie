@@ -11,10 +11,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.OperationPermission;
-import aussie.core.model.Permission;
-import aussie.core.model.ServicePermissionPolicy;
-import aussie.core.model.ServiceRegistration;
+import aussie.core.model.auth.OperationPermission;
+import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.ServicePermissionPolicy;
+import aussie.core.model.service.ServiceRegistration;
+import aussie.core.service.auth.*;
 
 @DisplayName("ServiceAuthorizationService")
 class ServiceAuthorizationServiceTest {

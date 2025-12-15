@@ -20,14 +20,14 @@ import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
 import aussie.adapter.out.telemetry.GatewayMetrics;
-import aussie.config.WebSocketConfigMapping;
-import aussie.core.model.MessageRateLimitHandler;
-import aussie.core.model.SessionInvalidatedEvent;
-import aussie.core.model.WebSocketProxySession;
-import aussie.core.model.WebSocketUpgradeRequest;
-import aussie.core.model.WebSocketUpgradeResult;
+import aussie.core.config.WebSocketConfig;
+import aussie.core.model.ratelimit.MessageRateLimitHandler;
+import aussie.core.model.session.SessionInvalidatedEvent;
+import aussie.core.model.websocket.WebSocketProxySession;
+import aussie.core.model.websocket.WebSocketUpgradeRequest;
+import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
-import aussie.core.service.WebSocketRateLimitService;
+import aussie.core.service.ratelimit.WebSocketRateLimitService;
 
 /**
  * Handles WebSocket proxy connections after authentication.
@@ -49,7 +49,7 @@ public class WebSocketGateway {
     private final Map<String, WebSocketProxySession> activeSessions = new ConcurrentHashMap<>();
 
     private final WebSocketGatewayUseCase gatewayUseCase;
-    private final WebSocketConfigMapping config;
+    private final WebSocketConfig config;
     private final Vertx vertx;
     private final GatewayMetrics metrics;
     private final WebSocketRateLimitService rateLimitService;
@@ -57,7 +57,7 @@ public class WebSocketGateway {
     @Inject
     public WebSocketGateway(
             WebSocketGatewayUseCase gatewayUseCase,
-            WebSocketConfigMapping config,
+            WebSocketConfig config,
             Vertx vertx,
             GatewayMetrics metrics,
             WebSocketRateLimitService rateLimitService) {

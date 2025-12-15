@@ -7,8 +7,8 @@ import java.util.Set;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.ApiKey;
-import aussie.core.model.ApiKeyCreateResult;
+import aussie.core.model.auth.ApiKey;
+import aussie.core.model.auth.ApiKeyCreateResult;
 
 /**
  * Port for managing API keys used for authentication.

@@ -14,8 +14,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.LimitsConfig;
-import aussie.core.model.ValidationResult;
+import aussie.core.model.common.LimitsConfig;
+import aussie.core.model.common.ValidationResult;
+import aussie.core.service.common.*;
 
 @DisplayName("RequestSizeValidator")
 class RequestSizeValidatorTest {

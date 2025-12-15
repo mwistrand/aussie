@@ -39,19 +39,19 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
-import aussie.config.RateLimitingConfig;
-import aussie.core.model.EffectiveRateLimit;
-import aussie.core.model.EndpointConfig;
-import aussie.core.model.EndpointVisibility;
-import aussie.core.model.RateLimitDecision;
-import aussie.core.model.RateLimitKey;
-import aussie.core.model.RouteLookupResult;
-import aussie.core.model.RouteMatch;
-import aussie.core.model.ServiceRegistration;
+import aussie.core.config.RateLimitingConfig;
+import aussie.core.model.ratelimit.EffectiveRateLimit;
+import aussie.core.model.ratelimit.RateLimitDecision;
+import aussie.core.model.ratelimit.RateLimitKey;
+import aussie.core.model.routing.EndpointConfig;
+import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.routing.RouteLookupResult;
+import aussie.core.model.routing.RouteMatch;
+import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
-import aussie.core.service.RateLimitResolver;
-import aussie.core.service.ServiceRegistry;
+import aussie.core.service.ratelimit.RateLimitResolver;
+import aussie.core.service.routing.ServiceRegistry;
 
 @DisplayName("RateLimitFilter")
 class RateLimitFilterTest {

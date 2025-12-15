@@ -1,8 +1,7 @@
 package aussie.adapter.out.telemetry;
 
-import aussie.config.TelemetryConfigMapping;
-import aussie.core.model.GatewayRequest;
-import aussie.core.model.ServiceRegistration;
+import aussie.core.model.gateway.GatewayRequest;
+import aussie.core.model.service.ServiceRegistration;
 
 /**
  * Traffic attribution dimensions for cost allocation.
@@ -34,7 +33,7 @@ public record TrafficAttribution(
      * @return traffic attribution dimensions
      */
     public static TrafficAttribution from(
-            GatewayRequest request, ServiceRegistration service, TelemetryConfigMapping.AttributionConfig config) {
+            GatewayRequest request, ServiceRegistration service, TelemetryConfig.AttributionConfig config) {
 
         return new TrafficAttribution(
                 service.serviceId(),
@@ -52,8 +51,7 @@ public record TrafficAttribution(
      * @param config the telemetry configuration
      * @return traffic attribution dimensions
      */
-    public static TrafficAttribution fromRequest(
-            GatewayRequest request, TelemetryConfigMapping.AttributionConfig config) {
+    public static TrafficAttribution fromRequest(GatewayRequest request, TelemetryConfig.AttributionConfig config) {
         return new TrafficAttribution(
                 null,
                 getHeader(request, config.teamHeader()),

@@ -15,8 +15,8 @@ import io.smallrye.mutiny.Uni;
 
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.adapter.out.telemetry.SecurityMonitor;
-import aussie.core.model.ApiKey;
-import aussie.core.model.Permission;
+import aussie.core.model.auth.ApiKey;
+import aussie.core.model.auth.Permission;
 import aussie.core.port.in.ApiKeyManagement;
 
 /**

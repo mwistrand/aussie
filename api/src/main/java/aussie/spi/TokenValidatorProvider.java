@@ -2,8 +2,8 @@ package aussie.spi;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.TokenProviderConfig;
-import aussie.core.model.TokenValidationResult;
+import aussie.core.model.auth.TokenProviderConfig;
+import aussie.core.model.auth.TokenValidationResult;
 
 /**
  * Service Provider Interface for token validation implementations.

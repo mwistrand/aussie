@@ -12,7 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.ServiceRegistration;
+import aussie.core.model.service.ServiceRegistration;
 
 @DisplayName("InMemoryServiceRegistrationRepository")
 class InMemoryServiceRegistrationRepositoryTest {

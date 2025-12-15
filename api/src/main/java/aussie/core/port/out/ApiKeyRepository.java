@@ -5,7 +5,7 @@ import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.ApiKey;
+import aussie.core.model.auth.ApiKey;
 
 /**
  * Port interface for persistent storage of API keys.

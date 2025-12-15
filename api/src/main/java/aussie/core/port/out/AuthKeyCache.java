@@ -4,7 +4,7 @@ import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.ApiKey;
+import aussie.core.model.auth.ApiKey;
 
 /**
  * Cache interface for API key authentication lookups.

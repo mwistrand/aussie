@@ -12,7 +12,6 @@ import jakarta.inject.Inject;
 
 import org.jboss.logging.Logger;
 
-import aussie.config.TelemetryConfigMapping;
 import aussie.core.port.out.SecurityMonitoring;
 import aussie.spi.SecurityEvent;
 
@@ -36,7 +35,7 @@ public class SecurityMonitor implements SecurityMonitoring {
 
     private static final Logger LOG = Logger.getLogger(SecurityMonitor.class);
 
-    private final TelemetryConfigMapping config;
+    private final TelemetryConfig config;
     private final SecurityEventDispatcher dispatcher;
     private final boolean enabled;
 
@@ -46,7 +45,7 @@ public class SecurityMonitor implements SecurityMonitoring {
     private final ConcurrentHashMap<String, AtomicInteger> authFailureCounts = new ConcurrentHashMap<>();
 
     @Inject
-    public SecurityMonitor(TelemetryConfigMapping config, SecurityEventDispatcher dispatcher) {
+    public SecurityMonitor(TelemetryConfig config, SecurityEventDispatcher dispatcher) {
         this.config = config;
         this.dispatcher = dispatcher;
         this.enabled = config != null && config.enabled() && config.security().enabled();

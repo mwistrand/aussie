@@ -3,7 +3,7 @@ package aussie.adapter.in.dto;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import aussie.core.model.ServicePermissionPolicy;
+import aussie.core.model.auth.ServicePermissionPolicy;
 
 /**
  * DTO for service permission policy.

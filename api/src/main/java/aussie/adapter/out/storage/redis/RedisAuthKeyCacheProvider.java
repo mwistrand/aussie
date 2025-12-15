@@ -6,7 +6,7 @@ import java.util.Optional;
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.StorageHealth;
+import aussie.core.model.common.StorageHealth;
 import aussie.core.port.out.AuthKeyCache;
 import aussie.core.port.out.StorageHealthIndicator;
 import aussie.spi.AuthKeyCacheProvider;

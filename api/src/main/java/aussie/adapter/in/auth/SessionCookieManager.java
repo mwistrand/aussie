@@ -9,8 +9,8 @@ import io.vertx.core.http.Cookie;
 import io.vertx.core.http.CookieSameSite;
 import io.vertx.core.http.HttpServerRequest;
 
-import aussie.config.SessionConfigMapping;
-import aussie.core.model.Session;
+import aussie.core.config.SessionConfig;
+import aussie.core.model.session.Session;
 
 /**
  * Manages session cookies - creation, extraction, and invalidation.
@@ -19,7 +19,7 @@ import aussie.core.model.Session;
 public class SessionCookieManager {
 
     @Inject
-    SessionConfigMapping config;
+    SessionConfig config;
 
     /**
      * Creates a session cookie for the given session.

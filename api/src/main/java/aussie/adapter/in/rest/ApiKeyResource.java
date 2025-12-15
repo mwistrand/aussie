@@ -23,8 +23,8 @@ import io.smallrye.mutiny.Uni;
 import aussie.adapter.in.auth.ApiKeyIdentityProvider.ApiKeyPrincipal;
 import aussie.adapter.in.dto.CreateApiKeyRequest;
 import aussie.adapter.in.problem.GatewayProblem;
-import aussie.core.model.ApiKey;
-import aussie.core.model.Permission;
+import aussie.core.model.auth.ApiKey;
+import aussie.core.model.auth.Permission;
 import aussie.core.port.in.ApiKeyManagement;
 
 /**

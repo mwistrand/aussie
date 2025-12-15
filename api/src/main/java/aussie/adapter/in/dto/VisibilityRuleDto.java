@@ -3,8 +3,8 @@ package aussie.adapter.in.dto;
 import java.util.List;
 import java.util.Set;
 
-import aussie.core.model.EndpointVisibility;
-import aussie.core.model.VisibilityRule;
+import aussie.core.model.auth.VisibilityRule;
+import aussie.core.model.routing.EndpointVisibility;
 
 /**
  * DTO for visibility rules in service registration requests.

@@ -23,9 +23,9 @@ import io.smallrye.mutiny.Uni;
 import aussie.adapter.in.dto.ServiceRegistrationRequest;
 import aussie.adapter.in.dto.ServiceRegistrationResponse;
 import aussie.adapter.in.problem.GatewayProblem;
-import aussie.core.model.Permission;
-import aussie.core.model.RegistrationResult;
-import aussie.core.service.ServiceRegistry;
+import aussie.core.model.auth.Permission;
+import aussie.core.model.service.RegistrationResult;
+import aussie.core.service.routing.ServiceRegistry;
 
 /**
  * REST resource for service administration.

@@ -2,7 +2,7 @@ package aussie.core.port.in;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.BootstrapResult;
+import aussie.core.model.common.BootstrapResult;
 
 /**
  * Port for bootstrap admin key management.

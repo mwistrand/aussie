@@ -2,7 +2,7 @@ package aussie.core.port.out;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.StorageHealth;
+import aussie.core.model.common.StorageHealth;
 
 /**
  * Optional interface for storage health checks.

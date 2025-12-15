@@ -20,20 +20,23 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import aussie.adapter.out.storage.NoOpConfigurationCache;
 import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
-import aussie.config.LocalCacheConfig;
-import aussie.core.model.AussieToken;
-import aussie.core.model.GatewayRequest;
-import aussie.core.model.GatewayResult;
-import aussie.core.model.GatewaySecurityConfig;
-import aussie.core.model.PreparedProxyRequest;
-import aussie.core.model.ProxyResponse;
-import aussie.core.model.RouteAuthResult;
-import aussie.core.model.RouteMatch;
-import aussie.core.model.ServiceRegistration;
+import aussie.core.cache.LocalCacheConfig;
+import aussie.core.model.auth.AussieToken;
+import aussie.core.model.auth.GatewaySecurityConfig;
+import aussie.core.model.gateway.GatewayRequest;
+import aussie.core.model.gateway.GatewayResult;
+import aussie.core.model.gateway.PreparedProxyRequest;
+import aussie.core.model.gateway.ProxyResponse;
+import aussie.core.model.gateway.RouteAuthResult;
+import aussie.core.model.routing.RouteMatch;
+import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.ProxyClient;
 import aussie.core.port.out.SecurityMonitoring;
 import aussie.core.port.out.TrafficAttributing;
+import aussie.core.service.auth.*;
+import aussie.core.service.gateway.*;
+import aussie.core.service.routing.*;
 
 @DisplayName("PassThroughService")
 class PassThroughServiceTest {

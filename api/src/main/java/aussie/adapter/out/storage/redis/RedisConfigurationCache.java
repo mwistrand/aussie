@@ -12,7 +12,7 @@ import io.quarkus.redis.datasource.keys.ReactiveKeyCommands;
 import io.quarkus.redis.datasource.value.ReactiveValueCommands;
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.ServiceRegistration;
+import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.ConfigurationCache;
 
 /**

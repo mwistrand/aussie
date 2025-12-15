@@ -1,6 +1,6 @@
 package aussie.core.port.out;
 
-import aussie.core.model.GatewayResult;
+import aussie.core.model.gateway.GatewayResult;
 
 /**
  * Port interface for recording gateway metrics.

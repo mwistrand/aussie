@@ -7,7 +7,7 @@ import jakarta.inject.Inject;
 import io.quarkus.runtime.StartupEvent;
 import org.jboss.logging.Logger;
 
-import aussie.core.service.ServiceRegistry;
+import aussie.core.service.routing.ServiceRegistry;
 
 /**
  * Initializes the service registry from persistent storage on application startup.

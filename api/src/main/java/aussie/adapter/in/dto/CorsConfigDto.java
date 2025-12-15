@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-import aussie.core.model.CorsConfig;
+import aussie.core.model.common.CorsConfig;
 
 /**
  * DTO for CORS configuration in service registration.

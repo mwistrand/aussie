@@ -19,16 +19,18 @@ import org.junit.jupiter.api.Test;
 
 import aussie.adapter.out.storage.NoOpConfigurationCache;
 import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
-import aussie.config.LocalCacheConfig;
-import aussie.core.model.EndpointConfig;
-import aussie.core.model.EndpointVisibility;
-import aussie.core.model.GatewaySecurityConfig;
-import aussie.core.model.OperationPermission;
-import aussie.core.model.RegistrationResult;
-import aussie.core.model.RouteMatch;
-import aussie.core.model.ServiceOnlyMatch;
-import aussie.core.model.ServicePermissionPolicy;
-import aussie.core.model.ServiceRegistration;
+import aussie.core.cache.LocalCacheConfig;
+import aussie.core.model.auth.GatewaySecurityConfig;
+import aussie.core.model.auth.OperationPermission;
+import aussie.core.model.auth.ServicePermissionPolicy;
+import aussie.core.model.routing.EndpointConfig;
+import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.routing.RouteMatch;
+import aussie.core.model.routing.ServiceOnlyMatch;
+import aussie.core.model.service.RegistrationResult;
+import aussie.core.model.service.ServiceRegistration;
+import aussie.core.service.auth.*;
+import aussie.core.service.routing.*;
 
 @DisplayName("ServiceRegistry")
 class ServiceRegistryTest {

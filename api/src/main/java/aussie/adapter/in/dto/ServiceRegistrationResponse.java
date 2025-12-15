@@ -2,7 +2,7 @@ package aussie.adapter.in.dto;
 
 import java.util.List;
 
-import aussie.core.model.ServiceRegistration;
+import aussie.core.model.service.ServiceRegistration;
 
 public record ServiceRegistrationResponse(
         String serviceId,

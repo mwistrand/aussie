@@ -4,7 +4,7 @@ import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.Session;
+import aussie.core.model.session.Session;
 
 /**
  * Outbound port for session storage operations.

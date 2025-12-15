@@ -2,8 +2,8 @@ package aussie.core.port.in;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.GatewayRequest;
-import aussie.core.model.GatewayResult;
+import aussie.core.model.gateway.GatewayRequest;
+import aussie.core.model.gateway.GatewayResult;
 
 public interface PassThroughUseCase {
 

@@ -14,8 +14,8 @@ import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.ext.Provider;
 
 import aussie.adapter.in.problem.GatewayProblem;
-import aussie.core.model.ValidationResult;
-import aussie.core.service.RequestSizeValidator;
+import aussie.core.model.common.ValidationResult;
+import aussie.core.service.common.RequestSizeValidator;
 
 @Provider
 @Priority(Priorities.AUTHENTICATION - 100)

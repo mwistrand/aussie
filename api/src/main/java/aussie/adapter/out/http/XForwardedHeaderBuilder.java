@@ -6,7 +6,7 @@ import java.util.Map;
 
 import jakarta.enterprise.context.ApplicationScoped;
 
-import aussie.core.model.GatewayRequest;
+import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.port.out.ForwardedHeaderBuilder;
 
 /**

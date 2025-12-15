@@ -11,9 +11,9 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.EndpointVisibility;
-import aussie.core.model.ServiceRateLimitConfig;
-import aussie.core.model.ServiceRegistration;
+import aussie.core.model.ratelimit.ServiceRateLimitConfig;
+import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.service.ServiceRegistration;
 
 @DisplayName("ServiceRegistrationResponse Tests")
 class ServiceRegistrationResponseTest {

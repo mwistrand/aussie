@@ -16,7 +16,7 @@ import io.vertx.core.http.HttpServerRequest;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
-import aussie.config.SessionConfigMapping;
+import aussie.core.config.SessionConfig;
 
 /**
  * Request filter that rejects requests with conflicting authentication.
@@ -32,7 +32,7 @@ public class ConflictingAuthFilter implements ContainerRequestFilter {
     private static final Logger LOG = Logger.getLogger(ConflictingAuthFilter.class);
 
     @Inject
-    Instance<SessionConfigMapping> sessionConfigInstance;
+    Instance<SessionConfig> sessionConfigInstance;
 
     @Inject
     Instance<SessionCookieManager> cookieManagerInstance;
@@ -52,7 +52,7 @@ public class ConflictingAuthFilter implements ContainerRequestFilter {
             return;
         }
 
-        SessionConfigMapping sessionConfig = sessionConfigInstance.get();
+        SessionConfig sessionConfig = sessionConfigInstance.get();
 
         // Skip if sessions are disabled
         if (!sessionConfig.enabled()) {

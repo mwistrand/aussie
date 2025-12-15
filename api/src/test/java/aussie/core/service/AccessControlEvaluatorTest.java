@@ -13,14 +13,15 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.AccessControlConfig;
-import aussie.core.model.EndpointConfig;
-import aussie.core.model.EndpointVisibility;
-import aussie.core.model.RouteLookupResult;
-import aussie.core.model.RouteMatch;
-import aussie.core.model.ServiceAccessConfig;
-import aussie.core.model.ServiceRegistration;
-import aussie.core.model.SourceIdentifier;
+import aussie.core.model.auth.AccessControlConfig;
+import aussie.core.model.auth.ServiceAccessConfig;
+import aussie.core.model.common.SourceIdentifier;
+import aussie.core.model.routing.EndpointConfig;
+import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.routing.RouteLookupResult;
+import aussie.core.model.routing.RouteMatch;
+import aussie.core.model.service.ServiceRegistration;
+import aussie.core.service.auth.*;
 
 @DisplayName("AccessControlEvaluator")
 class AccessControlEvaluatorTest {

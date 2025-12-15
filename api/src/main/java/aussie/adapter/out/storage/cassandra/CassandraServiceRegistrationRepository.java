@@ -18,12 +18,12 @@ import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 
-import aussie.core.model.CorsConfig;
-import aussie.core.model.EndpointVisibility;
-import aussie.core.model.ServiceAccessConfig;
-import aussie.core.model.ServicePermissionPolicy;
-import aussie.core.model.ServiceRateLimitConfig;
-import aussie.core.model.ServiceRegistration;
+import aussie.core.model.auth.ServiceAccessConfig;
+import aussie.core.model.auth.ServicePermissionPolicy;
+import aussie.core.model.common.CorsConfig;
+import aussie.core.model.ratelimit.ServiceRateLimitConfig;
+import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.ServiceRegistrationRepository;
 
 /**

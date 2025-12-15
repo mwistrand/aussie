@@ -13,8 +13,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 
-import aussie.config.TelemetryConfigMapping;
-import aussie.core.model.GatewayResult;
+import aussie.core.model.gateway.GatewayResult;
 import aussie.core.port.out.Metrics;
 
 /**
@@ -40,7 +39,7 @@ import aussie.core.port.out.Metrics;
 public class GatewayMetrics implements Metrics {
 
     private final MeterRegistry registry;
-    private final TelemetryConfigMapping config;
+    private final TelemetryConfig config;
     private final boolean enabled;
 
     // Connection gauges
@@ -48,7 +47,7 @@ public class GatewayMetrics implements Metrics {
     private final AtomicLong activeWebSockets = new AtomicLong(0);
 
     @Inject
-    public GatewayMetrics(MeterRegistry registry, TelemetryConfigMapping config) {
+    public GatewayMetrics(MeterRegistry registry, TelemetryConfig config) {
         this.registry = registry;
         this.config = config;
         this.enabled = config != null && config.enabled() && config.metrics().enabled();

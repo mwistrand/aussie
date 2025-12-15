@@ -17,11 +17,13 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.adapter.out.storage.memory.InMemoryApiKeyRepository;
-import aussie.config.ApiKeyConfig;
-import aussie.config.BootstrapConfig;
-import aussie.core.model.ApiKey;
-import aussie.core.model.Permission;
+import aussie.core.config.ApiKeyConfig;
+import aussie.core.config.BootstrapConfig;
+import aussie.core.model.auth.ApiKey;
+import aussie.core.model.auth.Permission;
 import aussie.core.port.in.BootstrapManagement.BootstrapException;
+import aussie.core.service.auth.*;
+import aussie.core.service.common.*;
 
 @DisplayName("BootstrapService")
 class BootstrapServiceTest {

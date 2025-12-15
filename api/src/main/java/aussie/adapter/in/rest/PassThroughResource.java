@@ -21,8 +21,8 @@ import jakarta.ws.rs.core.Response;
 import io.smallrye.mutiny.Uni;
 
 import aussie.adapter.in.problem.GatewayProblem;
-import aussie.core.model.GatewayRequest;
-import aussie.core.model.GatewayResult;
+import aussie.core.model.gateway.GatewayRequest;
+import aussie.core.model.gateway.GatewayResult;
 import aussie.core.port.in.PassThroughUseCase;
 
 @Path("/{serviceId}")

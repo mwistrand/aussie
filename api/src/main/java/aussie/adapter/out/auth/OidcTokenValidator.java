@@ -19,8 +19,8 @@ import org.jose4j.jwt.consumer.JwtConsumer;
 import org.jose4j.jwt.consumer.JwtConsumerBuilder;
 import org.jose4j.lang.JoseException;
 
-import aussie.core.model.TokenProviderConfig;
-import aussie.core.model.TokenValidationResult;
+import aussie.core.model.auth.TokenProviderConfig;
+import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.port.out.JwksCache;
 import aussie.spi.TokenValidatorProvider;
 

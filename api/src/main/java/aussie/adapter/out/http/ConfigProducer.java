@@ -4,9 +4,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
 
-import aussie.core.model.AccessControlConfig;
-import aussie.core.model.GatewaySecurityConfig;
-import aussie.core.model.LimitsConfig;
+import aussie.core.model.auth.AccessControlConfig;
+import aussie.core.model.auth.GatewaySecurityConfig;
+import aussie.core.model.common.LimitsConfig;
 
 /**
  * Produces configuration beans for injection into core services.

@@ -11,6 +11,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import aussie.core.model.auth.*;
+
 @DisplayName("OperationPermission")
 class OperationPermissionTest {
 

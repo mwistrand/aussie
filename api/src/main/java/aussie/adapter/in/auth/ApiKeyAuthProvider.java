@@ -7,9 +7,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.core.MultivaluedMap;
 
-import aussie.core.model.AuthenticationContext;
-import aussie.core.model.AuthenticationResult;
-import aussie.core.model.Principal;
+import aussie.core.model.auth.AuthenticationContext;
+import aussie.core.model.auth.AuthenticationResult;
+import aussie.core.model.auth.Principal;
 import aussie.core.port.in.ApiKeyManagement;
 import aussie.spi.AuthenticationProvider;
 

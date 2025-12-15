@@ -25,10 +25,10 @@ import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
 
 import aussie.adapter.out.telemetry.SpanAttributes;
-import aussie.core.model.PreparedProxyRequest;
-import aussie.core.model.ProxyResponse;
+import aussie.core.model.gateway.PreparedProxyRequest;
+import aussie.core.model.gateway.ProxyResponse;
 import aussie.core.port.out.ProxyClient;
-import aussie.core.service.ProxyRequestPreparer;
+import aussie.core.service.gateway.ProxyRequestPreparer;
 
 /**
  * HTTP adapter for forwarding prepared proxy requests using Vert.x WebClient.

@@ -2,7 +2,7 @@ package aussie.adapter.out.http;
 
 import io.smallrye.config.WithDefault;
 
-import aussie.core.model.GatewaySecurityConfig;
+import aussie.core.model.auth.GatewaySecurityConfig;
 
 /**
  * Security configuration for the gateway.

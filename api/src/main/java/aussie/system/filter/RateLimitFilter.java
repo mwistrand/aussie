@@ -21,17 +21,17 @@ import io.smallrye.mutiny.infrastructure.Infrastructure;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.SpanAttributes;
-import aussie.config.RateLimitingConfig;
-import aussie.core.model.EffectiveRateLimit;
-import aussie.core.model.RateLimitDecision;
-import aussie.core.model.RateLimitKey;
-import aussie.core.model.RouteLookupResult;
-import aussie.core.model.ServicePath;
-import aussie.core.model.ServiceRegistration;
+import aussie.core.config.RateLimitingConfig;
+import aussie.core.model.ratelimit.EffectiveRateLimit;
+import aussie.core.model.ratelimit.RateLimitDecision;
+import aussie.core.model.ratelimit.RateLimitKey;
+import aussie.core.model.routing.RouteLookupResult;
+import aussie.core.model.service.ServicePath;
+import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
-import aussie.core.service.RateLimitResolver;
-import aussie.core.service.ServiceRegistry;
+import aussie.core.service.ratelimit.RateLimitResolver;
+import aussie.core.service.routing.ServiceRegistry;
 import aussie.spi.SecurityEvent;
 
 /**

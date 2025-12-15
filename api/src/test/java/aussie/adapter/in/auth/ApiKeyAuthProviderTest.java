@@ -15,10 +15,10 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.adapter.out.storage.memory.InMemoryApiKeyRepository;
-import aussie.config.ApiKeyConfig;
-import aussie.core.model.AuthenticationResult;
-import aussie.core.model.Permission;
-import aussie.core.service.ApiKeyService;
+import aussie.core.config.ApiKeyConfig;
+import aussie.core.model.auth.AuthenticationResult;
+import aussie.core.model.auth.Permission;
+import aussie.core.service.auth.ApiKeyService;
 
 @DisplayName("ApiKeyAuthProvider")
 class ApiKeyAuthProviderTest {

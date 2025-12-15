@@ -2,9 +2,9 @@ package aussie.adapter.out.ratelimit;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.EffectiveRateLimit;
-import aussie.core.model.RateLimitDecision;
-import aussie.core.model.RateLimitKey;
+import aussie.core.model.ratelimit.EffectiveRateLimit;
+import aussie.core.model.ratelimit.RateLimitDecision;
+import aussie.core.model.ratelimit.RateLimitKey;
 import aussie.core.port.out.RateLimiter;
 
 /**

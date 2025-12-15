@@ -31,7 +31,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-import aussie.core.model.RateLimitKey;
+import aussie.core.model.ratelimit.RateLimitKey;
 
 /**
  * Integration tests for Redis rate limiting Lua scripts using a real Redis instance via testcontainers.

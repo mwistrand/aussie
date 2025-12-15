@@ -17,10 +17,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.AlgorithmRegistry;
-import aussie.core.model.EffectiveRateLimit;
-import aussie.core.model.RateLimitAlgorithm;
-import aussie.core.model.RateLimitKey;
+import aussie.core.model.ratelimit.AlgorithmRegistry;
+import aussie.core.model.ratelimit.EffectiveRateLimit;
+import aussie.core.model.ratelimit.RateLimitAlgorithm;
+import aussie.core.model.ratelimit.RateLimitKey;
 
 @DisplayName("InMemoryRateLimiter")
 class InMemoryRateLimiterTest {

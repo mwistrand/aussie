@@ -7,8 +7,8 @@ import jakarta.inject.Inject;
 import io.quarkus.runtime.StartupEvent;
 import org.jboss.logging.Logger;
 
-import aussie.config.BootstrapConfig;
-import aussie.core.model.BootstrapResult;
+import aussie.core.config.BootstrapConfig;
+import aussie.core.model.common.BootstrapResult;
 import aussie.core.port.in.BootstrapManagement;
 import aussie.core.port.in.BootstrapManagement.BootstrapException;
 

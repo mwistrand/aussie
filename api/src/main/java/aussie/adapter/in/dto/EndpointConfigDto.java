@@ -3,9 +3,9 @@ package aussie.adapter.in.dto;
 import java.util.Optional;
 import java.util.Set;
 
-import aussie.core.model.EndpointConfig;
-import aussie.core.model.EndpointType;
-import aussie.core.model.EndpointVisibility;
+import aussie.core.model.routing.EndpointConfig;
+import aussie.core.model.routing.EndpointType;
+import aussie.core.model.routing.EndpointVisibility;
 
 public record EndpointConfigDto(
         String path, Set<String> methods, String visibility, String pathRewrite, Boolean authRequired, String type) {

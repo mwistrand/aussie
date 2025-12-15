@@ -2,7 +2,7 @@ package aussie.adapter.in.dto;
 
 import java.util.Set;
 
-import aussie.core.model.OperationPermission;
+import aussie.core.model.auth.OperationPermission;
 
 /**
  * DTO for operation permission rules.

@@ -10,12 +10,12 @@ import io.smallrye.mutiny.Uni;
 import org.jboss.resteasy.reactive.server.ServerRequestFilter;
 
 import aussie.adapter.in.problem.GatewayProblem;
-import aussie.core.model.RouteLookupResult;
-import aussie.core.model.ServiceOnlyMatch;
-import aussie.core.model.ServicePath;
-import aussie.core.service.AccessControlEvaluator;
-import aussie.core.service.ServiceRegistry;
-import aussie.core.service.SourceIdentifierExtractor;
+import aussie.core.model.routing.RouteLookupResult;
+import aussie.core.model.routing.ServiceOnlyMatch;
+import aussie.core.model.service.ServicePath;
+import aussie.core.service.auth.AccessControlEvaluator;
+import aussie.core.service.common.SourceIdentifierExtractor;
+import aussie.core.service.routing.ServiceRegistry;
 
 /**
  * Reactive access control filter for gateway requests.

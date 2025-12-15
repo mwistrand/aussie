@@ -10,7 +10,7 @@ import io.quarkus.redis.datasource.keys.ReactiveKeyCommands;
 import io.quarkus.redis.datasource.value.ReactiveValueCommands;
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.ApiKey;
+import aussie.core.model.auth.ApiKey;
 import aussie.core.port.out.AuthKeyCache;
 
 /**

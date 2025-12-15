@@ -20,9 +20,9 @@ import io.smallrye.mutiny.Uni;
 
 import aussie.adapter.in.dto.ServicePermissionPolicyDto;
 import aussie.adapter.in.problem.GatewayProblem;
-import aussie.core.model.Permission;
-import aussie.core.service.ServiceAuthorizationService;
-import aussie.core.service.ServiceRegistry;
+import aussie.core.model.auth.Permission;
+import aussie.core.service.auth.ServiceAuthorizationService;
+import aussie.core.service.routing.ServiceRegistry;
 
 /**
  * REST resource for managing service permission policies.

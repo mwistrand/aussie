@@ -3,7 +3,7 @@ package aussie.adapter.in.dto;
 import java.util.List;
 import java.util.Optional;
 
-import aussie.core.model.ServiceAccessConfig;
+import aussie.core.model.auth.ServiceAccessConfig;
 
 public record ServiceAccessConfigDto(
         List<String> allowedIps, List<String> allowedDomains, List<String> allowedSubdomains) {

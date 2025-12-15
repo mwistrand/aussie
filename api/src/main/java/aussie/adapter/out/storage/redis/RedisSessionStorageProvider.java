@@ -14,7 +14,7 @@ import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.jboss.logging.Logger;
 
-import aussie.config.SessionConfigMapping;
+import aussie.core.config.SessionConfig;
 import aussie.core.port.out.SessionRepository;
 import aussie.spi.SessionStorageProvider;
 
@@ -34,7 +34,7 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
     ReactiveRedisDataSource redisDataSource;
 
     @Inject
-    SessionConfigMapping sessionConfig;
+    SessionConfig sessionConfig;
 
     private RedisSessionRepository repository;
     private final AtomicBoolean available = new AtomicBoolean(false);

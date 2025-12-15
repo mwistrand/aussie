@@ -10,9 +10,8 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 
-import aussie.config.TelemetryConfigMapping;
-import aussie.core.model.GatewayRequest;
-import aussie.core.model.ServiceRegistration;
+import aussie.core.model.gateway.GatewayRequest;
+import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.TrafficAttributing;
 
 /**
@@ -43,11 +42,11 @@ import aussie.core.port.out.TrafficAttributing;
 public class TrafficAttributionService implements TrafficAttributing {
 
     private final MeterRegistry registry;
-    private final TelemetryConfigMapping config;
+    private final TelemetryConfig config;
     private final boolean enabled;
 
     @Inject
-    public TrafficAttributionService(MeterRegistry registry, TelemetryConfigMapping config) {
+    public TrafficAttributionService(MeterRegistry registry, TelemetryConfig config) {
         this.registry = registry;
         this.config = config;
         this.enabled =
@@ -69,7 +68,7 @@ public class TrafficAttributionService implements TrafficAttributing {
      *
      * @return attribution config
      */
-    public TelemetryConfigMapping.AttributionConfig getConfig() {
+    public TelemetryConfig.AttributionConfig getConfig() {
         return config.attribution();
     }
 

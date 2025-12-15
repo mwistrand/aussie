@@ -17,7 +17,7 @@ import jakarta.ws.rs.ext.Provider;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 
-import aussie.core.model.AuthenticationResult;
+import aussie.core.model.auth.AuthenticationResult;
 import aussie.spi.AuthenticationProvider;
 
 /**

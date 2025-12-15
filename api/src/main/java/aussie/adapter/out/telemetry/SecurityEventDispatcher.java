@@ -14,7 +14,6 @@ import jakarta.inject.Inject;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.jboss.logging.Logger;
 
-import aussie.config.TelemetryConfigMapping;
 import aussie.spi.SecurityEvent;
 import aussie.spi.SecurityEventHandler;
 
@@ -32,7 +31,7 @@ public class SecurityEventDispatcher {
 
     private static final Logger LOG = Logger.getLogger(SecurityEventDispatcher.class);
 
-    private final TelemetryConfigMapping config;
+    private final TelemetryConfig config;
     private final MeterRegistry meterRegistry;
     private final boolean enabled;
 
@@ -40,7 +39,7 @@ public class SecurityEventDispatcher {
     private ExecutorService executor;
 
     @Inject
-    public SecurityEventDispatcher(TelemetryConfigMapping config, MeterRegistry meterRegistry) {
+    public SecurityEventDispatcher(TelemetryConfig config, MeterRegistry meterRegistry) {
         this.config = config;
         this.meterRegistry = meterRegistry;
         this.enabled = config != null && config.enabled() && config.security().enabled();

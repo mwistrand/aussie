@@ -11,10 +11,10 @@ import jakarta.ws.rs.core.MultivaluedMap;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 
-import aussie.core.model.AuthenticationContext;
-import aussie.core.model.AuthenticationResult;
-import aussie.core.model.Permission;
-import aussie.core.model.Principal;
+import aussie.core.model.auth.AuthenticationContext;
+import aussie.core.model.auth.AuthenticationResult;
+import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.Principal;
 import aussie.spi.AuthenticationProvider;
 
 /**

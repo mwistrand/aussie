@@ -18,7 +18,7 @@ import io.vertx.ext.web.RoutingContext;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 
-import aussie.core.model.Permission;
+import aussie.core.model.auth.Permission;
 
 /**
  * Quarkus HTTP authentication mechanism for API key authentication.

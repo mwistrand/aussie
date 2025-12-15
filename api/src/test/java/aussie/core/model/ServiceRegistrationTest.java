@@ -15,6 +15,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import aussie.core.model.auth.*;
+import aussie.core.model.ratelimit.*;
+import aussie.core.model.routing.*;
+import aussie.core.model.service.*;
+
 @DisplayName("ServiceRegistration")
 class ServiceRegistrationTest {
 

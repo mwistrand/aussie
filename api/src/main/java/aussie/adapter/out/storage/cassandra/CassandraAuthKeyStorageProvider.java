@@ -11,10 +11,10 @@ import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 
-import aussie.core.model.StorageHealth;
+import aussie.core.model.common.StorageHealth;
 import aussie.core.port.out.ApiKeyRepository;
 import aussie.core.port.out.StorageHealthIndicator;
-import aussie.core.service.ApiKeyEncryptionService;
+import aussie.core.service.auth.ApiKeyEncryptionService;
 import aussie.spi.AuthKeyStorageProvider;
 import aussie.spi.StorageAdapterConfig;
 import aussie.spi.StorageProviderException;

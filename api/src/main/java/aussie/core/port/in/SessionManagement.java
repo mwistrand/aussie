@@ -6,7 +6,7 @@ import java.util.Set;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.Session;
+import aussie.core.model.session.Session;
 
 /**
  * Inbound port for session management operations.

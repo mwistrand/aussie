@@ -15,8 +15,8 @@ import io.quarkus.redis.datasource.value.SetArgs;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
-import aussie.config.SessionConfigMapping;
-import aussie.core.model.Session;
+import aussie.core.config.SessionConfig;
+import aussie.core.model.session.Session;
 import aussie.core.port.out.SessionRepository;
 
 /**
@@ -35,7 +35,7 @@ public class RedisSessionRepository implements SessionRepository {
     private final String keyPrefix;
     private final Duration sessionTtl;
 
-    public RedisSessionRepository(ReactiveRedisDataSource redisDataSource, SessionConfigMapping config) {
+    public RedisSessionRepository(ReactiveRedisDataSource redisDataSource, SessionConfig config) {
         this.valueCommands = redisDataSource.value(String.class, String.class);
         this.keyCommands = redisDataSource.key(String.class);
         this.keyPrefix = config.storage().redis().keyPrefix();

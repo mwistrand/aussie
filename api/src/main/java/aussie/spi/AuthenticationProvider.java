@@ -2,7 +2,7 @@ package aussie.spi;
 
 import jakarta.ws.rs.core.MultivaluedMap;
 
-import aussie.core.model.AuthenticationResult;
+import aussie.core.model.auth.AuthenticationResult;
 
 /**
  * Service Provider Interface for authentication implementations.

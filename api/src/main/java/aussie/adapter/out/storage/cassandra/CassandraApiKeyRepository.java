@@ -14,9 +14,9 @@ import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 
-import aussie.core.model.ApiKey;
+import aussie.core.model.auth.ApiKey;
 import aussie.core.port.out.ApiKeyRepository;
-import aussie.core.service.ApiKeyEncryptionService;
+import aussie.core.service.auth.ApiKeyEncryptionService;
 
 /**
  * Cassandra implementation of ApiKeyRepository.

@@ -8,7 +8,7 @@ import jakarta.enterprise.inject.spi.CDI;
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.StorageHealth;
+import aussie.core.model.common.StorageHealth;
 import aussie.core.port.out.ConfigurationCache;
 import aussie.core.port.out.StorageHealthIndicator;
 import aussie.spi.ConfigurationCacheProvider;

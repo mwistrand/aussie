@@ -1,8 +1,8 @@
 package aussie.spi;
 
-import aussie.core.model.AussieToken;
-import aussie.core.model.JwsConfig;
-import aussie.core.model.TokenValidationResult;
+import aussie.core.model.auth.AussieToken;
+import aussie.core.model.auth.TokenValidationResult;
+import aussie.core.model.common.JwsConfig;
 
 /**
  * Service Provider Interface for JWS token issuance.

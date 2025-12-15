@@ -15,7 +15,7 @@ import jakarta.ws.rs.core.MediaType;
 import io.quarkus.security.identity.SecurityIdentity;
 
 import aussie.adapter.in.auth.ApiKeyIdentityProvider.ApiKeyPrincipal;
-import aussie.core.model.Permission;
+import aussie.core.model.auth.Permission;
 
 /**
  * REST resource for authentication-related endpoints.

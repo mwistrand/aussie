@@ -2,9 +2,9 @@ package aussie.adapter.in.dto;
 
 import java.util.Optional;
 
-import aussie.core.model.ServiceRateLimitConfig;
-import aussie.core.model.ServiceWebSocketRateLimitConfig;
-import aussie.core.model.ServiceWebSocketRateLimitConfig.RateLimitValues;
+import aussie.core.model.ratelimit.ServiceRateLimitConfig;
+import aussie.core.model.ratelimit.ServiceWebSocketRateLimitConfig;
+import aussie.core.model.ratelimit.ServiceWebSocketRateLimitConfig.RateLimitValues;
 
 /**
  * DTO for service rate limit configuration in service registration.

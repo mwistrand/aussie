@@ -15,18 +15,20 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.config.LocalCacheConfig;
-import aussie.config.RateLimitingConfig;
-import aussie.core.model.EndpointConfig;
-import aussie.core.model.EndpointRateLimitConfig;
-import aussie.core.model.EndpointType;
-import aussie.core.model.EndpointVisibility;
-import aussie.core.model.RouteMatch;
-import aussie.core.model.ServiceOnlyMatch;
-import aussie.core.model.ServiceRateLimitConfig;
-import aussie.core.model.ServiceRegistration;
-import aussie.core.model.ServiceWebSocketRateLimitConfig;
-import aussie.core.model.ServiceWebSocketRateLimitConfig.RateLimitValues;
+import aussie.core.cache.LocalCacheConfig;
+import aussie.core.config.RateLimitingConfig;
+import aussie.core.model.ratelimit.EndpointRateLimitConfig;
+import aussie.core.model.ratelimit.ServiceRateLimitConfig;
+import aussie.core.model.ratelimit.ServiceWebSocketRateLimitConfig;
+import aussie.core.model.ratelimit.ServiceWebSocketRateLimitConfig.RateLimitValues;
+import aussie.core.model.routing.EndpointConfig;
+import aussie.core.model.routing.EndpointType;
+import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.routing.RouteMatch;
+import aussie.core.model.routing.ServiceOnlyMatch;
+import aussie.core.model.service.ServiceRegistration;
+import aussie.core.service.ratelimit.*;
+import aussie.core.service.routing.*;
 
 @DisplayName("RateLimitResolver")
 class RateLimitResolverTest {
