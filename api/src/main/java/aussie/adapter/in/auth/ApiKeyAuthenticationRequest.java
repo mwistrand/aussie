@@ -17,7 +17,7 @@ public class ApiKeyAuthenticationRequest extends BaseAuthenticationRequest {
     }
 
     /**
-     * Returns the plaintext API key to validate.
+     * Return the plaintext API key to validate.
      *
      * @return the API key
      */

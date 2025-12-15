@@ -25,7 +25,7 @@ import aussie.core.service.auth.*;
 import aussie.core.service.routing.*;
 
 /**
- * Tests for ServiceRegistry multi-instance cache behavior.
+ * Test for ServiceRegistry multi-instance cache behavior.
  *
  * <p>Verifies that the TTL-based cache refresh mechanism works correctly,
  * simulating multi-instance deployment scenarios where services are registered

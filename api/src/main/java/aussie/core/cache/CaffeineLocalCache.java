@@ -35,7 +35,7 @@ public class CaffeineLocalCache<K, V> implements LocalCache<K, V> {
     private final double jitterFactor;
 
     /**
-     * Creates a new Caffeine-backed cache with default TTL jitter (±10%).
+     * Create a new Caffeine-backed cache with default TTL jitter (±10%).
      *
      * @param ttl     the base time-to-live for cache entries
      * @param maxSize the maximum number of entries in the cache
@@ -45,7 +45,7 @@ public class CaffeineLocalCache<K, V> implements LocalCache<K, V> {
     }
 
     /**
-     * Creates a new Caffeine-backed cache with configurable TTL jitter.
+     * Create a new Caffeine-backed cache with configurable TTL jitter.
      *
      * @param ttl          the base time-to-live for cache entries
      * @param maxSize      the maximum number of entries in the cache

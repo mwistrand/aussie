@@ -22,42 +22,42 @@ public record VisibilityRule(String pattern, Set<String> methods, EndpointVisibi
     }
 
     /**
-     * Creates a PUBLIC visibility rule for the given pattern.
+     * Create a PUBLIC visibility rule for the given pattern.
      */
     public static VisibilityRule publicRule(String pattern) {
         return new VisibilityRule(pattern, Set.of(), EndpointVisibility.PUBLIC);
     }
 
     /**
-     * Creates a PUBLIC visibility rule for the given pattern and methods.
+     * Create a PUBLIC visibility rule for the given pattern and methods.
      */
     public static VisibilityRule publicRule(String pattern, Set<String> methods) {
         return new VisibilityRule(pattern, methods, EndpointVisibility.PUBLIC);
     }
 
     /**
-     * Creates a PRIVATE visibility rule for the given pattern.
+     * Create a PRIVATE visibility rule for the given pattern.
      */
     public static VisibilityRule privateRule(String pattern) {
         return new VisibilityRule(pattern, Set.of(), EndpointVisibility.PRIVATE);
     }
 
     /**
-     * Creates a PRIVATE visibility rule for the given pattern and methods.
+     * Create a PRIVATE visibility rule for the given pattern and methods.
      */
     public static VisibilityRule privateRule(String pattern, Set<String> methods) {
         return new VisibilityRule(pattern, methods, EndpointVisibility.PRIVATE);
     }
 
     /**
-     * Checks if this rule applies to all HTTP methods.
+     * Check if this rule applies to all HTTP methods.
      */
     public boolean appliesToAllMethods() {
         return methods.isEmpty();
     }
 
     /**
-     * Checks if this rule applies to the given HTTP method.
+     * Check if this rule applies to the given HTTP method.
      */
     public boolean appliesToMethod(String method) {
         if (appliesToAllMethods()) {

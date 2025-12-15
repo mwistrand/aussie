@@ -7,7 +7,7 @@ package aussie.core.model.auth;
 public interface GatewaySecurityConfig {
 
     /**
-     * Returns whether services are allowed to set defaultVisibility to PUBLIC.
+     * Return whether services are allowed to set defaultVisibility to PUBLIC.
      * When false (the default), services must use PRIVATE as their default visibility.
      */
     boolean publicDefaultVisibilityEnabled();

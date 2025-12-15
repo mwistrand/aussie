@@ -15,7 +15,7 @@ import aussie.core.model.session.Session;
 public interface SessionRepository {
 
     /**
-     * Stores a new session only if the ID does not already exist.
+     * Store a new session only if the ID does not already exist.
      *
      * <p>This is the primary method for creating new sessions. It provides
      * atomic insert-if-absent semantics to prevent session ID collisions.
@@ -33,7 +33,7 @@ public interface SessionRepository {
     Uni<Boolean> saveIfAbsent(Session session);
 
     /**
-     * Stores or replaces a session.
+     * Store or replaces a session.
      *
      * <p>Use this for updates only, not for initial creation. For creating
      * new sessions, use {@link #saveIfAbsent(Session)} to prevent collisions.
@@ -44,7 +44,7 @@ public interface SessionRepository {
     Uni<Session> save(Session session);
 
     /**
-     * Retrieves a session by ID.
+     * Retrieve a session by ID.
      *
      * @param sessionId Session identifier
      * @return The session, or empty if not found
@@ -52,7 +52,7 @@ public interface SessionRepository {
     Uni<Optional<Session>> findById(String sessionId);
 
     /**
-     * Updates a session (e.g., refresh lastAccessedAt).
+     * Update a session (e.g., refresh lastAccessedAt).
      *
      * @param session Session to update
      * @return The updated session
@@ -68,7 +68,7 @@ public interface SessionRepository {
     Uni<Void> delete(String sessionId);
 
     /**
-     * Deletes all sessions for a user.
+     * Delete all sessions for a user.
      *
      * @param userId User identifier
      * @return Uni completing when all sessions are deleted
@@ -76,7 +76,7 @@ public interface SessionRepository {
     Uni<Void> deleteByUserId(String userId);
 
     /**
-     * Checks if a session exists.
+     * Check if a session exists.
      *
      * @param sessionId Session identifier
      * @return true if the session exists

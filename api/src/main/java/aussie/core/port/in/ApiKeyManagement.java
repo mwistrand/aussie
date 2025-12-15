@@ -19,7 +19,7 @@ import aussie.core.model.auth.ApiKeyCreateResult;
 public interface ApiKeyManagement {
 
     /**
-     * Creates a new API key.
+     * Create a new API key.
      *
      * <p>The plaintext key is returned only once in the result. After creation,
      * only the hash is stored and the key cannot be retrieved.
@@ -35,7 +35,7 @@ public interface ApiKeyManagement {
             String name, String description, Set<String> permissions, Duration ttl, String createdBy);
 
     /**
-     * Validates a plaintext API key and returns the associated metadata if valid.
+     * Validate a plaintext API key and returns the associated metadata if valid.
      *
      * <p>A key is valid if:
      * <ul>
@@ -68,7 +68,7 @@ public interface ApiKeyManagement {
     Uni<Boolean> revoke(String keyId);
 
     /**
-     * Gets a specific API key by ID with hash redacted.
+     * Get a specific API key by ID with hash redacted.
      *
      * @param keyId the key ID to retrieve
      * @return Uni with the ApiKey if found, empty otherwise
@@ -76,7 +76,7 @@ public interface ApiKeyManagement {
     Uni<Optional<ApiKey>> get(String keyId);
 
     /**
-     * Creates a new API key with a specific plaintext key value.
+     * Create a new API key with a specific plaintext key value.
      *
      * <p>This method is used for bootstrap scenarios where the key is provided
      * by the administrator via configuration rather than auto-generated.

@@ -7,9 +7,27 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 
 import aussie.core.model.common.SourceIdentifier;
 
+/**
+ * Extract client source identification from HTTP requests.
+ *
+ * <p>Determines the original client IP address and host by examining
+ * proxy headers in priority order:
+ * <ol>
+ *   <li>X-Forwarded-For (first IP in chain)</li>
+ *   <li>RFC 7239 Forwarded header</li>
+ *   <li>X-Real-IP</li>
+ *   <li>Request URI host (fallback)</li>
+ * </ol>
+ */
 @ApplicationScoped
 public class SourceIdentifierExtractor {
 
+    /**
+     * Extract source identification from the request.
+     *
+     * @param request the JAX-RS request context
+     * @return source identifier containing IP address, host, and forwarded chain
+     */
     public SourceIdentifier extract(ContainerRequestContext request) {
         var ipAddress = extractIpAddress(request);
         var host = extractHost(request);

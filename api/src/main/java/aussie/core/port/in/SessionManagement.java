@@ -18,7 +18,7 @@ import aussie.core.model.session.Session;
 public interface SessionManagement {
 
     /**
-     * Creates a new session for an authenticated user.
+     * Create a new session for an authenticated user.
      *
      * <p>This method generates a unique session ID with collision detection
      * and retry logic. If a collision is detected, it will retry up to the
@@ -42,7 +42,7 @@ public interface SessionManagement {
             String ipAddress);
 
     /**
-     * Retrieves and validates a session by ID.
+     * Retrieve and validates a session by ID.
      *
      * <p>Returns empty if the session doesn't exist, is expired, or has
      * exceeded the idle timeout.
@@ -53,7 +53,7 @@ public interface SessionManagement {
     Uni<Optional<Session>> getSession(String sessionId);
 
     /**
-     * Refreshes a session's expiration and last accessed time.
+     * Refresh a session's expiration and last accessed time.
      *
      * <p>This implements sliding expiration - the session TTL is extended
      * on each access if sliding expiration is enabled.
@@ -64,7 +64,7 @@ public interface SessionManagement {
     Uni<Optional<Session>> refreshSession(String sessionId);
 
     /**
-     * Invalidates a single session.
+     * Invalidate a single session.
      *
      * @param sessionId Session identifier
      * @return Uni completing when the session is invalidated
@@ -72,7 +72,7 @@ public interface SessionManagement {
     Uni<Void> invalidateSession(String sessionId);
 
     /**
-     * Invalidates all sessions for a user (logout everywhere).
+     * Invalidate all sessions for a user (logout everywhere).
      *
      * @param userId User identifier
      * @return Uni completing when all sessions are invalidated

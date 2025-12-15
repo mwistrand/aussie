@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 /**
- * Tests for the deprecated {@link AuthenticationFilter}.
+ * Test for the deprecated {@link AuthenticationFilter}.
  *
  * <p>Note: The AuthenticationFilter is deprecated and disabled by default.
  * Quarkus Security handles authentication via ApiKeyAuthenticationMechanism.

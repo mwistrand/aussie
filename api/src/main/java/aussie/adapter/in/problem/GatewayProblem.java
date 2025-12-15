@@ -103,7 +103,7 @@ public final class GatewayProblem {
     // ========== Rate Limit Errors ==========
 
     /**
-     * Creates a 429 Too Many Requests problem with full rate limit details.
+     * Create a 429 Too Many Requests problem with full rate limit details.
      *
      * @param detail the error detail message
      * @param retryAfterSeconds seconds until client can retry
@@ -126,7 +126,7 @@ public final class GatewayProblem {
     }
 
     /**
-     * Creates a 429 Too Many Requests problem with minimal details.
+     * Create a 429 Too Many Requests problem with minimal details.
      *
      * @param detail the error detail message
      * @param retryAfterSeconds seconds until client can retry

@@ -102,7 +102,7 @@ public record ServiceRegistration(
     }
 
     /**
-     * Creates a new ServiceRegistration with an incremented version.
+     * Create a new ServiceRegistration with an incremented version.
      */
     public ServiceRegistration withIncrementedVersion() {
         return new ServiceRegistration(
@@ -122,7 +122,7 @@ public record ServiceRegistration(
     }
 
     /**
-     * Creates a new ServiceRegistration with the given permission policy.
+     * Create a new ServiceRegistration with the given permission policy.
      */
     public ServiceRegistration withPermissionPolicy(ServicePermissionPolicy policy) {
         return new ServiceRegistration(
@@ -142,7 +142,7 @@ public record ServiceRegistration(
     }
 
     /**
-     * Creates a new ServiceRegistration with the given rate limit config.
+     * Create a new ServiceRegistration with the given rate limit config.
      */
     public ServiceRegistration withRateLimitConfig(ServiceRateLimitConfig config) {
         return new ServiceRegistration(
@@ -162,7 +162,7 @@ public record ServiceRegistration(
     }
 
     /**
-     * Finds a route matching the given path and method within this service's
+     * Find a route matching the given path and method within this service's
      * endpoints.
      *
      * @param path   the request path to match

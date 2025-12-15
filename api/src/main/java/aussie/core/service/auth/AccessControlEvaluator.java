@@ -16,6 +16,19 @@ import aussie.core.model.common.SourceIdentifier;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteLookupResult;
 
+/**
+ * Evaluate access control rules for incoming requests.
+ *
+ * <p>Supports IP-based access control with:
+ * <ul>
+ *   <li>CIDR range matching (e.g., 192.168.1.0/24)</li>
+ *   <li>Exact IP matching</li>
+ *   <li>Allowlist/blocklist configuration</li>
+ *   <li>Service-specific access overrides</li>
+ * </ul>
+ *
+ * <p>Caches parsed CIDR networks and IP addresses for efficient repeated lookups.
+ */
 @ApplicationScoped
 public class AccessControlEvaluator {
 
@@ -180,8 +193,8 @@ public class AccessControlEvaluator {
     }
 
     /**
-     * Parses a CIDR pattern into network bytes and prefix length.
-     * Returns null if the pattern is invalid.
+     * Parse a CIDR pattern into network bytes and prefix length.
+     * Return null if the pattern is invalid.
      */
     private ParsedCidr parseCidr(String cidr) {
         try {
@@ -198,8 +211,8 @@ public class AccessControlEvaluator {
     }
 
     /**
-     * Parses an IP address string into bytes.
-     * Returns null if the address is invalid.
+     * Parse an IP address string into bytes.
+     * Return null if the address is invalid.
      */
     private byte[] parseIpAddress(String ip) {
         try {

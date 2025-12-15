@@ -20,7 +20,7 @@ public final class NoOpRateLimiter implements RateLimiter {
     private NoOpRateLimiter() {}
 
     /**
-     * Returns the singleton instance.
+     * Return the singleton instance.
      *
      * @return the no-op rate limiter
      */

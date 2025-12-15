@@ -35,7 +35,7 @@ public class ServiceAuthorizationService {
     }
 
     /**
-     * Checks authorization for an already-loaded service.
+     * Check authorization for an already-loaded service.
      *
      * @param service     the service to check
      * @param operation   the operation to perform
@@ -61,7 +61,7 @@ public class ServiceAuthorizationService {
     }
 
     /**
-     * Checks if a principal can create a new service.
+     * Check if a principal can create a new service.
      * Uses the global default policy since the service doesn't exist yet.
      *
      * @param permissions the permissions from the authenticated principal

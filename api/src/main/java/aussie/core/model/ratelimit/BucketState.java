@@ -15,7 +15,7 @@ package aussie.core.model.ratelimit;
 public record BucketState(long tokens, long lastRefillMillis) implements RateLimitState {
 
     /**
-     * Creates a bucket state with validation.
+     * Create a bucket state with validation.
      */
     public BucketState {
         if (tokens < 0) {
@@ -27,7 +27,7 @@ public record BucketState(long tokens, long lastRefillMillis) implements RateLim
     }
 
     /**
-     * Creates an initial bucket state with full capacity.
+     * Create an initial bucket state with full capacity.
      *
      * @param capacity the initial token count
      * @return the initial state
@@ -37,7 +37,7 @@ public record BucketState(long tokens, long lastRefillMillis) implements RateLim
     }
 
     /**
-     * Returns a new state after consuming one token.
+     * Return a new state after consuming one token.
      *
      * @return the new state with one fewer token
      * @throws IllegalStateException if no tokens are available
@@ -50,7 +50,7 @@ public record BucketState(long tokens, long lastRefillMillis) implements RateLim
     }
 
     /**
-     * Returns a new state after refilling tokens.
+     * Return a new state after refilling tokens.
      *
      * @param tokensToAdd the number of tokens to add
      * @param capacity the maximum capacity
@@ -63,7 +63,7 @@ public record BucketState(long tokens, long lastRefillMillis) implements RateLim
     }
 
     /**
-     * Calculates how many tokens to refill based on elapsed time.
+     * Calculate how many tokens to refill based on elapsed time.
      *
      * @param refillRatePerSecond tokens per second
      * @param nowMillis current time in milliseconds

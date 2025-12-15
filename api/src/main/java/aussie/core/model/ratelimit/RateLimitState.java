@@ -17,7 +17,7 @@ package aussie.core.model.ratelimit;
 public sealed interface RateLimitState permits BucketState {
 
     /**
-     * Returns the number of requests remaining in the current window.
+     * Return the number of requests remaining in the current window.
      *
      * <p>For token bucket, this is the current token count.
      * For window-based algorithms, this is the limit minus current count.
@@ -27,7 +27,7 @@ public sealed interface RateLimitState permits BucketState {
     long remaining();
 
     /**
-     * Returns the timestamp (epoch millis) for state calculations.
+     * Return the timestamp (epoch millis) for state calculations.
      *
      * <p>For token bucket, this is the last refill time.
      * For window-based algorithms, this is the window start time.

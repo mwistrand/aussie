@@ -19,6 +19,22 @@ import aussie.core.port.out.SecurityMonitoring;
 import aussie.core.port.out.TrafficAttributing;
 import aussie.core.service.routing.ServiceRegistry;
 
+/**
+ * Handle gateway proxy requests using configured route matching.
+ *
+ * <p>Gateway mode provides full route matching capabilities where requests
+ * are matched against registered endpoint patterns. This enables:
+ * <ul>
+ *   <li>Path-based routing with wildcards and path variables</li>
+ *   <li>Per-endpoint visibility and authentication settings</li>
+ *   <li>Request transformation and path rewriting</li>
+ * </ul>
+ *
+ * <p>The service coordinates authentication, authorization, request preparation,
+ * and proxying while recording metrics for observability.
+ *
+ * <p>All operations are fully reactive and never block.
+ */
 @ApplicationScoped
 public class GatewayService implements GatewayUseCase {
 

@@ -44,7 +44,7 @@ public record RouteMatch(
     }
 
     /**
-     * Returns the full target URI for this route match.
+     * Return the full target URI for this route match.
      */
     public URI targetUri() {
         var base = service.baseUrl().toString();

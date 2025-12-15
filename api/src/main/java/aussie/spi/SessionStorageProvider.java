@@ -28,7 +28,7 @@ import aussie.core.port.out.SessionRepository;
 public interface SessionStorageProvider {
 
     /**
-     * Returns the provider name for configuration selection.
+     * Return the provider name for configuration selection.
      *
      * <p>This name is used in the configuration property
      * {@code aussie.session.storage.provider} to select this provider.
@@ -38,7 +38,7 @@ public interface SessionStorageProvider {
     String name();
 
     /**
-     * Returns the provider priority for automatic selection.
+     * Return the provider priority for automatic selection.
      *
      * <p>Higher priority providers are preferred when multiple providers
      * are available. Built-in priorities:
@@ -52,7 +52,7 @@ public interface SessionStorageProvider {
     int priority();
 
     /**
-     * Checks if this provider is available and ready to use.
+     * Check if this provider is available and ready to use.
      *
      * <p>For Redis, this checks if the connection is active.
      * For memory, this always returns true.
@@ -62,14 +62,14 @@ public interface SessionStorageProvider {
     boolean isAvailable();
 
     /**
-     * Creates the session repository implementation.
+     * Create the session repository implementation.
      *
      * @return Session repository instance
      */
     SessionRepository createRepository();
 
     /**
-     * Creates a health indicator for this storage backend.
+     * Create a health indicator for this storage backend.
      *
      * <p>The health indicator is used for the /q/health endpoint
      * to report the status of session storage.

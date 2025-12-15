@@ -44,7 +44,7 @@ public class DefaultPermissionPolicy {
     }
 
     /**
-     * Returns the default permission policy.
+     * Return the default permission policy.
      */
     public ServicePermissionPolicy getPolicy() {
         return defaultPolicy;

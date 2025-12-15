@@ -70,7 +70,7 @@ public record TrafficAttribution(
     }
 
     /**
-     * Returns the service ID or "unknown" if null.
+     * Return the service ID or "unknown" if null.
      *
      * @return service ID
      */
@@ -79,7 +79,7 @@ public record TrafficAttribution(
     }
 
     /**
-     * Returns the team ID or "unknown" if null.
+     * Return the team ID or "unknown" if null.
      *
      * @return team ID
      */
@@ -88,7 +88,7 @@ public record TrafficAttribution(
     }
 
     /**
-     * Returns the tenant ID or "unknown" if null.
+     * Return the tenant ID or "unknown" if null.
      *
      * @return tenant ID
      */
@@ -97,7 +97,7 @@ public record TrafficAttribution(
     }
 
     /**
-     * Returns the environment or "unknown" if null.
+     * Return the environment or "unknown" if null.
      *
      * @return environment
      */

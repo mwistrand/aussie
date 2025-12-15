@@ -26,7 +26,7 @@ public record RateLimitDecision(
         RateLimitState newState) {
 
     /**
-     * Creates an "allowed" decision with default values.
+     * Create an "allowed" decision with default values.
      *
      * <p>Used when rate limiting is disabled or the check cannot be performed.
      *
@@ -37,7 +37,7 @@ public record RateLimitDecision(
     }
 
     /**
-     * Creates an "allowed" decision with the specified state.
+     * Create an "allowed" decision with the specified state.
      *
      * @param remaining remaining requests in the window
      * @param limit the total limit
@@ -58,7 +58,7 @@ public record RateLimitDecision(
     }
 
     /**
-     * Creates a "rejected" decision indicating rate limit exceeded.
+     * Create a "rejected" decision indicating rate limit exceeded.
      *
      * @param limit the total limit
      * @param windowSeconds the window duration
@@ -80,7 +80,7 @@ public record RateLimitDecision(
     }
 
     /**
-     * Returns the reset time as epoch seconds for response headers.
+     * Return the reset time as epoch seconds for response headers.
      *
      * @return reset time as epoch seconds
      */

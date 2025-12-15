@@ -42,7 +42,7 @@ public class SessionStorageProviderRegistry {
     private SessionRepository repository;
 
     /**
-     * Gets the session repository from the selected provider.
+     * Get the session repository from the selected provider.
      *
      * @return Session repository instance
      */
@@ -54,7 +54,7 @@ public class SessionStorageProviderRegistry {
     }
 
     /**
-     * Gets the selected storage provider.
+     * Get the selected storage provider.
      *
      * @return Selected provider
      */
@@ -104,7 +104,7 @@ public class SessionStorageProviderRegistry {
     }
 
     /**
-     * Gets all available providers (for health checks).
+     * Get all available providers (for health checks).
      *
      * @return List of available providers
      */

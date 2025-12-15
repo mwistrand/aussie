@@ -6,7 +6,7 @@ import java.util.Base64;
 import jakarta.enterprise.context.ApplicationScoped;
 
 /**
- * Generates cryptographically secure session IDs.
+ * Generate cryptographically secure session IDs.
  *
  * <p>Session IDs are 32 bytes (256 bits) of random data encoded as
  * URL-safe Base64. This provides sufficient entropy to prevent
@@ -20,7 +20,7 @@ public class SessionIdGenerator {
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
 
     /**
-     * Generates a new cryptographically secure session ID.
+     * Generate a new cryptographically secure session ID.
      *
      * @return A URL-safe Base64 encoded session ID (43 characters)
      */

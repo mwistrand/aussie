@@ -20,7 +20,7 @@ public record OperationPermission(Set<String> anyOfPermissions) {
     }
 
     /**
-     * Checks if any of the provided permissions matches the allowed permissions.
+     * Check if any of the provided permissions matches the allowed permissions.
      *
      * @param permissions the permissions to check
      * @return true if intersection is non-empty

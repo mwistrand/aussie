@@ -9,7 +9,7 @@ import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.service.ServiceRegistration;
 
 /**
- * Validates service registrations against gateway policies.
+ * Validate service registrations against gateway policies.
  */
 @ApplicationScoped
 public class ServiceRegistrationValidator {
@@ -22,7 +22,7 @@ public class ServiceRegistrationValidator {
     }
 
     /**
-     * Validates a service registration against gateway security policies.
+     * Validate a service registration against gateway security policies.
      *
      * <p>Note: Basic field validation (null checks, format validation) is handled by
      * the domain model constructors. This validator only checks policy-level constraints.

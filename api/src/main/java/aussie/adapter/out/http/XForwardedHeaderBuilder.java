@@ -10,7 +10,7 @@ import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.port.out.ForwardedHeaderBuilder;
 
 /**
- * Builds legacy X-Forwarded-* headers.
+ * Build legacy X-Forwarded-* headers.
  * - X-Forwarded-For: client IP address
  * - X-Forwarded-Host: original Host header
  * - X-Forwarded-Proto: original protocol (http/https)

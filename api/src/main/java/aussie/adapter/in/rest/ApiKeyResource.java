@@ -100,7 +100,7 @@ public class ApiKeyResource {
     }
 
     /**
-     * Gets the identifier of the principal creating this key.
+     * Get the identifier of the principal creating this key.
      */
     private String getCreatorId() {
         var principal = identity.getPrincipal();

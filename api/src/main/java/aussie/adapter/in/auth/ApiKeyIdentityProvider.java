@@ -97,7 +97,7 @@ public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthentica
     }
 
     /**
-     * Builds effective permissions for service-level authorization.
+     * Build effective permissions for service-level authorization.
      *
      * <p>This includes all permissions from the API key, with special handling:
      * <ul>

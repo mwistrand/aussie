@@ -8,7 +8,7 @@ import aussie.core.model.gateway.GatewayRequest;
 public interface ForwardedHeaderBuilder {
 
     /**
-     * Builds forwarding headers to include in the proxied request.
+     * Build forwarding headers to include in the proxied request.
      *
      * @param originalRequest the original incoming request
      * @param targetUri the target URI being forwarded to

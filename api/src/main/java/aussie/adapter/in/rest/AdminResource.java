@@ -117,7 +117,7 @@ public class AdminResource {
     }
 
     /**
-     * Extracts effective permissions from the identity for service-level
+     * Extract effective permissions from the identity for service-level
      * authorization.
      */
     @SuppressWarnings("unchecked")
@@ -135,7 +135,7 @@ public class AdminResource {
     }
 
     /**
-     * Converts a RegistrationResult.Failure to the appropriate HttpProblem
+     * Convert a RegistrationResult.Failure to the appropriate HttpProblem
      * exception.
      */
     private HttpProblem toGatewayProblem(RegistrationResult.Failure failure) {

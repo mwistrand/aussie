@@ -131,7 +131,7 @@ public class Permission {
     // public static final String LOGS_READ = "service.logs.read";
 
     /**
-     * Converts a set of Aussie permissions to Quarkus Security roles.
+     * Convert a set of Aussie permissions to Quarkus Security roles.
      *
      * @param permissions the set of permissions
      * @return the corresponding set of roles
@@ -166,7 +166,7 @@ public class Permission {
     }
 
     /**
-     * Converts a single Aussie permission to a Quarkus Security role.
+     * Convert a single Aussie permission to a Quarkus Security role.
      *
      * @param permission the permission
      * @return the corresponding role

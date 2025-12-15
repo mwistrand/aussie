@@ -87,11 +87,11 @@ public class ServiceRegistry {
     }
 
     /**
-     * Refreshes all routes from persistent storage.
+     * Refresh all routes from persistent storage.
      *
      * <p>
      * Clears the local cache and reloads all service registrations from storage.
-     * Updates the last-refreshed timestamp for TTL tracking.
+     * Update the last-refreshed timestamp for TTL tracking.
      *
      * @return Uni completing when refresh is done
      */
@@ -109,7 +109,7 @@ public class ServiceRegistry {
     }
 
     /**
-     * Checks if the route cache is stale and needs refresh.
+     * Check if the route cache is stale and needs refresh.
      *
      * @return true if cache TTL has expired
      */
@@ -138,7 +138,7 @@ public class ServiceRegistry {
      * Register a new service or update an existing one.
      *
      * <p>
-     * Validates the registration against gateway policies before persisting.
+     * Validate the registration against gateway policies before persisting.
      * For new services, the version must be 1. For updates, the version must be
      * exactly the current stored version plus one (optimistic locking).
      *
@@ -157,7 +157,7 @@ public class ServiceRegistry {
      * Register a new service or update an existing one with authorization.
      *
      * <p>
-     * Validates the registration against gateway policies before persisting.
+     * Validate the registration against gateway policies before persisting.
      * For new services, the version must be 1. For updates, the version must be
      * exactly the current stored version plus one (optimistic locking).
      *
@@ -240,7 +240,7 @@ public class ServiceRegistry {
     }
 
     /**
-     * Checks if the permission policy has changed between existing and new service.
+     * Check if the permission policy has changed between existing and new service.
      *
      * @param existing The existing service registration
      * @param updated  The updated service registration

@@ -36,7 +36,7 @@ public record CorsConfig(
     }
 
     /**
-     * Creates default CORS config that allows all origins.
+     * Create default CORS config that allows all origins.
      */
     public static CorsConfig allowAll() {
         return new CorsConfig(
@@ -49,14 +49,14 @@ public record CorsConfig(
     }
 
     /**
-     * Creates CORS config that denies all cross-origin requests.
+     * Create CORS config that denies all cross-origin requests.
      */
     public static CorsConfig denyAll() {
         return new CorsConfig(List.of(), Set.of(), Set.of(), Set.of(), false, Optional.empty());
     }
 
     /**
-     * Checks if the given origin is allowed.
+     * Check if the given origin is allowed.
      *
      * @param origin The Origin header value
      * @return true if the origin is allowed
@@ -75,7 +75,7 @@ public record CorsConfig(
     }
 
     /**
-     * Checks if the given method is allowed.
+     * Check if the given method is allowed.
      *
      * @param method The HTTP method
      * @return true if the method is allowed
@@ -91,7 +91,7 @@ public record CorsConfig(
     }
 
     /**
-     * Gets the allowed headers as a comma-separated string for the response header.
+     * Get the allowed headers as a comma-separated string for the response header.
      */
     public String getAllowedHeadersString() {
         if (allowedHeaders.contains("*")) {
@@ -101,7 +101,7 @@ public record CorsConfig(
     }
 
     /**
-     * Gets the allowed methods as a comma-separated string for the response header.
+     * Get the allowed methods as a comma-separated string for the response header.
      */
     public String getAllowedMethodsString() {
         if (allowedMethods.contains("*")) {
@@ -111,7 +111,7 @@ public record CorsConfig(
     }
 
     /**
-     * Gets the exposed headers as a comma-separated string for the response header.
+     * Get the exposed headers as a comma-separated string for the response header.
      */
     public String getExposedHeadersString() {
         if (exposedHeaders.isEmpty()) {

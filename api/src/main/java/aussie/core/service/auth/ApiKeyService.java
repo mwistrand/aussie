@@ -142,7 +142,7 @@ public class ApiKeyService implements ApiKeyManagement {
     }
 
     /**
-     * Generates a cryptographically secure random key.
+     * Generate a cryptographically secure random key.
      *
      * @return Base64URL-encoded key string (43 characters)
      */
@@ -153,7 +153,7 @@ public class ApiKeyService implements ApiKeyManagement {
     }
 
     /**
-     * Generates a short random key ID for display and revocation.
+     * Generate a short random key ID for display and revocation.
      *
      * @return 8-character hex string
      */
@@ -164,7 +164,7 @@ public class ApiKeyService implements ApiKeyManagement {
     }
 
     /**
-     * Computes SHA-256 hash of the plaintext key.
+     * Compute SHA-256 hash of the plaintext key.
      *
      * @param key the plaintext key
      * @return hex-encoded hash string
@@ -181,7 +181,7 @@ public class ApiKeyService implements ApiKeyManagement {
     }
 
     /**
-     * Validates the requested TTL against the configured maximum.
+     * Validate the requested TTL against the configured maximum.
      *
      * @param ttl the requested TTL (may be null for no expiration)
      * @throws IllegalArgumentException if TTL exceeds the configured maximum
@@ -204,7 +204,7 @@ public class ApiKeyService implements ApiKeyManagement {
     }
 
     /**
-     * Formats a duration for human-readable display.
+     * Format a duration for human-readable display.
      */
     private String formatDuration(Duration duration) {
         long days = duration.toDays();

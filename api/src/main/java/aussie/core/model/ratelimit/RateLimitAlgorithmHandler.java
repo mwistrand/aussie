@@ -16,7 +16,7 @@ package aussie.core.model.ratelimit;
 public interface RateLimitAlgorithmHandler {
 
     /**
-     * Returns the algorithm type this handler implements.
+     * Return the algorithm type this handler implements.
      *
      * @return the algorithm type
      */

@@ -31,14 +31,14 @@ public record ServicePermissionPolicy(Map<String, OperationPermission> permissio
     }
 
     /**
-     * Creates an empty policy (no permissions defined).
+     * Create an empty policy (no permissions defined).
      */
     public static ServicePermissionPolicy empty() {
         return new ServicePermissionPolicy(Map.of());
     }
 
     /**
-     * Checks if a principal with the given permissions is allowed to perform the operation.
+     * Check if a principal with the given permissions is allowed to perform the operation.
      *
      * @param operation the operation to check (e.g., "service.config.read")
      * @param permissions the permissions from the API key
@@ -59,7 +59,7 @@ public record ServicePermissionPolicy(Map<String, OperationPermission> permissio
     }
 
     /**
-     * Returns true if this policy has any permissions defined.
+     * Return true if this policy has any permissions defined.
      */
     public boolean hasPermissions() {
         return !permissions.isEmpty();

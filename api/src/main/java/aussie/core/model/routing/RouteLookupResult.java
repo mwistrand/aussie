@@ -24,21 +24,21 @@ import aussie.core.model.service.ServiceRegistration;
 public sealed interface RouteLookupResult permits RouteMatch, ServiceOnlyMatch {
 
     /**
-     * Returns the matched service registration.
+     * Return the matched service registration.
      *
      * @return the service registration
      */
     ServiceRegistration service();
 
     /**
-     * Returns the matched endpoint, if any.
+     * Return the matched endpoint, if any.
      *
      * @return the endpoint config if a specific route was matched, empty otherwise
      */
     Optional<EndpointConfig> endpoint();
 
     /**
-     * Returns the effective visibility for this route.
+     * Return the effective visibility for this route.
      *
      * <p>
      * If a specific endpoint was matched, returns the endpoint's visibility.
@@ -52,7 +52,7 @@ public sealed interface RouteLookupResult permits RouteMatch, ServiceOnlyMatch {
     }
 
     /**
-     * Returns whether authentication is required for this route.
+     * Return whether authentication is required for this route.
      *
      * <p>
      * If a specific endpoint was matched, returns the endpoint's authRequired
@@ -67,7 +67,7 @@ public sealed interface RouteLookupResult permits RouteMatch, ServiceOnlyMatch {
     }
 
     /**
-     * Returns the effective rate limit configuration for this route.
+     * Return the effective rate limit configuration for this route.
      *
      * <p>
      * If a specific endpoint was matched and has a rate limit config, returns that.

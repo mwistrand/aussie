@@ -7,8 +7,8 @@ import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.service.ServiceRegistration;
 
 /**
- * Resolves the visibility for a given path and method based on service configuration.
- * Evaluates visibility rules in order (first match wins) and falls back to defaultVisibility.
+ * Resolve the visibility for a given path and method based on service configuration.
+ * Evaluate visibility rules in order (first match wins) and falls back to defaultVisibility.
  */
 @ApplicationScoped
 public class VisibilityResolver {
@@ -21,7 +21,7 @@ public class VisibilityResolver {
     }
 
     /**
-     * Resolves the visibility for a request path and method.
+     * Resolve the visibility for a request path and method.
      *
      * @param path the request path (e.g., "/api/users/123")
      * @param method the HTTP method (e.g., "GET", "POST")

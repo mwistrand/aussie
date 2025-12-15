@@ -26,7 +26,7 @@ import aussie.core.port.out.RateLimiter;
 public interface RateLimiterProvider {
 
     /**
-     * Returns the priority of this provider.
+     * Return the priority of this provider.
      *
      * <p>Higher values indicate higher priority. When multiple providers are
      * available, the one with the highest priority is selected.
@@ -43,7 +43,7 @@ public interface RateLimiterProvider {
     int priority();
 
     /**
-     * Returns the name of this provider for logging and configuration.
+     * Return the name of this provider for logging and configuration.
      *
      * @return the provider name (e.g., "memory", "redis")
      */

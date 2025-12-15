@@ -23,7 +23,7 @@ public final class InMemoryRateLimiterProvider implements RateLimiterProvider {
     private final boolean enabled;
 
     /**
-     * Creates a new in-memory provider with configuration.
+     * Create a new in-memory provider with configuration.
      *
      * @param algorithmRegistry the algorithm registry
      * @param algorithm the algorithm to use
@@ -74,7 +74,7 @@ public final class InMemoryRateLimiterProvider implements RateLimiterProvider {
     }
 
     /**
-     * Creates a configured provider instance.
+     * Create a configured provider instance.
      *
      * @param algorithmRegistry the algorithm registry
      * @param algorithm the algorithm to use

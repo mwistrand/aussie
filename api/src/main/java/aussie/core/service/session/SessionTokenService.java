@@ -69,7 +69,7 @@ public class SessionTokenService {
     }
 
     /**
-     * Generates a JWS token from a session.
+     * Generate a JWS token from a session.
      *
      * @param session The session to generate a token for
      * @return The generated session token
@@ -79,7 +79,7 @@ public class SessionTokenService {
     }
 
     /**
-     * Generates a JWS token from a session with additional claims.
+     * Generate a JWS token from a session with additional claims.
      *
      * @param session The session to generate a token for
      * @param additionalClaims Additional claims to include
@@ -221,7 +221,7 @@ public class SessionTokenService {
     }
 
     /**
-     * Checks if JWS token generation is enabled.
+     * Check if JWS token generation is enabled.
      *
      * @return true if enabled
      */
@@ -230,7 +230,7 @@ public class SessionTokenService {
     }
 
     /**
-     * Checks if token signing is available.
+     * Check if token signing is available.
      *
      * @return true if a signing key is configured
      */

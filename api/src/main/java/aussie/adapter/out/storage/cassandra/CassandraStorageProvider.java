@@ -166,7 +166,7 @@ public class CassandraStorageProvider implements StorageRepositoryProvider {
     }
 
     /**
-     * Gets an executor that will run on the Vert.x context if available,
+     * Get an executor that will run on the Vert.x context if available,
      * otherwise falls back to the default worker pool.
      */
     private Executor getContextExecutor() {

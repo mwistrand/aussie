@@ -22,7 +22,7 @@ import java.util.Optional;
 public record RateLimitKey(RateLimitKeyType keyType, String clientId, String serviceId, Optional<String> endpointId) {
 
     /**
-     * Creates a rate limit key with validation.
+     * Create a rate limit key with validation.
      */
     public RateLimitKey {
         Objects.requireNonNull(keyType, "keyType must not be null");
@@ -32,7 +32,7 @@ public record RateLimitKey(RateLimitKeyType keyType, String clientId, String ser
     }
 
     /**
-     * Creates an HTTP rate limit key.
+     * Create an HTTP rate limit key.
      *
      * @param clientId the client identifier
      * @param serviceId the service identifier
@@ -44,7 +44,7 @@ public record RateLimitKey(RateLimitKeyType keyType, String clientId, String ser
     }
 
     /**
-     * Creates a WebSocket connection rate limit key.
+     * Create a WebSocket connection rate limit key.
      *
      * @param clientId the client identifier
      * @param serviceId the service identifier
@@ -55,7 +55,7 @@ public record RateLimitKey(RateLimitKeyType keyType, String clientId, String ser
     }
 
     /**
-     * Creates a WebSocket message rate limit key.
+     * Create a WebSocket message rate limit key.
      *
      * @param clientId the client identifier
      * @param serviceId the service identifier
@@ -67,7 +67,7 @@ public record RateLimitKey(RateLimitKeyType keyType, String clientId, String ser
     }
 
     /**
-     * Converts this key to a cache key string.
+     * Convert this key to a cache key string.
      *
      * @return the cache key string
      */

@@ -29,7 +29,7 @@ public final class RedisRateLimiterProvider implements RateLimiterProvider {
     private final boolean redisConfigured;
 
     /**
-     * Creates a new Redis provider with configuration.
+     * Create a new Redis provider with configuration.
      *
      * @param redisDataSource the Redis data source
      * @param enabled whether rate limiting is enabled
@@ -78,7 +78,7 @@ public final class RedisRateLimiterProvider implements RateLimiterProvider {
     }
 
     /**
-     * Creates a configured provider instance.
+     * Create a configured provider instance.
      *
      * @param redisDataSource the Redis data source
      * @param enabled whether rate limiting is enabled

@@ -10,7 +10,7 @@ import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.port.out.ForwardedHeaderBuilder;
 
 /**
- * Builds RFC 7239 compliant Forwarded header.
+ * Build RFC 7239 compliant Forwarded header.
  * Format: Forwarded: for=192.0.2.60;proto=http;by=203.0.113.43;host=example.com
  */
 @ApplicationScoped

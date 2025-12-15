@@ -12,7 +12,7 @@ public interface WebSocketGatewayUseCase {
 
     /**
      * Handle WebSocket upgrade for gateway mode (/gateway/...).
-     * Finds the route by path pattern matching.
+     * Find the route by path pattern matching.
      *
      * @param request the upgrade request
      * @return the upgrade result

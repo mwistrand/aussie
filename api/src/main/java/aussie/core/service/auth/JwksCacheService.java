@@ -62,7 +62,7 @@ public class JwksCacheService implements JwksCache {
     }
 
     /**
-     * Gets an existing in-flight fetch or creates a new one.
+     * Get an existing in-flight fetch or creates a new one.
      * This prevents thundering herd by coalescing concurrent requests.
      */
     private Uni<JsonWebKeySet> getOrCreateFetch(URI jwksUri) {

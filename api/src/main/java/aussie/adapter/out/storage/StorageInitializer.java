@@ -10,7 +10,7 @@ import org.jboss.logging.Logger;
 import aussie.core.service.routing.ServiceRegistry;
 
 /**
- * Initializes the service registry from persistent storage on application startup.
+ * Initialize the service registry from persistent storage on application startup.
  */
 @ApplicationScoped
 public class StorageInitializer {

@@ -56,7 +56,7 @@ public class SessionResource {
     HttpServerRequest request;
 
     /**
-     * Creates a new session after successful authentication.
+     * Create a new session after successful authentication.
      *
      * <p>This endpoint is called by the auth callback after validating
      * the user's token from their identity provider.
@@ -110,7 +110,7 @@ public class SessionResource {
     }
 
     /**
-     * Gets the current session information.
+     * Get the current session information.
      */
     @GET
     @Path("/session")
@@ -147,7 +147,7 @@ public class SessionResource {
     }
 
     /**
-     * Invalidates the current session (logout).
+     * Invalidate the current session (logout).
      */
     @DELETE
     @Path("/session")
@@ -184,7 +184,7 @@ public class SessionResource {
     }
 
     /**
-     * Invalidates all sessions for the current user (logout everywhere).
+     * Invalidate all sessions for the current user (logout everywhere).
      */
     @DELETE
     @Path("/sessions")
@@ -319,7 +319,7 @@ public class SessionResource {
     }
 
     /**
-     * Decodes JWT claims without signature validation (demo mode).
+     * Decode JWT claims without signature validation (demo mode).
      * In production, use proper JWT validation with JWKS.
      */
     private Map<String, Object> decodeJwtClaims(String token) {

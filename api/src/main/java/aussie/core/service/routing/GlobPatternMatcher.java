@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
 import jakarta.enterprise.context.ApplicationScoped;
 
 /**
- * Matches paths against glob patterns using Java's built-in PathMatcher.
+ * Match paths against glob patterns using Java's built-in PathMatcher.
  * Caches compiled patterns and normalized paths for performance.
  */
 @ApplicationScoped
@@ -23,7 +23,7 @@ public class GlobPatternMatcher {
     private final Map<String, String> normalizedPathCache = new ConcurrentHashMap<>();
 
     /**
-     * Tests if a path matches a glob pattern.
+     * Test if a path matches a glob pattern.
      *
      * @param glob the glob pattern (e.g., "/api/users/**", "/api/health")
      * @param path the path to test

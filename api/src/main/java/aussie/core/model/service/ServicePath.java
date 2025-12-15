@@ -29,7 +29,7 @@ public record ServicePath(String serviceId, String path) {
     }
 
     /**
-     * Parses a full request path into service ID and endpoint path components.
+     * Parse a full request path into service ID and endpoint path components.
      *
      * <p>
      * Examples:

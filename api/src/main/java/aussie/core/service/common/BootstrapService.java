@@ -149,7 +149,7 @@ public class BootstrapService implements BootstrapManagement {
     }
 
     /**
-     * Formats a duration for human-readable display.
+     * Format a duration for human-readable display.
      */
     private String formatDuration(Duration duration) {
         long hours = duration.toHours();

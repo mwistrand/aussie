@@ -37,7 +37,7 @@ public record AuthenticationContext(
     }
 
     /**
-     * Checks if this principal has the specified permission.
+     * Check if this principal has the specified permission.
      * The wildcard permission "*" grants access to everything.
      *
      * @param permission the permission to check
@@ -48,7 +48,7 @@ public record AuthenticationContext(
     }
 
     /**
-     * Checks if this authentication context has expired.
+     * Check if this authentication context has expired.
      *
      * @return true if expired, false if still valid or never expires
      */
@@ -57,7 +57,7 @@ public record AuthenticationContext(
     }
 
     /**
-     * Creates a builder for constructing an AuthenticationContext.
+     * Create a builder for constructing an AuthenticationContext.
      */
     public static Builder builder(Principal principal) {
         return new Builder(principal);

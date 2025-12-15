@@ -19,7 +19,7 @@ import aussie.core.model.service.ServiceRegistration;
 import aussie.core.service.routing.ServiceRegistry;
 
 /**
- * Resolves effective rate limits based on the configuration hierarchy.
+ * Resolve effective rate limits based on the configuration hierarchy.
  *
  * <p>
  * Resolution priority (highest to lowest):
@@ -56,7 +56,7 @@ public class RateLimitResolver {
     }
 
     /**
-     * Resolves the effective rate limit for an HTTP request.
+     * Resolve the effective rate limit for an HTTP request.
      *
      * @param route the route lookup result (service + optional endpoint)
      * @return the effective rate limit, capped at platform maximum
@@ -74,7 +74,7 @@ public class RateLimitResolver {
     }
 
     /**
-     * Resolves the effective rate limit for a service without a specific endpoint.
+     * Resolve the effective rate limit for a service without a specific endpoint.
      *
      * @param service the service registration
      * @return the effective rate limit, capped at platform maximum
@@ -89,7 +89,7 @@ public class RateLimitResolver {
     }
 
     /**
-     * Resolves the effective rate limit using only service ID (for pass-through
+     * Resolve the effective rate limit using only service ID (for pass-through
      * mode).
      *
      * <p>
@@ -139,7 +139,7 @@ public class RateLimitResolver {
     }
 
     /**
-     * Invalidates the cached rate limit config for a service.
+     * Invalidate the cached rate limit config for a service.
      *
      * <p>
      * Call this when a service registration is updated or deleted on this
@@ -153,7 +153,7 @@ public class RateLimitResolver {
     }
 
     /**
-     * Resolves the effective WebSocket connection rate limit.
+     * Resolve the effective WebSocket connection rate limit.
      *
      * @param service the service registration (optional)
      * @return the effective rate limit for WebSocket connections
@@ -182,7 +182,7 @@ public class RateLimitResolver {
     }
 
     /**
-     * Resolves the effective WebSocket message rate limit.
+     * Resolve the effective WebSocket message rate limit.
      *
      * @param service the service registration (optional)
      * @return the effective rate limit for WebSocket messages
@@ -211,7 +211,7 @@ public class RateLimitResolver {
     }
 
     /**
-     * Resolves platform default limits.
+     * Resolve platform default limits.
      *
      * @return the platform default rate limit
      */
@@ -221,7 +221,7 @@ public class RateLimitResolver {
     }
 
     /**
-     * Checks if rate limiting is enabled.
+     * Check if rate limiting is enabled.
      *
      * @return true if enabled
      */
@@ -230,7 +230,7 @@ public class RateLimitResolver {
     }
 
     /**
-     * Gets the platform maximum requests per window.
+     * Get the platform maximum requests per window.
      *
      * @return platform maximum
      */

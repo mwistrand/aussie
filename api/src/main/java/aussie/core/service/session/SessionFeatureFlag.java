@@ -18,7 +18,7 @@ public class SessionFeatureFlag {
     SessionConfig config;
 
     /**
-     * Checks if session management is enabled.
+     * Check if session management is enabled.
      *
      * <p>When disabled:
      * <ul>
@@ -35,7 +35,7 @@ public class SessionFeatureFlag {
     }
 
     /**
-     * Checks if JWS token generation is enabled.
+     * Check if JWS token generation is enabled.
      *
      * <p>Requires both sessions and JWS to be enabled.
      * When enabled, session-authenticated requests will have
@@ -48,7 +48,7 @@ public class SessionFeatureFlag {
     }
 
     /**
-     * Checks if sliding expiration is enabled.
+     * Check if sliding expiration is enabled.
      *
      * <p>When enabled, session TTL is refreshed on each request,
      * extending the session lifetime as long as the user is active.
@@ -60,7 +60,7 @@ public class SessionFeatureFlag {
     }
 
     /**
-     * Checks if conflicting authentication detection is enabled.
+     * Check if conflicting authentication detection is enabled.
      *
      * <p>When sessions are enabled, requests with both an Authorization
      * header and a session cookie are rejected with 400 Bad Request.

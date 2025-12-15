@@ -155,7 +155,7 @@ public class InMemorySessionRepository implements SessionRepository {
     }
 
     /**
-     * Returns the current session count (for testing).
+     * Return the current session count (for testing).
      */
     public int getSessionCount() {
         return sessions.size();

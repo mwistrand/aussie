@@ -24,7 +24,7 @@ public record EndpointRateLimitConfig(
     }
 
     /**
-     * Creates a rate limit config with all values specified.
+     * Create a rate limit config with all values specified.
      */
     public static EndpointRateLimitConfig of(long requestsPerWindow, long windowSeconds, long burstCapacity) {
         return new EndpointRateLimitConfig(
@@ -32,7 +32,7 @@ public record EndpointRateLimitConfig(
     }
 
     /**
-     * Creates a rate limit config with requests and window specified.
+     * Create a rate limit config with requests and window specified.
      */
     public static EndpointRateLimitConfig of(long requestsPerWindow, long windowSeconds) {
         return new EndpointRateLimitConfig(
@@ -40,14 +40,14 @@ public record EndpointRateLimitConfig(
     }
 
     /**
-     * Creates an empty configuration (use service/platform defaults).
+     * Create an empty configuration (use service/platform defaults).
      */
     public static EndpointRateLimitConfig defaults() {
         return new EndpointRateLimitConfig(Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     /**
-     * Checks if any rate limit values are configured.
+     * Check if any rate limit values are configured.
      */
     public boolean hasConfiguration() {
         return requestsPerWindow.isPresent() || windowSeconds.isPresent() || burstCapacity.isPresent();

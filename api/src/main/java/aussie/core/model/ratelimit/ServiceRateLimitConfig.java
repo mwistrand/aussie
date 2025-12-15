@@ -29,7 +29,7 @@ public record ServiceRateLimitConfig(
     }
 
     /**
-     * Creates a rate limit config without WebSocket config.
+     * Create a rate limit config without WebSocket config.
      */
     public ServiceRateLimitConfig(
             Optional<Long> requestsPerWindow, Optional<Long> windowSeconds, Optional<Long> burstCapacity) {
@@ -37,7 +37,7 @@ public record ServiceRateLimitConfig(
     }
 
     /**
-     * Creates a rate limit config with all HTTP values specified.
+     * Create a rate limit config with all HTTP values specified.
      */
     public static ServiceRateLimitConfig of(long requestsPerWindow, long windowSeconds, long burstCapacity) {
         return new ServiceRateLimitConfig(
@@ -48,7 +48,7 @@ public record ServiceRateLimitConfig(
     }
 
     /**
-     * Creates a rate limit config with requests and window specified.
+     * Create a rate limit config with requests and window specified.
      */
     public static ServiceRateLimitConfig of(long requestsPerWindow, long windowSeconds) {
         return new ServiceRateLimitConfig(
@@ -56,14 +56,14 @@ public record ServiceRateLimitConfig(
     }
 
     /**
-     * Creates an empty configuration (use platform defaults).
+     * Create an empty configuration (use platform defaults).
      */
     public static ServiceRateLimitConfig defaults() {
         return new ServiceRateLimitConfig(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     /**
-     * Checks if any rate limit values are configured.
+     * Check if any rate limit values are configured.
      */
     public boolean hasConfiguration() {
         return requestsPerWindow.isPresent()

@@ -16,7 +16,7 @@ import aussie.core.model.common.CorsConfig;
  * CORS filter for gateway requests using Vert.x RouteFilter.
  *
  * <p>
- * Handles CORS preflight (OPTIONS) requests and adds CORS headers to
+ * Handle CORS preflight (OPTIONS) requests and adds CORS headers to
  * responses. Uses global CORS configuration from application properties.
  *
  * <p>

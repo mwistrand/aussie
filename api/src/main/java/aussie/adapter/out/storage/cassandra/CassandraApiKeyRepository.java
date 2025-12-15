@@ -179,7 +179,7 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
     }
 
     /**
-     * Gets an executor that will run on the Vert.x context if available,
+     * Get an executor that will run on the Vert.x context if available,
      * otherwise falls back to the default worker pool.
      *
      * <p>This is necessary because the Cassandra driver completes its futures

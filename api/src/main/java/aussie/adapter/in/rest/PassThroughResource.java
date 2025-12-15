@@ -25,6 +25,16 @@ import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.GatewayResult;
 import aussie.core.port.in.PassThroughUseCase;
 
+/**
+ * REST resource for pass-through proxy requests.
+ *
+ * <p>Exposes endpoints under {@code /{serviceId}/{path}} that forward requests
+ * directly to the specified backend service. Supports all standard HTTP methods
+ * (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS).
+ *
+ * <p>This resource has the lowest path priority and handles any requests not
+ * matched by more specific resources (admin, gateway, etc.).
+ */
 @Path("/{serviceId}")
 @ApplicationScoped
 public class PassThroughResource {

@@ -22,7 +22,7 @@ public class SessionCookieManager {
     SessionConfig config;
 
     /**
-     * Creates a session cookie for the given session.
+     * Create a session cookie for the given session.
      *
      * @param session The session to create a cookie for
      * @return The session cookie
@@ -50,7 +50,7 @@ public class SessionCookieManager {
     }
 
     /**
-     * Creates a logout cookie that expires immediately.
+     * Create a logout cookie that expires immediately.
      *
      * @return Cookie that clears the session
      */
@@ -64,7 +64,7 @@ public class SessionCookieManager {
     }
 
     /**
-     * Extracts the session ID from a request's cookies.
+     * Extract the session ID from a request's cookies.
      *
      * @param request The HTTP request
      * @return The session ID, or empty if not present
@@ -78,7 +78,7 @@ public class SessionCookieManager {
     }
 
     /**
-     * Checks if a request has a session cookie.
+     * Check if a request has a session cookie.
      *
      * @param request The HTTP request
      * @return true if a session cookie is present
@@ -88,7 +88,7 @@ public class SessionCookieManager {
     }
 
     /**
-     * Gets the configured cookie name.
+     * Get the configured cookie name.
      *
      * @return Cookie name
      */

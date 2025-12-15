@@ -19,7 +19,7 @@ import java.util.Set;
 public record SessionToken(String token, Instant expiresAt, String sessionId, Set<String> claims) {
 
     /**
-     * Checks if the token has expired.
+     * Check if the token has expired.
      */
     public boolean isExpired() {
         return expiresAt != null && Instant.now().isAfter(expiresAt);

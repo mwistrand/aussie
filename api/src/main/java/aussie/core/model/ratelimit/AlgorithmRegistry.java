@@ -33,7 +33,7 @@ public class AlgorithmRegistry {
     private final RateLimitAlgorithmHandler defaultHandler;
 
     /**
-     * Creates a new algorithm registry with all available handlers.
+     * Create a new algorithm registry with all available handlers.
      */
     public AlgorithmRegistry() {
         this.handlers = new EnumMap<>(RateLimitAlgorithm.class);

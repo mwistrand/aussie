@@ -30,7 +30,7 @@ public final class BucketAlgorithm implements RateLimitAlgorithmHandler {
     private BucketAlgorithm() {}
 
     /**
-     * Returns the singleton instance.
+     * Return the singleton instance.
      *
      * @return the bucket algorithm instance
      */

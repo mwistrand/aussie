@@ -18,7 +18,7 @@ public record CorsConfigDto(
         Long maxAge) {
 
     /**
-     * Converts this DTO to a CorsConfig model.
+     * Convert this DTO to a CorsConfig model.
      */
     public CorsConfig toModel() {
         return new CorsConfig(
@@ -31,7 +31,7 @@ public record CorsConfigDto(
     }
 
     /**
-     * Creates a DTO from a CorsConfig model.
+     * Create a DTO from a CorsConfig model.
      */
     public static CorsConfigDto fromModel(CorsConfig config) {
         if (config == null) {

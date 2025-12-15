@@ -30,7 +30,7 @@ import aussie.core.port.in.WebSocketGatewayUseCase;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
 
 /**
- * Handles WebSocket proxy connections after authentication.
+ * Handle WebSocket proxy connections after authentication.
  *
  * <p>All operations are fully reactive using Vert.x Futures - no blocking calls.
  *

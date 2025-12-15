@@ -55,7 +55,7 @@ public record ApiKey(
     }
 
     /**
-     * Checks if this API key is valid (not revoked and not expired).
+     * Check if this API key is valid (not revoked and not expired).
      *
      * @return true if the key can be used for authentication
      */
@@ -64,7 +64,7 @@ public record ApiKey(
     }
 
     /**
-     * Creates a copy of this key with the hash redacted for display purposes.
+     * Create a copy of this key with the hash redacted for display purposes.
      *
      * @return a new ApiKey with "[REDACTED]" as the keyHash
      */
@@ -73,7 +73,7 @@ public record ApiKey(
     }
 
     /**
-     * Creates a revoked copy of this key.
+     * Create a revoked copy of this key.
      *
      * @return a new ApiKey with revoked=true
      */

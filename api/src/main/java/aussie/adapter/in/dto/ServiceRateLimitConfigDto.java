@@ -15,7 +15,7 @@ public record ServiceRateLimitConfigDto(
         Long requestsPerWindow, Long windowSeconds, Long burstCapacity, WebSocketRateLimitConfigDto websocket) {
 
     /**
-     * Converts this DTO to a ServiceRateLimitConfig model.
+     * Convert this DTO to a ServiceRateLimitConfig model.
      */
     public ServiceRateLimitConfig toModel() {
         return new ServiceRateLimitConfig(
@@ -26,7 +26,7 @@ public record ServiceRateLimitConfigDto(
     }
 
     /**
-     * Creates a DTO from a ServiceRateLimitConfig model.
+     * Create a DTO from a ServiceRateLimitConfig model.
      */
     public static ServiceRateLimitConfigDto fromModel(ServiceRateLimitConfig model) {
         if (model == null) {
@@ -45,7 +45,7 @@ public record ServiceRateLimitConfigDto(
     public record WebSocketRateLimitConfigDto(RateLimitValuesDto connection, RateLimitValuesDto message) {
 
         /**
-         * Converts this DTO to a ServiceWebSocketRateLimitConfig model.
+         * Convert this DTO to a ServiceWebSocketRateLimitConfig model.
          */
         public ServiceWebSocketRateLimitConfig toModel() {
             return new ServiceWebSocketRateLimitConfig(
@@ -54,7 +54,7 @@ public record ServiceRateLimitConfigDto(
         }
 
         /**
-         * Creates a DTO from a ServiceWebSocketRateLimitConfig model.
+         * Create a DTO from a ServiceWebSocketRateLimitConfig model.
          */
         public static WebSocketRateLimitConfigDto fromModel(ServiceWebSocketRateLimitConfig model) {
             if (model == null) {
@@ -72,7 +72,7 @@ public record ServiceRateLimitConfigDto(
     public record RateLimitValuesDto(Long requestsPerWindow, Long windowSeconds, Long burstCapacity) {
 
         /**
-         * Converts this DTO to a RateLimitValues model.
+         * Convert this DTO to a RateLimitValues model.
          */
         public RateLimitValues toModel() {
             return new RateLimitValues(
@@ -82,7 +82,7 @@ public record ServiceRateLimitConfigDto(
         }
 
         /**
-         * Creates a DTO from a RateLimitValues model.
+         * Create a DTO from a RateLimitValues model.
          */
         public static RateLimitValuesDto fromModel(RateLimitValues model) {
             if (model == null) {

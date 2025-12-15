@@ -35,7 +35,7 @@ public record Session(
         String ipAddress) {
 
     /**
-     * Creates a new session with updated lastAccessedAt timestamp.
+     * Create a new session with updated lastAccessedAt timestamp.
      */
     public Session withLastAccessedAt(Instant lastAccessedAt) {
         return new Session(
@@ -43,7 +43,7 @@ public record Session(
     }
 
     /**
-     * Creates a new session with updated expiration time.
+     * Create a new session with updated expiration time.
      */
     public Session withExpiresAt(Instant expiresAt) {
         return new Session(
@@ -51,7 +51,7 @@ public record Session(
     }
 
     /**
-     * Creates a new session with a different ID.
+     * Create a new session with a different ID.
      */
     public Session withId(String id) {
         return new Session(
@@ -59,14 +59,14 @@ public record Session(
     }
 
     /**
-     * Checks if the session has expired.
+     * Check if the session has expired.
      */
     public boolean isExpired() {
         return expiresAt != null && Instant.now().isAfter(expiresAt);
     }
 
     /**
-     * Checks if the session has exceeded the idle timeout.
+     * Check if the session has exceeded the idle timeout.
      *
      * @param idleTimeout Maximum duration of inactivity
      */
@@ -78,7 +78,7 @@ public record Session(
     }
 
     /**
-     * Checks if the session is valid (not expired and not idle).
+     * Check if the session is valid (not expired and not idle).
      *
      * @param idleTimeout Maximum duration of inactivity (null to skip idle check)
      */

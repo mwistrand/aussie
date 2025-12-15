@@ -17,7 +17,7 @@ import aussie.core.model.routing.RouteMatch;
 import aussie.core.port.out.ForwardedHeaderBuilderProvider;
 
 /**
- * Prepares proxy requests by applying header filtering and forwarding rules.
+ * Prepare proxy requests by applying header filtering and forwarding rules.
  * This encapsulates the business logic for:
  * - Filtering hop-by-hop headers (RFC 2616 Section 13.5.1)
  * - Setting the Host header for the target

@@ -144,7 +144,7 @@ public class ServicePermissionsResource {
     }
 
     /**
-     * Extracts effective permissions from the identity for service-level authorization.
+     * Extract effective permissions from the identity for service-level authorization.
      *
      * <p>
      * Permissions are computed by

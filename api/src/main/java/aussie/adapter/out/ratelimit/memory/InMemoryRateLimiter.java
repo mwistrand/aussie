@@ -17,7 +17,7 @@ import aussie.core.port.out.RateLimiter;
  * In-memory rate limiter implementation.
  *
  * <p>
- * Stores rate limit state in a concurrent hash map. Suitable for
+ * Store rate limit state in a concurrent hash map. Suitable for
  * single-instance deployments or development/testing.
  *
  * <p>
@@ -39,7 +39,7 @@ public final class InMemoryRateLimiter implements RateLimiter {
     private final boolean enabled;
 
     /**
-     * Creates a new in-memory rate limiter.
+     * Create a new in-memory rate limiter.
      *
      * @param algorithmRegistry the algorithm registry
      * @param algorithm         the algorithm to use
@@ -100,7 +100,7 @@ public final class InMemoryRateLimiter implements RateLimiter {
     }
 
     /**
-     * Returns the current number of tracked rate limit buckets.
+     * Return the current number of tracked rate limit buckets.
      *
      * <p>
      * Useful for monitoring and testing.

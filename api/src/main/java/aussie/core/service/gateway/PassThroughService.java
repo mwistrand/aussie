@@ -25,6 +25,19 @@ import aussie.core.service.routing.EndpointMatcher;
 import aussie.core.service.routing.ServiceRegistry;
 import aussie.core.service.routing.VisibilityResolver;
 
+/**
+ * Handle pass-through proxy requests where the service ID is in the URL path.
+ *
+ * <p>Pass-through mode allows requests to be routed directly to registered services
+ * using the URL pattern {@code /{serviceId}/...}. This provides a simpler alternative
+ * to gateway mode for services that don't need complex route matching.
+ *
+ * <p>The service validates that the service ID is not a reserved path (admin, gateway, q),
+ * resolves visibility and authentication requirements, and forwards the request to
+ * the appropriate backend.
+ *
+ * <p>All operations are fully reactive and never block.
+ */
 @ApplicationScoped
 public class PassThroughService implements PassThroughUseCase {
 

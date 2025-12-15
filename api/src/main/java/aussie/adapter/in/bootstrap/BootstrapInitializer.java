@@ -13,7 +13,7 @@ import aussie.core.port.in.BootstrapManagement;
 import aussie.core.port.in.BootstrapManagement.BootstrapException;
 
 /**
- * Initializes bootstrap admin key on application startup.
+ * Initialize bootstrap admin key on application startup.
  *
  * <p>Observes the Quarkus StartupEvent and triggers bootstrap key creation
  * if enabled and conditions are met.

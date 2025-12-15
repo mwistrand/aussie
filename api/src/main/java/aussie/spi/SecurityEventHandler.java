@@ -37,14 +37,14 @@ package aussie.spi;
 public interface SecurityEventHandler {
 
     /**
-     * Returns the unique name of this handler.
+     * Return the unique name of this handler.
      *
      * @return handler name (e.g., "pagerduty", "slack", "webhook")
      */
     String name();
 
     /**
-     * Returns a human-readable description of this handler.
+     * Return a human-readable description of this handler.
      *
      * @return handler description
      */
@@ -53,7 +53,7 @@ public interface SecurityEventHandler {
     }
 
     /**
-     * Returns the priority of this handler.
+     * Return the priority of this handler.
      *
      * <p>Higher priority handlers are invoked first. Built-in handlers use:
      * <ul>
@@ -71,7 +71,7 @@ public interface SecurityEventHandler {
     }
 
     /**
-     * Returns whether this handler is currently available.
+     * Return whether this handler is currently available.
      *
      * <p>Handlers should return false if their external dependencies
      * (e.g., alerting service, webhook endpoint) are not configured

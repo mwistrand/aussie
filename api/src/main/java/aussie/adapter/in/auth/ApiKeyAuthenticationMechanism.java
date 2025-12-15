@@ -24,7 +24,7 @@ import aussie.core.model.auth.Permission;
  * Quarkus HTTP authentication mechanism for API key authentication.
  *
  * <p>
- * Extracts Bearer tokens from the Authorization header and creates
+ * Extract Bearer tokens from the Authorization header and creates
  * {@link ApiKeyAuthenticationRequest} credentials for validation by
  * {@link ApiKeyIdentityProvider}.
  *
@@ -56,7 +56,7 @@ public class ApiKeyAuthenticationMechanism implements HttpAuthenticationMechanis
     }
 
     /**
-     * Creates a SecurityIdentity with all roles for noop mode.
+     * Create a SecurityIdentity with all roles for noop mode.
      */
     private SecurityIdentity createNoopIdentity() {
         if (noopWarningLogged.compareAndSet(false, true)) {

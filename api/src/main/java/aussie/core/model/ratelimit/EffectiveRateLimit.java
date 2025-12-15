@@ -13,7 +13,7 @@ package aussie.core.model.ratelimit;
 public record EffectiveRateLimit(long requestsPerWindow, long windowSeconds, long burstCapacity) {
 
     /**
-     * Creates an effective rate limit with validation.
+     * Create an effective rate limit with validation.
      */
     public EffectiveRateLimit {
         if (requestsPerWindow < 0) {
@@ -28,7 +28,7 @@ public record EffectiveRateLimit(long requestsPerWindow, long windowSeconds, lon
     }
 
     /**
-     * Creates a disabled rate limit (unlimited).
+     * Create a disabled rate limit (unlimited).
      *
      * @return an unlimited rate limit
      */
@@ -37,7 +37,7 @@ public record EffectiveRateLimit(long requestsPerWindow, long windowSeconds, lon
     }
 
     /**
-     * Creates an effective rate limit with burst capacity equal to requests per window.
+     * Create an effective rate limit with burst capacity equal to requests per window.
      *
      * @param requestsPerWindow the maximum requests per window
      * @param windowSeconds the window duration
@@ -48,7 +48,7 @@ public record EffectiveRateLimit(long requestsPerWindow, long windowSeconds, lon
     }
 
     /**
-     * Returns a new rate limit capped by the platform maximum.
+     * Return a new rate limit capped by the platform maximum.
      *
      * @param platformMax the platform maximum requests per window
      * @return a new rate limit with values capped at the platform maximum
@@ -62,7 +62,7 @@ public record EffectiveRateLimit(long requestsPerWindow, long windowSeconds, lon
     }
 
     /**
-     * Calculates the refill rate for token bucket algorithm.
+     * Calculate the refill rate for token bucket algorithm.
      *
      * @return tokens per second
      */

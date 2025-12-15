@@ -19,21 +19,21 @@ public record ServiceWebSocketRateLimitConfig(Optional<RateLimitValues> connecti
     }
 
     /**
-     * Creates a WebSocket config with both connection and message limits.
+     * Create a WebSocket config with both connection and message limits.
      */
     public static ServiceWebSocketRateLimitConfig of(RateLimitValues connection, RateLimitValues message) {
         return new ServiceWebSocketRateLimitConfig(Optional.ofNullable(connection), Optional.ofNullable(message));
     }
 
     /**
-     * Creates an empty configuration (use platform defaults).
+     * Create an empty configuration (use platform defaults).
      */
     public static ServiceWebSocketRateLimitConfig defaults() {
         return new ServiceWebSocketRateLimitConfig(Optional.empty(), Optional.empty());
     }
 
     /**
-     * Checks if any WebSocket rate limit values are configured.
+     * Check if any WebSocket rate limit values are configured.
      */
     public boolean hasConfiguration() {
         return connection.isPresent() || message.isPresent();
@@ -56,7 +56,7 @@ public record ServiceWebSocketRateLimitConfig(Optional<RateLimitValues> connecti
         }
 
         /**
-         * Creates rate limit values with all fields specified.
+         * Create rate limit values with all fields specified.
          */
         public static RateLimitValues of(long requestsPerWindow, long windowSeconds, long burstCapacity) {
             return new RateLimitValues(
@@ -64,14 +64,14 @@ public record ServiceWebSocketRateLimitConfig(Optional<RateLimitValues> connecti
         }
 
         /**
-         * Creates rate limit values with requests and window specified.
+         * Create rate limit values with requests and window specified.
          */
         public static RateLimitValues of(long requestsPerWindow, long windowSeconds) {
             return new RateLimitValues(Optional.of(requestsPerWindow), Optional.of(windowSeconds), Optional.empty());
         }
 
         /**
-         * Checks if any values are configured.
+         * Check if any values are configured.
          */
         public boolean hasConfiguration() {
             return requestsPerWindow.isPresent() || windowSeconds.isPresent() || burstCapacity.isPresent();

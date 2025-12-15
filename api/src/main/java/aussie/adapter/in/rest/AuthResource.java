@@ -36,7 +36,7 @@ public class AuthResource {
     }
 
     /**
-     * Returns information about the currently authenticated caller.
+     * Return information about the currently authenticated caller.
      *
      * <p>
      * This endpoint is useful for CLIs and automation to verify their

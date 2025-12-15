@@ -17,7 +17,7 @@ import java.util.Optional;
 public interface LocalCache<K, V> {
 
     /**
-     * Gets a value from the cache.
+     * Get a value from the cache.
      *
      * @param key the cache key
      * @return Optional containing the value if present and not expired
@@ -36,19 +36,19 @@ public interface LocalCache<K, V> {
     void put(K key, V value);
 
     /**
-     * Invalidates (removes) a specific cache entry.
+     * Invalidate (removes) a specific cache entry.
      *
      * @param key the cache key to invalidate
      */
     void invalidate(K key);
 
     /**
-     * Invalidates all entries in the cache.
+     * Invalidate all entries in the cache.
      */
     void invalidateAll();
 
     /**
-     * Returns a snapshot of all values currently in the cache.
+     * Return a snapshot of all values currently in the cache.
      *
      * <p>
      * Note: This is a snapshot and may not reflect concurrent modifications.
@@ -58,7 +58,7 @@ public interface LocalCache<K, V> {
     Collection<V> values();
 
     /**
-     * Returns the estimated number of entries in the cache.
+     * Return the estimated number of entries in the cache.
      *
      * @return estimated entry count
      */

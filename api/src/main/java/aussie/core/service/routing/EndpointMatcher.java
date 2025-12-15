@@ -9,7 +9,7 @@ import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.service.ServiceRegistration;
 
 /**
- * Matches request paths against configured endpoints.
+ * Match request paths against configured endpoints.
  *
  * <p>Evaluates endpoints in order (first match wins) to find the appropriate
  * endpoint configuration including auth requirements.
@@ -25,7 +25,7 @@ public class EndpointMatcher {
     }
 
     /**
-     * Finds a matching endpoint for the given path and method.
+     * Find a matching endpoint for the given path and method.
      *
      * @param path    the request path (e.g., "/api/auth/login")
      * @param method  the HTTP method (e.g., "POST")

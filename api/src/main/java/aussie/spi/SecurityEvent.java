@@ -22,21 +22,21 @@ import java.util.Map;
 public sealed interface SecurityEvent {
 
     /**
-     * Returns the timestamp when this event occurred.
+     * Return the timestamp when this event occurred.
      *
      * @return event timestamp
      */
     Instant timestamp();
 
     /**
-     * Returns the client identifier (usually hashed IP).
+     * Return the client identifier (usually hashed IP).
      *
      * @return client identifier
      */
     String clientIdentifier();
 
     /**
-     * Returns the severity level of this event.
+     * Return the severity level of this event.
      *
      * @return severity level
      */

@@ -25,6 +25,13 @@ import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.GatewayResult;
 import aussie.core.port.in.GatewayUseCase;
 
+/**
+ * REST resource for gateway-mode proxy requests.
+ *
+ * <p>Exposes endpoints under {@code /gateway/{path}} that forward requests
+ * to backend services based on configured route matching. Supports all
+ * standard HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS).
+ */
 @Path("/gateway")
 @ApplicationScoped
 public class GatewayResource {
