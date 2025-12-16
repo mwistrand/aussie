@@ -221,7 +221,7 @@ export function findDeviceCodeByUserCode(
   userCode: string
 ): { deviceCode: string; entry: DeviceCodeEntry } | undefined {
   for (const [deviceCode, entry] of deviceCodes.entries()) {
-    if (entry.userCode === userCode.toUpperCase().replace('-', '')) {
+    if (entry.userCode === userCode.toUpperCase().replace(/-/g, '')) {
       return { deviceCode, entry };
     }
   }

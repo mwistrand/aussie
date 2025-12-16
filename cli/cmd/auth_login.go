@@ -154,14 +154,26 @@ func browserLogin(cfg *config.Config) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
+	var result error
+	var token string
+
 	select {
-	case token := <-tokenChan:
-		return storeAndPrintCredentials(token)
-	case err := <-errChan:
-		return err
+	case token = <-tokenChan:
+		result = nil
+	case result = <-errChan:
 	case <-ctx.Done():
-		return fmt.Errorf("authentication timed out after 5 minutes")
+		result = fmt.Errorf("authentication timed out after 5 minutes")
 	}
+
+	// Gracefully shutdown the server
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer shutdownCancel()
+	_ = server.Shutdown(shutdownCtx)
+
+	if result != nil {
+		return result
+	}
+	return storeAndPrintCredentials(token)
 }
 
 // deviceCodeLogin uses device code flow for headless environments.
@@ -287,14 +299,26 @@ func callbackLogin(cfg *config.Config) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
+	var result error
+	var token string
+
 	select {
-	case token := <-tokenChan:
-		return storeAndPrintCredentials(token)
-	case err := <-errChan:
-		return err
+	case token = <-tokenChan:
+		result = nil
+	case result = <-errChan:
 	case <-ctx.Done():
-		return fmt.Errorf("authentication timed out after 10 minutes")
+		result = fmt.Errorf("authentication timed out after 10 minutes")
 	}
+
+	// Gracefully shutdown the server
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer shutdownCancel()
+	_ = server.Shutdown(shutdownCtx)
+
+	if result != nil {
+		return result
+	}
+	return storeAndPrintCredentials(token)
 }
 
 // pollForToken polls the translation layer for a token using the device code.

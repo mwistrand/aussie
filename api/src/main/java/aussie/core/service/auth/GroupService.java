@@ -118,10 +118,17 @@ public class GroupService implements GroupManagement {
 
     @Override
     public Uni<GroupMapping> getGroupMapping() {
-        // Check cache first
+        // Check cache first - must read volatile fields atomically
+        final GroupMapping cached;
+        final Instant expiry;
+        synchronized (cacheLock) {
+            cached = this.cachedMapping;
+            expiry = this.cacheExpiry;
+        }
+
         final var now = Instant.now();
-        if (cachedMapping != null && now.isBefore(cacheExpiry)) {
-            return Uni.createFrom().item(cachedMapping);
+        if (cached != null && now.isBefore(expiry)) {
+            return Uni.createFrom().item(cached);
         }
 
         // Refresh cache

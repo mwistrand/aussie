@@ -35,10 +35,18 @@ services:
           sleep 5
         done
         echo "Running schema initialization..."
-        for script in /scripts/V*.cql; do
-          echo "Applying $script..."
-          cqlsh cassandra -f "$script" || true
-        done
+        shopt -s nullglob
+        scripts=(/scripts/V*.cql)
+        if [ $${#scripts[@]} -eq 0 ]; then
+          echo "No migration scripts found in /scripts/"
+        else
+          for script in "$${scripts[@]}"; do
+            if [ -f "$$script" ]; then
+              echo "Applying $$script..."
+              cqlsh cassandra -f "$$script" || true
+            fi
+          done
+        fi
         echo "Schema initialization complete"
 
   redis:
