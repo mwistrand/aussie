@@ -45,11 +45,12 @@ export interface TokenClaims {
 
 // Simulated group mappings (in production, this comes from IdP claims)
 // Maps demo users to their groups
+// Groups follow the pattern: <service-id>.<role>
 export const USER_GROUPS: Record<string, string[]> = {
-  admin: ['platform-team', 'service-admin'],
-  alice: ['service-admin', 'developer'],
-  bob: ['developer'],
-  guest: ['readonly'],
+  admin: ['platform-team', 'demo-service.admin'],
+  alice: ['demo-service.admin', 'demo-service.dev'],
+  bob: ['demo-service.dev'],
+  guest: ['demo-service.readonly'],
 };
 
 // Default TTL settings

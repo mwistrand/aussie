@@ -58,12 +58,12 @@ Server: http://localhost:1234
 Authentication: JWT Token (IdP)
   User:   alice@example.com
   Name:   Alice Smith
-  Groups: service-admin, developer
+  Groups: demo-service.admin, demo-service.dev
   Expires: 2025-03-08T18:30:00Z
 
 Server Status: Authenticated
-  Groups: service-admin, developer
-  Effective Permissions: apikeys.write, apikeys.read, service.config.*
+  Groups: demo-service.admin, demo-service.dev
+  Effective Permissions: demo-service.admin, demo-service.lead, demo-service.dev
 ```
 
 **4. Logout:**
@@ -133,11 +133,11 @@ Server: http://localhost:1234
 
 Authentication: JWT Token (IdP)
   User:   alice@example.com
-  Groups: service-admin, developer
+  Groups: demo-service.admin, demo-service.dev
   Expires: 2025-03-08T18:30:00Z
 
 Server Status: Authenticated
-  Effective Permissions: apikeys.write, apikeys.read, service.config.*
+  Effective Permissions: demo-service.admin, demo-service.lead, demo-service.dev
 ```
 
 **Output (API key):**
@@ -456,28 +456,32 @@ host = "http://localhost:1234"
 api_key = "your-api-key"
 ```
 
-#### `auth login`
+#### `login` / `auth login`
 Authenticate with your organization's identity provider.
+
+> **Note:** `login` and `logout` are available as both top-level commands and under `auth`:
+> `aussie login` is equivalent to `aussie auth login`.
+
 ```bash
 # Uses configured mode (default: browser)
-./aussie auth login
+./aussie login
 
 # Override mode for this invocation
-./aussie auth login --mode device_code
-./aussie auth login --mode cli_callback
+./aussie login --mode device_code
+./aussie login --mode cli_callback
 ```
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--mode` | (from config) | Auth mode: `browser`, `device_code`, `cli_callback` |
 
-#### `auth logout`
+#### `logout` / `auth logout`
 Clear stored authentication credentials.
 ```bash
 # Clear local credentials only
-./aussie auth logout
+./aussie logout
 
 # Also invalidate server session (if logout_url configured)
-./aussie auth logout --server
+./aussie logout --server
 ```
 | Flag | Default | Description |
 |------|---------|-------------|
@@ -494,11 +498,11 @@ Server: http://localhost:1234
 
 Authentication: JWT Token (IdP)
   User:   alice@example.com
-  Groups: service-admin, developer
+  Groups: demo-service.admin, demo-service.dev
   Expires: 2025-03-08T18:30:00Z
 
 Server Status: Authenticated
-  Effective Permissions: apikeys.write, apikeys.read, service.config.*
+  Effective Permissions: demo-service.admin, demo-service.lead, demo-service.dev
 ```
 
 **Output (API key):**
@@ -591,9 +595,14 @@ Preview visibility settings for a registered service.
 ### Command Summary
 | Command | Description |
 |---------|-------------|
-| `auth login` | Authenticate with IdP |
-| `auth logout` | Clear stored credentials |
+| `login` / `auth login` | Authenticate with IdP |
+| `logout` / `auth logout` | Clear stored credentials |
 | `auth status` | Show current authentication status |
+| `groups create` | Create a new RBAC group |
+| `groups list` | List all groups |
+| `groups get <id>` | Get a specific group |
+| `groups update <id>` | Update a group |
+| `groups delete <id>` | Delete a group |
 | `keys create` | Create a new API key |
 | `keys list` | List all API keys |
 | `keys revoke <id>` | Revoke an API key |

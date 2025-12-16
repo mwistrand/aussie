@@ -10,8 +10,7 @@ import {
 export interface LoginRequest {
   username: string;
   password: string;
-  isAdmin: boolean;
-  groups?: string[];
+  group?: string;
   redirect?: string;
 }
 
@@ -60,8 +59,7 @@ export async function POST(request: NextRequest) {
       body = {
         username: formData.get('username') as string,
         password: formData.get('password') as string,
-        isAdmin: formData.get('isAdmin') === 'true',
-        groups: formData.getAll('groups') as string[],
+        group: formData.get('group') as string | undefined,
         redirect: formData.get('redirect') as string | undefined,
       };
     }
@@ -78,30 +76,22 @@ export async function POST(request: NextRequest) {
     // For demo purposes, accept any password
     // In production, this would validate against an identity provider
 
-    // Determine groups based on username and admin flag
+    // Determine groups based on selected group
     const username = body.username.trim().toLowerCase();
     let groups: string[] = [];
 
-    // Check for predefined user groups
+    // Check for predefined user groups (username-based defaults)
     if (USER_GROUPS[username]) {
       groups = [...USER_GROUPS[username]];
     }
 
-    // Add admin groups if requested
-    if (body.isAdmin) {
-      groups = [...new Set([...groups, 'platform-team', 'service-admin'])];
+    // Add the selected group from the form
+    if (body.group) {
+      groups = [...new Set([...groups, body.group])];
     }
 
-    // Add any custom groups selected
-    if (body.groups && body.groups.length > 0) {
-      groups = [...new Set([...groups, ...body.groups])];
-    }
-
-    // Build permissions based on admin checkbox (legacy support)
-    const permissions: string[] = [];
-    if (body.isAdmin) {
-      permissions.push('admin:read', 'admin:write');
-    }
+    // No permissions are added directly - they come from group expansion
+    const permissions: string[] = body.group === 'admin' ? ['admin'] : [];
 
     // Generate signed JWT token
     const token = await generateToken({

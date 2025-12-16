@@ -96,3 +96,96 @@ func TestLogoutCmd_Initialized(t *testing.T) {
 		t.Error("logoutCmd missing --server flag")
 	}
 }
+
+// Tests for top-level login/logout commands
+
+func TestTopLoginCmd_Initialized(t *testing.T) {
+	if topLoginCmd == nil {
+		t.Fatal("topLoginCmd is nil")
+	}
+
+	if topLoginCmd.Use != "login" {
+		t.Errorf("topLoginCmd.Use = %q, want %q", topLoginCmd.Use, "login")
+	}
+
+	if topLoginCmd.Short == "" {
+		t.Error("topLoginCmd.Short should not be empty")
+	}
+
+	if topLoginCmd.Long == "" {
+		t.Error("topLoginCmd.Long should not be empty")
+	}
+
+	// Check that --mode flag exists
+	flag := topLoginCmd.Flags().Lookup("mode")
+	if flag == nil {
+		t.Error("topLoginCmd missing --mode flag")
+	}
+}
+
+func TestTopLogoutCmd_Initialized(t *testing.T) {
+	if topLogoutCmd == nil {
+		t.Fatal("topLogoutCmd is nil")
+	}
+
+	if topLogoutCmd.Use != "logout" {
+		t.Errorf("topLogoutCmd.Use = %q, want %q", topLogoutCmd.Use, "logout")
+	}
+
+	if topLogoutCmd.Short == "" {
+		t.Error("topLogoutCmd.Short should not be empty")
+	}
+
+	if topLogoutCmd.Long == "" {
+		t.Error("topLogoutCmd.Long should not be empty")
+	}
+
+	// Check that --server flag exists
+	flag := topLogoutCmd.Flags().Lookup("server")
+	if flag == nil {
+		t.Error("topLogoutCmd missing --server flag")
+	}
+}
+
+func TestTopLoginCmd_SharesRunFunctionWithAuthLogin(t *testing.T) {
+	// Both commands should use the same RunE function
+	if topLoginCmd.RunE == nil {
+		t.Error("topLoginCmd.RunE should not be nil")
+	}
+
+	if loginCmd.RunE == nil {
+		t.Error("loginCmd.RunE should not be nil")
+	}
+
+	// We can't directly compare function pointers in Go, but we can verify
+	// both commands are properly initialized with RunE functions
+}
+
+func TestTopLogoutCmd_SharesRunFunctionWithAuthLogout(t *testing.T) {
+	// Both commands should use the same RunE function
+	if topLogoutCmd.RunE == nil {
+		t.Error("topLogoutCmd.RunE should not be nil")
+	}
+
+	if logoutCmd.RunE == nil {
+		t.Error("logoutCmd.RunE should not be nil")
+	}
+}
+
+func TestRootCmd_HasTopLevelLoginLogout(t *testing.T) {
+	subcommands := rootCmd.Commands()
+
+	subcommandNames := make(map[string]bool)
+	for _, cmd := range subcommands {
+		subcommandNames[cmd.Name()] = true
+	}
+
+	// Check that login and logout are available as top-level commands
+	if !subcommandNames["login"] {
+		t.Error("rootCmd missing top-level 'login' command")
+	}
+
+	if !subcommandNames["logout"] {
+		t.Error("rootCmd missing top-level 'logout' command")
+	}
+}

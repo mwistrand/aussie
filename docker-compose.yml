@@ -78,6 +78,8 @@ services:
     environment:
       - QUARKUS_PROFILE=dev
       - CASSANDRA_CONTACT_POINTS=cassandra:9042
+      # Demo app URL for JWKS fetching (Docker hostname)
+      - DEMO_APP_URL=http://demo:3000
       # CORS configuration for demo
       - AUSSIE_GATEWAY_CORS_ENABLED=true
       - AUSSIE_GATEWAY_CORS_ALLOWED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080

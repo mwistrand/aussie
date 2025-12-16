@@ -92,7 +92,7 @@ func LoadCredentials() (*StoredCredentials, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("not authenticated: run 'aussie auth login' to authenticate")
+			return nil, fmt.Errorf("not authenticated: run 'aussie login' to authenticate")
 		}
 		return nil, fmt.Errorf("failed to read credentials: %w", err)
 	}
@@ -106,7 +106,7 @@ func LoadCredentials() (*StoredCredentials, error) {
 	if creds.IsExpired() {
 		// Clean up expired credentials
 		_ = ClearCredentials()
-		return nil, fmt.Errorf("credentials expired: run 'aussie auth login' to re-authenticate")
+		return nil, fmt.Errorf("credentials expired: run 'aussie login' to re-authenticate")
 	}
 
 	return &creds, nil

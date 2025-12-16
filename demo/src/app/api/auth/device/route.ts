@@ -10,8 +10,7 @@ export interface DeviceAuthRequest {
   device_code?: string;
   user_code?: string;
   username: string;
-  isAdmin?: boolean;
-  groups?: string[];
+  group?: string;
 }
 
 /**
@@ -74,25 +73,18 @@ export async function POST(request: NextRequest) {
     const username = body.username.trim().toLowerCase();
     let groups: string[] = [];
 
-    // Check for predefined user groups
+    // Check for predefined user groups (username-based defaults)
     if (USER_GROUPS[username]) {
       groups = [...USER_GROUPS[username]];
     }
 
-    // Add admin groups if requested
-    if (body.isAdmin) {
-      groups = [...new Set([...groups, 'platform-team', 'service-admin'])];
+    // Add the selected group from the form
+    if (body.group) {
+      groups = [...new Set([...groups, body.group])];
     }
 
-    // Add any custom groups
-    if (body.groups && body.groups.length > 0) {
-      groups = [...new Set([...groups, ...body.groups])];
-    }
-
+    // No permissions are added directly - they come from group expansion
     const permissions: string[] = [];
-    if (body.isAdmin) {
-      permissions.push('admin:read', 'admin:write');
-    }
 
     // Authorize the device code
     const success = await authorizeDeviceCode(deviceCode, {

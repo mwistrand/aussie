@@ -11,7 +11,7 @@ import java.util.Set;
  * at validation time. This allows centralized permission management without
  * regenerating tokens.
  *
- * @param id          unique identifier (e.g., "platform-team", "service-admin")
+ * @param id          unique identifier (e.g., "platform-team", "demo-service.admin")
  * @param displayName human-readable name (e.g., "Platform Team")
  * @param description optional description of this group's purpose
  * @param permissions set of permission strings granted to members of this group

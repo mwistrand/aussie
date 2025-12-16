@@ -60,7 +60,7 @@ func runKeysCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	if !cfg.IsAuthenticated() {
-		return fmt.Errorf("not authenticated. Add your API key to ~/.aussierc or .aussierc")
+		return fmt.Errorf("not authenticated. Run 'aussie login' to authenticate")
 	}
 
 	// Build request body
@@ -96,7 +96,7 @@ func runKeysCreate(cmd *cobra.Command, args []string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("authentication failed. Check your API key in ~/.aussierc or .aussierc")
+		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
 	}
 	if resp.StatusCode == http.StatusForbidden {
 		return fmt.Errorf("insufficient permissions to create API keys")

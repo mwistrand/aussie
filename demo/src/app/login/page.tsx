@@ -54,8 +54,8 @@ export default async function LoginPage({ searchParams }: PageProps) {
                 management. Any username/password combination will work.
               </p>
               <p className="mt-2">
-                Check the &quot;Admin&quot; box to receive admin permissions
-                (admin:read, admin:write).
+                Select a role to receive the corresponding group membership.
+                Permissions are derived from the group at validation time.
               </p>
             </div>
           </div>

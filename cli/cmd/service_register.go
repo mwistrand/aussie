@@ -226,7 +226,7 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	case http.StatusBadRequest:
 		return fmt.Errorf("invalid service configuration: %s", string(body))
 	case http.StatusUnauthorized:
-		return fmt.Errorf("authentication required: add your API key to ~/.aussierc or .aussierc")
+		return fmt.Errorf("authentication required. Run 'aussie login' to authenticate")
 	case http.StatusForbidden:
 		return fmt.Errorf("permission denied: insufficient privileges")
 	case http.StatusConflict:

@@ -57,7 +57,7 @@ func runServicePermissionsRevoke(cmd *cobra.Command, args []string) error {
 	}
 
 	if !cfg.IsAuthenticated() {
-		return fmt.Errorf("not authenticated. Add your API key to ~/.aussierc or .aussierc")
+		return fmt.Errorf("not authenticated. Run 'aussie login' to authenticate")
 	}
 
 	// Step 1: Get current policy

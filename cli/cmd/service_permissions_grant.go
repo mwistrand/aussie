@@ -71,7 +71,7 @@ func runServicePermissionsGrant(cmd *cobra.Command, args []string) error {
 	}
 
 	if !cfg.IsAuthenticated() {
-		return fmt.Errorf("not authenticated. Add your API key to ~/.aussierc or .aussierc")
+		return fmt.Errorf("not authenticated. Run 'aussie login' to authenticate")
 	}
 
 	// Step 1: Get current policy
@@ -137,7 +137,7 @@ func getPermissionPolicy(cfg *config.Config, serviceID string) (*ServicePermissi
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, 0, fmt.Errorf("authentication failed. Check your API key in ~/.aussierc or .aussierc")
+		return nil, 0, fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
 	}
 	if resp.StatusCode == http.StatusForbidden {
 		return nil, 0, fmt.Errorf("insufficient permissions to read service permissions")
@@ -181,7 +181,7 @@ func updatePermissionPolicy(cfg *config.Config, serviceID string, policy *Servic
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		return fmt.Errorf("authentication failed. Check your API key in ~/.aussierc or .aussierc")
+		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
 	}
 	if resp.StatusCode == http.StatusForbidden {
 		return fmt.Errorf("insufficient permissions to update service permissions")

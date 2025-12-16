@@ -237,7 +237,7 @@ Your translation layer must return a JWT with this structure:
 {
   "sub": "user@example.com",
   "name": "User Name",
-  "groups": ["service-admin", "developer"],
+  "groups": ["demo-service.admin", "demo-service.dev"],
   "iat": 1702656000,
   "exp": 1702659600
 }
@@ -268,9 +268,9 @@ Map your IdP roles/groups to Aussie groups in your translation layer:
 // Example mapping in translation layer
 const IDP_TO_AUSSIE_GROUPS = {
   'Engineering/Platform': ['platform-team'],
-  'Engineering/Backend': ['service-admin', 'developer'],
-  'Engineering/Frontend': ['developer'],
-  'QA': ['developer', 'readonly'],
+  'Engineering/Backend': ['demo-service.admin', 'demo-service.dev'],
+  'Engineering/Frontend': ['demo-service.dev'],
+  'QA': ['demo-service.dev', 'demo-service.readonly'],
 };
 
 function mapIdpGroupsToAussie(idpGroups) {
@@ -325,9 +325,9 @@ curl -X POST https://aussie.example.com/admin/groups \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "id": "service-admin",
-    "displayName": "Service Administrators",
-    "permissions": ["apikeys.write", "apikeys.read", "service.config.*"]
+    "id": "demo-service.admin",
+    "displayName": "Demo Service Admins",
+    "permissions": ["demo-service.admin", "demo-service.lead", "demo-service.dev"]
   }'
 
 # List groups
@@ -335,27 +335,29 @@ curl https://aussie.example.com/admin/groups \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 
 # Update a group
-curl -X PUT https://aussie.example.com/admin/groups/service-admin \
+curl -X PUT https://aussie.example.com/admin/groups/demo-service.admin \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "permissions": ["apikeys.write", "apikeys.read", "service.config.*", "metrics.read"]
+    "permissions": ["demo-service.admin", "demo-service.lead", "demo-service.dev", "metrics.read"]
   }'
 
 # Delete a group
-curl -X DELETE https://aussie.example.com/admin/groups/service-admin \
+curl -X DELETE https://aussie.example.com/admin/groups/demo-service.admin \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
-### Default Groups
+### Example Groups
 
-These groups are created by default:
+Groups follow a `<service-id>.<role>` naming convention. Here are example groups for a demo service:
 
 | Group | Permissions | Description |
 |-------|-------------|-------------|
-| `platform-team` | `*` | Full admin access |
-| `service-admin` | `apikeys.write`, `apikeys.read`, `service.config.*` | Service management |
-| `developer` | `apikeys.read`, `service.config.read` | Read-only access |
+| `platform-team` | `*` | Full platform admin access |
+| `demo-service.admin` | `demo-service.admin`, `demo-service.lead`, `demo-service.dev` | Full service admin |
+| `demo-service.lead` | `demo-service.lead`, `demo-service.dev` | Lead developer access |
+| `demo-service.dev` | `demo-service.dev` | Basic developer access |
+| `demo-service.readonly` | `demo-service.readonly` | Read-only access |
 
 ### How Group Expansion Works
 
@@ -363,17 +365,69 @@ When a user authenticates with a token containing groups, Aussie expands those g
 
 ```
 Token claims:
-  groups: ["service-admin", "developer"]
+  groups: ["demo-service.admin", "demo-service.dev"]
 
 Group mappings (from database):
-  service-admin → ["apikeys.write", "apikeys.read", "service.config.*"]
-  developer     → ["apikeys.read", "service.config.read"]
+  demo-service.admin → ["demo-service.admin", "demo-service.lead", "demo-service.dev"]
+  demo-service.dev   → ["demo-service.dev"]
 
 Effective permissions:
-  ["apikeys.write", "apikeys.read", "service.config.*", "service.config.read"]
+  ["demo-service.admin", "demo-service.lead", "demo-service.dev"]
 ```
 
 Direct permissions in the token are merged with expanded group permissions.
+
+### Group Management CLI Commands
+
+Groups can be managed via the CLI in addition to the Admin API:
+
+#### Create a group
+```bash
+aussie groups create --id demo-service.admin \
+  --display-name "Demo Service Admins" \
+  --description "Full admin access for demo-service" \
+  --permissions "demo-service.admin,demo-service.lead,demo-service.dev"
+
+# Create with minimal options
+aussie groups create --id demo-service.dev --permissions "demo-service.dev"
+```
+
+| Flag | Short | Required | Description |
+|------|-------|----------|-------------|
+| `--id` | | Yes | Unique identifier for the group |
+| `--display-name` | `-d` | No | Human-readable name (defaults to id) |
+| `--description` | | No | Description of the group's purpose |
+| `--permissions` | `-p` | No | Comma-separated list of permissions |
+
+#### List groups
+```bash
+aussie groups list
+```
+
+#### Get a group
+```bash
+aussie groups get demo-service.admin
+```
+
+#### Update a group
+```bash
+# Update permissions
+aussie groups update demo-service.admin --permissions "demo-service.admin,demo-service.lead,demo-service.dev,metrics.read"
+
+# Update display name
+aussie groups update demo-service.admin --display-name "Demo Service Administrators"
+```
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--display-name` | `-d` | New display name |
+| `--description` | | New description |
+| `--permissions` | `-p` | New set of permissions (replaces existing) |
+
+#### Delete a group
+```bash
+aussie groups delete demo-service.readonly
+```
 
 ## Access Control
 
