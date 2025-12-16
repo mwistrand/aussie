@@ -1,0 +1,63 @@
+# Aussie CLI full configuration reference
+# Copy this to ~/.aussierc (global) or .aussierc (project-local)
+
+# =============================================================================
+# Server Configuration
+# =============================================================================
+
+# Gateway host URL (required)
+host = "https://aussie.yourcompany.com"
+
+# =============================================================================
+# API Key Authentication (Fallback)
+# =============================================================================
+
+# API key for authentication (only if enabled by platform team)
+# This is used as fallback when IdP authentication is not available
+# Uncomment to use:
+# api_key = "your-api-key-here"
+
+# =============================================================================
+# IdP Authentication (Recommended)
+# =============================================================================
+
+[auth]
+# Organization's translation layer endpoints
+# These endpoints handle the IdP integration (SAML, OIDC, etc.)
+
+# Login URL (required for IdP auth)
+# This is your organization's auth endpoint, not the IdP directly
+login_url = "https://sso.yourcompany.com/auth/aussie/login"
+
+# Logout URL (optional)
+# Server-side session invalidation endpoint
+logout_url = "https://sso.yourcompany.com/auth/aussie/logout"
+
+# Refresh URL (optional)
+# Token refresh endpoint
+refresh_url = "https://sso.yourcompany.com/auth/aussie/refresh"
+
+# Authentication mode
+# Options:
+#   "browser"      - Opens browser for OAuth/SAML login (default)
+#                    Best for: developer workstations
+#
+#   "device_code"  - Displays a code to enter at a verification URL
+#                    Best for: CI/CD, SSH sessions, headless servers
+#
+#   "cli_callback" - CLI starts a local server and displays URL
+#                    Best for: environments where browser can't auto-open
+#
+# Can be overridden with: aussie auth login --mode <mode>
+mode = "browser"
+
+# =============================================================================
+# Token Refresh Settings (Optional)
+# =============================================================================
+
+# Automatically refresh tokens before they expire
+auto_refresh = true
+
+# How long before expiry to trigger refresh (Go duration format)
+# Examples: "5m" (5 minutes), "1h" (1 hour), "30s" (30 seconds)
+refresh_before_expiry = "5m"

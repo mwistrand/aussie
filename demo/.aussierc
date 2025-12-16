@@ -1,4 +1,28 @@
 # Aussie CLI configuration for the demo project
 # This file is automatically used when running aussie commands from this directory
 
+# Gateway host
 host = "http://localhost:1234"
+
+# API key authentication (fallback - only if enabled on gateway)
+# Uncomment to use API key instead of IdP authentication
+# api_key = "your-api-key-here"
+
+[auth]
+# Organization's translation layer endpoints
+# These endpoints handle the IdP integration (SAML, OIDC, etc.)
+# The demo app provides example endpoints at localhost:3000
+login_url = "http://localhost:3000/api/auth/login"
+logout_url = "http://localhost:3000/api/auth/logout"
+refresh_url = "http://localhost:3000/api/auth/refresh"
+
+# Authentication mode (can be overridden with --mode flag)
+# Options:
+#   "browser"      - Opens browser for OAuth/SAML login (default)
+#   "device_code"  - Device code flow for headless/CI environments
+#   "cli_callback" - CLI starts local server to receive callback
+mode = "browser"
+
+# Token refresh settings
+auto_refresh = true
+refresh_before_expiry = "5m"

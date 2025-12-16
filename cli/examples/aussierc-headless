@@ -1,0 +1,18 @@
+# Aussie CLI configuration for headless/CI environments
+# Copy this to ~/.aussierc or .aussierc in your project
+
+# Gateway host
+host = "https://aussie.yourcompany.com"
+
+[auth]
+# Organization's translation layer endpoints
+login_url = "https://sso.yourcompany.com/auth/aussie/login"
+logout_url = "https://sso.yourcompany.com/auth/aussie/logout"
+
+# Use device code flow for environments without a browser
+# This displays a code to enter at a verification URL
+mode = "device_code"
+
+# Token refresh settings (optional)
+# auto_refresh = true
+# refresh_before_expiry = "5m"

@@ -6,6 +6,8 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 - [Setup](#setup)
 - [Authentication Configuration](#authentication-configuration)
 - [Bootstrap Mode](#bootstrap-mode-first-time-setup)
+- [IdP Integration (RBAC)](#idp-integration-rbac)
+- [Group-Based Access Control](#group-based-access-control)
 - [Access Control](#access-control)
 - [Request Forwarding](#request-forwarding)
 - [Request Size Limits](#request-size-limits)
@@ -13,6 +15,7 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 - [WebSocket Configuration](websocket-configuration.md)
 - [Admin API](#admin-api)
 - [Service Permission Policies](#service-permission-policies)
+- [Environment Variables Reference](#environment-variables-reference)
 
 ## Setup
 
@@ -178,6 +181,199 @@ Recovery mode is logged with a security warning - review your system if you didn
 | `AUSSIE_BOOTSTRAP_KEY` | - | Bootstrap key (min 32 chars) |
 | `AUSSIE_BOOTSTRAP_TTL` | `PT24H` | Bootstrap key TTL (max: 24h) |
 | `AUSSIE_BOOTSTRAP_RECOVERY_MODE` | `false` | Allow bootstrap with existing keys |
+
+## IdP Integration (RBAC)
+
+Aussie supports Role-Based Access Control (RBAC) through integration with your organization's Identity Provider (IdP). Instead of manually distributing API keys, developers can authenticate using their organization's SSO (SAML, OIDC, etc.) and receive short-lived tokens.
+
+### Architecture Overview
+
+```
+┌──────────┐     ┌───────────────┐     ┌──────────┐     ┌──────────┐
+│   CLI    │     │  Translation  │     │  Aussie  │     │ Backend  │
+│          │     │    Layer      │     │ Gateway  │     │ Services │
+└────┬─────┘     └──────┬────────┘     └────┬─────┘     └────┬─────┘
+     │                  │                   │                │
+     │ 1. aussie login  │                   │                │
+     │─────────────────>│                   │                │
+     │                  │ 2. Authenticate   │                │
+     │                  │    with IdP       │                │
+     │ 3. JWT Token     │                   │                │
+     │<─────────────────│                   │                │
+     │                  │                   │                │
+     │ 4. API Request + JWT                 │                │
+     │─────────────────────────────────────>│                │
+     │                  │                   │ 5. Expand      │
+     │                  │                   │    groups to   │
+     │                  │                   │    permissions │
+     │                  │                   │─────────────────>
+     │ 6. Response      │                   │                │
+     │<─────────────────────────────────────│                │
+```
+
+### Translation Layer
+
+Platform teams must provide a **translation layer** between the CLI and their IdP. This layer:
+
+1. Receives authentication requests from the Aussie CLI
+2. Delegates to the organization's IdP (SAML, OIDC, etc.)
+3. Maps IdP claims (roles, groups) to Aussie groups
+4. Returns an Aussie-compatible JWT
+
+#### Required Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/auth/aussie/login` | GET | Initiate auth flow (redirect to IdP or return device code) |
+| `/auth/aussie/login` | POST | Exchange IdP credentials for Aussie JWT |
+| `/auth/aussie/logout` | POST | Invalidate session (optional) |
+| `/auth/aussie/refresh` | POST | Refresh token (optional) |
+
+#### Expected JWT Format
+
+Your translation layer must return a JWT with this structure:
+
+```json
+{
+  "sub": "user@example.com",
+  "name": "User Name",
+  "groups": ["service-admin", "developer"],
+  "iat": 1702656000,
+  "exp": 1702659600
+}
+```
+
+### Authentication Flows
+
+**Browser Flow (Default)**
+1. CLI opens browser to `login_url?callback=http://127.0.0.1:PORT/callback`
+2. Translation layer redirects to IdP
+3. User authenticates with IdP
+4. IdP redirects back to translation layer
+5. Translation layer generates Aussie JWT
+6. Redirects to CLI callback with `?token=JWT`
+
+**Device Code Flow (Headless)**
+1. CLI POSTs to `login_url?flow=device_code`
+2. Translation layer returns device code and verification URL
+3. User opens verification URL, enters code, authenticates
+4. CLI polls for token
+5. Translation layer returns Aussie JWT when auth completes
+
+### Group Mapping Example
+
+Map your IdP roles/groups to Aussie groups in your translation layer:
+
+```javascript
+// Example mapping in translation layer
+const IDP_TO_AUSSIE_GROUPS = {
+  'Engineering/Platform': ['platform-team'],
+  'Engineering/Backend': ['service-admin', 'developer'],
+  'Engineering/Frontend': ['developer'],
+  'QA': ['developer', 'readonly'],
+};
+
+function mapIdpGroupsToAussie(idpGroups) {
+  return idpGroups
+    .flatMap(g => IDP_TO_AUSSIE_GROUPS[g] || [])
+    .filter((v, i, a) => a.indexOf(v) === i); // Dedupe
+}
+```
+
+### Token TTL Configuration
+
+Configure token TTL limits in `application.properties` or via environment variables:
+
+```properties
+# Maximum allowed TTL for JWT tokens (ISO-8601 duration)
+aussie.auth.route-auth.jws.max-token-ttl=PT24H
+
+# Default TTL for issued tokens
+aussie.auth.route-auth.jws.token-ttl=PT5M
+```
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `AUSSIE_AUTH_ROUTE_AUTH_JWS_MAX_TOKEN_TTL` | `PT24H` | Maximum allowed JWT token TTL |
+| `AUSSIE_AUTH_ROUTE_AUTH_JWS_TOKEN_TTL` | `PT5M` | Default TTL for issued tokens |
+
+### API Key Fallback
+
+API key authentication can be enabled as a fallback for emergencies or teams without IdP integration:
+
+```bash
+# Enable API key authentication (disabled by default)
+export AUSSIE_API_KEYS_ENABLED=true
+
+# Maximum TTL for API keys
+export AUSSIE_AUTH_API_KEYS_MAX_TTL=P365D
+```
+
+**Security Note**: API keys are disabled by default. Only enable for critical teams that need fallback authentication when the IdP is unavailable.
+
+## Group-Based Access Control
+
+Groups provide a mapping between organizational roles (from your IdP) and Aussie permissions.
+
+### Defining Groups
+
+Use the Admin API to define groups:
+
+```bash
+# Create a group
+curl -X POST https://aussie.example.com/admin/groups \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "service-admin",
+    "displayName": "Service Administrators",
+    "permissions": ["apikeys.write", "apikeys.read", "service.config.*"]
+  }'
+
+# List groups
+curl https://aussie.example.com/admin/groups \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# Update a group
+curl -X PUT https://aussie.example.com/admin/groups/service-admin \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "permissions": ["apikeys.write", "apikeys.read", "service.config.*", "metrics.read"]
+  }'
+
+# Delete a group
+curl -X DELETE https://aussie.example.com/admin/groups/service-admin \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+### Default Groups
+
+These groups are created by default:
+
+| Group | Permissions | Description |
+|-------|-------------|-------------|
+| `platform-team` | `*` | Full admin access |
+| `service-admin` | `apikeys.write`, `apikeys.read`, `service.config.*` | Service management |
+| `developer` | `apikeys.read`, `service.config.read` | Read-only access |
+
+### How Group Expansion Works
+
+When a user authenticates with a token containing groups, Aussie expands those groups to permissions:
+
+```
+Token claims:
+  groups: ["service-admin", "developer"]
+
+Group mappings (from database):
+  service-admin → ["apikeys.write", "apikeys.read", "service.config.*"]
+  developer     → ["apikeys.read", "service.config.read"]
+
+Effective permissions:
+  ["apikeys.write", "apikeys.read", "service.config.*", "service.config.read"]
+```
+
+Direct permissions in the token are merged with expanded group permissions.
 
 ## Access Control
 
@@ -383,3 +579,70 @@ With the permission policy above:
 - `ops-admin` can do everything (wildcard grants `aussie:admin`)
 - `team-lead` can read and update my-service config, but not delete it
 - `developer` can only read my-service config
+
+## Environment Variables Reference
+
+### Authentication & Authorization
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_AUTH_ENABLED` | `true` | Enable/disable authentication |
+| `AUSSIE_AUTH_ADMIN_PATHS_ONLY` | `true` | Only require auth for admin paths |
+| `AUSSIE_AUTH_DANGEROUS_NOOP` | `false` | Disable authentication (NEVER use in production) |
+| `AUSSIE_API_KEYS_ENABLED` | `false` | Enable API key authentication (fallback) |
+| `AUSSIE_AUTH_API_KEYS_MAX_TTL` | `P365D` | Maximum TTL for API keys |
+
+### Token Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_AUTH_ROUTE_AUTH_ENABLED` | `false` | Enable per-route authentication |
+| `AUSSIE_AUTH_ROUTE_AUTH_JWS_TOKEN_TTL` | `PT5M` | Default TTL for issued tokens |
+| `AUSSIE_AUTH_ROUTE_AUTH_JWS_MAX_TOKEN_TTL` | `PT24H` | Maximum allowed JWT token TTL |
+| `AUSSIE_AUTH_ROUTE_AUTH_JWS_ISSUER` | `aussie-gateway` | Issuer claim for JWS tokens |
+| `AUSSIE_JWS_SIGNING_KEY` | - | RSA signing key (base64-encoded PKCS#8 PEM) |
+
+### Bootstrap Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_BOOTSTRAP_ENABLED` | `false` | Enable bootstrap mode |
+| `AUSSIE_BOOTSTRAP_KEY` | - | Bootstrap key (min 32 chars) |
+| `AUSSIE_BOOTSTRAP_TTL` | `PT24H` | Bootstrap key TTL (max: 24h) |
+| `AUSSIE_BOOTSTRAP_RECOVERY_MODE` | `false` | Allow bootstrap with existing keys |
+
+### Storage Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CASSANDRA_CONTACT_POINTS` | `cassandra:9042` | Cassandra contact points |
+| `CASSANDRA_RUN_MIGRATIONS` | `false` | Run database migrations on startup |
+| `REDIS_HOSTS` | `redis://localhost:6379` | Redis connection string |
+
+### Gateway Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_GATEWAY_FORWARDING_USE_RFC7239` | `true` | Use RFC 7239 Forwarded headers |
+| `AUSSIE_GATEWAY_LIMITS_MAX_BODY_SIZE` | `10485760` | Maximum request body size (bytes) |
+| `AUSSIE_GATEWAY_LIMITS_MAX_HEADER_SIZE` | `8192` | Maximum single header size (bytes) |
+| `AUSSIE_GATEWAY_CORS_ENABLED` | `true` | Enable CORS support |
+| `AUSSIE_GATEWAY_CORS_ALLOWED_ORIGINS` | `*` | Allowed CORS origins |
+
+### Rate Limiting
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_RATE_LIMITING_ENABLED` | `true` | Enable rate limiting |
+| `AUSSIE_RATE_LIMITING_ALGORITHM` | `BUCKET` | Algorithm: BUCKET, FIXED_WINDOW, SLIDING_WINDOW |
+| `AUSSIE_RATE_LIMITING_DEFAULT_REQUESTS_PER_WINDOW` | `100` | Default requests per window |
+| `AUSSIE_RATE_LIMITING_WINDOW_SECONDS` | `60` | Window duration in seconds |
+
+### Telemetry
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_TELEMETRY_ENABLED` | `false` | Master toggle for telemetry |
+| `AUSSIE_TELEMETRY_TRACING_ENABLED` | `false` | Enable distributed tracing |
+| `AUSSIE_TELEMETRY_METRICS_ENABLED` | `false` | Enable metrics collection |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | OpenTelemetry exporter endpoint |

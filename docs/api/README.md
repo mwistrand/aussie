@@ -16,19 +16,88 @@ This guide is for developers onboarding their applications to the Aussie API Gat
 ## Getting Started
 
 To onboard your service to Aussie, you'll need:
-1. An API key from your platform team
+1. Authentication configured (IdP login or API key from your platform team)
 2. The Aussie CLI
 3. A service configuration file describing your endpoints
 
 ## Authentication
 
-### Obtaining an API Key
-Contact your platform team to obtain an API key with appropriate permissions:
-- Read-only access (`admin:read`): For viewing registered services
-- Read/write access (`admin:read`, `admin:write`): For registering and managing services
+Aussie supports two authentication methods:
+1. **IdP Authentication** (recommended) - Authenticate with your organization's SSO
+2. **API Key** (fallback) - Use a pre-shared API key
 
-### Configuring Authentication
-Add your API key to your configuration file:
+### IdP Authentication (Recommended)
+
+Authenticate using your organization's identity provider (SAML, OIDC, etc.):
+
+**1. Configure your `.aussierc`:**
+```toml
+host = "http://localhost:1234"
+
+[auth]
+login_url = "https://sso.yourcompany.com/auth/aussie/login"
+logout_url = "https://sso.yourcompany.com/auth/aussie/logout"   # Optional
+refresh_url = "https://sso.yourcompany.com/auth/aussie/refresh" # Optional
+mode = "browser"  # Options: browser, device_code, cli_callback
+```
+
+**2. Login:**
+```bash
+./aussie auth login
+```
+This opens your browser for SSO authentication. After successful login, your token is stored locally.
+
+**3. Check status:**
+```bash
+./aussie auth status
+```
+**Output:**
+```
+Server: http://localhost:1234
+
+Authentication: JWT Token (IdP)
+  User:   alice@example.com
+  Name:   Alice Smith
+  Groups: service-admin, developer
+  Expires: 2025-03-08T18:30:00Z
+
+Server Status: Authenticated
+  Groups: service-admin, developer
+  Effective Permissions: apikeys.write, apikeys.read, service.config.*
+```
+
+**4. Logout:**
+```bash
+./aussie auth logout           # Clear local credentials only
+./aussie auth logout --server  # Also invalidate server session
+```
+
+### Authentication Modes
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `browser` | Opens browser for OAuth/SAML login (default) | Workstations with browsers |
+| `device_code` | Displays code to enter at verification URL | CI/CD, SSH sessions, headless environments |
+| `cli_callback` | CLI starts local server, displays URL | Environments where browser can't auto-open |
+
+**Using device code mode (for headless environments):**
+```bash
+# Override mode for this invocation
+./aussie auth login --mode device_code
+```
+**Output:**
+```
+To authenticate, visit:
+  https://sso.yourcompany.com/device
+
+And enter code: ABCD-1234
+
+Waiting for authentication...
+```
+
+### API Key Authentication (Fallback)
+
+If your organization has API keys enabled, add the key to your configuration:
 
 **~/.aussierc** (global) or **.aussierc** (project-local):
 ```toml
@@ -44,21 +113,44 @@ api_key = "your-api-key"
 ./aussie service register -f my-service.json
 ./aussie keys list
 ```
-Credentials are stored in `~/.aussierc` and used automatically for subsequent commands.
+
+**Note:** API keys are disabled by default. Contact your platform team if you need one.
+
+### Authentication Precedence
+
+When both IdP credentials and API key are available, the CLI uses this precedence:
+1. JWT token from `aussie auth login` (stored in `~/.aussie/credentials`)
+2. API key from `.aussierc`
 
 ### Checking Credentials
 Verify your credentials using the CLI:
 ```bash
 ./aussie auth status
 ```
-**Output:**
+**Output (JWT token):**
 ```
 Server: http://localhost:1234
-Status: Authenticated
-Key ID: abc123
-Name:   my-api-key
-Permissions: admin:read, admin:write
-Expires: 2025-06-06T10:30:00Z
+
+Authentication: JWT Token (IdP)
+  User:   alice@example.com
+  Groups: service-admin, developer
+  Expires: 2025-03-08T18:30:00Z
+
+Server Status: Authenticated
+  Effective Permissions: apikeys.write, apikeys.read, service.config.*
+```
+
+**Output (API key):**
+```
+Server: http://localhost:1234
+
+Authentication: API Key (fallback)
+
+Server Status: Authenticated
+  Key ID: abc123
+  Name: my-api-key
+  Permissions: admin:read, admin:write
+  Expires: 2025-06-06T10:30:00Z
 ```
 
 ## CLI Installation
@@ -343,28 +435,82 @@ When `authRequired: true`:
 
 ## CLI Reference
 
-### Authentication
+### Authentication Commands
 
 #### Configuration
-Add your API key to `~/.aussierc` (global) or `.aussierc` (project-local):
+Configure authentication in `~/.aussierc` (global) or `.aussierc` (project-local):
+
+**For IdP authentication:**
+```toml
+host = "http://localhost:1234"
+
+[auth]
+login_url = "https://sso.yourcompany.com/auth/aussie/login"
+logout_url = "https://sso.yourcompany.com/auth/aussie/logout"
+mode = "browser"  # or "device_code" for headless environments
+```
+
+**For API key authentication (if enabled):**
 ```toml
 host = "http://localhost:1234"
 api_key = "your-api-key"
 ```
+
+#### `auth login`
+Authenticate with your organization's identity provider.
+```bash
+# Uses configured mode (default: browser)
+./aussie auth login
+
+# Override mode for this invocation
+./aussie auth login --mode device_code
+./aussie auth login --mode cli_callback
+```
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--mode` | (from config) | Auth mode: `browser`, `device_code`, `cli_callback` |
+
+#### `auth logout`
+Clear stored authentication credentials.
+```bash
+# Clear local credentials only
+./aussie auth logout
+
+# Also invalidate server session (if logout_url configured)
+./aussie auth logout --server
+```
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--server` | `false` | Also logout from IdP server |
 
 #### `auth status`
 Check your current authentication status.
 ```bash
 ./aussie auth status
 ```
-**Output:**
+**Output (IdP authentication):**
 ```
 Server: http://localhost:1234
-Status: Authenticated
-Key ID: abc123
-Name:   my-api-key
-Permissions: admin:read, admin:write
-Expires: 2025-06-06T10:30:00Z
+
+Authentication: JWT Token (IdP)
+  User:   alice@example.com
+  Groups: service-admin, developer
+  Expires: 2025-03-08T18:30:00Z
+
+Server Status: Authenticated
+  Effective Permissions: apikeys.write, apikeys.read, service.config.*
+```
+
+**Output (API key):**
+```
+Server: http://localhost:1234
+
+Authentication: API Key (fallback)
+
+Server Status: Authenticated
+  Key ID: abc123
+  Permissions: admin:read, admin:write
+  Expires: 2025-06-06T10:30:00Z
 ```
 
 ### API Key Management Commands
@@ -445,6 +591,8 @@ Preview visibility settings for a registered service.
 ### Command Summary
 | Command | Description |
 |---------|-------------|
+| `auth login` | Authenticate with IdP |
+| `auth logout` | Clear stored credentials |
 | `auth status` | Show current authentication status |
 | `keys create` | Create a new API key |
 | `keys list` | List all API keys |
