@@ -328,3 +328,298 @@ api_key = "my-secret-key"`
 		t.Error("Config with API key should be authenticated")
 	}
 }
+
+// AuthMode tests
+
+func TestAuthMode_IsValid(t *testing.T) {
+	tests := []struct {
+		mode AuthMode
+		want bool
+	}{
+		{AuthModeBrowser, true},
+		{AuthModeDeviceCode, true},
+		{AuthModeCLICallback, true},
+		{AuthMode(""), false},
+		{AuthMode("invalid"), false},
+		{AuthMode("BROWSER"), false}, // Case sensitive
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.mode), func(t *testing.T) {
+			if got := tt.mode.IsValid(); got != tt.want {
+				t.Errorf("AuthMode(%q).IsValid() = %v, want %v", tt.mode, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAuthMode_String(t *testing.T) {
+	tests := []struct {
+		mode AuthMode
+		want string
+	}{
+		{AuthModeBrowser, "browser"},
+		{AuthModeDeviceCode, "device_code"},
+		{AuthModeCLICallback, "cli_callback"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			if got := tt.mode.String(); got != tt.want {
+				t.Errorf("AuthMode.String() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// AuthConfig tests
+
+func TestAuthConfig_GetMode_Default(t *testing.T) {
+	cfg := AuthConfig{}
+
+	if got := cfg.GetMode(); got != AuthModeBrowser {
+		t.Errorf("AuthConfig{}.GetMode() = %q, want %q", got, AuthModeBrowser)
+	}
+}
+
+func TestAuthConfig_GetMode_Configured(t *testing.T) {
+	tests := []struct {
+		name string
+		mode AuthMode
+		want AuthMode
+	}{
+		{"browser", AuthModeBrowser, AuthModeBrowser},
+		{"device_code", AuthModeDeviceCode, AuthModeDeviceCode},
+		{"cli_callback", AuthModeCLICallback, AuthModeCLICallback},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := AuthConfig{Mode: tt.mode}
+			if got := cfg.GetMode(); got != tt.want {
+				t.Errorf("AuthConfig{Mode: %q}.GetMode() = %q, want %q", tt.mode, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAuthConfig_GetMode_InvalidFallsBackToDefault(t *testing.T) {
+	cfg := AuthConfig{Mode: AuthMode("invalid")}
+
+	if got := cfg.GetMode(); got != AuthModeBrowser {
+		t.Errorf("AuthConfig{Mode: \"invalid\"}.GetMode() = %q, want %q (default)", got, AuthModeBrowser)
+	}
+}
+
+// Config with Auth section tests
+
+func TestLoadFromFile_WithAuthConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	content := `host = "http://example.com:9090"
+
+[auth]
+login_url = "https://sso.example.com/auth/login"
+logout_url = "https://sso.example.com/auth/logout"
+refresh_url = "https://sso.example.com/auth/refresh"
+mode = "device_code"
+auto_refresh = true
+refresh_before_expiry = "5m"`
+
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadFromFile(configPath)
+	if err != nil {
+		t.Fatalf("LoadFromFile() returned error: %v", err)
+	}
+
+	// Check auth config
+	if cfg.Auth.LoginURL != "https://sso.example.com/auth/login" {
+		t.Errorf("Auth.LoginURL = %q, want %q", cfg.Auth.LoginURL, "https://sso.example.com/auth/login")
+	}
+	if cfg.Auth.LogoutURL != "https://sso.example.com/auth/logout" {
+		t.Errorf("Auth.LogoutURL = %q, want %q", cfg.Auth.LogoutURL, "https://sso.example.com/auth/logout")
+	}
+	if cfg.Auth.RefreshURL != "https://sso.example.com/auth/refresh" {
+		t.Errorf("Auth.RefreshURL = %q, want %q", cfg.Auth.RefreshURL, "https://sso.example.com/auth/refresh")
+	}
+	if cfg.Auth.Mode != AuthModeDeviceCode {
+		t.Errorf("Auth.Mode = %q, want %q", cfg.Auth.Mode, AuthModeDeviceCode)
+	}
+	if !cfg.Auth.AutoRefresh {
+		t.Error("Auth.AutoRefresh = false, want true")
+	}
+	if cfg.Auth.RefreshBeforeExpiry != "5m" {
+		t.Errorf("Auth.RefreshBeforeExpiry = %q, want %q", cfg.Auth.RefreshBeforeExpiry, "5m")
+	}
+}
+
+func TestLoadFromFile_WithAuthConfig_BrowserMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	content := `host = "http://example.com:9090"
+
+[auth]
+login_url = "https://sso.example.com/auth/login"
+mode = "browser"`
+
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadFromFile(configPath)
+	if err != nil {
+		t.Fatalf("LoadFromFile() returned error: %v", err)
+	}
+
+	if cfg.Auth.GetMode() != AuthModeBrowser {
+		t.Errorf("Auth.GetMode() = %q, want %q", cfg.Auth.GetMode(), AuthModeBrowser)
+	}
+}
+
+func TestLoadFromFile_WithAuthConfig_CLICallbackMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	content := `host = "http://example.com:9090"
+
+[auth]
+login_url = "https://sso.example.com/auth/login"
+mode = "cli_callback"`
+
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadFromFile(configPath)
+	if err != nil {
+		t.Fatalf("LoadFromFile() returned error: %v", err)
+	}
+
+	if cfg.Auth.GetMode() != AuthModeCLICallback {
+		t.Errorf("Auth.GetMode() = %q, want %q", cfg.Auth.GetMode(), AuthModeCLICallback)
+	}
+}
+
+func TestLoadFromFile_WithAuthConfig_NoMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.toml")
+
+	content := `host = "http://example.com:9090"
+
+[auth]
+login_url = "https://sso.example.com/auth/login"`
+
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadFromFile(configPath)
+	if err != nil {
+		t.Fatalf("LoadFromFile() returned error: %v", err)
+	}
+
+	// Should default to browser mode
+	if cfg.Auth.GetMode() != AuthModeBrowser {
+		t.Errorf("Auth.GetMode() = %q, want %q (default)", cfg.Auth.GetMode(), AuthModeBrowser)
+	}
+}
+
+func TestSave_WithAuthConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	cfg := &Config{
+		Host: "http://test-server:8080",
+		Auth: AuthConfig{
+			LoginURL:    "https://sso.example.com/login",
+			LogoutURL:   "https://sso.example.com/logout",
+			Mode:        AuthModeDeviceCode,
+			AutoRefresh: true,
+		},
+	}
+
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Save() returned error: %v", err)
+	}
+
+	// Load and verify
+	savedPath := filepath.Join(tmpDir, ".aussierc")
+	loadedCfg, err := LoadFromFile(savedPath)
+	if err != nil {
+		t.Fatalf("Failed to load saved config: %v", err)
+	}
+
+	if loadedCfg.Auth.LoginURL != cfg.Auth.LoginURL {
+		t.Errorf("Loaded Auth.LoginURL = %q, want %q", loadedCfg.Auth.LoginURL, cfg.Auth.LoginURL)
+	}
+	if loadedCfg.Auth.LogoutURL != cfg.Auth.LogoutURL {
+		t.Errorf("Loaded Auth.LogoutURL = %q, want %q", loadedCfg.Auth.LogoutURL, cfg.Auth.LogoutURL)
+	}
+	if loadedCfg.Auth.Mode != cfg.Auth.Mode {
+		t.Errorf("Loaded Auth.Mode = %q, want %q", loadedCfg.Auth.Mode, cfg.Auth.Mode)
+	}
+	if loadedCfg.Auth.AutoRefresh != cfg.Auth.AutoRefresh {
+		t.Errorf("Loaded Auth.AutoRefresh = %v, want %v", loadedCfg.Auth.AutoRefresh, cfg.Auth.AutoRefresh)
+	}
+}
+
+func TestLoad_LocalConfigOverridesGlobalAuth(t *testing.T) {
+	origDir, _ := os.Getwd()
+	origHome := os.Getenv("HOME")
+
+	// Create separate directories for home and working directory
+	homeDir := t.TempDir()
+	workDir := t.TempDir()
+
+	os.Setenv("HOME", homeDir)
+	os.Chdir(workDir)
+	defer func() {
+		os.Chdir(origDir)
+		os.Setenv("HOME", origHome)
+	}()
+
+	// Create global config in home directory
+	globalContent := `host = "http://global:8080"
+
+[auth]
+login_url = "https://global.example.com/login"
+mode = "browser"`
+	if err := os.WriteFile(filepath.Join(homeDir, ".aussierc"), []byte(globalContent), 0644); err != nil {
+		t.Fatalf("Failed to write global config: %v", err)
+	}
+
+	// Create local config in working directory that overrides the auth section
+	localContent := `[auth]
+login_url = "https://local.example.com/login"
+mode = "device_code"`
+	if err := os.WriteFile(filepath.Join(workDir, ".aussierc"), []byte(localContent), 0644); err != nil {
+		t.Fatalf("Failed to write local config: %v", err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	// Local mode should override global
+	if cfg.Auth.GetMode() != AuthModeDeviceCode {
+		t.Errorf("Auth.GetMode() = %q, want %q (local override)", cfg.Auth.GetMode(), AuthModeDeviceCode)
+	}
+
+	// Local login_url should override global (entire section is replaced)
+	if cfg.Auth.LoginURL != "https://local.example.com/login" {
+		t.Errorf("Auth.LoginURL = %q, want %q (from local)", cfg.Auth.LoginURL, "https://local.example.com/login")
+	}
+
+	// Host should still be from global since local doesn't override it
+	if cfg.Host != "http://global:8080" {
+		t.Errorf("Host = %q, want %q (from global)", cfg.Host, "http://global:8080")
+	}
+}

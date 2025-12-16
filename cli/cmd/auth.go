@@ -6,16 +6,29 @@ import (
 
 var authCmd = &cobra.Command{
 	Use:   "auth",
-	Short: "View authentication status",
-	Long: `Commands for viewing authentication status with the Aussie API gateway.
+	Short: "Manage authentication with the Aussie API gateway",
+	Long: `Commands for authenticating with the Aussie API gateway.
 
-To configure authentication, add your API key to ~/.aussierc or .aussierc:
+Authentication Methods:
+  1. IdP Authentication (recommended):
+     Use 'aussie auth login' to authenticate via your organization's
+     identity provider. Tokens are short-lived and automatically managed.
 
-  host = 'http://localhost:8080'
-  api_key = 'your-api-key'
+  2. API Key (fallback):
+     Configure an API key in .aussierc. This is disabled by default
+     and must be enabled by your platform team.
+
+Configuration (.aussierc):
+  host = "https://aussie.yourcompany.com"
+
+  [auth]
+  login_url = "https://sso.yourcompany.com/auth/aussie/login"
+  mode = "browser"  # or "device_code" for headless environments
 
 Examples:
-  aussie auth status`,
+  aussie auth login      # Authenticate via IdP
+  aussie auth status     # Show current authentication state
+  aussie auth logout     # Clear stored credentials`,
 }
 
 func init() {

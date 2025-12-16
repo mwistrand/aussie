@@ -39,17 +39,60 @@ func TestStatusCmd_Initialized(t *testing.T) {
 func TestAuthCmd_HasSubcommands(t *testing.T) {
 	subcommands := authCmd.Commands()
 
-	if len(subcommands) != 1 {
-		t.Errorf("authCmd has %d subcommands, want 1", len(subcommands))
+	if len(subcommands) != 3 {
+		t.Errorf("authCmd has %d subcommands, want 3", len(subcommands))
 	}
 
-	// Check that status subcommand is present
+	// Check that all subcommands are present
 	subcommandNames := make(map[string]bool)
 	for _, cmd := range subcommands {
 		subcommandNames[cmd.Use] = true
 	}
 
-	if !subcommandNames["status"] {
-		t.Error("authCmd missing subcommand 'status'")
+	expectedCommands := []string{"login", "logout", "status"}
+	for _, name := range expectedCommands {
+		if !subcommandNames[name] {
+			t.Errorf("authCmd missing subcommand '%s'", name)
+		}
+	}
+}
+
+func TestLoginCmd_Initialized(t *testing.T) {
+	if loginCmd == nil {
+		t.Fatal("loginCmd is nil")
+	}
+
+	if loginCmd.Use != "login" {
+		t.Errorf("loginCmd.Use = %q, want %q", loginCmd.Use, "login")
+	}
+
+	if loginCmd.Short == "" {
+		t.Error("loginCmd.Short should not be empty")
+	}
+
+	// Check that --mode flag exists
+	flag := loginCmd.Flags().Lookup("mode")
+	if flag == nil {
+		t.Error("loginCmd missing --mode flag")
+	}
+}
+
+func TestLogoutCmd_Initialized(t *testing.T) {
+	if logoutCmd == nil {
+		t.Fatal("logoutCmd is nil")
+	}
+
+	if logoutCmd.Use != "logout" {
+		t.Errorf("logoutCmd.Use = %q, want %q", logoutCmd.Use, "logout")
+	}
+
+	if logoutCmd.Short == "" {
+		t.Error("logoutCmd.Short should not be empty")
+	}
+
+	// Check that --server flag exists
+	flag := logoutCmd.Flags().Lookup("server")
+	if flag == nil {
+		t.Error("logoutCmd missing --server flag")
 	}
 }

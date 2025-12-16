@@ -7,10 +7,71 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// AuthMode represents the authentication mode for the CLI.
+type AuthMode string
+
+const (
+	AuthModeBrowser     AuthMode = "browser"
+	AuthModeDeviceCode  AuthMode = "device_code"
+	AuthModeCLICallback AuthMode = "cli_callback"
+)
+
+// IsValid returns true if the mode is a recognized authentication mode.
+func (m AuthMode) IsValid() bool {
+	switch m {
+	case AuthModeBrowser, AuthModeDeviceCode, AuthModeCLICallback:
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the string representation of the AuthMode.
+func (m AuthMode) String() string {
+	return string(m)
+}
+
+// AuthConfig contains authentication-related configuration.
+type AuthConfig struct {
+	// LoginURL is the organization's translation layer login endpoint.
+	// This triggers the auth flow (SAML, OIDC, etc.).
+	LoginURL string `toml:"login_url,omitempty"`
+
+	// LogoutURL is the optional server-side logout endpoint.
+	LogoutURL string `toml:"logout_url,omitempty"`
+
+	// RefreshURL is the optional token refresh endpoint.
+	RefreshURL string `toml:"refresh_url,omitempty"`
+
+	// CallbackURL is the local callback URL for OAuth/OIDC flows.
+	CallbackURL string `toml:"callback_url,omitempty"`
+
+	// Mode is the authentication mode: browser, device_code, or cli_callback.
+	// Can be overridden with --mode flag.
+	Mode AuthMode `toml:"mode,omitempty"`
+
+	// AutoRefresh enables automatic token refresh before expiry.
+	AutoRefresh bool `toml:"auto_refresh,omitempty"`
+
+	// RefreshBeforeExpiry is the duration before expiry to trigger refresh (e.g., "5m").
+	RefreshBeforeExpiry string `toml:"refresh_before_expiry,omitempty"`
+}
+
+// GetMode returns the configured auth mode, defaulting to "browser" if not set.
+func (a *AuthConfig) GetMode() AuthMode {
+	if a.Mode != "" && a.Mode.IsValid() {
+		return a.Mode
+	}
+	return AuthModeBrowser
+}
+
 // Config represents the Aussie CLI configuration
 type Config struct {
 	Host   string `toml:"host"`
 	ApiKey string `toml:"api_key,omitempty"`
+
+	// Auth contains authentication configuration for IdP-based auth.
+	Auth AuthConfig `toml:"auth,omitempty"`
 }
 
 // DefaultConfig returns a config with default values
