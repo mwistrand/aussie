@@ -57,8 +57,11 @@ public class TokenIssuanceService {
                     config.jws().issuer(),
                     config.jws().keyId(),
                     config.jws().tokenTtl(),
+                    config.jws().maxTokenTtl(),
                     config.jws().forwardedClaims());
-            LOG.infov("TokenIssuanceService initialized with {0} issuers", issuers.size());
+            LOG.infov(
+                    "TokenIssuanceService initialized with {0} issuers, max TTL: {1}",
+                    issuers.size(), config.jws().maxTokenTtl());
         } else {
             this.jwsConfig = null;
         }
