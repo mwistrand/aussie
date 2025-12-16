@@ -2,13 +2,16 @@ import { Suspense } from 'react';
 import LoginForm from '@/components/LoginForm';
 
 interface PageProps {
-  searchParams: Promise<{ redirect?: string; error?: string }>;
+  searchParams: Promise<{ redirect?: string; error?: string; callback?: string; flow?: string; code?: string }>;
 }
 
 export default async function LoginPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const redirectUrl = params.redirect;
   const errorMessage = params.error;
+  const callbackUrl = params.callback;
+  const flow = params.flow;
+  const deviceCode = params.code;
 
   return (
     <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gray-50">
@@ -24,7 +27,13 @@ export default async function LoginPage({ searchParams }: PageProps) {
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
           <Suspense fallback={<div>Loading...</div>}>
-            <LoginForm redirectUrl={redirectUrl} errorMessage={errorMessage} />
+            <LoginForm
+              redirectUrl={redirectUrl}
+              errorMessage={errorMessage}
+              callbackUrl={callbackUrl}
+              flow={flow}
+              deviceCode={deviceCode}
+            />
           </Suspense>
 
           <div className="mt-6">

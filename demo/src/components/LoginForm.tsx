@@ -6,9 +6,12 @@ import { useRouter } from 'next/navigation';
 interface LoginFormProps {
   redirectUrl?: string;
   errorMessage?: string;
+  callbackUrl?: string;
+  flow?: string;
+  deviceCode?: string;
 }
 
-export default function LoginForm({ redirectUrl, errorMessage }: LoginFormProps) {
+export default function LoginForm({ redirectUrl, errorMessage, callbackUrl, flow, deviceCode }: LoginFormProps) {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -22,7 +25,39 @@ export default function LoginForm({ redirectUrl, errorMessage }: LoginFormProps)
     setError('');
 
     try {
-      const response = await fetch('/api/auth/login', {
+      // Device code flow: authorize the pending device code
+      if (flow === 'device' && deviceCode) {
+        const response = await fetch('/api/auth/device', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            device_code: deviceCode,
+            username,
+            isAdmin,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Device authorization failed');
+        }
+
+        // Show success message - user can close the window
+        setError('');
+        setIsLoading(false);
+        alert('Device authorized! You can close this window and return to your CLI.');
+        return;
+      }
+
+      // CLI callback flow: POST to login endpoint with callback parameter
+      const loginUrl = callbackUrl
+        ? `/api/auth/login?callback=${encodeURIComponent(callbackUrl)}`
+        : '/api/auth/login';
+
+      const response = await fetch(loginUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -39,6 +74,12 @@ export default function LoginForm({ redirectUrl, errorMessage }: LoginFormProps)
 
       if (!response.ok) {
         throw new Error(data.error || 'Login failed');
+      }
+
+      // CLI callback flow: redirect to CLI's local server
+      if (data.redirectTo) {
+        window.location.href = data.redirectTo;
+        return;
       }
 
       // Redirect to Aussie callback to create session
