@@ -1,0 +1,2 @@
+aussie.adapter.out.storage.memory.InMemoryGroupStorageProvider
+aussie.adapter.out.storage.cassandra.CassandraGroupStorageProvider

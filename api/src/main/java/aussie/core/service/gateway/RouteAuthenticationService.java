@@ -108,7 +108,7 @@ public class RouteAuthenticationService {
 
         return validationService
                 .validate(bearerToken)
-                .map(validationResult -> handleValidationResult(validationResult, route));
+                .flatMap(validationResult -> handleValidationResult(validationResult, route));
     }
 
     private Uni<RouteAuthResult> authenticateWithSession(String sessionId, RouteMatch route) {
@@ -151,38 +151,40 @@ public class RouteAuthenticationService {
         });
     }
 
-    private RouteAuthResult handleValidationResult(TokenValidationResult validationResult, RouteMatch route) {
+    private Uni<RouteAuthResult> handleValidationResult(TokenValidationResult validationResult, RouteMatch route) {
         return switch (validationResult) {
             case TokenValidationResult.Valid valid -> {
-                // Token is valid, issue an Aussie token for the backend
-                Optional<AussieToken> aussieToken = issuanceService.issue(valid);
-                if (aussieToken.isPresent()) {
-                    LOG.debugv(
-                            "Authenticated request for {0}, subject: {1}",
-                            route.endpointConfig().path(), valid.subject());
-                    yield new RouteAuthResult.Authenticated(aussieToken.get());
-                } else {
-                    // Issuance failed but validation succeeded - still allow with original claims
-                    // This is a degraded mode where backends won't get the Aussie token
-                    LOG.warnv(
-                            "Token issuance failed for {0}, allowing request without Aussie token",
-                            route.endpointConfig().path());
-                    // Create a minimal token representation for the result
-                    AussieToken minimalToken = new AussieToken("", valid.subject(), valid.expiresAt(), valid.claims());
-                    yield new RouteAuthResult.Authenticated(minimalToken);
-                }
+                // Token is valid, issue an Aussie token for the backend (with group expansion)
+                yield issuanceService.issueAsync(valid).map(aussieTokenOpt -> {
+                    if (aussieTokenOpt.isPresent()) {
+                        LOG.debugv(
+                                "Authenticated request for {0}, subject: {1}",
+                                route.endpointConfig().path(), valid.subject());
+                        return (RouteAuthResult) new RouteAuthResult.Authenticated(aussieTokenOpt.get());
+                    } else {
+                        // Issuance failed but validation succeeded - still allow with original claims
+                        // This is a degraded mode where backends won't get the Aussie token
+                        LOG.warnv(
+                                "Token issuance failed for {0}, allowing request without Aussie token",
+                                route.endpointConfig().path());
+                        // Create a minimal token representation for the result
+                        final var minimalToken =
+                                new AussieToken("", valid.subject(), valid.expiresAt(), valid.claims());
+                        return (RouteAuthResult) new RouteAuthResult.Authenticated(minimalToken);
+                    }
+                });
             }
             case TokenValidationResult.Invalid invalid -> {
                 LOG.debugv(
                         "Token validation failed for {0}: {1}",
                         route.endpointConfig().path(), invalid.reason());
-                yield new RouteAuthResult.Unauthorized(invalid.reason());
+                yield Uni.createFrom().item(new RouteAuthResult.Unauthorized(invalid.reason()));
             }
             case TokenValidationResult.NoToken noToken -> {
                 LOG.debugv(
                         "No token provided for protected route {0}",
                         route.endpointConfig().path());
-                yield new RouteAuthResult.Unauthorized("Authentication required");
+                yield Uni.createFrom().item(new RouteAuthResult.Unauthorized("Authentication required"));
             }
         };
     }
