@@ -7,6 +7,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.quarkus.security.AuthenticationFailedException;
+import io.quarkus.security.StringPermission;
 import io.quarkus.security.identity.AuthenticationRequestContext;
 import io.quarkus.security.identity.IdentityProvider;
 import io.quarkus.security.identity.SecurityIdentity;
@@ -84,6 +85,11 @@ public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthentica
                 .addRoles(roles)
                 .addAttribute("keyId", apiKey.id())
                 .addAttribute("permissions", effectivePermissions);
+
+        // Add StringPermission objects for @PermissionsAllowed checks
+        for (String permission : roles) {
+            builder.addPermission(new StringPermission(permission));
+        }
 
         if (apiKey.expiresAt() != null) {
             builder.addAttribute("expiresAt", apiKey.expiresAt());

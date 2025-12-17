@@ -7,6 +7,7 @@ import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import io.quarkus.security.StringPermission;
 import io.quarkus.security.identity.IdentityProviderManager;
 import io.quarkus.security.identity.SecurityIdentity;
 import io.quarkus.security.identity.request.AuthenticationRequest;
@@ -128,6 +129,11 @@ public class SessionAuthenticationMechanism implements HttpAuthenticationMechani
                 .addRoles(roles)
                 .addAttribute("sessionId", session.id())
                 .addAttribute("userId", session.userId());
+
+        // Add StringPermission objects for @PermissionsAllowed checks
+        for (String role : roles) {
+            builder.addPermission(new StringPermission(role));
+        }
 
         if (session.issuer() != null) {
             builder.addAttribute("issuer", session.issuer());

@@ -10,6 +10,7 @@ import java.util.Set;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import io.quarkus.security.StringPermission;
 import io.quarkus.security.identity.AuthenticationRequestContext;
 import io.quarkus.security.identity.IdentityProvider;
 import io.quarkus.security.identity.SecurityIdentity;
@@ -109,6 +110,11 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
                     .addAttribute("roles", tokenRoles)
                     .addAttribute("permissions", allPermissions)
                     .addAttribute("expiresAt", expiry);
+
+            // Add StringPermission objects for @PermissionsAllowed checks
+            for (String role : securityRoles) {
+                builder.addPermission(new StringPermission(role));
+            }
 
             LOG.debugv(
                     "JWT authenticated: subject={0}, roles={1}, permissions={2}", subject, tokenRoles, allPermissions);

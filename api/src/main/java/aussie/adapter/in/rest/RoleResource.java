@@ -2,7 +2,6 @@ package aussie.adapter.in.rest;
 
 import java.util.List;
 
-import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -16,6 +15,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import io.quarkus.security.PermissionsAllowed;
 import io.smallrye.mutiny.Uni;
 
 import aussie.adapter.in.dto.CreateRoleRequest;
@@ -32,12 +32,12 @@ import aussie.core.service.auth.RoleService;
  * that map to permission sets. Roles are used to expand token role claims
  * into effective permissions at validation time.
  *
- * <p>Authorization is enforced via {@code @RolesAllowed} annotations:
+ * <p>Authorization is enforced via {@code @PermissionsAllowed} annotations:
  * <ul>
- * <li>POST (create) requires {@code auth.roles.create} or {@code admin} role</li>
- * <li>GET (list/read) requires {@code auth.roles.read} or {@code admin} role</li>
- * <li>PUT (update) requires {@code auth.roles.update} or {@code admin} role</li>
- * <li>DELETE requires {@code auth.roles.delete} or {@code admin} role</li>
+ * <li>POST (create) requires {@code auth.roles.create} or {@code admin} permission</li>
+ * <li>GET (list/read) requires {@code auth.roles.read} or {@code admin} permission</li>
+ * <li>PUT (update) requires {@code auth.roles.update} or {@code admin} permission</li>
+ * <li>DELETE requires {@code auth.roles.delete} or {@code admin} permission</li>
  * </ul>
  */
 @Path("/admin/roles")
@@ -60,7 +60,7 @@ public class RoleResource {
      * @return 201 Created with the new role, or 400 if validation fails
      */
     @POST
-    @RolesAllowed({Permissions.AUTH_ROLES_CREATE, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.AUTH_ROLES_CREATE, Permissions.ADMIN})
     public Uni<Response> createRole(CreateRoleRequest request) {
         if (request == null || request.id() == null || request.id().isBlank()) {
             throw GatewayProblem.badRequest("id is required");
@@ -80,7 +80,7 @@ public class RoleResource {
      * @return list of all roles
      */
     @GET
-    @RolesAllowed({Permissions.AUTH_ROLES_READ, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.AUTH_ROLES_READ, Permissions.ADMIN})
     public Uni<List<Role>> listRoles() {
         return roleService.list();
     }
@@ -93,7 +93,7 @@ public class RoleResource {
      */
     @GET
     @Path("/{roleId}")
-    @RolesAllowed({Permissions.AUTH_ROLES_READ, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.AUTH_ROLES_READ, Permissions.ADMIN})
     public Uni<Response> getRole(@PathParam("roleId") String roleId) {
         return roleService.get(roleId).map(opt -> opt.map(
                         role -> Response.ok(role).build())
@@ -118,7 +118,7 @@ public class RoleResource {
      */
     @PUT
     @Path("/{roleId}")
-    @RolesAllowed({Permissions.AUTH_ROLES_UPDATE, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.AUTH_ROLES_UPDATE, Permissions.ADMIN})
     public Uni<Response> updateRole(@PathParam("roleId") String roleId, UpdateRoleRequest request) {
         if (request == null) {
             throw GatewayProblem.badRequest("Request body is required");
@@ -150,7 +150,7 @@ public class RoleResource {
      */
     @DELETE
     @Path("/{roleId}")
-    @RolesAllowed({Permissions.AUTH_ROLES_DELETE, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.AUTH_ROLES_DELETE, Permissions.ADMIN})
     public Uni<Response> deleteRole(@PathParam("roleId") String roleId) {
         return roleService.delete(roleId).map(deleted -> {
             if (deleted) {

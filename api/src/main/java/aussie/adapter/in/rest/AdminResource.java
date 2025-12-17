@@ -3,7 +3,6 @@ package aussie.adapter.in.rest;
 import java.util.List;
 import java.util.Set;
 
-import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -17,6 +16,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import io.quarkiverse.resteasy.problem.HttpProblem;
+import io.quarkus.security.PermissionsAllowed;
 import io.quarkus.security.identity.CurrentIdentityAssociation;
 import io.smallrye.mutiny.Uni;
 
@@ -51,7 +51,7 @@ public class AdminResource {
     }
 
     @POST
-    @RolesAllowed({Permissions.SERVICE_CONFIG_CREATE, Permissions.SERVICE_CONFIG_UPDATE, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.SERVICE_CONFIG_CREATE, Permissions.SERVICE_CONFIG_UPDATE, Permissions.ADMIN})
     public Uni<Response> registerService(ServiceRegistrationRequest request) {
         // Minimal adapter-level validation to prevent NPE during DTO conversion
         if (request == null || request.serviceId() == null || request.baseUrl() == null) {
@@ -79,7 +79,7 @@ public class AdminResource {
 
     @DELETE
     @Path("/{serviceId}")
-    @RolesAllowed({Permissions.SERVICE_CONFIG_DELETE, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.SERVICE_CONFIG_DELETE, Permissions.ADMIN})
     public Uni<Response> unregisterService(@PathParam("serviceId") String serviceId) {
         return identityAssociation.getDeferredIdentity().flatMap(identity -> {
             var permissions = extractPermissions(identity);
@@ -92,7 +92,7 @@ public class AdminResource {
     }
 
     @GET
-    @RolesAllowed({Permissions.SERVICE_CONFIG_READ, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.SERVICE_CONFIG_READ, Permissions.ADMIN})
     public Uni<List<ServiceRegistrationResponse>> listServices() {
         // List all services - service-level filtering could be added here if needed
         return serviceRegistry.getAllServices().map(services -> services.stream()
@@ -102,7 +102,7 @@ public class AdminResource {
 
     @GET
     @Path("/{serviceId}")
-    @RolesAllowed({Permissions.SERVICE_CONFIG_READ, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.SERVICE_CONFIG_READ, Permissions.ADMIN})
     public Uni<Response> getService(@PathParam("serviceId") String serviceId) {
         return identityAssociation.getDeferredIdentity().flatMap(identity -> {
             var permissions = extractPermissions(identity);

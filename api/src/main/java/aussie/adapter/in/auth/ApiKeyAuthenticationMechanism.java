@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import io.quarkus.security.StringPermission;
 import io.quarkus.security.identity.IdentityProviderManager;
 import io.quarkus.security.identity.SecurityIdentity;
 import io.quarkus.security.identity.request.AuthenticationRequest;
@@ -65,7 +66,7 @@ public class ApiKeyAuthenticationMechanism implements HttpAuthenticationMechanis
             LOG.warn("⚠️  Do NOT use this setting in production!");
         }
 
-        return QuarkusSecurityIdentity.builder()
+        var builder = QuarkusSecurityIdentity.builder()
                 .setPrincipal(() -> "development-mode")
                 .addRole(Permissions.ADMIN)
                 .addRole(Permissions.SERVICE_CONFIG_READ)
@@ -83,8 +84,24 @@ public class ApiKeyAuthenticationMechanism implements HttpAuthenticationMechanis
                 // Add permissions attribute with wildcard for gateway-level authorization
                 .addAttribute("permissions", Set.of(Permissions.ALL))
                 // Add claims attribute with wildcard for service-level authorization
-                .addAttribute("claims", Set.of(Permissions.ALL))
-                .build();
+                .addAttribute("claims", Set.of(Permissions.ALL));
+
+        // Add StringPermission objects for @PermissionsAllowed checks
+        builder.addPermission(new StringPermission(Permissions.ADMIN));
+        builder.addPermission(new StringPermission(Permissions.SERVICE_CONFIG_READ));
+        builder.addPermission(new StringPermission(Permissions.SERVICE_CONFIG_CREATE));
+        builder.addPermission(new StringPermission(Permissions.SERVICE_CONFIG_UPDATE));
+        builder.addPermission(new StringPermission(Permissions.SERVICE_CONFIG_DELETE));
+        builder.addPermission(new StringPermission(Permissions.SERVICE_PERMISSIONS_READ));
+        builder.addPermission(new StringPermission(Permissions.SERVICE_PERMISSIONS_WRITE));
+        builder.addPermission(new StringPermission(Permissions.APIKEYS_READ));
+        builder.addPermission(new StringPermission(Permissions.APIKEYS_WRITE));
+        builder.addPermission(new StringPermission(Permissions.AUTH_ROLES_READ));
+        builder.addPermission(new StringPermission(Permissions.AUTH_ROLES_CREATE));
+        builder.addPermission(new StringPermission(Permissions.AUTH_ROLES_UPDATE));
+        builder.addPermission(new StringPermission(Permissions.AUTH_ROLES_DELETE));
+
+        return builder.build();
     }
 
     @Override

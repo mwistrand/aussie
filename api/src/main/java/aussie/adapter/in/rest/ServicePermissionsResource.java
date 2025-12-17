@@ -2,7 +2,6 @@ package aussie.adapter.in.rest;
 
 import java.util.Set;
 
-import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -15,6 +14,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import io.quarkus.security.PermissionsAllowed;
 import io.quarkus.security.identity.CurrentIdentityAssociation;
 import io.smallrye.mutiny.Uni;
 
@@ -60,7 +60,7 @@ public class ServicePermissionsResource {
      * Get the permission policy for a service.
      */
     @GET
-    @RolesAllowed({Permissions.SERVICE_PERMISSIONS_READ, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.SERVICE_PERMISSIONS_READ, Permissions.ADMIN})
     public Uni<Response> getPermissions(@PathParam("serviceId") String serviceId) {
         return identityAssociation.getDeferredIdentity().flatMap(identity -> {
             var permissions = extractPermissions(identity);
@@ -94,7 +94,7 @@ public class ServicePermissionsResource {
      * Requires If-Match header with the current version for optimistic locking.
      */
     @PUT
-    @RolesAllowed({Permissions.SERVICE_PERMISSIONS_WRITE, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.SERVICE_PERMISSIONS_WRITE, Permissions.ADMIN})
     public Uni<Response> updatePermissions(
             @PathParam("serviceId") String serviceId,
             @HeaderParam("If-Match") Long ifMatch,

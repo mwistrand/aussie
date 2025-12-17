@@ -4,7 +4,6 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 
-import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -12,6 +11,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 
+import io.quarkus.security.PermissionsAllowed;
 import io.quarkus.security.identity.SecurityIdentity;
 
 import aussie.adapter.in.auth.ApiKeyIdentityProvider.ApiKeyPrincipal;
@@ -50,7 +50,7 @@ public class AuthResource {
      */
     @GET
     @Path("/whoami")
-    @RolesAllowed({
+    @PermissionsAllowed({
         Permissions.ADMIN,
         Permissions.SERVICE_CONFIG_READ,
         Permissions.SERVICE_CONFIG_CREATE,

@@ -4,7 +4,6 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 
-import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -17,6 +16,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import io.quarkus.security.PermissionsAllowed;
 import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
 
@@ -35,11 +35,11 @@ import aussie.core.port.in.ApiKeyManagement;
  * for authentication to admin endpoints.
  *
  * <p>
- * Authorization is enforced via {@code @RolesAllowed} annotations:
+ * Authorization is enforced via {@code @PermissionsAllowed} annotations:
  * <ul>
- * <li>GET endpoints require {@code apikeys-read} or {@code admin} role</li>
+ * <li>GET endpoints require {@code apikeys-read} or {@code admin} permission</li>
  * <li>POST/DELETE endpoints require {@code apikeys-write} or {@code admin}
- * role</li>
+ * permission</li>
  * </ul>
  */
 @Path("/admin/api-keys")
@@ -65,7 +65,7 @@ public class ApiKeyResource {
      * It cannot be retrieved later - only the hash is stored.
      */
     @POST
-    @RolesAllowed({Permissions.APIKEYS_WRITE, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.APIKEYS_WRITE, Permissions.ADMIN})
     public Uni<Response> createKey(CreateApiKeyRequest request) {
         if (request == null || request.name() == null || request.name().isBlank()) {
             throw GatewayProblem.badRequest("name is required");
@@ -117,7 +117,7 @@ public class ApiKeyResource {
      * Key hashes are redacted in the response.
      */
     @GET
-    @RolesAllowed({Permissions.APIKEYS_READ, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.APIKEYS_READ, Permissions.ADMIN})
     public Uni<List<ApiKey>> listKeys() {
         return apiKeyService.list();
     }
@@ -130,7 +130,7 @@ public class ApiKeyResource {
      */
     @GET
     @Path("/{keyId}")
-    @RolesAllowed({Permissions.APIKEYS_READ, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.APIKEYS_READ, Permissions.ADMIN})
     public Uni<Response> getKey(@PathParam("keyId") String keyId) {
         return apiKeyService.get(keyId).map(opt -> opt.map(
                         key -> Response.ok(key).build())
@@ -146,7 +146,7 @@ public class ApiKeyResource {
      */
     @DELETE
     @Path("/{keyId}")
-    @RolesAllowed({Permissions.APIKEYS_WRITE, Permissions.ADMIN})
+    @PermissionsAllowed({Permissions.APIKEYS_WRITE, Permissions.ADMIN})
     public Uni<Response> revokeKey(@PathParam("keyId") String keyId) {
         return apiKeyService.revoke(keyId).map(revoked -> {
             if (revoked) {
