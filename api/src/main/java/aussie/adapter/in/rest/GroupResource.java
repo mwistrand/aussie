@@ -32,7 +32,13 @@ import aussie.core.port.in.GroupManagement;
  * that map to permission sets. Groups are used to expand token group claims
  * into effective permissions at validation time.
  *
- * <p>Authorization: All endpoints require {@code admin} role.
+ * <p>Authorization is enforced via {@code @RolesAllowed} annotations:
+ * <ul>
+ * <li>POST (create) requires {@code auth.groups.create} or {@code admin} role</li>
+ * <li>GET (list/read) requires {@code auth.groups.read} or {@code admin} role</li>
+ * <li>PUT (update) requires {@code auth.groups.update} or {@code admin} role</li>
+ * <li>DELETE requires {@code auth.groups.delete} or {@code admin} role</li>
+ * </ul>
  */
 @Path("/admin/groups")
 @ApplicationScoped
@@ -54,7 +60,7 @@ public class GroupResource {
      * @return 201 Created with the new group, or 400 if validation fails
      */
     @POST
-    @RolesAllowed({Permission.ADMIN})
+    @RolesAllowed({Permission.AUTH_GROUPS_CREATE, Permission.ADMIN})
     public Uni<Response> createGroup(CreateGroupRequest request) {
         if (request == null || request.id() == null || request.id().isBlank()) {
             throw GatewayProblem.badRequest("id is required");
@@ -74,7 +80,7 @@ public class GroupResource {
      * @return list of all groups
      */
     @GET
-    @RolesAllowed({Permission.ADMIN})
+    @RolesAllowed({Permission.AUTH_GROUPS_READ, Permission.ADMIN})
     public Uni<List<Group>> listGroups() {
         return groupService.list();
     }
@@ -87,7 +93,7 @@ public class GroupResource {
      */
     @GET
     @Path("/{groupId}")
-    @RolesAllowed({Permission.ADMIN})
+    @RolesAllowed({Permission.AUTH_GROUPS_READ, Permission.ADMIN})
     public Uni<Response> getGroup(@PathParam("groupId") String groupId) {
         return groupService.get(groupId).map(opt -> opt.map(
                         group -> Response.ok(group).build())
@@ -105,7 +111,7 @@ public class GroupResource {
      */
     @PUT
     @Path("/{groupId}")
-    @RolesAllowed({Permission.ADMIN})
+    @RolesAllowed({Permission.AUTH_GROUPS_UPDATE, Permission.ADMIN})
     public Uni<Response> updateGroup(@PathParam("groupId") String groupId, UpdateGroupRequest request) {
         if (request == null) {
             throw GatewayProblem.badRequest("Request body is required");
@@ -125,7 +131,7 @@ public class GroupResource {
      */
     @DELETE
     @Path("/{groupId}")
-    @RolesAllowed({Permission.ADMIN})
+    @RolesAllowed({Permission.AUTH_GROUPS_DELETE, Permission.ADMIN})
     public Uni<Response> deleteGroup(@PathParam("groupId") String groupId) {
         return groupService.delete(groupId).map(deleted -> {
             if (deleted) {

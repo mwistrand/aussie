@@ -368,11 +368,11 @@ Token claims:
   groups: ["demo-service.admin", "demo-service.dev"]
 
 Group mappings (from database):
-  demo-service.admin → ["demo-service.admin", "demo-service.lead", "demo-service.dev"]
-  demo-service.dev   → ["demo-service.dev"]
+  demo-service.admin → ["service.config.update", "service.config.read", "service.config.delete", "service.permissions.write"]
+  demo-service.dev   → ["service.config.update", "service.config.read"]
 
 Effective permissions:
-  ["demo-service.admin", "demo-service.lead", "demo-service.dev"]
+  ["service.config.update", "service.config.read", "service.config.delete", "service.permissions.write"]
 ```
 
 Direct permissions in the token are merged with expanded group permissions.
@@ -386,10 +386,10 @@ Groups can be managed via the CLI in addition to the Admin API:
 aussie groups create --id demo-service.admin \
   --display-name "Demo Service Admins" \
   --description "Full admin access for demo-service" \
-  --permissions "demo-service.admin,demo-service.lead,demo-service.dev"
+  --permissions "service.config.update,service.config.read,service.config.delete,service.permissions.write"
 
 # Create with minimal options
-aussie groups create --id demo-service.dev --permissions "demo-service.dev"
+aussie groups create --id demo-service.dev --permissions "service.config.update,service.config.read"
 ```
 
 | Flag | Short | Required | Description |
@@ -412,7 +412,7 @@ aussie groups get demo-service.admin
 #### Update a group
 ```bash
 # Update permissions
-aussie groups update demo-service.admin --permissions "demo-service.admin,demo-service.lead,demo-service.dev,metrics.read"
+aussie groups update demo-service.admin --permissions "*" # DANGEROUS
 
 # Update display name
 aussie groups update demo-service.admin --display-name "Demo Service Administrators"

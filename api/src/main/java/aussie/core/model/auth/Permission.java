@@ -11,18 +11,27 @@ import jakarta.enterprise.context.ApplicationScoped;
  * <p>
  * Permissions follow a hierarchical format and represent operations that can be
  * performed on services and resources. These are the canonical operation names
- * used
- * in permission policies. The vocabulary is stable and defined by Aussie, while
- * the
- * claims that map to these operations are defined by the organization.
+ * used in permission policies. The vocabulary is stable and defined by Aussie,
+ * while the claims that map to these operations are defined by the organization.
  *
  * <p>
  * The wildcard permission {@code *} grants all permissions.
  *
  * <p>
  * Roles are derived from permissions and used by {@code @RolesAllowed}
- * annotations
- * in JAX-RS resources.
+ * annotations in JAX-RS resources.
+ *
+ * <h2>Important Distinction: ADMIN_CLAIM vs ADMIN</h2>
+ * <p>
+ * These serve different purposes and should NOT be consolidated:
+ * <ul>
+ * <li>{@link #ADMIN_CLAIM} ({@code "aussie:admin"}) - A token claim value used
+ * by {@code DefaultPermissionPolicy} for service-level authorization. Controls
+ * which backend services can be accessed through the gateway.</li>
+ * <li>{@link #ADMIN} ({@code "admin"}) - A Quarkus Security role used with
+ * {@code @RolesAllowed} annotations for endpoint-level authorization. Controls
+ * access to admin REST endpoints.</li>
+ * </ul>
  */
 @ApplicationScoped
 public class Permission {
@@ -93,6 +102,30 @@ public class Permission {
     public static final String APIKEYS_WRITE = "apikeys.write";
 
     // ========================================================================
+    // Group management roles (for @RolesAllowed)
+    // ========================================================================
+
+    /**
+     * Role for creating groups.
+     */
+    public static final String AUTH_GROUPS_CREATE = "auth.groups.create";
+
+    /**
+     * Role for reading groups.
+     */
+    public static final String AUTH_GROUPS_READ = "auth.groups.read";
+
+    /**
+     * Role for updating groups.
+     */
+    public static final String AUTH_GROUPS_UPDATE = "auth.groups.update";
+
+    /**
+     * Role for deleting groups.
+     */
+    public static final String AUTH_GROUPS_DELETE = "auth.groups.delete";
+
+    // ========================================================================
     // Service operation constants (for permission policies)
     // ========================================================================
 
@@ -155,6 +188,10 @@ public class Permission {
                 roles.add(SERVICE_PERMISSIONS_WRITE);
                 roles.add(APIKEYS_READ);
                 roles.add(APIKEYS_WRITE);
+                roles.add(AUTH_GROUPS_CREATE);
+                roles.add(AUTH_GROUPS_READ);
+                roles.add(AUTH_GROUPS_UPDATE);
+                roles.add(AUTH_GROUPS_DELETE);
             } else {
                 // Convert colon to hyphen: service.config:read -> service.config-read
                 String role = permission.replace(':', '-');

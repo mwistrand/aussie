@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     }
 
     // No permissions are added directly - they come from group expansion
-    const permissions: string[] = body.group === 'admin' ? ['admin'] : [];
+    const permissions: string[] = body.group === 'admin' ? ['*'] : [];
 
     // Generate signed JWT token
     const token = await generateToken({
