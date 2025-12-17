@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/aussie/cli/internal/auth"
 	"github.com/aussie/cli/internal/config"
 )
 
@@ -70,12 +71,14 @@ func runServicePermissionsGrant(cmd *cobra.Command, args []string) error {
 		cfg.Host = serverFlag
 	}
 
-	if !cfg.IsAuthenticated() {
-		return fmt.Errorf("not authenticated. Run 'aussie login' to authenticate")
+	// Get authentication token (JWT first, then API key fallback)
+	token, err := auth.GetAuthToken(cfg.ApiKey)
+	if err != nil {
+		return err
 	}
 
 	// Step 1: Get current policy
-	currentPolicy, version, err := getPermissionPolicy(cfg, serviceID)
+	currentPolicy, version, err := getPermissionPolicy(cfg.Host, token, serviceID)
 	if err != nil {
 		return err
 	}
@@ -107,7 +110,7 @@ func runServicePermissionsGrant(cmd *cobra.Command, args []string) error {
 	currentPolicy.Permissions[grantOperation] = opPerm
 
 	// Step 3: Update the policy
-	if err := updatePermissionPolicy(cfg, serviceID, currentPolicy, version); err != nil {
+	if err := updatePermissionPolicy(cfg.Host, token, serviceID, currentPolicy, version); err != nil {
 		return err
 	}
 
@@ -115,13 +118,13 @@ func runServicePermissionsGrant(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func getPermissionPolicy(cfg *config.Config, serviceID string) (*ServicePermissionPolicy, int64, error) {
-	url := fmt.Sprintf("%s/admin/services/%s/permissions", cfg.Host, serviceID)
+func getPermissionPolicy(host, token, serviceID string) (*ServicePermissionPolicy, int64, error) {
+	url := fmt.Sprintf("%s/admin/services/%s/permissions", host, serviceID)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -157,18 +160,18 @@ func getPermissionPolicy(cfg *config.Config, serviceID string) (*ServicePermissi
 	return response.PermissionPolicy, response.Version, nil
 }
 
-func updatePermissionPolicy(cfg *config.Config, serviceID string, policy *ServicePermissionPolicy, version int64) error {
+func updatePermissionPolicy(host, token, serviceID string, policy *ServicePermissionPolicy, version int64) error {
 	policyData, err := json.Marshal(policy)
 	if err != nil {
 		return fmt.Errorf("failed to serialize policy: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/admin/services/%s/permissions", cfg.Host, serviceID)
+	url := fmt.Sprintf("%s/admin/services/%s/permissions", host, serviceID)
 	req, err := http.NewRequest("PUT", url, bytes.NewReader(policyData))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("If-Match", fmt.Sprintf("%d", version))

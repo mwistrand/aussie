@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/aussie/cli/internal/auth"
 	"github.com/aussie/cli/internal/config"
 )
 
@@ -56,12 +57,14 @@ func runServicePermissionsRevoke(cmd *cobra.Command, args []string) error {
 		cfg.Host = serverFlag
 	}
 
-	if !cfg.IsAuthenticated() {
-		return fmt.Errorf("not authenticated. Run 'aussie login' to authenticate")
+	// Get authentication token (JWT first, then API key fallback)
+	token, err := auth.GetAuthToken(cfg.ApiKey)
+	if err != nil {
+		return err
 	}
 
 	// Step 1: Get current policy
-	currentPolicy, version, err := getPermissionPolicy(cfg, serviceID)
+	currentPolicy, version, err := getPermissionPolicy(cfg.Host, token, serviceID)
 	if err != nil {
 		return err
 	}
@@ -98,7 +101,7 @@ func runServicePermissionsRevoke(cmd *cobra.Command, args []string) error {
 	currentPolicy.Permissions[revokeOperation] = opPerm
 
 	// Step 3: Update the policy
-	if err := updatePermissionPolicy(cfg, serviceID, currentPolicy, version); err != nil {
+	if err := updatePermissionPolicy(cfg.Host, token, serviceID, currentPolicy, version); err != nil {
 		return err
 	}
 

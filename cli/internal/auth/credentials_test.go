@@ -281,3 +281,119 @@ func TestHasCredentials(t *testing.T) {
 		t.Error("HasCredentials() = true after clear, want false")
 	}
 }
+
+func TestGetAuthToken_JWTFirst(t *testing.T) {
+	// Create a temporary directory for testing
+	tmpDir, err := os.MkdirTemp("", "aussie-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Override home directory for testing
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Store JWT credentials
+	creds := StoredCredentials{
+		Token:     "jwt-token-from-login",
+		ExpiresAt: time.Now().Add(time.Hour),
+		Subject:   "user@example.com",
+	}
+
+	if err := StoreCredentials(creds); err != nil {
+		t.Fatalf("StoreCredentials() error = %v", err)
+	}
+
+	// GetAuthToken should return JWT token even when API key is provided
+	token, err := GetAuthToken("api-key-from-config")
+	if err != nil {
+		t.Fatalf("GetAuthToken() error = %v", err)
+	}
+
+	if token != "jwt-token-from-login" {
+		t.Errorf("GetAuthToken() = %q, want %q", token, "jwt-token-from-login")
+	}
+}
+
+func TestGetAuthToken_FallbackToAPIKey(t *testing.T) {
+	// Create a temporary directory for testing
+	tmpDir, err := os.MkdirTemp("", "aussie-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Override home directory for testing
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// No JWT credentials stored
+
+	// GetAuthToken should fall back to API key
+	token, err := GetAuthToken("api-key-from-config")
+	if err != nil {
+		t.Fatalf("GetAuthToken() error = %v", err)
+	}
+
+	if token != "api-key-from-config" {
+		t.Errorf("GetAuthToken() = %q, want %q", token, "api-key-from-config")
+	}
+}
+
+func TestGetAuthToken_NoAuthAvailable(t *testing.T) {
+	// Create a temporary directory for testing
+	tmpDir, err := os.MkdirTemp("", "aussie-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Override home directory for testing
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// No JWT credentials and no API key
+	_, err = GetAuthToken("")
+	if err == nil {
+		t.Error("GetAuthToken() should return error when no auth is available")
+	}
+}
+
+func TestGetAuthToken_ExpiredJWT_FallbackToAPIKey(t *testing.T) {
+	// Create a temporary directory for testing
+	tmpDir, err := os.MkdirTemp("", "aussie-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Override home directory for testing
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", originalHome)
+
+	// Store expired JWT credentials
+	creds := StoredCredentials{
+		Token:     "expired-jwt-token",
+		ExpiresAt: time.Now().Add(-time.Hour), // Expired
+		Subject:   "user@example.com",
+	}
+
+	if err := StoreCredentials(creds); err != nil {
+		t.Fatalf("StoreCredentials() error = %v", err)
+	}
+
+	// GetAuthToken should fall back to API key when JWT is expired
+	token, err := GetAuthToken("api-key-from-config")
+	if err != nil {
+		t.Fatalf("GetAuthToken() error = %v", err)
+	}
+
+	if token != "api-key-from-config" {
+		t.Errorf("GetAuthToken() = %q, want %q", token, "api-key-from-config")
+	}
+}

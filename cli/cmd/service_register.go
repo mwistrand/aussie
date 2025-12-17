@@ -9,8 +9,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/aussie/cli/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/aussie/cli/internal/auth"
+	"github.com/aussie/cli/internal/config"
 )
 
 var (
@@ -192,9 +194,9 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	// Add authentication if available
-	if cfg.ApiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
+	// Add authentication (JWT first, then API key fallback)
+	if token, err := auth.GetAuthToken(cfg.ApiKey); err == nil {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
 	client := &http.Client{Timeout: 30 * time.Second}

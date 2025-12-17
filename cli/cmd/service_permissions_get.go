@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/aussie/cli/internal/auth"
 	"github.com/aussie/cli/internal/config"
 )
 
@@ -49,8 +50,10 @@ func runServicePermissionsGet(cmd *cobra.Command, args []string) error {
 		cfg.Host = serverFlag
 	}
 
-	if !cfg.IsAuthenticated() {
-		return fmt.Errorf("not authenticated. Run 'aussie login' to authenticate")
+	// Get authentication token (JWT first, then API key fallback)
+	token, err := auth.GetAuthToken(cfg.ApiKey)
+	if err != nil {
+		return err
 	}
 
 	url := fmt.Sprintf("%s/admin/services/%s/permissions", cfg.Host, serviceID)
@@ -58,7 +61,7 @@ func runServicePermissionsGet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 
 	client := &http.Client{Timeout: 30 * time.Second}

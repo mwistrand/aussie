@@ -146,3 +146,20 @@ func GetToken() (string, error) {
 	}
 	return creds.Token, nil
 }
+
+// GetAuthToken returns an authentication token, checking JWT credentials first,
+// then falling back to the provided API key if available.
+// This is the recommended way to get an auth token in CLI commands.
+func GetAuthToken(apiKey string) (string, error) {
+	// Check for JWT credentials first
+	if token, err := GetToken(); err == nil {
+		return token, nil
+	}
+
+	// Fall back to API key if provided
+	if apiKey != "" {
+		return apiKey, nil
+	}
+
+	return "", fmt.Errorf("not authenticated: run 'aussie login' to authenticate")
+}

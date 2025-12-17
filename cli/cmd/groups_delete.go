@@ -47,14 +47,10 @@ func runGroupsDelete(cmd *cobra.Command, args []string) error {
 		cfg.Host = serverFlag
 	}
 
-	// Check for JWT credentials first, then fall back to API key
-	var token string
-	if t, err := auth.GetToken(); err == nil {
-		token = t
-	} else if cfg.IsAuthenticated() {
-		token = cfg.ApiKey
-	} else {
-		return fmt.Errorf("not authenticated. Run 'aussie login' to authenticate")
+	// Get authentication token (JWT first, then API key fallback)
+	token, err := auth.GetAuthToken(cfg.ApiKey)
+	if err != nil {
+		return err
 	}
 
 	url := fmt.Sprintf("%s/admin/groups/%s", cfg.Host, groupID)
