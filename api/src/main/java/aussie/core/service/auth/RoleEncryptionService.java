@@ -18,13 +18,13 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
-import aussie.core.model.auth.Group;
+import aussie.core.model.auth.Role;
 
 /**
- * Encryption service for Group records at rest.
+ * Encryption service for Role records at rest.
  *
  * <p>Uses AES-256-GCM encryption with unique IVs per operation. This provides
- * both confidentiality and integrity for stored group data.
+ * both confidentiality and integrity for stored role data.
  *
  * <p>Shares the same encryption key as API keys for simplicity.
  *
@@ -35,9 +35,9 @@ import aussie.core.model.auth.Group;
  * </pre>
  */
 @ApplicationScoped
-public class GroupEncryptionService {
+public class RoleEncryptionService {
 
-    private static final Logger LOG = Logger.getLogger(GroupEncryptionService.class);
+    private static final Logger LOG = Logger.getLogger(RoleEncryptionService.class);
 
     private static final String ALGORITHM = "AES/GCM/NoPadding";
     private static final int IV_LENGTH = 12;
@@ -56,7 +56,7 @@ public class GroupEncryptionService {
      * @param keyId         key identifier for rotation support
      */
     @Inject
-    public GroupEncryptionService(
+    public RoleEncryptionService(
             @ConfigProperty(name = "aussie.auth.encryption.key") Optional<String> encryptionKey,
             @ConfigProperty(name = "aussie.auth.encryption.key-id", defaultValue = "v1") String keyId) {
         this(encryptionKey, keyId, true);
@@ -68,7 +68,7 @@ public class GroupEncryptionService {
      * @param encryptionKey optional base64-encoded encryption key
      * @param keyId         key identifier for rotation support
      */
-    public GroupEncryptionService(Optional<String> encryptionKey, String keyId, boolean logStatus) {
+    public RoleEncryptionService(Optional<String> encryptionKey, String keyId, boolean logStatus) {
         this.keyId = keyId;
         this.secureRandom = new SecureRandom();
 
@@ -81,27 +81,27 @@ public class GroupEncryptionService {
             this.secretKey = new SecretKeySpec(keyBytes, "AES");
             this.encryptionEnabled = true;
             if (logStatus) {
-                LOG.info("Group encryption enabled with key ID: " + keyId);
+                LOG.info("Role encryption enabled with key ID: " + keyId);
             }
         } else {
             this.secretKey = null;
             this.encryptionEnabled = false;
             if (logStatus) {
-                LOG.warn("Group encryption is DISABLED. Set aussie.auth.encryption.key to enable.");
+                LOG.warn("Role encryption is DISABLED. Set aussie.auth.encryption.key to enable.");
             }
         }
     }
 
     /**
-     * Encrypt a Group record for storage.
+     * Encrypt a Role record for storage.
      *
      * <p>If encryption is disabled, returns a plaintext-compatible format.
      *
-     * @param group the group to encrypt
+     * @param role the role to encrypt
      * @return Base64-encoded encrypted data, or plaintext if disabled
      */
-    public String encrypt(Group group) {
-        final String serialized = serialize(group);
+    public String encrypt(Role role) {
+        final String serialized = serialize(role);
 
         if (!encryptionEnabled) {
             return "PLAIN:" + Base64.getEncoder().encodeToString(serialized.getBytes(StandardCharsets.UTF_8));
@@ -125,18 +125,18 @@ public class GroupEncryptionService {
 
             return Base64.getEncoder().encodeToString(buffer.array());
         } catch (Exception e) {
-            throw new RuntimeException("Failed to encrypt group", e);
+            throw new RuntimeException("Failed to encrypt role", e);
         }
     }
 
     /**
-     * Decrypt a Group record from storage.
+     * Decrypt a Role record from storage.
      *
      * @param encryptedData Base64-encoded encrypted data
-     * @return the decrypted Group
+     * @return the decrypted Role
      * @throws RuntimeException if decryption fails
      */
-    public Group decrypt(String encryptedData) {
+    public Role decrypt(String encryptedData) {
         if (encryptedData.startsWith("PLAIN:")) {
             final String encoded = encryptedData.substring(6);
             final String serialized = new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8);
@@ -171,7 +171,7 @@ public class GroupEncryptionService {
 
             return deserialize(new String(plaintext, StandardCharsets.UTF_8));
         } catch (Exception e) {
-            throw new RuntimeException("Failed to decrypt group", e);
+            throw new RuntimeException("Failed to decrypt role", e);
         }
     }
 
@@ -184,26 +184,26 @@ public class GroupEncryptionService {
         return encryptionEnabled;
     }
 
-    private String serialize(Group group) {
+    private String serialize(Role role) {
         return String.join(
                 FIELD_SEPARATOR,
-                group.id(),
-                group.displayName(),
-                group.description() != null ? group.description() : "",
-                String.join(",", group.permissions()),
-                group.createdAt().toString(),
-                group.updatedAt().toString());
+                role.id(),
+                role.displayName(),
+                role.description() != null ? role.description() : "",
+                String.join(",", role.permissions()),
+                role.createdAt().toString(),
+                role.updatedAt().toString());
     }
 
-    private Group deserialize(String data) {
+    private Role deserialize(String data) {
         final String[] parts = data.split(FIELD_SEPARATOR, -1);
         if (parts.length < 6) {
-            throw new IllegalArgumentException("Invalid serialized Group format");
+            throw new IllegalArgumentException("Invalid serialized Role format");
         }
 
         final Set<String> permissions = parts[3].isEmpty() ? Set.of() : Set.of(parts[3].split(","));
 
-        return Group.builder(parts[0])
+        return Role.builder(parts[0])
                 .displayName(parts[1])
                 .description(parts[2].isEmpty() ? null : parts[2])
                 .permissions(permissions)

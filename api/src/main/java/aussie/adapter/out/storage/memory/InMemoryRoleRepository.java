@@ -10,12 +10,12 @@ import java.util.stream.Collectors;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.auth.Group;
-import aussie.core.model.auth.GroupMapping;
-import aussie.core.port.out.GroupRepository;
+import aussie.core.model.auth.Role;
+import aussie.core.model.auth.RoleMapping;
+import aussie.core.port.out.RoleRepository;
 
 /**
- * In-memory implementation of GroupRepository.
+ * In-memory implementation of RoleRepository.
  *
  * <p>Data is NOT persisted across restarts. This implementation is suitable for:
  * <ul>
@@ -29,44 +29,44 @@ import aussie.core.port.out.GroupRepository;
  *
  * <p>Thread-safety: Uses ConcurrentHashMap for safe concurrent access.
  */
-public class InMemoryGroupRepository implements GroupRepository {
+public class InMemoryRoleRepository implements RoleRepository {
 
-    private final ConcurrentHashMap<String, Group> storage = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Role> storage = new ConcurrentHashMap<>();
 
     @Override
-    public Uni<Void> save(Group group) {
+    public Uni<Void> save(Role role) {
         return Uni.createFrom().item(() -> {
-            storage.put(group.id(), group);
+            storage.put(role.id(), role);
             return null;
         });
     }
 
     @Override
-    public Uni<Optional<Group>> findById(String groupId) {
-        return Uni.createFrom().item(() -> Optional.ofNullable(storage.get(groupId)));
+    public Uni<Optional<Role>> findById(String roleId) {
+        return Uni.createFrom().item(() -> Optional.ofNullable(storage.get(roleId)));
     }
 
     @Override
-    public Uni<Boolean> delete(String groupId) {
-        return Uni.createFrom().item(() -> storage.remove(groupId) != null);
+    public Uni<Boolean> delete(String roleId) {
+        return Uni.createFrom().item(() -> storage.remove(roleId) != null);
     }
 
     @Override
-    public Uni<List<Group>> findAll() {
+    public Uni<List<Role>> findAll() {
         return Uni.createFrom().item(() -> new ArrayList<>(storage.values()));
     }
 
     @Override
-    public Uni<Boolean> exists(String groupId) {
-        return Uni.createFrom().item(() -> storage.containsKey(groupId));
+    public Uni<Boolean> exists(String roleId) {
+        return Uni.createFrom().item(() -> storage.containsKey(roleId));
     }
 
     @Override
-    public Uni<GroupMapping> getGroupMapping() {
+    public Uni<RoleMapping> getRoleMapping() {
         return Uni.createFrom().item(() -> {
             final Map<String, Set<String>> mapping =
-                    storage.values().stream().collect(Collectors.toMap(Group::id, Group::permissions));
-            return new GroupMapping(mapping);
+                    storage.values().stream().collect(Collectors.toMap(Role::id, Role::permissions));
+            return new RoleMapping(mapping);
         });
     }
 }

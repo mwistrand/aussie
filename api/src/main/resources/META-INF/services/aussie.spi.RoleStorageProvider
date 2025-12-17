@@ -1,0 +1,2 @@
+aussie.adapter.out.storage.memory.InMemoryRoleStorageProvider
+aussie.adapter.out.storage.cassandra.CassandraRoleStorageProvider

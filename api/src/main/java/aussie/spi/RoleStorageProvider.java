@@ -2,28 +2,28 @@ package aussie.spi;
 
 import java.util.Optional;
 
-import aussie.core.port.out.GroupRepository;
+import aussie.core.port.out.RoleRepository;
 import aussie.core.port.out.StorageHealthIndicator;
 
 /**
- * Service Provider Interface for group storage backends.
+ * Service Provider Interface for role storage backends.
  *
- * <p>Implementations provide persistent storage for RBAC groups, which map
- * to sets of permissions. Groups are used to expand token group claims
+ * <p>Implementations provide persistent storage for RBAC roles, which map
+ * to sets of permissions. Roles are used to expand token role claims
  * into effective permissions at validation time.
  *
  * <p>Providers are discovered via ServiceLoader. Configure the preferred
- * provider with aussie.auth.groups.storage.provider, or let the loader
+ * provider with aussie.auth.roles.storage.provider, or let the loader
  * select the highest priority available provider.
  *
  * <p>To implement a custom provider:
  * <ol>
  *   <li>Implement this interface</li>
- *   <li>Create a META-INF/services/aussie.spi.GroupStorageProvider file</li>
+ *   <li>Create a META-INF/services/aussie.spi.RoleStorageProvider file</li>
  *   <li>Add the fully qualified class name to the file</li>
  * </ol>
  */
-public interface GroupStorageProvider {
+public interface RoleStorageProvider {
 
     /**
      * Get the provider name.
@@ -62,12 +62,12 @@ public interface GroupStorageProvider {
     }
 
     /**
-     * Create the group repository.
+     * Create the role repository.
      *
      * @param config configuration adapter
      * @return the repository instance
      */
-    GroupRepository createRepository(StorageAdapterConfig config);
+    RoleRepository createRepository(StorageAdapterConfig config);
 
     /**
      * Create a health indicator for this storage backend.

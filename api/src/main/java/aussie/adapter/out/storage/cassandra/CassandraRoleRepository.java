@@ -17,39 +17,39 @@ import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 
-import aussie.core.model.auth.Group;
-import aussie.core.model.auth.GroupMapping;
-import aussie.core.port.out.GroupRepository;
-import aussie.core.service.auth.GroupEncryptionService;
+import aussie.core.model.auth.Role;
+import aussie.core.model.auth.RoleMapping;
+import aussie.core.port.out.RoleRepository;
+import aussie.core.service.auth.RoleEncryptionService;
 
 /**
- * Cassandra implementation of GroupRepository.
+ * Cassandra implementation of RoleRepository.
  *
- * <p>Provides durable, distributed storage for RBAC groups with optional encryption
- * at rest. The group ID is stored separately for efficient lookup, while the
- * full group record is encrypted.
+ * <p>Provides durable, distributed storage for RBAC roles with optional encryption
+ * at rest. The role ID is stored separately for efficient lookup, while the
+ * full role record is encrypted.
  *
  * <h2>Schema</h2>
  * <pre>
- * CREATE TABLE IF NOT EXISTS groups (
- *     group_id text PRIMARY KEY,
+ * CREATE TABLE IF NOT EXISTS roles (
+ *     role_id text PRIMARY KEY,
  *     encrypted_data text,
  *     created_at timestamp,
  *     updated_at timestamp
  * );
  * </pre>
  */
-public class CassandraGroupRepository implements GroupRepository {
+public class CassandraRoleRepository implements RoleRepository {
 
     private final CqlSession session;
-    private final GroupEncryptionService encryptionService;
+    private final RoleEncryptionService encryptionService;
     private final PreparedStatement insertStmt;
     private final PreparedStatement selectByIdStmt;
     private final PreparedStatement deleteStmt;
     private final PreparedStatement selectAllStmt;
     private final PreparedStatement existsStmt;
 
-    public CassandraGroupRepository(CqlSession session, GroupEncryptionService encryptionService) {
+    public CassandraRoleRepository(CqlSession session, RoleEncryptionService encryptionService) {
         this.session = session;
         this.encryptionService = encryptionService;
         this.insertStmt = prepareInsert();
@@ -62,34 +62,34 @@ public class CassandraGroupRepository implements GroupRepository {
     private PreparedStatement prepareInsert() {
         return session.prepare(
                 """
-                INSERT INTO groups (group_id, encrypted_data, created_at, updated_at)
+                INSERT INTO roles (role_id, encrypted_data, created_at, updated_at)
                 VALUES (?, ?, toTimestamp(now()), toTimestamp(now()))
                 """);
     }
 
     private PreparedStatement prepareSelectById() {
-        return session.prepare("SELECT * FROM groups WHERE group_id = ?");
+        return session.prepare("SELECT * FROM roles WHERE role_id = ?");
     }
 
     private PreparedStatement prepareDelete() {
-        return session.prepare("DELETE FROM groups WHERE group_id = ?");
+        return session.prepare("DELETE FROM roles WHERE role_id = ?");
     }
 
     private PreparedStatement prepareSelectAll() {
-        return session.prepare("SELECT * FROM groups");
+        return session.prepare("SELECT * FROM roles");
     }
 
     private PreparedStatement prepareExists() {
-        return session.prepare("SELECT group_id FROM groups WHERE group_id = ?");
+        return session.prepare("SELECT role_id FROM roles WHERE role_id = ?");
     }
 
     @Override
-    public Uni<Void> save(Group group) {
+    public Uni<Void> save(Role role) {
         final Executor executor = getContextExecutor();
         return Uni.createFrom()
                 .completionStage(() -> {
-                    final String encryptedData = encryptionService.encrypt(group);
-                    final BoundStatement bound = insertStmt.bind(group.id(), encryptedData);
+                    final String encryptedData = encryptionService.encrypt(role);
+                    final BoundStatement bound = insertStmt.bind(role.id(), encryptedData);
                     return session.executeAsync(bound).toCompletableFuture();
                 })
                 .emitOn(executor)
@@ -97,11 +97,11 @@ public class CassandraGroupRepository implements GroupRepository {
     }
 
     @Override
-    public Uni<Optional<Group>> findById(String groupId) {
+    public Uni<Optional<Role>> findById(String roleId) {
         final Executor executor = getContextExecutor();
         return Uni.createFrom()
                 .completionStage(() -> {
-                    final BoundStatement bound = selectByIdStmt.bind(groupId);
+                    final BoundStatement bound = selectByIdStmt.bind(roleId);
                     return session.executeAsync(bound).toCompletableFuture();
                 })
                 .emitOn(executor)
@@ -112,15 +112,15 @@ public class CassandraGroupRepository implements GroupRepository {
     }
 
     @Override
-    public Uni<Boolean> delete(String groupId) {
+    public Uni<Boolean> delete(String roleId) {
         final Executor executor = getContextExecutor();
-        return exists(groupId).flatMap(existed -> {
+        return exists(roleId).flatMap(existed -> {
             if (!existed) {
                 return Uni.createFrom().item(false);
             }
             return Uni.createFrom()
                     .completionStage(() -> {
-                        final BoundStatement bound = deleteStmt.bind(groupId);
+                        final BoundStatement bound = deleteStmt.bind(roleId);
                         return session.executeAsync(bound).toCompletableFuture();
                     })
                     .emitOn(executor)
@@ -129,25 +129,25 @@ public class CassandraGroupRepository implements GroupRepository {
     }
 
     @Override
-    public Uni<List<Group>> findAll() {
+    public Uni<List<Role>> findAll() {
         final Executor executor = getContextExecutor();
         return Uni.createFrom()
                 .completionStage(
                         () -> session.executeAsync(selectAllStmt.bind()).toCompletableFuture())
                 .emitOn(executor)
                 .map(rs -> {
-                    final List<Group> groups = new ArrayList<>();
-                    rs.currentPage().forEach(row -> groups.add(fromRow(row)));
-                    return groups;
+                    final List<Role> roles = new ArrayList<>();
+                    rs.currentPage().forEach(row -> roles.add(fromRow(row)));
+                    return roles;
                 });
     }
 
     @Override
-    public Uni<Boolean> exists(String groupId) {
+    public Uni<Boolean> exists(String roleId) {
         final Executor executor = getContextExecutor();
         return Uni.createFrom()
                 .completionStage(() -> {
-                    final BoundStatement bound = existsStmt.bind(groupId);
+                    final BoundStatement bound = existsStmt.bind(roleId);
                     return session.executeAsync(bound).toCompletableFuture();
                 })
                 .emitOn(executor)
@@ -155,15 +155,15 @@ public class CassandraGroupRepository implements GroupRepository {
     }
 
     @Override
-    public Uni<GroupMapping> getGroupMapping() {
-        return findAll().map(groups -> {
+    public Uni<RoleMapping> getRoleMapping() {
+        return findAll().map(roles -> {
             final Map<String, Set<String>> mapping =
-                    groups.stream().collect(Collectors.toMap(Group::id, Group::permissions));
-            return new GroupMapping(mapping);
+                    roles.stream().collect(Collectors.toMap(Role::id, Role::permissions));
+            return new RoleMapping(mapping);
         });
     }
 
-    private Group fromRow(Row row) {
+    private Role fromRow(Row row) {
         final String encryptedData = row.getString("encrypted_data");
         return encryptionService.decrypt(encryptedData);
     }

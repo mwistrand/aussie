@@ -13,10 +13,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.auth.Group;
+import aussie.core.model.auth.Role;
 
-@DisplayName("Group")
-class GroupTest {
+@DisplayName("Role")
+class RoleTest {
 
     @Nested
     @DisplayName("constructor validation")
@@ -27,7 +27,7 @@ class GroupTest {
         void shouldRejectNullId() {
             assertThrows(
                     IllegalArgumentException.class,
-                    () -> new Group(null, "Display", null, Set.of(), Instant.now(), Instant.now()));
+                    () -> new Role(null, "Display", null, Set.of(), Instant.now(), Instant.now()));
         }
 
         @Test
@@ -35,42 +35,42 @@ class GroupTest {
         void shouldRejectBlankId() {
             assertThrows(
                     IllegalArgumentException.class,
-                    () -> new Group("   ", "Display", null, Set.of(), Instant.now(), Instant.now()));
+                    () -> new Role("   ", "Display", null, Set.of(), Instant.now(), Instant.now()));
         }
 
         @Test
         @DisplayName("should default displayName to id when null")
         void shouldDefaultDisplayNameToId() {
-            final var group = new Group("test-group", null, null, Set.of(), null, null);
-            assertEquals("test-group", group.displayName());
+            final var role = new Role("test-role", null, null, Set.of(), null, null);
+            assertEquals("test-role", role.displayName());
         }
 
         @Test
         @DisplayName("should default displayName to id when blank")
         void shouldDefaultDisplayNameToIdWhenBlank() {
-            final var group = new Group("test-group", "   ", null, Set.of(), null, null);
-            assertEquals("test-group", group.displayName());
+            final var role = new Role("test-role", "   ", null, Set.of(), null, null);
+            assertEquals("test-role", role.displayName());
         }
 
         @Test
         @DisplayName("should default description to empty string")
         void shouldDefaultDescriptionToEmptyString() {
-            final var group = new Group("test-group", "Display", null, Set.of(), null, null);
-            assertEquals("", group.description());
+            final var role = new Role("test-role", "Display", null, Set.of(), null, null);
+            assertEquals("", role.description());
         }
 
         @Test
         @DisplayName("should default permissions to empty set")
         void shouldDefaultPermissionsToEmptySet() {
-            final var group = new Group("test-group", "Display", null, null, null, null);
-            assertTrue(group.permissions().isEmpty());
+            final var role = new Role("test-role", "Display", null, null, null, null);
+            assertTrue(role.permissions().isEmpty());
         }
 
         @Test
         @DisplayName("should make permissions immutable")
         void shouldMakePermissionsImmutable() {
-            final var group = new Group("test-group", "Display", null, Set.of("perm1"), null, null);
-            assertThrows(UnsupportedOperationException.class, () -> group.permissions()
+            final var role = new Role("test-role", "Display", null, Set.of("perm1"), null, null);
+            assertThrows(UnsupportedOperationException.class, () -> role.permissions()
                     .add("perm2"));
         }
 
@@ -78,21 +78,21 @@ class GroupTest {
         @DisplayName("should default createdAt to now")
         void shouldDefaultCreatedAtToNow() {
             final var before = Instant.now();
-            final var group = new Group("test-group", "Display", null, Set.of(), null, null);
+            final var role = new Role("test-role", "Display", null, Set.of(), null, null);
             final var after = Instant.now();
 
-            assertNotNull(group.createdAt());
-            assertTrue(!group.createdAt().isBefore(before));
-            assertTrue(!group.createdAt().isAfter(after));
+            assertNotNull(role.createdAt());
+            assertTrue(!role.createdAt().isBefore(before));
+            assertTrue(!role.createdAt().isAfter(after));
         }
 
         @Test
         @DisplayName("should default updatedAt to createdAt")
         void shouldDefaultUpdatedAtToCreatedAt() {
             final var createdAt = Instant.now().minusSeconds(3600);
-            final var group = new Group("test-group", "Display", null, Set.of(), createdAt, null);
+            final var role = new Role("test-role", "Display", null, Set.of(), createdAt, null);
 
-            assertEquals(createdAt, group.updatedAt());
+            assertEquals(createdAt, role.updatedAt());
         }
     }
 
@@ -103,22 +103,22 @@ class GroupTest {
         @Test
         @DisplayName("create() should set id, displayName, and permissions")
         void createShouldSetFields() {
-            final var group = Group.create("platform-team", "Platform Team", Set.of("*"));
+            final var role = Role.create("platform-team", "Platform Team", Set.of("*"));
 
-            assertEquals("platform-team", group.id());
-            assertEquals("Platform Team", group.displayName());
-            assertEquals(Set.of("*"), group.permissions());
-            assertNotNull(group.createdAt());
-            assertEquals(group.createdAt(), group.updatedAt());
+            assertEquals("platform-team", role.id());
+            assertEquals("Platform Team", role.displayName());
+            assertEquals(Set.of("*"), role.permissions());
+            assertNotNull(role.createdAt());
+            assertEquals(role.createdAt(), role.updatedAt());
         }
 
         @Test
-        @DisplayName("builder should create group with all fields")
-        void builderShouldCreateGroup() {
+        @DisplayName("builder should create role with all fields")
+        void builderShouldCreateRole() {
             final var createdAt = Instant.now().minusSeconds(3600);
             final var updatedAt = Instant.now();
 
-            final var group = Group.builder("developers")
+            final var role = Role.builder("developers")
                     .displayName("Developers")
                     .description("All developers")
                     .permissions(Set.of("apikeys.read", "service.config.read"))
@@ -126,12 +126,12 @@ class GroupTest {
                     .updatedAt(updatedAt)
                     .build();
 
-            assertEquals("developers", group.id());
-            assertEquals("Developers", group.displayName());
-            assertEquals("All developers", group.description());
-            assertEquals(Set.of("apikeys.read", "service.config.read"), group.permissions());
-            assertEquals(createdAt, group.createdAt());
-            assertEquals(updatedAt, group.updatedAt());
+            assertEquals("developers", role.id());
+            assertEquals("Developers", role.displayName());
+            assertEquals("All developers", role.description());
+            assertEquals(Set.of("apikeys.read", "service.config.read"), role.permissions());
+            assertEquals(createdAt, role.createdAt());
+            assertEquals(updatedAt, role.updatedAt());
         }
     }
 
@@ -142,7 +142,7 @@ class GroupTest {
         @Test
         @DisplayName("withPermissions() should create copy with new permissions")
         void withPermissionsShouldCreateCopy() {
-            final var original = Group.create("test", "Test", Set.of("perm1"));
+            final var original = Role.create("test", "Test", Set.of("perm1"));
             final var updated = original.withPermissions(Set.of("perm2", "perm3"));
 
             assertEquals(Set.of("perm1"), original.permissions());
@@ -156,7 +156,7 @@ class GroupTest {
         @Test
         @DisplayName("withDetails() should create copy with new displayName and description")
         void withDetailsShouldCreateCopy() {
-            final var original = Group.create("test", "Test", Set.of("perm1"));
+            final var original = Role.create("test", "Test", Set.of("perm1"));
             final var updated = original.withDetails("New Name", "New Description");
 
             assertEquals("Test", original.displayName());

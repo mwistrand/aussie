@@ -47,9 +47,6 @@ public class SessionAuthenticationMechanism implements HttpAuthenticationMechani
     SessionManagement sessionManagement;
 
     @Inject
-    Permission roleMapper;
-
-    @Inject
     GatewayMetrics metrics;
 
     @Inject
@@ -124,7 +121,7 @@ public class SessionAuthenticationMechanism implements HttpAuthenticationMechani
 
     private SecurityIdentity buildIdentity(Session session) {
         // Map permissions to roles
-        Set<String> roles = roleMapper.toRoles(session.permissions());
+        Set<String> roles = Permission.toRoles(session.permissions());
 
         var builder = QuarkusSecurityIdentity.builder()
                 .setPrincipal(new SessionPrincipal(session.id(), session.userId()))

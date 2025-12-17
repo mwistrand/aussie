@@ -13,7 +13,7 @@ import org.jboss.logging.Logger;
 
 import aussie.core.model.auth.AuthenticationContext;
 import aussie.core.model.auth.AuthenticationResult;
-import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.Permissions;
 import aussie.core.model.auth.Principal;
 import aussie.spi.AuthenticationProvider;
 
@@ -76,7 +76,7 @@ public class NoopAuthProvider implements AuthenticationProvider {
 
         // Grant all permissions
         var context = AuthenticationContext.builder(Principal.system("Development Mode"))
-                .permissions(Set.of(Permission.ALL))
+                .permissions(Set.of(Permissions.ALL))
                 .claims(Map.of("mode", "dangerous-noop"))
                 .authenticatedAt(Instant.now())
                 .expiresAt(null)

@@ -6,7 +6,7 @@ import java.util.Set;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import aussie.core.model.auth.OperationPermission;
-import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.Permissions;
 import aussie.core.model.auth.ServicePermissionPolicy;
 
 /**
@@ -32,15 +32,15 @@ public class DefaultPermissionPolicy {
 
     public DefaultPermissionPolicy() {
         // Default: Only "aussie:admin" claim can perform any operation
-        var adminOnly = new OperationPermission(Set.of(Permission.ADMIN_CLAIM));
+        var adminOnly = new OperationPermission(Set.of(Permissions.ADMIN_CLAIM));
 
         this.defaultPolicy = new ServicePermissionPolicy(Map.of(
-                Permission.CONFIG_CREATE, adminOnly,
-                Permission.CONFIG_READ, adminOnly,
-                Permission.CONFIG_UPDATE, adminOnly,
-                Permission.CONFIG_DELETE, adminOnly,
-                Permission.PERMISSIONS_READ, adminOnly,
-                Permission.PERMISSIONS_WRITE, adminOnly));
+                Permissions.CONFIG_CREATE, adminOnly,
+                Permissions.CONFIG_READ, adminOnly,
+                Permissions.CONFIG_UPDATE, adminOnly,
+                Permissions.CONFIG_DELETE, adminOnly,
+                Permissions.PERMISSIONS_READ, adminOnly,
+                Permissions.PERMISSIONS_WRITE, adminOnly));
     }
 
     /**

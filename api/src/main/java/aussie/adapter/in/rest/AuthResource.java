@@ -15,7 +15,7 @@ import jakarta.ws.rs.core.MediaType;
 import io.quarkus.security.identity.SecurityIdentity;
 
 import aussie.adapter.in.auth.ApiKeyIdentityProvider.ApiKeyPrincipal;
-import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.Permissions;
 
 /**
  * REST resource for authentication-related endpoints.
@@ -51,15 +51,19 @@ public class AuthResource {
     @GET
     @Path("/whoami")
     @RolesAllowed({
-        Permission.ADMIN,
-        Permission.SERVICE_CONFIG_READ,
-        Permission.SERVICE_CONFIG_CREATE,
-        Permission.SERVICE_CONFIG_UPDATE,
-        Permission.SERVICE_CONFIG_DELETE,
-        Permission.SERVICE_PERMISSIONS_READ,
-        Permission.SERVICE_PERMISSIONS_WRITE,
-        Permission.APIKEYS_READ,
-        Permission.APIKEYS_WRITE
+        Permissions.ADMIN,
+        Permissions.SERVICE_CONFIG_READ,
+        Permissions.SERVICE_CONFIG_CREATE,
+        Permissions.SERVICE_CONFIG_UPDATE,
+        Permissions.SERVICE_CONFIG_DELETE,
+        Permissions.SERVICE_PERMISSIONS_READ,
+        Permissions.SERVICE_PERMISSIONS_WRITE,
+        Permissions.APIKEYS_READ,
+        Permissions.APIKEYS_WRITE,
+        Permissions.AUTH_ROLES_READ,
+        Permissions.AUTH_ROLES_CREATE,
+        Permissions.AUTH_ROLES_UPDATE,
+        Permissions.AUTH_ROLES_DELETE
     })
     public Map<String, Object> whoami() {
         var result = new java.util.LinkedHashMap<String, Object>();

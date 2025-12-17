@@ -24,9 +24,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.auth.Permission;
 import aussie.core.model.auth.TokenValidationResult;
-import aussie.core.port.in.GroupManagement;
+import aussie.core.port.in.RoleManagement;
 import aussie.core.service.auth.TokenValidationService;
 
 @DisplayName("JwtIdentityProvider")
@@ -34,18 +33,16 @@ class JwtIdentityProviderTest {
 
     private JwtIdentityProvider provider;
     private TokenValidationService tokenValidationService;
-    private GroupManagement groupManagement;
-    private Permission roleMapper;
+    private RoleManagement roleManagement;
     private AuthenticationRequestContext context;
 
     @BeforeEach
     void setUp() {
         tokenValidationService = mock(TokenValidationService.class);
-        groupManagement = mock(GroupManagement.class);
-        roleMapper = new Permission();
+        roleManagement = mock(RoleManagement.class);
         context = mock(AuthenticationRequestContext.class);
 
-        provider = new JwtIdentityProvider(tokenValidationService, groupManagement, roleMapper);
+        provider = new JwtIdentityProvider(tokenValidationService, roleManagement);
     }
 
     @Nested
@@ -102,7 +99,7 @@ class JwtIdentityProviderTest {
                     "test-user",
                     "name",
                     "Test User",
-                    "groups",
+                    "roles",
                     List.of("demo-service.admin"),
                     "permissions",
                     List.of("admin:read"));
@@ -111,7 +108,7 @@ class JwtIdentityProviderTest {
 
             when(tokenValidationService.validate(any()))
                     .thenReturn(Uni.createFrom().item(validResult));
-            when(groupManagement.expandGroups(anySet()))
+            when(roleManagement.expandRoles(anySet()))
                     .thenReturn(Uni.createFrom().item(Set.of("service.config.read", "service.config.write")));
 
             var request = new JwtAuthenticationRequest("valid-token");
@@ -120,23 +117,23 @@ class JwtIdentityProviderTest {
 
             assertNotNull(result);
             assertEquals("Test User", result.getPrincipal().getName());
-            assertTrue(result.getAttribute("groups") instanceof List);
+            assertTrue(result.getAttribute("roles") instanceof List);
             assertTrue(result.getAttribute("permissions") instanceof Set);
         }
 
         @Test
-        @DisplayName("should expand groups to permissions")
-        void shouldExpandGroupsToPermissions() {
+        @DisplayName("should expand roles to permissions")
+        void shouldExpandRolesToPermissions() {
             when(tokenValidationService.isEnabled()).thenReturn(true);
 
             var claims = Map.<String, Object>of(
-                    "sub", "test-user", "groups", List.of("demo-service.admin", "demo-service.dev"));
+                    "sub", "test-user", "roles", List.of("demo-service.admin", "demo-service.dev"));
             var validResult = new TokenValidationResult.Valid(
                     "test-user", "demo-app", claims, Instant.now().plusSeconds(3600));
 
             when(tokenValidationService.validate(any()))
                     .thenReturn(Uni.createFrom().item(validResult));
-            when(groupManagement.expandGroups(anySet()))
+            when(roleManagement.expandRoles(anySet()))
                     .thenReturn(Uni.createFrom().item(Set.of("admin:read", "admin:write", "service:read")));
 
             var request = new JwtAuthenticationRequest("valid-token");
@@ -152,20 +149,20 @@ class JwtIdentityProviderTest {
         }
 
         @Test
-        @DisplayName("should combine direct permissions with group-expanded permissions")
-        void shouldCombineDirectAndGroupPermissions() {
+        @DisplayName("should combine direct permissions with role-expanded permissions")
+        void shouldCombineDirectAndRolePermissions() {
             when(tokenValidationService.isEnabled()).thenReturn(true);
 
             var claims = Map.<String, Object>of(
                     "sub", "test-user",
-                    "groups", List.of("demo-service.dev"),
+                    "roles", List.of("demo-service.dev"),
                     "permissions", List.of("custom:permission"));
             var validResult = new TokenValidationResult.Valid(
                     "test-user", "demo-app", claims, Instant.now().plusSeconds(3600));
 
             when(tokenValidationService.validate(any()))
                     .thenReturn(Uni.createFrom().item(validResult));
-            when(groupManagement.expandGroups(anySet()))
+            when(roleManagement.expandRoles(anySet()))
                     .thenReturn(Uni.createFrom().item(Set.of("dev:read")));
 
             var request = new JwtAuthenticationRequest("valid-token");
@@ -176,21 +173,21 @@ class JwtIdentityProviderTest {
             @SuppressWarnings("unchecked")
             Set<String> permissions = (Set<String>) result.getAttribute("permissions");
             assertTrue(permissions.contains("custom:permission")); // Direct permission
-            assertTrue(permissions.contains("dev:read")); // Group-expanded permission
+            assertTrue(permissions.contains("dev:read")); // Role-expanded permission
         }
 
         @Test
-        @DisplayName("should propagate exception when group expansion fails")
-        void shouldPropagateExceptionWhenGroupExpansionFails() {
+        @DisplayName("should propagate exception when role expansion fails")
+        void shouldPropagateExceptionWhenRoleExpansionFails() {
             when(tokenValidationService.isEnabled()).thenReturn(true);
 
-            var claims = Map.<String, Object>of("sub", "test-user", "groups", List.of("demo-service.dev"));
+            var claims = Map.<String, Object>of("sub", "test-user", "roles", List.of("demo-service.dev"));
             var validResult = new TokenValidationResult.Valid(
                     "test-user", "demo-app", claims, Instant.now().plusSeconds(3600));
 
             when(tokenValidationService.validate(any()))
                     .thenReturn(Uni.createFrom().item(validResult));
-            when(groupManagement.expandGroups(anySet()))
+            when(roleManagement.expandRoles(anySet()))
                     .thenReturn(Uni.createFrom().failure(new RuntimeException("Database connection failed")));
 
             var request = new JwtAuthenticationRequest("valid-token");
@@ -201,17 +198,17 @@ class JwtIdentityProviderTest {
         }
 
         @Test
-        @DisplayName("should handle empty groups list")
-        void shouldHandleEmptyGroupsList() {
+        @DisplayName("should handle empty roles list")
+        void shouldHandleEmptyRolesList() {
             when(tokenValidationService.isEnabled()).thenReturn(true);
 
-            var claims = Map.<String, Object>of("sub", "test-user", "groups", List.of());
+            var claims = Map.<String, Object>of("sub", "test-user", "roles", List.of());
             var validResult = new TokenValidationResult.Valid(
                     "test-user", "demo-app", claims, Instant.now().plusSeconds(3600));
 
             when(tokenValidationService.validate(any()))
                     .thenReturn(Uni.createFrom().item(validResult));
-            // Note: expandGroups should not be called when groups list is empty
+            // Note: expandRoles should not be called when roles list is empty
 
             var request = new JwtAuthenticationRequest("valid-token");
             SecurityIdentity result =
@@ -224,8 +221,8 @@ class JwtIdentityProviderTest {
         }
 
         @Test
-        @DisplayName("should handle missing groups claim")
-        void shouldHandleMissingGroupsClaim() {
+        @DisplayName("should handle missing roles claim")
+        void shouldHandleMissingRolesClaim() {
             when(tokenValidationService.isEnabled()).thenReturn(true);
 
             var claims = Map.<String, Object>of("sub", "test-user");

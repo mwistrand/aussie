@@ -20,7 +20,7 @@ import aussie.adapter.out.storage.memory.InMemoryApiKeyRepository;
 import aussie.core.config.ApiKeyConfig;
 import aussie.core.config.BootstrapConfig;
 import aussie.core.model.auth.ApiKey;
-import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.Permissions;
 import aussie.core.port.in.BootstrapManagement.BootstrapException;
 import aussie.core.service.auth.*;
 import aussie.core.service.common.*;
@@ -77,14 +77,14 @@ class BootstrapServiceTest {
 
     private void createAdminKey() {
         apiKeyService
-                .create("existing-admin", "Existing admin key", Set.of(Permission.ALL), null, "test")
+                .create("existing-admin", "Existing admin key", Set.of(Permissions.ALL), null, "test")
                 .await()
                 .indefinitely();
     }
 
     private void createReadOnlyKey() {
         apiKeyService
-                .create("read-only", "Read-only key", Set.of(Permission.SERVICE_CONFIG_READ), null, "test")
+                .create("read-only", "Read-only key", Set.of(Permissions.SERVICE_CONFIG_READ), null, "test")
                 .await()
                 .indefinitely();
     }
@@ -149,7 +149,7 @@ class BootstrapServiceTest {
         @DisplayName("should return true for key with wildcard permission")
         void shouldReturnTrueForWildcardPermission() {
             apiKeyService
-                    .create("admin", null, Set.of(Permission.ALL), null, "test")
+                    .create("admin", null, Set.of(Permissions.ALL), null, "test")
                     .await()
                     .indefinitely();
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
@@ -166,9 +166,9 @@ class BootstrapServiceTest {
                             "admin",
                             null,
                             Set.of(
-                                    Permission.SERVICE_CONFIG_CREATE,
-                                    Permission.SERVICE_CONFIG_UPDATE,
-                                    Permission.SERVICE_CONFIG_DELETE),
+                                    Permissions.SERVICE_CONFIG_CREATE,
+                                    Permissions.SERVICE_CONFIG_UPDATE,
+                                    Permissions.SERVICE_CONFIG_DELETE),
                             null,
                             "test")
                     .await()
@@ -193,7 +193,7 @@ class BootstrapServiceTest {
         @DisplayName("should ignore revoked admin keys")
         void shouldIgnoreRevokedAdminKeys() {
             var result = apiKeyService
-                    .create("admin", null, Set.of(Permission.ALL), null, "test")
+                    .create("admin", null, Set.of(Permissions.ALL), null, "test")
                     .await()
                     .indefinitely();
             apiKeyService.revoke(result.keyId()).await().indefinitely();
@@ -210,7 +210,7 @@ class BootstrapServiceTest {
             // Create an already-expired key by manipulating the repository directly
             var expiredKey = ApiKey.builder("expired-id", "hash")
                     .name("expired-admin")
-                    .permissions(Set.of(Permission.ALL))
+                    .permissions(Set.of(Permissions.ALL))
                     .createdAt(Instant.now().minusSeconds(3600))
                     .expiresAt(Instant.now().minusSeconds(1800)) // Expired 30 minutes ago
                     .revoked(false)
@@ -252,7 +252,7 @@ class BootstrapServiceTest {
             var validated = apiKeyService.validate(VALID_BOOTSTRAP_KEY).await().indefinitely();
             assertTrue(validated.isPresent());
             assertEquals("bootstrap-admin", validated.get().name());
-            assertTrue(validated.get().permissions().contains(Permission.ALL));
+            assertTrue(validated.get().permissions().contains(Permissions.ALL));
         }
 
         @Test

@@ -12,15 +12,15 @@ import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 
 import aussie.core.model.common.StorageHealth;
-import aussie.core.port.out.GroupRepository;
+import aussie.core.port.out.RoleRepository;
 import aussie.core.port.out.StorageHealthIndicator;
-import aussie.core.service.auth.GroupEncryptionService;
-import aussie.spi.GroupStorageProvider;
+import aussie.core.service.auth.RoleEncryptionService;
+import aussie.spi.RoleStorageProvider;
 import aussie.spi.StorageAdapterConfig;
 import aussie.spi.StorageProviderException;
 
 /**
- * Cassandra storage provider for groups.
+ * Cassandra storage provider for roles.
  *
  * <p>Configuration properties:
  * <ul>
@@ -32,12 +32,12 @@ import aussie.spi.StorageProviderException;
  * </ul>
  *
  * <p>This provider shares the same Cassandra cluster as other storage providers
- * but uses a separate groups table.
+ * but uses a separate roles table.
  */
-public class CassandraGroupStorageProvider implements GroupStorageProvider {
+public class CassandraRoleStorageProvider implements RoleStorageProvider {
 
     private CqlSession session;
-    private GroupEncryptionService encryptionService;
+    private RoleEncryptionService encryptionService;
 
     @Override
     public String name() {
@@ -46,7 +46,7 @@ public class CassandraGroupStorageProvider implements GroupStorageProvider {
 
     @Override
     public String description() {
-        return "Apache Cassandra persistent storage for groups";
+        return "Apache Cassandra persistent storage for roles";
     }
 
     @Override
@@ -65,10 +65,10 @@ public class CassandraGroupStorageProvider implements GroupStorageProvider {
     }
 
     @Override
-    public GroupRepository createRepository(StorageAdapterConfig config) {
+    public RoleRepository createRepository(StorageAdapterConfig config) {
         this.session = buildSession(config);
         this.encryptionService = createEncryptionService(config);
-        return new CassandraGroupRepository(session, encryptionService);
+        return new CassandraRoleRepository(session, encryptionService);
     }
 
     @Override
@@ -76,7 +76,7 @@ public class CassandraGroupStorageProvider implements GroupStorageProvider {
         return Optional.of(() -> {
             if (session == null || session.isClosed()) {
                 return Uni.createFrom()
-                        .item(StorageHealth.unhealthy("cassandra-groups", "Session not initialized or closed"));
+                        .item(StorageHealth.unhealthy("cassandra-roles", "Session not initialized or closed"));
             }
 
             final Executor executor = getContextExecutor();
@@ -87,10 +87,10 @@ public class CassandraGroupStorageProvider implements GroupStorageProvider {
                     .emitOn(executor)
                     .map(rs -> {
                         final long latency = System.currentTimeMillis() - start;
-                        return StorageHealth.healthy("cassandra-groups", latency);
+                        return StorageHealth.healthy("cassandra-roles", latency);
                     })
                     .onFailure()
-                    .recoverWithItem(e -> StorageHealth.unhealthy("cassandra-groups", e.getMessage()));
+                    .recoverWithItem(e -> StorageHealth.unhealthy("cassandra-roles", e.getMessage()));
         });
     }
 
@@ -131,14 +131,14 @@ public class CassandraGroupStorageProvider implements GroupStorageProvider {
         try {
             return builder.build();
         } catch (Exception e) {
-            throw new StorageProviderException("Failed to connect to Cassandra for group storage", e);
+            throw new StorageProviderException("Failed to connect to Cassandra for role storage", e);
         }
     }
 
-    private GroupEncryptionService createEncryptionService(StorageAdapterConfig config) {
+    private RoleEncryptionService createEncryptionService(StorageAdapterConfig config) {
         final Optional<String> encryptionKey = config.get("aussie.auth.encryption.key");
         final String keyId = config.getOrDefault("aussie.auth.encryption.key-id", "v1");
-        return new GroupEncryptionService(encryptionKey, keyId, false);
+        return new RoleEncryptionService(encryptionKey, keyId, false);
     }
 
     /**

@@ -15,7 +15,7 @@ import io.restassured.http.ContentType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.Permissions;
 import aussie.core.port.in.ApiKeyManagement;
 import aussie.core.port.out.ApiKeyRepository;
 
@@ -89,7 +89,7 @@ public class BootstrapIntegrationTest {
 
         assertTrue(bootstrapKey.isPresent(), "Bootstrap key should exist");
         assertTrue(
-                bootstrapKey.get().permissions().contains(Permission.ALL),
+                bootstrapKey.get().permissions().contains(Permissions.ALL),
                 "Bootstrap key should have wildcard permission");
         assertNotNull(bootstrapKey.get().expiresAt(), "Bootstrap key should have expiration");
     }
@@ -101,7 +101,7 @@ public class BootstrapIntegrationTest {
 
         assertTrue(validated.isPresent(), "Bootstrap key should validate successfully");
         assertTrue(
-                validated.get().permissions().contains(Permission.ALL),
+                validated.get().permissions().contains(Permissions.ALL),
                 "Validated key should have wildcard permission");
     }
 

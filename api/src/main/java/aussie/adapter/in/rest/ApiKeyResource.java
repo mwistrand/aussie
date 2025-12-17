@@ -24,7 +24,7 @@ import aussie.adapter.in.auth.ApiKeyIdentityProvider.ApiKeyPrincipal;
 import aussie.adapter.in.dto.CreateApiKeyRequest;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.auth.ApiKey;
-import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.Permissions;
 import aussie.core.port.in.ApiKeyManagement;
 
 /**
@@ -65,7 +65,7 @@ public class ApiKeyResource {
      * It cannot be retrieved later - only the hash is stored.
      */
     @POST
-    @RolesAllowed({Permission.APIKEYS_WRITE, Permission.ADMIN})
+    @RolesAllowed({Permissions.APIKEYS_WRITE, Permissions.ADMIN})
     public Uni<Response> createKey(CreateApiKeyRequest request) {
         if (request == null || request.name() == null || request.name().isBlank()) {
             throw GatewayProblem.badRequest("name is required");
@@ -117,7 +117,7 @@ public class ApiKeyResource {
      * Key hashes are redacted in the response.
      */
     @GET
-    @RolesAllowed({Permission.APIKEYS_READ, Permission.ADMIN})
+    @RolesAllowed({Permissions.APIKEYS_READ, Permissions.ADMIN})
     public Uni<List<ApiKey>> listKeys() {
         return apiKeyService.list();
     }
@@ -130,7 +130,7 @@ public class ApiKeyResource {
      */
     @GET
     @Path("/{keyId}")
-    @RolesAllowed({Permission.APIKEYS_READ, Permission.ADMIN})
+    @RolesAllowed({Permissions.APIKEYS_READ, Permissions.ADMIN})
     public Uni<Response> getKey(@PathParam("keyId") String keyId) {
         return apiKeyService.get(keyId).map(opt -> opt.map(
                         key -> Response.ok(key).build())
@@ -146,7 +146,7 @@ public class ApiKeyResource {
      */
     @DELETE
     @Path("/{keyId}")
-    @RolesAllowed({Permission.APIKEYS_WRITE, Permission.ADMIN})
+    @RolesAllowed({Permissions.APIKEYS_WRITE, Permissions.ADMIN})
     public Uni<Response> revokeKey(@PathParam("keyId") String keyId) {
         return apiKeyService.revoke(keyId).map(revoked -> {
             if (revoked) {

@@ -18,7 +18,7 @@ import io.vertx.ext.web.RoutingContext;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 
-import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.Permissions;
 
 /**
  * Quarkus HTTP authentication mechanism for API key authentication.
@@ -67,19 +67,23 @@ public class ApiKeyAuthenticationMechanism implements HttpAuthenticationMechanis
 
         return QuarkusSecurityIdentity.builder()
                 .setPrincipal(() -> "development-mode")
-                .addRole(Permission.ADMIN)
-                .addRole(Permission.SERVICE_CONFIG_READ)
-                .addRole(Permission.SERVICE_CONFIG_CREATE)
-                .addRole(Permission.SERVICE_CONFIG_UPDATE)
-                .addRole(Permission.SERVICE_CONFIG_DELETE)
-                .addRole(Permission.SERVICE_PERMISSIONS_READ)
-                .addRole(Permission.SERVICE_PERMISSIONS_WRITE)
-                .addRole(Permission.APIKEYS_READ)
-                .addRole(Permission.APIKEYS_WRITE)
+                .addRole(Permissions.ADMIN)
+                .addRole(Permissions.SERVICE_CONFIG_READ)
+                .addRole(Permissions.SERVICE_CONFIG_CREATE)
+                .addRole(Permissions.SERVICE_CONFIG_UPDATE)
+                .addRole(Permissions.SERVICE_CONFIG_DELETE)
+                .addRole(Permissions.SERVICE_PERMISSIONS_READ)
+                .addRole(Permissions.SERVICE_PERMISSIONS_WRITE)
+                .addRole(Permissions.APIKEYS_READ)
+                .addRole(Permissions.APIKEYS_WRITE)
+                .addRole(Permissions.AUTH_ROLES_READ)
+                .addRole(Permissions.AUTH_ROLES_CREATE)
+                .addRole(Permissions.AUTH_ROLES_UPDATE)
+                .addRole(Permissions.AUTH_ROLES_DELETE)
                 // Add permissions attribute with wildcard for gateway-level authorization
-                .addAttribute("permissions", Set.of(Permission.ALL))
+                .addAttribute("permissions", Set.of(Permissions.ALL))
                 // Add claims attribute with wildcard for service-level authorization
-                .addAttribute("claims", Set.of(Permission.ALL))
+                .addAttribute("claims", Set.of(Permissions.ALL))
                 .build();
     }
 

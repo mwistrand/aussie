@@ -13,18 +13,18 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
-import aussie.core.port.out.GroupRepository;
+import aussie.core.port.out.RoleRepository;
 import aussie.core.port.out.StorageHealthIndicator;
-import aussie.spi.GroupStorageProvider;
+import aussie.spi.RoleStorageProvider;
 import aussie.spi.StorageAdapterConfig;
 import aussie.spi.StorageProviderException;
 
 /**
- * Discovers and loads group storage providers via ServiceLoader.
+ * Discovers and loads role storage providers via ServiceLoader.
  *
  * <p>Provider selection:
  * <ol>
- *   <li>If aussie.auth.groups.storage.provider is set, use that provider</li>
+ *   <li>If aussie.auth.roles.storage.provider is set, use that provider</li>
  *   <li>Otherwise, select the highest priority available provider</li>
  * </ol>
  *
@@ -32,18 +32,18 @@ import aussie.spi.StorageProviderException;
  * to ensure thread-safe access from CDI producer methods.
  */
 @ApplicationScoped
-public class GroupStorageProviderLoader {
+public class RoleStorageProviderLoader {
 
-    private static final Logger LOG = Logger.getLogger(GroupStorageProviderLoader.class);
+    private static final Logger LOG = Logger.getLogger(RoleStorageProviderLoader.class);
 
     private final Optional<String> configuredStorageProvider;
     private final StorageAdapterConfig config;
 
-    private GroupStorageProvider storageProvider;
+    private RoleStorageProvider storageProvider;
 
     @Inject
-    public GroupStorageProviderLoader(
-            @ConfigProperty(name = "aussie.auth.groups.storage.provider") Optional<String> configuredStorageProvider,
+    public RoleStorageProviderLoader(
+            @ConfigProperty(name = "aussie.auth.roles.storage.provider") Optional<String> configuredStorageProvider,
             StorageAdapterConfig config) {
         this.configuredStorageProvider = configuredStorageProvider;
         this.config = config;
@@ -51,56 +51,56 @@ public class GroupStorageProviderLoader {
 
     @Produces
     @ApplicationScoped
-    public GroupRepository groupRepository() {
+    public RoleRepository roleRepository() {
         final var provider = getStorageProvider();
-        LOG.infof("Creating group repository from provider: %s (%s)", provider.name(), provider.description());
+        LOG.infof("Creating role repository from provider: %s (%s)", provider.name(), provider.description());
         return provider.createRepository(config);
     }
 
     @Produces
     @ApplicationScoped
-    public List<StorageHealthIndicator> groupHealthIndicators() {
+    public List<StorageHealthIndicator> roleHealthIndicators() {
         final List<StorageHealthIndicator> indicators = new ArrayList<>();
         getStorageProvider().createHealthIndicator(config).ifPresent(indicators::add);
         return indicators;
     }
 
-    private synchronized GroupStorageProvider getStorageProvider() {
+    private synchronized RoleStorageProvider getStorageProvider() {
         if (storageProvider != null) {
             return storageProvider;
         }
 
-        final List<GroupStorageProvider> providers = new ArrayList<>();
-        ServiceLoader.load(GroupStorageProvider.class).forEach(providers::add);
+        final List<RoleStorageProvider> providers = new ArrayList<>();
+        ServiceLoader.load(RoleStorageProvider.class).forEach(providers::add);
 
         if (providers.isEmpty()) {
             throw new StorageProviderException(
-                    "No group storage providers found. Ensure a provider JAR is on the classpath.");
+                    "No role storage providers found. Ensure a provider JAR is on the classpath.");
         }
 
         LOG.infof(
-                "Found %d group storage provider(s): %s",
+                "Found %d role storage provider(s): %s",
                 providers.size(),
-                providers.stream().map(GroupStorageProvider::name).toList());
+                providers.stream().map(RoleStorageProvider::name).toList());
 
         storageProvider = selectProvider(providers, configuredStorageProvider.orElse(null));
 
         return storageProvider;
     }
 
-    private GroupStorageProvider selectProvider(List<GroupStorageProvider> providers, String configured) {
+    private RoleStorageProvider selectProvider(List<RoleStorageProvider> providers, String configured) {
         if (configured != null && !configured.isBlank()) {
             return providers.stream()
                     .filter(p -> p.name().equals(configured))
                     .findFirst()
-                    .orElseThrow(() -> new StorageProviderException("Configured group storage provider not found: "
+                    .orElseThrow(() -> new StorageProviderException("Configured role storage provider not found: "
                             + configured + ". Available: "
-                            + providers.stream().map(GroupStorageProvider::name).toList()));
+                            + providers.stream().map(RoleStorageProvider::name).toList()));
         }
 
         return providers.stream()
-                .filter(GroupStorageProvider::isAvailable)
-                .max(Comparator.comparingInt(GroupStorageProvider::priority))
-                .orElseThrow(() -> new StorageProviderException("No available group storage providers"));
+                .filter(RoleStorageProvider::isAvailable)
+                .max(Comparator.comparingInt(RoleStorageProvider::priority))
+                .orElseThrow(() -> new StorageProviderException("No available role storage providers"));
     }
 }

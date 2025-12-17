@@ -11,7 +11,7 @@ import org.jboss.logging.Logger;
 
 import aussie.core.config.BootstrapConfig;
 import aussie.core.model.auth.ApiKey;
-import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.Permissions;
 import aussie.core.model.common.BootstrapResult;
 import aussie.core.port.in.ApiKeyManagement;
 import aussie.core.port.in.BootstrapManagement;
@@ -75,7 +75,7 @@ public class BootstrapService implements BootstrapManagement {
                     .createWithKey(
                             BOOTSTRAP_KEY_NAME,
                             BOOTSTRAP_KEY_DESCRIPTION,
-                            Set.of(Permission.ALL), // Wildcard permission for full access
+                            Set.of(Permissions.ALL), // Wildcard permission for full access
                             ttl,
                             plaintextKey,
                             "bootstrap")
@@ -119,10 +119,10 @@ public class BootstrapService implements BootstrapManagement {
      * Check if a key has admin-level permissions.
      */
     private boolean isAdminKey(ApiKey key) {
-        return key.permissions().contains(Permission.ALL)
-                || key.permissions().contains(Permission.SERVICE_CONFIG_CREATE)
-                || key.permissions().contains(Permission.SERVICE_CONFIG_UPDATE)
-                || key.permissions().contains(Permission.SERVICE_CONFIG_DELETE);
+        return key.permissions().contains(Permissions.ALL)
+                || key.permissions().contains(Permissions.SERVICE_CONFIG_CREATE)
+                || key.permissions().contains(Permissions.SERVICE_CONFIG_UPDATE)
+                || key.permissions().contains(Permissions.SERVICE_CONFIG_DELETE);
     }
 
     /**

@@ -20,7 +20,7 @@ import io.smallrye.mutiny.Uni;
 
 import aussie.adapter.in.dto.ServicePermissionPolicyDto;
 import aussie.adapter.in.problem.GatewayProblem;
-import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.Permissions;
 import aussie.core.service.auth.ServiceAuthorizationService;
 import aussie.core.service.routing.ServiceRegistry;
 
@@ -60,7 +60,7 @@ public class ServicePermissionsResource {
      * Get the permission policy for a service.
      */
     @GET
-    @RolesAllowed({Permission.SERVICE_PERMISSIONS_READ, Permission.ADMIN})
+    @RolesAllowed({Permissions.SERVICE_PERMISSIONS_READ, Permissions.ADMIN})
     public Uni<Response> getPermissions(@PathParam("serviceId") String serviceId) {
         return identityAssociation.getDeferredIdentity().flatMap(identity -> {
             var permissions = extractPermissions(identity);
@@ -73,7 +73,7 @@ public class ServicePermissionsResource {
                 var service = serviceOpt.get();
 
                 // Check authorization for reading permissions
-                if (!authService.isAuthorizedForService(service, Permission.PERMISSIONS_READ, permissions)) {
+                if (!authService.isAuthorizedForService(service, Permissions.PERMISSIONS_READ, permissions)) {
                     throw GatewayProblem.forbidden("Not authorized to read permissions for service: " + serviceId);
                 }
 
@@ -94,7 +94,7 @@ public class ServicePermissionsResource {
      * Requires If-Match header with the current version for optimistic locking.
      */
     @PUT
-    @RolesAllowed({Permission.SERVICE_PERMISSIONS_WRITE, Permission.ADMIN})
+    @RolesAllowed({Permissions.SERVICE_PERMISSIONS_WRITE, Permissions.ADMIN})
     public Uni<Response> updatePermissions(
             @PathParam("serviceId") String serviceId,
             @HeaderParam("If-Match") Long ifMatch,
@@ -115,7 +115,7 @@ public class ServicePermissionsResource {
                 var service = serviceOpt.get();
 
                 // Check authorization for updating permissions
-                if (!authService.isAuthorizedForService(service, Permission.PERMISSIONS_WRITE, permissions)) {
+                if (!authService.isAuthorizedForService(service, Permissions.PERMISSIONS_WRITE, permissions)) {
                     throw GatewayProblem.forbidden("Not authorized to update permissions for service: " + serviceId);
                 }
 

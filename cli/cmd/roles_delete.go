@@ -11,30 +11,30 @@ import (
 	"github.com/aussie/cli/internal/config"
 )
 
-var groupsDeleteCmd = &cobra.Command{
-	Use:   "delete <group-id>",
-	Short: "Delete a group",
-	Long: `Delete an RBAC group.
+var rolesDeleteCmd = &cobra.Command{
+	Use:   "delete <role-id>",
+	Short: "Delete a role",
+	Long: `Delete an RBAC role.
 
-This removes the group definition. Any users with this group in their token
-claims will no longer receive the group's permissions.
+This removes the role definition. Any users with this role in their token
+claims will no longer receive the role's permissions.
 
 Examples:
-  aussie groups delete old-team`,
+  aussie roles delete old-team`,
 	Args: cobra.ExactArgs(1),
-	RunE: runGroupsDelete,
+	RunE: runRolesDelete,
 }
 
 func init() {
-	groupsCmd.AddCommand(groupsDeleteCmd)
+	rolesCmd.AddCommand(rolesDeleteCmd)
 }
 
-func runGroupsDelete(cmd *cobra.Command, args []string) error {
-	groupID := args[0]
+func runRolesDelete(cmd *cobra.Command, args []string) error {
+	roleID := args[0]
 
-	// Validate group ID to prevent path traversal attacks
-	if !validGroupIDPattern.MatchString(groupID) {
-		return fmt.Errorf("invalid group ID format: must contain only alphanumeric characters, hyphens, underscores, and dots")
+	// Validate role ID to prevent path traversal attacks
+	if !validRoleIDPattern.MatchString(roleID) {
+		return fmt.Errorf("invalid role ID format: must contain only alphanumeric characters, hyphens, underscores, and dots")
 	}
 
 	cfg, err := config.Load()
@@ -53,7 +53,7 @@ func runGroupsDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	url := fmt.Sprintf("%s/admin/groups/%s", cfg.Host, groupID)
+	url := fmt.Sprintf("%s/admin/roles/%s", cfg.Host, roleID)
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -71,15 +71,15 @@ func runGroupsDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
 	}
 	if resp.StatusCode == http.StatusForbidden {
-		return fmt.Errorf("insufficient permissions to delete groups (requires admin)")
+		return fmt.Errorf("insufficient permissions to delete roles (requires admin)")
 	}
 	if resp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("group not found: %s", groupID)
+		return fmt.Errorf("role not found: %s", roleID)
 	}
 	if resp.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("unexpected response: %s", resp.Status)
 	}
 
-	fmt.Printf("Group %s has been deleted.\n", groupID)
+	fmt.Printf("Role %s has been deleted.\n", roleID)
 	return nil
 }

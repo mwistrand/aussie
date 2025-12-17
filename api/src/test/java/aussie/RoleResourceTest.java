@@ -17,37 +17,37 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.port.in.GroupManagement;
+import aussie.core.port.in.RoleManagement;
 
 /**
- * Integration tests for Group management endpoints.
+ * Integration tests for Role management endpoints.
  *
  * <p>Uses default test profile with dangerous-noop enabled, which grants wildcard
  * permissions (effectively admin access).
  */
 @QuarkusTest
-@DisplayName("Group Resource Tests")
-class GroupResourceTest {
+@DisplayName("Role Resource Tests")
+class RoleResourceTest {
 
     @Inject
-    GroupManagement groupService;
+    RoleManagement roleService;
 
     @AfterEach
     void tearDown() {
-        // Clean up all groups after each test
-        groupService.list().await().atMost(Duration.ofSeconds(5)).forEach(group -> groupService
-                .delete(group.id())
+        // Clean up all roles after each test
+        roleService.list().await().atMost(Duration.ofSeconds(5)).forEach(role -> roleService
+                .delete(role.id())
                 .await()
                 .atMost(Duration.ofSeconds(5)));
     }
 
     @Nested
-    @DisplayName("Group Creation")
-    class GroupCreationTests {
+    @DisplayName("Role Creation")
+    class RoleCreationTests {
 
         @Test
-        @DisplayName("should create group with all fields")
-        void shouldCreateGroupWithAllFields() {
+        @DisplayName("should create role with all fields")
+        void shouldCreateRoleWithAllFields() {
             given().contentType(ContentType.JSON)
                     .body(
                             """
@@ -59,7 +59,7 @@ class GroupResourceTest {
                             }
                             """)
                     .when()
-                    .post("/admin/groups")
+                    .post("/admin/roles")
                     .then()
                     .statusCode(201)
                     .body("id", equalTo("platform-team"))
@@ -72,21 +72,21 @@ class GroupResourceTest {
         }
 
         @Test
-        @DisplayName("should create group with minimal fields")
-        void shouldCreateGroupWithMinimalFields() {
+        @DisplayName("should create role with minimal fields")
+        void shouldCreateRoleWithMinimalFields() {
             given().contentType(ContentType.JSON)
                     .body(
                             """
                             {
-                                "id": "minimal-group"
+                                "id": "minimal-role"
                             }
                             """)
                     .when()
-                    .post("/admin/groups")
+                    .post("/admin/roles")
                     .then()
                     .statusCode(201)
-                    .body("id", equalTo("minimal-group"))
-                    .body("displayName", equalTo("minimal-group"))
+                    .body("id", equalTo("minimal-role"))
+                    .body("displayName", equalTo("minimal-role"))
                     .body("permissions", hasSize(0));
         }
 
@@ -97,12 +97,12 @@ class GroupResourceTest {
                     .body(
                             """
                             {
-                                "displayName": "No ID Group",
+                                "displayName": "No ID Role",
                                 "permissions": ["apikeys.read"]
                             }
                             """)
                     .when()
-                    .post("/admin/groups")
+                    .post("/admin/roles")
                     .then()
                     .statusCode(400)
                     .contentType("application/problem+json")
@@ -117,43 +117,43 @@ class GroupResourceTest {
                             """
                             {
                                 "id": "   ",
-                                "displayName": "Blank ID Group"
+                                "displayName": "Blank ID Role"
                             }
                             """)
                     .when()
-                    .post("/admin/groups")
+                    .post("/admin/roles")
                     .then()
                     .statusCode(400);
         }
 
         @Test
-        @DisplayName("should reject duplicate group id")
-        void shouldRejectDuplicateGroupId() {
-            // Create first group
+        @DisplayName("should reject duplicate role id")
+        void shouldRejectDuplicateRoleId() {
+            // Create first role
             given().contentType(ContentType.JSON)
                     .body(
                             """
                             {
                                 "id": "duplicate-test",
-                                "displayName": "First Group"
+                                "displayName": "First Role"
                             }
                             """)
                     .when()
-                    .post("/admin/groups")
+                    .post("/admin/roles")
                     .then()
                     .statusCode(201);
 
-            // Try to create second group with same id
+            // Try to create second role with same id
             given().contentType(ContentType.JSON)
                     .body(
                             """
                             {
                                 "id": "duplicate-test",
-                                "displayName": "Second Group"
+                                "displayName": "Second Role"
                             }
                             """)
                     .when()
-                    .post("/admin/groups")
+                    .post("/admin/roles")
                     .then()
                     .statusCode(400)
                     .contentType("application/problem+json");
@@ -161,49 +161,49 @@ class GroupResourceTest {
     }
 
     @Nested
-    @DisplayName("Group Listing")
-    class GroupListingTests {
+    @DisplayName("Role Listing")
+    class RoleListingTests {
 
         @Test
-        @DisplayName("should return empty list when no groups")
-        void shouldReturnEmptyListWhenNoGroups() {
-            given().when().get("/admin/groups").then().statusCode(200).body("$", hasSize(0));
+        @DisplayName("should return empty list when no roles")
+        void shouldReturnEmptyListWhenNoRoles() {
+            given().when().get("/admin/roles").then().statusCode(200).body("$", hasSize(0));
         }
 
         @Test
-        @DisplayName("should list all groups")
-        void shouldListAllGroups() {
-            // Create several groups
-            createGroup("group-1", "Group 1");
-            createGroup("group-2", "Group 2");
-            createGroup("group-3", "Group 3");
+        @DisplayName("should list all roles")
+        void shouldListAllRoles() {
+            // Create several roles
+            createRole("role-1", "Role 1");
+            createRole("role-2", "Role 2");
+            createRole("role-3", "Role 3");
 
-            given().when().get("/admin/groups").then().statusCode(200).body("$", hasSize(3));
+            given().when().get("/admin/roles").then().statusCode(200).body("$", hasSize(3));
         }
     }
 
     @Nested
-    @DisplayName("Group Retrieval")
-    class GroupRetrievalTests {
+    @DisplayName("Role Retrieval")
+    class RoleRetrievalTests {
 
         @Test
-        @DisplayName("should get group by id")
-        void shouldGetGroupById() {
-            createGroup("get-test", "Get Test Group");
+        @DisplayName("should get role by id")
+        void shouldGetRoleById() {
+            createRole("get-test", "Get Test Role");
 
             given().when()
-                    .get("/admin/groups/get-test")
+                    .get("/admin/roles/get-test")
                     .then()
                     .statusCode(200)
                     .body("id", equalTo("get-test"))
-                    .body("displayName", equalTo("Get Test Group"));
+                    .body("displayName", equalTo("Get Test Role"));
         }
 
         @Test
-        @DisplayName("should return 404 for non-existent group")
-        void shouldReturn404ForNonExistentGroup() {
+        @DisplayName("should return 404 for non-existent role")
+        void shouldReturn404ForNonExistentRole() {
             given().when()
-                    .get("/admin/groups/non-existent")
+                    .get("/admin/roles/non-existent")
                     .then()
                     .statusCode(404)
                     .contentType("application/problem+json");
@@ -211,13 +211,13 @@ class GroupResourceTest {
     }
 
     @Nested
-    @DisplayName("Group Update")
-    class GroupUpdateTests {
+    @DisplayName("Role Update")
+    class RoleUpdateTests {
 
         @Test
-        @DisplayName("should update group display name")
-        void shouldUpdateGroupDisplayName() {
-            createGroup("update-test", "Original Name");
+        @DisplayName("should update role display name")
+        void shouldUpdateRoleDisplayName() {
+            createRole("update-test", "Original Name");
 
             given().contentType(ContentType.JSON)
                     .body(
@@ -227,7 +227,7 @@ class GroupResourceTest {
                             }
                             """)
                     .when()
-                    .put("/admin/groups/update-test")
+                    .put("/admin/roles/update-test")
                     .then()
                     .statusCode(200)
                     .body("id", equalTo("update-test"))
@@ -235,9 +235,9 @@ class GroupResourceTest {
         }
 
         @Test
-        @DisplayName("should update group permissions")
-        void shouldUpdateGroupPermissions() {
-            createGroup("perm-update-test", "Permission Update Test");
+        @DisplayName("should update role permissions")
+        void shouldUpdateRolePermissions() {
+            createRole("perm-update-test", "Permission Update Test");
 
             given().contentType(ContentType.JSON)
                     .body(
@@ -247,7 +247,7 @@ class GroupResourceTest {
                             }
                             """)
                     .when()
-                    .put("/admin/groups/perm-update-test")
+                    .put("/admin/roles/perm-update-test")
                     .then()
                     .statusCode(200)
                     .body("id", equalTo("perm-update-test"))
@@ -258,7 +258,7 @@ class GroupResourceTest {
         @Test
         @DisplayName("should update multiple fields at once")
         void shouldUpdateMultipleFields() {
-            createGroup("multi-update", "Original");
+            createRole("multi-update", "Original");
 
             given().contentType(ContentType.JSON)
                     .body(
@@ -270,7 +270,7 @@ class GroupResourceTest {
                             }
                             """)
                     .when()
-                    .put("/admin/groups/multi-update")
+                    .put("/admin/roles/multi-update")
                     .then()
                     .statusCode(200)
                     .body("displayName", equalTo("New Display Name"))
@@ -279,7 +279,7 @@ class GroupResourceTest {
         }
 
         @Test
-        @DisplayName("should return 404 when updating non-existent group")
+        @DisplayName("should return 404 when updating non-existent role")
         void shouldReturn404WhenUpdatingNonExistent() {
             given().contentType(ContentType.JSON)
                     .body(
@@ -289,7 +289,7 @@ class GroupResourceTest {
                             }
                             """)
                     .when()
-                    .put("/admin/groups/non-existent")
+                    .put("/admin/roles/non-existent")
                     .then()
                     .statusCode(404)
                     .contentType("application/problem+json");
@@ -298,36 +298,36 @@ class GroupResourceTest {
         @Test
         @DisplayName("should reject update without request body")
         void shouldRejectUpdateWithoutBody() {
-            createGroup("no-body-test", "Test");
+            createRole("no-body-test", "Test");
 
             given().contentType(ContentType.JSON)
                     .when()
-                    .put("/admin/groups/no-body-test")
+                    .put("/admin/roles/no-body-test")
                     .then()
                     .statusCode(400);
         }
     }
 
     @Nested
-    @DisplayName("Group Deletion")
-    class GroupDeletionTests {
+    @DisplayName("Role Deletion")
+    class RoleDeletionTests {
 
         @Test
-        @DisplayName("should delete existing group")
-        void shouldDeleteExistingGroup() {
-            createGroup("to-delete", "To Delete");
+        @DisplayName("should delete existing role")
+        void shouldDeleteExistingRole() {
+            createRole("to-delete", "To Delete");
 
-            given().when().delete("/admin/groups/to-delete").then().statusCode(204);
+            given().when().delete("/admin/roles/to-delete").then().statusCode(204);
 
             // Verify it's gone
-            given().when().get("/admin/groups/to-delete").then().statusCode(404);
+            given().when().get("/admin/roles/to-delete").then().statusCode(404);
         }
 
         @Test
-        @DisplayName("should return 404 when deleting non-existent group")
+        @DisplayName("should return 404 when deleting non-existent role")
         void shouldReturn404WhenDeletingNonExistent() {
             given().when()
-                    .delete("/admin/groups/non-existent")
+                    .delete("/admin/roles/non-existent")
                     .then()
                     .statusCode(404)
                     .contentType("application/problem+json");
@@ -335,9 +335,9 @@ class GroupResourceTest {
     }
 
     /**
-     * Helper method to create a group for testing.
+     * Helper method to create a role for testing.
      */
-    private void createGroup(String id, String displayName) {
+    private void createRole(String id, String displayName) {
         var requestBody = String.format(
                 """
                 {
@@ -350,7 +350,7 @@ class GroupResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/admin/groups")
+                .post("/admin/roles")
                 .then()
                 .statusCode(201);
     }

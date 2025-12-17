@@ -16,10 +16,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.auth.Group;
+import aussie.core.model.auth.Role;
 
-@DisplayName("GroupEncryptionService")
-class GroupEncryptionServiceTest {
+@DisplayName("RoleEncryptionService")
+class RoleEncryptionServiceTest {
 
     /**
      * Generate a valid 256-bit key for testing.
@@ -37,7 +37,7 @@ class GroupEncryptionServiceTest {
         @Test
         @DisplayName("should enable encryption when key provided")
         void shouldEnableEncryptionWhenKeyProvided() {
-            final var service = new GroupEncryptionService(Optional.of(generateTestKey()), "v1", false);
+            final var service = new RoleEncryptionService(Optional.of(generateTestKey()), "v1", false);
 
             assertTrue(service.isEncryptionEnabled());
         }
@@ -45,7 +45,7 @@ class GroupEncryptionServiceTest {
         @Test
         @DisplayName("should disable encryption when no key provided")
         void shouldDisableEncryptionWhenNoKey() {
-            final var service = new GroupEncryptionService(Optional.empty(), "v1", false);
+            final var service = new RoleEncryptionService(Optional.empty(), "v1", false);
 
             assertFalse(service.isEncryptionEnabled());
         }
@@ -53,7 +53,7 @@ class GroupEncryptionServiceTest {
         @Test
         @DisplayName("should disable encryption when key is blank")
         void shouldDisableEncryptionWhenKeyIsBlank() {
-            final var service = new GroupEncryptionService(Optional.of("   "), "v1", false);
+            final var service = new RoleEncryptionService(Optional.of("   "), "v1", false);
 
             assertFalse(service.isEncryptionEnabled());
         }
@@ -68,7 +68,7 @@ class GroupEncryptionServiceTest {
 
             assertThrows(
                     IllegalArgumentException.class,
-                    () -> new GroupEncryptionService(Optional.of(invalidKey), "v1", false));
+                    () -> new RoleEncryptionService(Optional.of(invalidKey), "v1", false));
         }
     }
 
@@ -76,13 +76,13 @@ class GroupEncryptionServiceTest {
     @DisplayName("encrypt() and decrypt() with encryption enabled")
     class EncryptionEnabledTests {
 
-        private final GroupEncryptionService service =
-                new GroupEncryptionService(Optional.of(generateTestKey()), "v1", false);
+        private final RoleEncryptionService service =
+                new RoleEncryptionService(Optional.of(generateTestKey()), "v1", false);
 
         @Test
-        @DisplayName("should round-trip a group")
-        void shouldRoundTripGroup() {
-            final var original = Group.builder("developers")
+        @DisplayName("should round-trip a role")
+        void shouldRoundTripRole() {
+            final var original = Role.builder("developers")
                     .displayName("Developers")
                     .description("Development team")
                     .permissions(Set.of("apikeys.read", "service.config.read"))
@@ -91,7 +91,7 @@ class GroupEncryptionServiceTest {
                     .build();
 
             final String encrypted = service.encrypt(original);
-            final Group decrypted = service.decrypt(encrypted);
+            final Role decrypted = service.decrypt(encrypted);
 
             assertEquals(original.id(), decrypted.id());
             assertEquals(original.displayName(), decrypted.displayName());
@@ -102,12 +102,12 @@ class GroupEncryptionServiceTest {
         }
 
         @Test
-        @DisplayName("should produce different ciphertext for same group")
+        @DisplayName("should produce different ciphertext for same role")
         void shouldProduceDifferentCiphertext() {
-            final var group = Group.create("test", "Test", Set.of("perm1"));
+            final var role = Role.create("test", "Test", Set.of("perm1"));
 
-            final String encrypted1 = service.encrypt(group);
-            final String encrypted2 = service.encrypt(group);
+            final String encrypted1 = service.encrypt(role);
+            final String encrypted2 = service.encrypt(role);
 
             // Due to random IV, same plaintext should produce different ciphertext
             assertNotEquals(encrypted1, encrypted2);
@@ -116,15 +116,15 @@ class GroupEncryptionServiceTest {
         @Test
         @DisplayName("should handle empty permissions")
         void shouldHandleEmptyPermissions() {
-            final var group = Group.builder("empty-perms")
+            final var role = Role.builder("empty-perms")
                     .displayName("Empty Permissions")
                     .permissions(Set.of())
                     .createdAt(Instant.now())
                     .updatedAt(Instant.now())
                     .build();
 
-            final String encrypted = service.encrypt(group);
-            final Group decrypted = service.decrypt(encrypted);
+            final String encrypted = service.encrypt(role);
+            final Role decrypted = service.decrypt(encrypted);
 
             assertTrue(decrypted.permissions().isEmpty());
         }
@@ -132,7 +132,7 @@ class GroupEncryptionServiceTest {
         @Test
         @DisplayName("should handle null description")
         void shouldHandleNullDescription() {
-            final var group = Group.builder("no-desc")
+            final var role = Role.builder("no-desc")
                     .displayName("No Description")
                     .description(null)
                     .permissions(Set.of("perm"))
@@ -140,8 +140,8 @@ class GroupEncryptionServiceTest {
                     .updatedAt(Instant.now())
                     .build();
 
-            final String encrypted = service.encrypt(group);
-            final Group decrypted = service.decrypt(encrypted);
+            final String encrypted = service.encrypt(role);
+            final Role decrypted = service.decrypt(encrypted);
 
             // Null is stored as empty string, so expect empty or null
             assertTrue(
@@ -152,7 +152,7 @@ class GroupEncryptionServiceTest {
         @DisplayName("should handle special characters in fields")
         void shouldHandleSpecialCharacters() {
             // Note: \u0000 cannot be used as it's the field separator in serialization
-            final var group = Group.builder("special-chars")
+            final var role = Role.builder("special-chars")
                     .displayName("Test with special chars: @#$%^&*()")
                     .description("Description with \"quotes\" and 'apostrophes'")
                     .permissions(Set.of("perm.with.dots", "perm:with:colons"))
@@ -160,8 +160,8 @@ class GroupEncryptionServiceTest {
                     .updatedAt(Instant.now())
                     .build();
 
-            final String encrypted = service.encrypt(group);
-            final Group decrypted = service.decrypt(encrypted);
+            final String encrypted = service.encrypt(role);
+            final Role decrypted = service.decrypt(encrypted);
 
             assertEquals("special-chars", decrypted.id());
             assertEquals("Test with special chars: @#$%^&*()", decrypted.displayName());
@@ -170,14 +170,14 @@ class GroupEncryptionServiceTest {
         @Test
         @DisplayName("should produce non-plaintext output")
         void shouldProduceNonPlaintextOutput() {
-            final var group = Group.create("test", "Test Group", Set.of("permission"));
+            final var role = Role.create("test", "Test Role", Set.of("permission"));
 
-            final String encrypted = service.encrypt(group);
+            final String encrypted = service.encrypt(role);
 
             // Should be base64 encoded and not start with PLAIN:
             assertFalse(encrypted.startsWith("PLAIN:"));
             assertFalse(encrypted.contains("test"));
-            assertFalse(encrypted.contains("Test Group"));
+            assertFalse(encrypted.contains("Test Role"));
         }
     }
 
@@ -185,12 +185,12 @@ class GroupEncryptionServiceTest {
     @DisplayName("encrypt() and decrypt() with encryption disabled")
     class EncryptionDisabledTests {
 
-        private final GroupEncryptionService service = new GroupEncryptionService(Optional.empty(), "v1", false);
+        private final RoleEncryptionService service = new RoleEncryptionService(Optional.empty(), "v1", false);
 
         @Test
         @DisplayName("should round-trip in plaintext mode")
         void shouldRoundTripInPlaintextMode() {
-            final var original = Group.builder("plain-test")
+            final var original = Role.builder("plain-test")
                     .displayName("Plain Test")
                     .description("Testing plaintext")
                     .permissions(Set.of("perm1", "perm2"))
@@ -199,7 +199,7 @@ class GroupEncryptionServiceTest {
                     .build();
 
             final String encoded = service.encrypt(original);
-            final Group decoded = service.decrypt(encoded);
+            final Role decoded = service.decrypt(encoded);
 
             assertEquals(original.id(), decoded.id());
             assertEquals(original.displayName(), decoded.displayName());
@@ -209,9 +209,9 @@ class GroupEncryptionServiceTest {
         @Test
         @DisplayName("should prefix output with PLAIN:")
         void shouldPrefixWithPlain() {
-            final var group = Group.create("test", "Test", Set.of());
+            final var role = Role.create("test", "Test", Set.of());
 
-            final String encoded = service.encrypt(group);
+            final String encoded = service.encrypt(role);
 
             assertTrue(encoded.startsWith("PLAIN:"));
         }
@@ -220,9 +220,9 @@ class GroupEncryptionServiceTest {
         @DisplayName("should throw when trying to decrypt encrypted data")
         void shouldThrowWhenDecryptingEncryptedData() {
             // First encrypt with enabled service
-            final var enabledService = new GroupEncryptionService(Optional.of(generateTestKey()), "v1", false);
-            final var group = Group.create("test", "Test", Set.of());
-            final String encrypted = enabledService.encrypt(group);
+            final var enabledService = new RoleEncryptionService(Optional.of(generateTestKey()), "v1", false);
+            final var role = Role.create("test", "Test", Set.of());
+            final String encrypted = enabledService.encrypt(role);
 
             // Try to decrypt with disabled service
             assertThrows(IllegalStateException.class, () -> service.decrypt(encrypted));
@@ -238,15 +238,15 @@ class GroupEncryptionServiceTest {
         void shouldDecryptWithDifferentKeyId() {
             // Create service with key ID v1
             final String key = generateTestKey();
-            final var serviceV1 = new GroupEncryptionService(Optional.of(key), "v1", false);
-            final var group = Group.create("rotation-test", "Test", Set.of("perm"));
-            final String encrypted = serviceV1.encrypt(group);
+            final var serviceV1 = new RoleEncryptionService(Optional.of(key), "v1", false);
+            final var role = Role.create("rotation-test", "Test", Set.of("perm"));
+            final String encrypted = serviceV1.encrypt(role);
 
             // Create service with key ID v2 but same key
-            final var serviceV2 = new GroupEncryptionService(Optional.of(key), "v2", false);
+            final var serviceV2 = new RoleEncryptionService(Optional.of(key), "v2", false);
 
             // Should still decrypt (with warning in logs)
-            final Group decrypted = serviceV2.decrypt(encrypted);
+            final Role decrypted = serviceV2.decrypt(encrypted);
             assertEquals("rotation-test", decrypted.id());
         }
     }
@@ -258,14 +258,14 @@ class GroupEncryptionServiceTest {
         @Test
         @DisplayName("encrypted service should decrypt plaintext data")
         void encryptedServiceShouldDecryptPlaintext() {
-            final var disabledService = new GroupEncryptionService(Optional.empty(), "v1", false);
-            final var enabledService = new GroupEncryptionService(Optional.of(generateTestKey()), "v1", false);
+            final var disabledService = new RoleEncryptionService(Optional.empty(), "v1", false);
+            final var enabledService = new RoleEncryptionService(Optional.of(generateTestKey()), "v1", false);
 
-            final var group = Group.create("compat-test", "Test", Set.of("perm"));
-            final String plainEncoded = disabledService.encrypt(group);
+            final var role = Role.create("compat-test", "Test", Set.of("perm"));
+            final String plainEncoded = disabledService.encrypt(role);
 
             // Enabled service should be able to decrypt PLAIN: data
-            final Group decrypted = enabledService.decrypt(plainEncoded);
+            final Role decrypted = enabledService.decrypt(plainEncoded);
             assertEquals("compat-test", decrypted.id());
         }
     }
@@ -274,11 +274,11 @@ class GroupEncryptionServiceTest {
     @DisplayName("edge cases")
     class EdgeCaseTests {
 
-        private final GroupEncryptionService service =
-                new GroupEncryptionService(Optional.of(generateTestKey()), "v1", false);
+        private final RoleEncryptionService service =
+                new RoleEncryptionService(Optional.of(generateTestKey()), "v1", false);
 
         @Test
-        @DisplayName("should handle group with many permissions")
+        @DisplayName("should handle role with many permissions")
         void shouldHandleManyPermissions() {
             final Set<String> manyPermissions = Set.of(
                     "apikeys.read",
@@ -294,24 +294,24 @@ class GroupEncryptionServiceTest {
                     "analytics.read",
                     "analytics.export");
 
-            final var group = Group.builder("power-users")
+            final var role = Role.builder("power-users")
                     .displayName("Power Users")
                     .permissions(manyPermissions)
                     .createdAt(Instant.now())
                     .updatedAt(Instant.now())
                     .build();
 
-            final String encrypted = service.encrypt(group);
-            final Group decrypted = service.decrypt(encrypted);
+            final String encrypted = service.encrypt(role);
+            final Role decrypted = service.decrypt(encrypted);
 
             assertEquals(manyPermissions.size(), decrypted.permissions().size());
             assertTrue(decrypted.permissions().containsAll(manyPermissions));
         }
 
         @Test
-        @DisplayName("should handle unicode in group fields")
+        @DisplayName("should handle unicode in role fields")
         void shouldHandleUnicode() {
-            final var group = Group.builder("unicode-test")
+            final var role = Role.builder("unicode-test")
                     .displayName("Développeurs")
                     .description("团队描述")
                     .permissions(Set.of("権限.読み取り"))
@@ -319,8 +319,8 @@ class GroupEncryptionServiceTest {
                     .updatedAt(Instant.now())
                     .build();
 
-            final String encrypted = service.encrypt(group);
-            final Group decrypted = service.decrypt(encrypted);
+            final String encrypted = service.encrypt(role);
+            final Role decrypted = service.decrypt(encrypted);
 
             assertEquals("Développeurs", decrypted.displayName());
             assertEquals("团队描述", decrypted.description());

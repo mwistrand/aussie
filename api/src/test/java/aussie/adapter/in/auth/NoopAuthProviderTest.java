@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.core.model.auth.AuthenticationResult;
-import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.Permissions;
 
 @DisplayName("NoopAuthProvider")
 class NoopAuthProviderTest {
@@ -87,7 +87,7 @@ class NoopAuthProviderTest {
             var success = (AuthenticationResult.Success) result;
             // NoopAuthProvider grants wildcard permission which includes all other
             // permissions
-            assertTrue(success.context().hasPermission(Permission.ALL));
+            assertTrue(success.context().hasPermission(Permissions.ALL));
         }
 
         @Test

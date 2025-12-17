@@ -4,21 +4,21 @@ import java.time.Instant;
 import java.util.Set;
 
 /**
- * Represents a group that maps to a set of permissions.
+ * Represents a role that maps to a set of permissions.
  *
- * <p>Groups are used for role-based access control (RBAC). When a token contains
- * group claims, the gateway expands those groups to their associated permissions
+ * <p>Roles are used for role-based access control (RBAC). When a token contains
+ * role claims, the gateway expands those roles to their associated permissions
  * at validation time. This allows centralized permission management without
  * regenerating tokens.
  *
  * @param id          unique identifier (e.g., "platform-team", "demo-service.admin")
  * @param displayName human-readable name (e.g., "Platform Team")
- * @param description optional description of this group's purpose
- * @param permissions set of permission strings granted to members of this group
- * @param createdAt   when the group was created
- * @param updatedAt   when the group was last modified
+ * @param description optional description of this role's purpose
+ * @param permissions set of permission strings granted to members of this role
+ * @param createdAt   when the role was created
+ * @param updatedAt   when the role was last modified
  */
-public record Group(
+public record Role(
         String id,
         String displayName,
         String description,
@@ -26,9 +26,9 @@ public record Group(
         Instant createdAt,
         Instant updatedAt) {
 
-    public Group {
+    public Role {
         if (id == null || id.isBlank()) {
-            throw new IllegalArgumentException("Group ID cannot be null or blank");
+            throw new IllegalArgumentException("Role ID cannot be null or blank");
         }
         if (displayName == null || displayName.isBlank()) {
             displayName = id;
@@ -50,37 +50,37 @@ public record Group(
     }
 
     /**
-     * Create a new group with the given ID, display name, and permissions.
+     * Create a new role with the given ID, display name, and permissions.
      *
      * @param id          unique identifier
      * @param displayName human-readable name
      * @param permissions set of permissions
-     * @return a new Group instance
+     * @return a new Role instance
      */
-    public static Group create(String id, String displayName, Set<String> permissions) {
+    public static Role create(String id, String displayName, Set<String> permissions) {
         final var now = Instant.now();
-        return new Group(id, displayName, null, permissions, now, now);
+        return new Role(id, displayName, null, permissions, now, now);
     }
 
     /**
-     * Create a copy of this group with updated permissions.
+     * Create a copy of this role with updated permissions.
      *
      * @param newPermissions the new set of permissions
-     * @return a new Group with updated permissions and updatedAt timestamp
+     * @return a new Role with updated permissions and updatedAt timestamp
      */
-    public Group withPermissions(Set<String> newPermissions) {
-        return new Group(id, displayName, description, newPermissions, createdAt, Instant.now());
+    public Role withPermissions(Set<String> newPermissions) {
+        return new Role(id, displayName, description, newPermissions, createdAt, Instant.now());
     }
 
     /**
-     * Create a copy of this group with updated display name and description.
+     * Create a copy of this role with updated display name and description.
      *
      * @param newDisplayName the new display name
      * @param newDescription the new description
-     * @return a new Group with updated fields and updatedAt timestamp
+     * @return a new Role with updated fields and updatedAt timestamp
      */
-    public Group withDetails(String newDisplayName, String newDescription) {
-        return new Group(id, newDisplayName, newDescription, permissions, createdAt, Instant.now());
+    public Role withDetails(String newDisplayName, String newDescription) {
+        return new Role(id, newDisplayName, newDescription, permissions, createdAt, Instant.now());
     }
 
     public static Builder builder(String id) {
@@ -124,8 +124,8 @@ public record Group(
             return this;
         }
 
-        public Group build() {
-            return new Group(id, displayName, description, permissions, createdAt, updatedAt);
+        public Role build() {
+            return new Role(id, displayName, description, permissions, createdAt, updatedAt);
         }
     }
 }

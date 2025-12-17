@@ -19,7 +19,7 @@ import org.jboss.logging.Logger;
 
 import aussie.core.model.auth.Permission;
 import aussie.core.model.auth.TokenValidationResult;
-import aussie.core.port.in.GroupManagement;
+import aussie.core.port.in.RoleManagement;
 import aussie.core.service.auth.TokenValidationService;
 
 /**
@@ -31,8 +31,8 @@ import aussie.core.service.auth.TokenValidationService;
  * <p>The resulting {@link SecurityIdentity} contains:
  * <ul>
  *   <li>Principal name: The subject (sub) claim from the JWT</li>
- *   <li>Roles: Mapped from JWT groups/permissions claims</li>
- *   <li>Attributes: All JWT claims including groups and permissions</li>
+ *   <li>Roles: Mapped from JWT roles/permissions claims</li>
+ *   <li>Attributes: All JWT claims including roles and permissions</li>
  * </ul>
  */
 @ApplicationScoped
@@ -41,15 +41,12 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
     private static final Logger LOG = Logger.getLogger(JwtIdentityProvider.class);
 
     private final TokenValidationService tokenValidationService;
-    private final GroupManagement groupManagement;
-    private final Permission roleMapper;
+    private final RoleManagement roleManagement;
 
     @Inject
-    public JwtIdentityProvider(
-            TokenValidationService tokenValidationService, GroupManagement groupManagement, Permission roleMapper) {
+    public JwtIdentityProvider(TokenValidationService tokenValidationService, RoleManagement roleManagement) {
         this.tokenValidationService = tokenValidationService;
-        this.groupManagement = groupManagement;
-        this.roleMapper = roleMapper;
+        this.roleManagement = roleManagement;
     }
 
     @Override
@@ -83,9 +80,9 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
         Map<String, Object> claims = validResult.claims();
         Instant expiry = validResult.expiresAt();
 
-        // Extract groups from claims
+        // Extract roles from claims
         @SuppressWarnings("unchecked")
-        List<String> groups = claims.get("groups") instanceof List<?> list
+        List<String> tokenRoles = claims.get("roles") instanceof List<?> list
                 ? list.stream().map(Object::toString).toList()
                 : List.of();
 
@@ -95,36 +92,37 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
                 ? list.stream().map(Object::toString).toList()
                 : List.of();
 
-        // Expand groups to permissions
-        return expandGroupsToPermissions(groups).map(groupPermissions -> {
-            // Combine direct permissions with group-expanded permissions
+        // Expand roles to permissions
+        return expandRolesToPermissions(tokenRoles).map(rolePermissions -> {
+            // Combine direct permissions with role-expanded permissions
             Set<String> allPermissions = new HashSet<>(directPermissions);
-            allPermissions.addAll(groupPermissions);
+            allPermissions.addAll(rolePermissions);
 
             // Map permissions to Quarkus Security roles
-            Set<String> roles = roleMapper.toRoles(allPermissions);
+            Set<String> securityRoles = Permission.toRoles(allPermissions);
 
             // Build security identity
             var builder = QuarkusSecurityIdentity.builder()
                     .setPrincipal(new JwtPrincipal(subject, claims))
-                    .addRoles(roles)
+                    .addRoles(securityRoles)
                     .addAttribute("claims", claims)
-                    .addAttribute("groups", groups)
+                    .addAttribute("roles", tokenRoles)
                     .addAttribute("permissions", allPermissions)
                     .addAttribute("expiresAt", expiry);
 
-            LOG.debugv("JWT authenticated: subject={0}, groups={1}, permissions={2}", subject, groups, allPermissions);
+            LOG.debugv(
+                    "JWT authenticated: subject={0}, roles={1}, permissions={2}", subject, tokenRoles, allPermissions);
 
             return builder.build();
         });
     }
 
-    private Uni<Set<String>> expandGroupsToPermissions(List<String> groups) {
-        if (groups.isEmpty()) {
+    private Uni<Set<String>> expandRolesToPermissions(List<String> roles) {
+        if (roles.isEmpty()) {
             return Uni.createFrom().item(Set.of());
         }
 
-        return groupManagement.expandGroups(new HashSet<>(groups));
+        return roleManagement.expandRoles(new HashSet<>(roles));
     }
 
     /**

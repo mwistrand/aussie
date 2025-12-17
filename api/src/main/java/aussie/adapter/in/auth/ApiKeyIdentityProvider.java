@@ -17,6 +17,7 @@ import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.adapter.out.telemetry.SecurityMonitor;
 import aussie.core.model.auth.ApiKey;
 import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.Permissions;
 import aussie.core.port.in.ApiKeyManagement;
 
 /**
@@ -36,18 +37,13 @@ import aussie.core.port.in.ApiKeyManagement;
 public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthenticationRequest> {
 
     private final ApiKeyManagement apiKeyManagement;
-    private final Permission roleMapper;
     private final GatewayMetrics metrics;
     private final SecurityMonitor securityMonitor;
 
     @Inject
     public ApiKeyIdentityProvider(
-            ApiKeyManagement apiKeyManagement,
-            Permission roleMapper,
-            GatewayMetrics metrics,
-            SecurityMonitor securityMonitor) {
+            ApiKeyManagement apiKeyManagement, GatewayMetrics metrics, SecurityMonitor securityMonitor) {
         this.apiKeyManagement = apiKeyManagement;
-        this.roleMapper = roleMapper;
         this.metrics = metrics;
         this.securityMonitor = securityMonitor;
     }
@@ -77,7 +73,7 @@ public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthentica
 
     private SecurityIdentity buildIdentity(ApiKey apiKey) {
         // Map permissions to Quarkus Security roles for @RolesAllowed checks
-        var roles = roleMapper.toRoles(apiKey.permissions());
+        var roles = Permission.toRoles(apiKey.permissions());
 
         // Build effective permissions for service-level authorization
         var effectivePermissions = buildEffectivePermissions(apiKey);
@@ -111,9 +107,9 @@ public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthentica
         // Add permissions for service-level authorization
         if (apiKey.permissions() != null) {
             for (String permission : apiKey.permissions()) {
-                if (Permission.ALL.equals(permission)) {
+                if (Permissions.ALL.equals(permission)) {
                     // Wildcard grants full admin access
-                    effectivePermissions.add(Permission.ADMIN_CLAIM);
+                    effectivePermissions.add(Permissions.ADMIN_CLAIM);
                 }
                 effectivePermissions.add(permission);
             }

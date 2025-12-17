@@ -1,18 +1,18 @@
 package aussie.adapter.out.storage.memory;
 
-import aussie.core.port.out.GroupRepository;
-import aussie.spi.GroupStorageProvider;
+import aussie.core.port.out.RoleRepository;
+import aussie.spi.RoleStorageProvider;
 import aussie.spi.StorageAdapterConfig;
 
 /**
- * In-memory storage provider for groups.
+ * In-memory storage provider for roles.
  *
  * <p>Provides non-persistent storage suitable for development, testing,
- * and single-instance deployments where groups are managed externally.
+ * and single-instance deployments where roles are managed externally.
  *
  * <p>Data is NOT persisted across application restarts.
  */
-public class InMemoryGroupStorageProvider implements GroupStorageProvider {
+public class InMemoryRoleStorageProvider implements RoleStorageProvider {
 
     @Override
     public String name() {
@@ -21,7 +21,7 @@ public class InMemoryGroupStorageProvider implements GroupStorageProvider {
 
     @Override
     public String description() {
-        return "In-memory group storage (non-persistent)";
+        return "In-memory role storage (non-persistent)";
     }
 
     @Override
@@ -30,7 +30,7 @@ public class InMemoryGroupStorageProvider implements GroupStorageProvider {
     }
 
     @Override
-    public GroupRepository createRepository(StorageAdapterConfig config) {
-        return new InMemoryGroupRepository();
+    public RoleRepository createRepository(StorageAdapterConfig config) {
+        return new InMemoryRoleRepository();
     }
 }

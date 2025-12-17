@@ -23,7 +23,7 @@ import io.smallrye.mutiny.Uni;
 import aussie.adapter.in.dto.ServiceRegistrationRequest;
 import aussie.adapter.in.dto.ServiceRegistrationResponse;
 import aussie.adapter.in.problem.GatewayProblem;
-import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.Permissions;
 import aussie.core.model.service.RegistrationResult;
 import aussie.core.service.routing.ServiceRegistry;
 
@@ -51,7 +51,7 @@ public class AdminResource {
     }
 
     @POST
-    @RolesAllowed({Permission.SERVICE_CONFIG_CREATE, Permission.SERVICE_CONFIG_UPDATE, Permission.ADMIN})
+    @RolesAllowed({Permissions.SERVICE_CONFIG_CREATE, Permissions.SERVICE_CONFIG_UPDATE, Permissions.ADMIN})
     public Uni<Response> registerService(ServiceRegistrationRequest request) {
         // Minimal adapter-level validation to prevent NPE during DTO conversion
         if (request == null || request.serviceId() == null || request.baseUrl() == null) {
@@ -79,7 +79,7 @@ public class AdminResource {
 
     @DELETE
     @Path("/{serviceId}")
-    @RolesAllowed({Permission.SERVICE_CONFIG_DELETE, Permission.ADMIN})
+    @RolesAllowed({Permissions.SERVICE_CONFIG_DELETE, Permissions.ADMIN})
     public Uni<Response> unregisterService(@PathParam("serviceId") String serviceId) {
         return identityAssociation.getDeferredIdentity().flatMap(identity -> {
             var permissions = extractPermissions(identity);
@@ -92,7 +92,7 @@ public class AdminResource {
     }
 
     @GET
-    @RolesAllowed({Permission.SERVICE_CONFIG_READ, Permission.ADMIN})
+    @RolesAllowed({Permissions.SERVICE_CONFIG_READ, Permissions.ADMIN})
     public Uni<List<ServiceRegistrationResponse>> listServices() {
         // List all services - service-level filtering could be added here if needed
         return serviceRegistry.getAllServices().map(services -> services.stream()
@@ -102,7 +102,7 @@ public class AdminResource {
 
     @GET
     @Path("/{serviceId}")
-    @RolesAllowed({Permission.SERVICE_CONFIG_READ, Permission.ADMIN})
+    @RolesAllowed({Permissions.SERVICE_CONFIG_READ, Permissions.ADMIN})
     public Uni<Response> getService(@PathParam("serviceId") String serviceId) {
         return identityAssociation.getDeferredIdentity().flatMap(identity -> {
             var permissions = extractPermissions(identity);

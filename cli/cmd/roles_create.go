@@ -15,37 +15,37 @@ import (
 )
 
 var (
-	createGroupID          string
-	createGroupDisplayName string
-	createGroupDescription string
-	createGroupPermissions []string
+	createRoleID          string
+	createRoleDisplayName string
+	createRoleDescription string
+	createRolePermissions []string
 )
 
-var groupsCreateCmd = &cobra.Command{
+var rolesCreateCmd = &cobra.Command{
 	Use:   "create",
-	Short: "Create a new RBAC group",
-	Long: `Create a new RBAC group that maps to a set of permissions.
+	Short: "Create a new RBAC role",
+	Long: `Create a new RBAC role that maps to a set of permissions.
 
-Groups are used to expand token group claims into effective permissions
+Roles are used to expand token role claims into effective permissions
 at validation time. This allows centralized permission management without
 regenerating tokens.
 
 Examples:
-  aussie groups create --id service-admin --permissions "apikeys.write,service.config.*"
-  aussie groups create --id platform-team --display-name "Platform Team" --description "Core platform engineering" --permissions "admin"`,
-	RunE: runGroupsCreate,
+  aussie roles create --id service-admin --permissions "apikeys.write,service.config.*"
+  aussie roles create --id platform-team --display-name "Platform Team" --description "Core platform engineering" --permissions "admin"`,
+	RunE: runRolesCreate,
 }
 
 func init() {
-	groupsCmd.AddCommand(groupsCreateCmd)
-	groupsCreateCmd.Flags().StringVar(&createGroupID, "id", "", "Unique identifier for the group (required)")
-	groupsCreateCmd.Flags().StringVarP(&createGroupDisplayName, "display-name", "d", "", "Human-readable name for the group")
-	groupsCreateCmd.Flags().StringVar(&createGroupDescription, "description", "", "Description of the group's purpose")
-	groupsCreateCmd.Flags().StringSliceVarP(&createGroupPermissions, "permissions", "p", nil, "Permissions granted to this group (comma-separated)")
-	groupsCreateCmd.MarkFlagRequired("id")
+	rolesCmd.AddCommand(rolesCreateCmd)
+	rolesCreateCmd.Flags().StringVar(&createRoleID, "id", "", "Unique identifier for the role (required)")
+	rolesCreateCmd.Flags().StringVarP(&createRoleDisplayName, "display-name", "d", "", "Human-readable name for the role")
+	rolesCreateCmd.Flags().StringVar(&createRoleDescription, "description", "", "Description of the role's purpose")
+	rolesCreateCmd.Flags().StringSliceVarP(&createRolePermissions, "permissions", "p", nil, "Permissions granted to this role (comma-separated or multiple flags)")
+	rolesCreateCmd.MarkFlagRequired("id")
 }
 
-func runGroupsCreate(cmd *cobra.Command, args []string) error {
+func runRolesCreate(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -64,16 +64,16 @@ func runGroupsCreate(cmd *cobra.Command, args []string) error {
 
 	// Build request body
 	reqBody := map[string]interface{}{
-		"id": createGroupID,
+		"id": createRoleID,
 	}
-	if createGroupDisplayName != "" {
-		reqBody["displayName"] = createGroupDisplayName
+	if createRoleDisplayName != "" {
+		reqBody["displayName"] = createRoleDisplayName
 	}
-	if createGroupDescription != "" {
-		reqBody["description"] = createGroupDescription
+	if createRoleDescription != "" {
+		reqBody["description"] = createRoleDescription
 	}
-	if len(createGroupPermissions) > 0 {
-		reqBody["permissions"] = createGroupPermissions
+	if len(createRolePermissions) > 0 {
+		reqBody["permissions"] = createRolePermissions
 	}
 
 	jsonBody, err := json.Marshal(reqBody)
@@ -81,7 +81,7 @@ func runGroupsCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/admin/groups", cfg.Host)
+	url := fmt.Sprintf("%s/admin/roles", cfg.Host)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -100,7 +100,7 @@ func runGroupsCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
 	}
 	if resp.StatusCode == http.StatusForbidden {
-		return fmt.Errorf("insufficient permissions to create groups (requires admin)")
+		return fmt.Errorf("insufficient permissions to create roles (requires admin)")
 	}
 	if resp.StatusCode == http.StatusBadRequest {
 		var errResp struct {
@@ -124,7 +124,7 @@ func runGroupsCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	fmt.Println("Group created successfully!")
+	fmt.Println("Role created successfully!")
 	fmt.Println()
 	fmt.Printf("ID:           %s\n", result.ID)
 	if result.DisplayName != "" {

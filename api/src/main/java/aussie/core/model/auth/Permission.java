@@ -3,27 +3,20 @@ package aussie.core.model.auth;
 import java.util.HashSet;
 import java.util.Set;
 
-import jakarta.enterprise.context.ApplicationScoped;
-
 /**
- * Permission constants and role mapping for Aussie API authentication.
+ * Permission enum for Aussie API authentication.
  *
- * <p>
- * Permissions follow a hierarchical format and represent operations that can be
+ * <p>Each enum constant encapsulates a permission string value. For use in
+ * annotations (which require compile-time constants), use the string constants
+ * in {@link Permissions} instead.
+ *
+ * <p>Permissions follow a hierarchical format and represent operations that can be
  * performed on services and resources. These are the canonical operation names
- * used in permission policies. The vocabulary is stable and defined by Aussie,
- * while the claims that map to these operations are defined by the organization.
+ * used in permission policies.
  *
- * <p>
- * The wildcard permission {@code *} grants all permissions.
- *
- * <p>
- * Roles are derived from permissions and used by {@code @RolesAllowed}
- * annotations in JAX-RS resources.
+ * <p>The wildcard permission {@code *} grants all permissions.
  *
  * <h2>Important Distinction: ADMIN_CLAIM vs ADMIN</h2>
- * <p>
- * These serve different purposes and should NOT be consolidated:
  * <ul>
  * <li>{@link #ADMIN_CLAIM} ({@code "aussie:admin"}) - A token claim value used
  * by {@code DefaultPermissionPolicy} for service-level authorization. Controls
@@ -32,9 +25,10 @@ import jakarta.enterprise.context.ApplicationScoped;
  * {@code @RolesAllowed} annotations for endpoint-level authorization. Controls
  * access to admin REST endpoints.</li>
  * </ul>
+ *
+ * @see Permissions
  */
-@ApplicationScoped
-public class Permission {
+public enum Permission {
 
     // ========================================================================
     // Wildcard permission
@@ -42,88 +36,86 @@ public class Permission {
 
     /**
      * Wildcard permission that grants access to everything.
-     * Used by the dangerous-noop provider in development mode.
      */
-    public static final String ALL = "*";
+    ALL(Permissions.ALL),
 
     /**
      * Default admin claim used for service-level authorization.
-     * This claim grants full access when no explicit permission policy is defined.
      */
-    public static final String ADMIN_CLAIM = "aussie:admin";
+    ADMIN_CLAIM(Permissions.ADMIN_CLAIM),
 
     // ========================================================================
-    // Role constants (used by @RolesAllowed)
+    // Role constants (used by @RolesAllowed via Permissions class)
     // ========================================================================
 
     /**
      * Role for full admin access (granted by wildcard permission).
      */
-    public static final String ADMIN = "admin";
+    ADMIN(Permissions.ADMIN),
 
     /**
      * Role for reading service configurations.
      */
-    public static final String SERVICE_CONFIG_READ = "service.config.read";
+    SERVICE_CONFIG_READ(Permissions.SERVICE_CONFIG_READ),
 
     /**
      * Role for creating service configurations.
      */
-    public static final String SERVICE_CONFIG_CREATE = "service.config.create";
+    SERVICE_CONFIG_CREATE(Permissions.SERVICE_CONFIG_CREATE),
 
     /**
      * Role for updating service configurations.
      */
-    public static final String SERVICE_CONFIG_UPDATE = "service.config.update";
+    SERVICE_CONFIG_UPDATE(Permissions.SERVICE_CONFIG_UPDATE),
 
     /**
      * Role for deleting service configurations.
      */
-    public static final String SERVICE_CONFIG_DELETE = "service.config.delete";
+    SERVICE_CONFIG_DELETE(Permissions.SERVICE_CONFIG_DELETE),
 
     /**
      * Role for reading service permission policies.
      */
-    public static final String SERVICE_PERMISSIONS_READ = "service.permissions.read";
+    SERVICE_PERMISSIONS_READ(Permissions.SERVICE_PERMISSIONS_READ),
 
     /**
      * Role for writing service permission policies.
      */
-    public static final String SERVICE_PERMISSIONS_WRITE = "service.permissions.write";
+    SERVICE_PERMISSIONS_WRITE(Permissions.SERVICE_PERMISSIONS_WRITE),
 
     /**
      * Role for reading API keys.
      */
-    public static final String APIKEYS_READ = "apikeys.read";
+    APIKEYS_READ(Permissions.APIKEYS_READ),
 
     /**
      * Role for writing API keys.
      */
-    public static final String APIKEYS_WRITE = "apikeys.write";
+    APIKEYS_WRITE(Permissions.APIKEYS_WRITE),
 
     // ========================================================================
-    // Group management roles (for @RolesAllowed)
+    // Role management permissions
     // ========================================================================
 
     /**
-     * Role for creating groups.
+     * Permission for creating roles.
      */
-    public static final String AUTH_GROUPS_CREATE = "auth.groups.create";
+    AUTH_ROLES_CREATE(Permissions.AUTH_ROLES_CREATE),
 
     /**
-     * Role for reading groups.
+     * Permission for reading roles.
      */
-    public static final String AUTH_GROUPS_READ = "auth.groups.read";
+    AUTH_ROLES_READ(Permissions.AUTH_ROLES_READ),
 
     /**
-     * Role for updating groups.
+     * Permission for updating roles.
      */
-    public static final String AUTH_GROUPS_UPDATE = "auth.groups.update";
+    AUTH_ROLES_UPDATE(Permissions.AUTH_ROLES_UPDATE),
 
     /**
-     * Role for deleting groups.
+     * Permission for deleting roles.
      */
-    public static final String AUTH_GROUPS_DELETE = "auth.groups.delete";
+    AUTH_ROLES_DELETE(Permissions.AUTH_ROLES_DELETE),
 
     // ========================================================================
     // Service operation constants (for permission policies)
@@ -132,44 +124,64 @@ public class Permission {
     /**
      * Service configuration create operation.
      */
-    public static final String CONFIG_CREATE = "service.config.create";
+    CONFIG_CREATE(Permissions.CONFIG_CREATE),
 
     /**
      * Service configuration read operation.
      */
-    public static final String CONFIG_READ = "service.config.read";
+    CONFIG_READ(Permissions.CONFIG_READ),
 
     /**
      * Service configuration update operation.
      */
-    public static final String CONFIG_UPDATE = "service.config.update";
+    CONFIG_UPDATE(Permissions.CONFIG_UPDATE),
 
     /**
      * Service configuration delete operation.
      */
-    public static final String CONFIG_DELETE = "service.config.delete";
+    CONFIG_DELETE(Permissions.CONFIG_DELETE),
 
     /**
      * Permission policy read operation.
      */
-    public static final String PERMISSIONS_READ = "service.permissions.read";
+    PERMISSIONS_READ(Permissions.PERMISSIONS_READ),
 
     /**
      * Permission policy update operation.
      */
-    public static final String PERMISSIONS_WRITE = "service.permissions.write";
+    PERMISSIONS_WRITE(Permissions.PERMISSIONS_WRITE);
 
-    // Future operations (not yet implemented)
-    // public static final String METRICS_READ = "service.metrics.read";
-    // public static final String LOGS_READ = "service.logs.read";
+    private final String value;
+
+    Permission(String value) {
+        this.value = value;
+    }
+
+    /**
+     * Get the string value of this permission.
+     *
+     * @return the permission string
+     */
+    public String value() {
+        return value;
+    }
+
+    @Override
+    public String toString() {
+        return value;
+    }
+
+    // ========================================================================
+    // Utility methods
+    // ========================================================================
 
     /**
      * Convert a set of Aussie permissions to Quarkus Security roles.
      *
-     * @param permissions the set of permissions
+     * @param permissions the set of permissions (as strings)
      * @return the corresponding set of roles
      */
-    public Set<String> toRoles(Set<String> permissions) {
+    public static Set<String> toRoles(Set<String> permissions) {
         if (permissions == null || permissions.isEmpty()) {
             return Set.of();
         }
@@ -177,25 +189,23 @@ public class Permission {
         Set<String> roles = new HashSet<>();
 
         for (String permission : permissions) {
-            if (ALL.equals(permission)) {
+            if (Permissions.ALL.equals(permission)) {
                 // Wildcard grants all roles
-                roles.add(ADMIN);
-                roles.add(SERVICE_CONFIG_READ);
-                roles.add(SERVICE_CONFIG_CREATE);
-                roles.add(SERVICE_CONFIG_UPDATE);
-                roles.add(SERVICE_CONFIG_DELETE);
-                roles.add(SERVICE_PERMISSIONS_READ);
-                roles.add(SERVICE_PERMISSIONS_WRITE);
-                roles.add(APIKEYS_READ);
-                roles.add(APIKEYS_WRITE);
-                roles.add(AUTH_GROUPS_CREATE);
-                roles.add(AUTH_GROUPS_READ);
-                roles.add(AUTH_GROUPS_UPDATE);
-                roles.add(AUTH_GROUPS_DELETE);
+                roles.add(Permissions.ADMIN);
+                roles.add(Permissions.SERVICE_CONFIG_READ);
+                roles.add(Permissions.SERVICE_CONFIG_CREATE);
+                roles.add(Permissions.SERVICE_CONFIG_UPDATE);
+                roles.add(Permissions.SERVICE_CONFIG_DELETE);
+                roles.add(Permissions.SERVICE_PERMISSIONS_READ);
+                roles.add(Permissions.SERVICE_PERMISSIONS_WRITE);
+                roles.add(Permissions.APIKEYS_READ);
+                roles.add(Permissions.APIKEYS_WRITE);
+                roles.add(Permissions.AUTH_ROLES_CREATE);
+                roles.add(Permissions.AUTH_ROLES_READ);
+                roles.add(Permissions.AUTH_ROLES_UPDATE);
+                roles.add(Permissions.AUTH_ROLES_DELETE);
             } else {
-                // Convert colon to hyphen: service.config:read -> service.config-read
-                String role = permission.replace(':', '-');
-                roles.add(role);
+                roles.add(permission);
             }
         }
 
@@ -205,15 +215,15 @@ public class Permission {
     /**
      * Convert a single Aussie permission to a Quarkus Security role.
      *
-     * @param permission the permission
+     * @param permission the permission string
      * @return the corresponding role
      */
-    public String toRole(String permission) {
+    public static String toRole(String permission) {
         if (permission == null) {
             return null;
         }
-        if (ALL.equals(permission)) {
-            return ADMIN;
+        if (Permissions.ALL.equals(permission)) {
+            return Permissions.ADMIN;
         }
         return permission;
     }

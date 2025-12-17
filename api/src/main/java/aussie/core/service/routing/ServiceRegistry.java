@@ -16,7 +16,7 @@ import jakarta.inject.Inject;
 import io.smallrye.mutiny.Uni;
 
 import aussie.core.cache.LocalCacheConfig;
-import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.Permissions;
 import aussie.core.model.auth.ServicePermissionPolicy;
 import aussie.core.model.common.ValidationResult;
 import aussie.core.model.routing.EndpointConfig;
@@ -214,7 +214,8 @@ public class ServiceRegistry {
                 }
 
                 // Check update authorization if claims provided
-                if (claims != null && !authService.isAuthorizedForService(existing, Permission.CONFIG_UPDATE, claims)) {
+                if (claims != null
+                        && !authService.isAuthorizedForService(existing, Permissions.CONFIG_UPDATE, claims)) {
                     return Uni.createFrom()
                             .item(RegistrationResult.failure(
                                     "Not authorized to update service: " + service.serviceId(), 403));
@@ -222,7 +223,7 @@ public class ServiceRegistry {
 
                 // Check if permission policy is changing (not just present)
                 if (claims != null && hasPermissionPolicyChanged(existing, service)) {
-                    if (!authService.isAuthorizedForService(existing, Permission.PERMISSIONS_WRITE, claims)) {
+                    if (!authService.isAuthorizedForService(existing, Permissions.PERMISSIONS_WRITE, claims)) {
                         return Uni.createFrom()
                                 .item(RegistrationResult.failure(
                                         "Not authorized to update permissions for service: " + service.serviceId(),
@@ -297,7 +298,7 @@ public class ServiceRegistry {
             var existing = opt.get();
 
             // Check delete authorization if claims provided
-            if (claims != null && !authService.isAuthorizedForService(existing, Permission.CONFIG_DELETE, claims)) {
+            if (claims != null && !authService.isAuthorizedForService(existing, Permissions.CONFIG_DELETE, claims)) {
                 return Uni.createFrom()
                         .item(RegistrationResult.failure("Not authorized to delete service: " + serviceId, 403));
             }
@@ -346,7 +347,7 @@ public class ServiceRegistry {
             var service = opt.get();
 
             // Check read authorization
-            if (!authService.isAuthorizedForService(service, Permission.CONFIG_READ, claims)) {
+            if (!authService.isAuthorizedForService(service, Permissions.CONFIG_READ, claims)) {
                 return RegistrationResult.failure("Not authorized to read service: " + serviceId, 403);
             }
 
