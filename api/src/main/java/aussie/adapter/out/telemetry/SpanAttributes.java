@@ -112,9 +112,6 @@ public final class SpanAttributes {
     /** Tenant identifier for multi-tenant deployments. */
     public static final String TENANT_ID = "aussie.tenant.id";
 
-    /** Cost center for billing attribution. */
-    public static final String COST_CENTER = "aussie.cost_center";
-
     /** Client application identifier. */
     public static final String CLIENT_APPLICATION = "aussie.client.application";
 

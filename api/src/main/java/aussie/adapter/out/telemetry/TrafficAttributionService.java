@@ -188,20 +188,5 @@ public class TrafficAttributionService implements TrafficAttributing {
      * @param responseBytes size of response body in bytes
      * @param durationMs request processing time in milliseconds
      */
-    public record RequestMetrics(long requestBytes, long responseBytes, long durationMs) {
-        /**
-         * Create request metrics.
-         *
-         * @param requestBytes request body size (null-safe)
-         * @param responseBytes response body size (null-safe)
-         * @param durationMs duration in milliseconds
-         * @return request metrics
-         */
-        public static RequestMetrics of(byte[] requestBody, byte[] responseBody, long durationMs) {
-            return new RequestMetrics(
-                    requestBody != null ? requestBody.length : 0,
-                    responseBody != null ? responseBody.length : 0,
-                    durationMs);
-        }
-    }
+    public record RequestMetrics(long requestBytes, long responseBytes, long durationMs) {}
 }

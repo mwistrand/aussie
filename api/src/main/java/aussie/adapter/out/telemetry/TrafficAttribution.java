@@ -7,22 +7,16 @@ import aussie.core.model.service.ServiceRegistration;
  * Traffic attribution dimensions for cost allocation.
  *
  * <p>This record captures all the dimensions used to attribute traffic
- * to teams, tenants, and cost centers for billing and reporting purposes.
+ * to teams and tenants for billing and reporting purposes.
  *
  * @param serviceId the target service identifier
  * @param teamId the team owning or consuming the service
- * @param costCenter the billing cost center
  * @param tenantId the tenant identifier (for multi-tenant deployments)
  * @param clientApplication the client application making the request
  * @param environment the deployment environment (dev/staging/prod)
  */
 public record TrafficAttribution(
-        String serviceId,
-        String teamId,
-        String costCenter,
-        String tenantId,
-        String clientApplication,
-        String environment) {
+        String serviceId, String teamId, String tenantId, String clientApplication, String environment) {
 
     /**
      * Extract attribution dimensions from a request and service registration.
@@ -38,24 +32,6 @@ public record TrafficAttribution(
         return new TrafficAttribution(
                 service.serviceId(),
                 getHeader(request, config.teamHeader()),
-                null, // costCenter - would come from service metadata if available
-                getHeader(request, config.tenantHeader()),
-                getHeader(request, config.clientAppHeader()),
-                System.getenv("AUSSIE_ENV"));
-    }
-
-    /**
-     * Extract attribution from request headers only (when service not yet resolved).
-     *
-     * @param request the gateway request
-     * @param config the telemetry configuration
-     * @return traffic attribution dimensions
-     */
-    public static TrafficAttribution fromRequest(GatewayRequest request, TelemetryConfig.AttributionConfig config) {
-        return new TrafficAttribution(
-                null,
-                getHeader(request, config.teamHeader()),
-                null,
                 getHeader(request, config.tenantHeader()),
                 getHeader(request, config.clientAppHeader()),
                 System.getenv("AUSSIE_ENV"));
