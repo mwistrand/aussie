@@ -1,6 +1,6 @@
 COMPOSE=docker compose
 
-.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test
+.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test reset
 
 up:
 	$(COMPOSE) up -d --build
@@ -47,7 +47,6 @@ test:
 	@echo "Running CLI tests..."
 	cd cli && go test ./...
 
-# Run database migrations against running Cassandra
 migrate:
 	@echo "Running Cassandra migrations..."
 	@docker exec -i aussie-cassandra cqlsh -e "describe keyspaces" > /dev/null 2>&1 || \
@@ -57,3 +56,15 @@ migrate:
 		docker exec -i aussie-cassandra cqlsh < "$$script" || true; \
 	done
 	@echo "Migrations complete"
+
+reset:
+	@echo "Checking Redis and Cassandra are running..."
+	@docker exec -i aussie-redis redis-cli ping > /dev/null 2>&1 || (echo "Error: Redis is not running. Start it with 'make api' first." && exit 1)
+	@docker exec -i aussie-cassandra cqlsh -e "describe keyspaces" > /dev/null 2>&1 || (echo "Error: Cassandra is not running. Start it with 'make api' first." && exit 1)
+	@echo "Flushing Redis data..."
+	@docker exec -i aussie-redis redis-cli FLUSHALL || true
+	@echo "Dropping Cassandra keyspace 'aussie'..."
+	@docker exec -i aussie-cassandra cqlsh -e "DROP KEYSPACE IF EXISTS aussie;" || true
+	@echo "Recreating Cassandra schema..."
+	@$(MAKE) migrate
+	@echo "Cassandra and Redis reset complete."
