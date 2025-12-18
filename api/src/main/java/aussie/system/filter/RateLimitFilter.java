@@ -21,6 +21,7 @@ import io.smallrye.mutiny.infrastructure.Infrastructure;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.SpanAttributes;
+import aussie.adapter.out.telemetry.TelemetryHelper;
 import aussie.core.config.RateLimitingConfig;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
 import aussie.core.model.ratelimit.RateLimitDecision;
@@ -69,6 +70,7 @@ public class RateLimitFilter implements ContainerRequestFilter, ContainerRespons
     private final SecurityEventDispatcher securityEventDispatcher;
     private final RateLimitResolver rateLimitResolver;
     private final ServiceRegistry serviceRegistry;
+    private final TelemetryHelper telemetryHelper;
 
     @Inject
     public RateLimitFilter(
@@ -77,13 +79,15 @@ public class RateLimitFilter implements ContainerRequestFilter, ContainerRespons
             Metrics metrics,
             SecurityEventDispatcher securityEventDispatcher,
             RateLimitResolver rateLimitResolver,
-            ServiceRegistry serviceRegistry) {
+            ServiceRegistry serviceRegistry,
+            TelemetryHelper telemetryHelper) {
         this.rateLimiter = rateLimiter;
         this.configInstance = configInstance;
         this.metrics = metrics;
         this.securityEventDispatcher = securityEventDispatcher;
         this.rateLimitResolver = rateLimitResolver;
         this.serviceRegistry = serviceRegistry;
+        this.telemetryHelper = telemetryHelper;
     }
 
     private RateLimitingConfig config() {
@@ -145,14 +149,14 @@ public class RateLimitFilter implements ContainerRequestFilter, ContainerRespons
 
     private void setSpanAttributes(RateLimitDecision decision) {
         final var span = Span.current();
-        span.setAttribute(SpanAttributes.RATE_LIMITED, !decision.allowed());
-        span.setAttribute(SpanAttributes.RATE_LIMIT_REMAINING, decision.remaining());
-        span.setAttribute(SpanAttributes.RATE_LIMIT_TYPE, SpanAttributes.RATE_LIMIT_TYPE_HTTP);
+        telemetryHelper.setRateLimited(span, !decision.allowed());
+        telemetryHelper.setRateLimitRemaining(span, decision.remaining());
+        telemetryHelper.setRateLimitType(span, SpanAttributes.RATE_LIMIT_TYPE_HTTP);
     }
 
     private void setExceededSpanAttributes(RateLimitDecision decision) {
         final var span = Span.current();
-        span.setAttribute(SpanAttributes.RATE_LIMIT_RETRY_AFTER, decision.retryAfterSeconds());
+        telemetryHelper.setRateLimitRetryAfter(span, decision.retryAfterSeconds());
         // Use OK status - rate limiting is expected behavior, not an error
         // Errors would trigger alerts; rate limits are informational
         span.setStatus(StatusCode.OK, "Rate limit exceeded");

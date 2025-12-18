@@ -6,7 +6,12 @@ package aussie.adapter.out.telemetry;
  * <p>These attributes provide consistent naming across all instrumentation points
  * in the Aussie gateway. They follow OpenTelemetry semantic conventions where applicable.
  *
+ * <p>Use {@link TelemetryHelper} to conditionally add these attributes based on
+ * {@link TelemetryConfig.AttributesConfig} settings.
+ *
  * @see <a href="https://opentelemetry.io/docs/specs/semconv/">OpenTelemetry Semantic Conventions</a>
+ * @see TelemetryHelper
+ * @see TelemetryConfig.AttributesConfig
  */
 public final class SpanAttributes {
 
@@ -52,12 +57,6 @@ public final class SpanAttributes {
     // Request Attributes
     // -------------------------------------------------------------------------
 
-    /** Unique identifier for the request (X-Request-ID or generated). */
-    public static final String REQUEST_ID = "aussie.request.id";
-
-    /** Client IP address (after proxy header resolution). */
-    public static final String CLIENT_IP = "aussie.client.ip";
-
     /** Size of the incoming request body in bytes. */
     public static final String REQUEST_SIZE = "aussie.request.size";
 
@@ -90,14 +89,8 @@ public final class SpanAttributes {
     /** Authentication method used (api_key, session, jwt, none). */
     public static final String AUTH_METHOD = "aussie.auth.method";
 
-    /** Identifier for the authenticated principal. */
-    public static final String AUTH_PRINCIPAL = "aussie.auth.principal";
-
     /** API key ID (not the key itself) for API key authentication. */
     public static final String API_KEY_ID = "aussie.auth.api_key_id";
-
-    /** Session ID for session-based authentication. */
-    public static final String SESSION_ID = "aussie.auth.session_id";
 
     /** Whether authentication was required for this request. */
     public static final String AUTH_REQUIRED = "aussie.auth.required";

@@ -25,6 +25,7 @@ import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
 
 import aussie.adapter.out.telemetry.SpanAttributes;
+import aussie.adapter.out.telemetry.TelemetryHelper;
 import aussie.core.model.gateway.PreparedProxyRequest;
 import aussie.core.model.gateway.ProxyResponse;
 import aussie.core.port.out.ProxyClient;
@@ -47,15 +48,21 @@ public class ProxyHttpClient implements ProxyClient {
     private final ProxyRequestPreparer requestPreparer;
     private final Tracer tracer;
     private final TextMapPropagator propagator;
+    private final TelemetryHelper telemetryHelper;
     private WebClient webClient;
 
     @Inject
     public ProxyHttpClient(
-            Vertx vertx, ProxyRequestPreparer requestPreparer, Tracer tracer, TextMapPropagator propagator) {
+            Vertx vertx,
+            ProxyRequestPreparer requestPreparer,
+            Tracer tracer,
+            TextMapPropagator propagator,
+            TelemetryHelper telemetryHelper) {
         this.vertx = vertx;
         this.requestPreparer = requestPreparer;
         this.tracer = tracer;
         this.propagator = propagator;
+        this.telemetryHelper = telemetryHelper;
     }
 
     @PostConstruct
@@ -67,6 +74,7 @@ public class ProxyHttpClient implements ProxyClient {
     public Uni<ProxyResponse> forward(PreparedProxyRequest preparedRequest) {
         var targetUri = preparedRequest.targetUri();
         var method = HttpMethod.valueOf(preparedRequest.method());
+        final var startTime = System.currentTimeMillis();
 
         // Create a client span for the outgoing request
         var span = tracer.spanBuilder("HTTP " + preparedRequest.method())
@@ -77,6 +85,14 @@ public class ProxyHttpClient implements ProxyClient {
                 .setAttribute(SpanAttributes.NET_PEER_PORT, (long) getPort(targetUri))
                 .startSpan();
 
+        // Add configurable upstream attributes
+        telemetryHelper.setUpstreamHost(span, targetUri.getHost());
+        telemetryHelper.setUpstreamPort(span, getPort(targetUri));
+        telemetryHelper.setUpstreamUri(span, targetUri.toString());
+        if (preparedRequest.body() != null) {
+            telemetryHelper.setRequestSize(span, preparedRequest.body().length);
+        }
+
         var request = createRequest(method, targetUri);
         applyHeaders(preparedRequest, request);
 
@@ -86,6 +102,8 @@ public class ProxyHttpClient implements ProxyClient {
         return executeRequest(request, preparedRequest.body())
                 .invoke(response -> {
                     span.setAttribute(SpanAttributes.HTTP_STATUS_CODE, (long) response.statusCode());
+                    telemetryHelper.setUpstreamLatency(span, System.currentTimeMillis() - startTime);
+                    telemetryHelper.setResponseSize(span, response.body().length);
                     if (response.statusCode() >= 400) {
                         span.setStatus(StatusCode.ERROR, "HTTP " + response.statusCode());
                     }
@@ -93,6 +111,7 @@ public class ProxyHttpClient implements ProxyClient {
                 })
                 .onFailure()
                 .invoke(error -> {
+                    telemetryHelper.setUpstreamLatency(span, System.currentTimeMillis() - startTime);
                     span.setStatus(StatusCode.ERROR, error.getMessage());
                     span.recordException(error);
                     span.end();

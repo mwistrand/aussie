@@ -207,6 +207,35 @@ Aussie adds the following attributes to spans:
 | `net.peer.name` | Upstream host |
 | `net.peer.port` | Upstream port |
 
+### Configurable Span Attributes
+
+Some span attributes can be enabled or disabled to control cardinality and storage costs. All configurable attributes respect the master `aussie.telemetry.enabled` and `aussie.telemetry.tracing.enabled` switches.
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `aussie.telemetry.attributes.request-size` | `true` | Request body size in bytes |
+| `aussie.telemetry.attributes.response-size` | `true` | Response body size in bytes |
+| `aussie.telemetry.attributes.upstream-host` | `true` | Upstream service hostname |
+| `aussie.telemetry.attributes.upstream-port` | `true` | Upstream service port |
+| `aussie.telemetry.attributes.upstream-uri` | `false` | Full upstream URI (high-cardinality) |
+| `aussie.telemetry.attributes.upstream-latency` | `true` | Upstream call latency in milliseconds |
+| `aussie.telemetry.attributes.rate-limited` | `true` | Whether request was rate limited |
+| `aussie.telemetry.attributes.rate-limit-remaining` | `true` | Remaining requests in window |
+| `aussie.telemetry.attributes.rate-limit-type` | `true` | Type of rate limit (http, ws_connection) |
+| `aussie.telemetry.attributes.rate-limit-retry-after` | `true` | Seconds until rate limit resets |
+
+**High-Cardinality Warning**: `upstream-uri` is disabled by default because it includes query parameters, which can create unbounded cardinality. Enable only for debugging in non-production environments.
+
+Example configuration to enable all attributes for debugging:
+
+```properties
+# Production: high-cardinality attributes disabled (default)
+aussie.telemetry.attributes.upstream-uri=false
+
+# Development: enable for debugging
+%dev.aussie.telemetry.attributes.upstream-uri=true
+```
+
 ## Security Monitoring
 
 ### Security Events

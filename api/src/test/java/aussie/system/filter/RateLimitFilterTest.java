@@ -39,6 +39,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
+import aussie.adapter.out.telemetry.TelemetryHelper;
 import aussie.core.config.RateLimitingConfig;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
 import aussie.core.model.ratelimit.RateLimitDecision;
@@ -64,6 +65,7 @@ class RateLimitFilterTest {
     private SecurityEventDispatcher securityEventDispatcher;
     private RateLimitResolver rateLimitResolver;
     private ServiceRegistry serviceRegistry;
+    private TelemetryHelper telemetryHelper;
     private ContainerRequestContext requestContext;
     private UriInfo uriInfo;
 
@@ -77,6 +79,7 @@ class RateLimitFilterTest {
         securityEventDispatcher = mock(SecurityEventDispatcher.class);
         rateLimitResolver = mock(RateLimitResolver.class);
         serviceRegistry = mock(ServiceRegistry.class);
+        telemetryHelper = mock(TelemetryHelper.class);
         requestContext = mock(ContainerRequestContext.class);
         uriInfo = mock(UriInfo.class);
 
@@ -95,7 +98,13 @@ class RateLimitFilterTest {
         when(serviceRegistry.findRoute(anyString(), anyString())).thenReturn(Optional.empty());
 
         filter = new RateLimitFilter(
-                rateLimiter, configInstance, metrics, securityEventDispatcher, rateLimitResolver, serviceRegistry);
+                rateLimiter,
+                configInstance,
+                metrics,
+                securityEventDispatcher,
+                rateLimitResolver,
+                serviceRegistry,
+                telemetryHelper);
     }
 
     private ServiceRegistration createTestService(String serviceId) {

@@ -53,6 +53,11 @@ public interface TelemetryConfig {
     AttributionConfig attribution();
 
     /**
+     * Span attributes configuration for controlling which attributes are included in traces.
+     */
+    AttributesConfig attributes();
+
+    /**
      * Tracing configuration.
      */
     interface TracingConfig {
@@ -202,5 +207,67 @@ public interface TelemetryConfig {
          */
         @WithName("custom-dimensions")
         Optional<List<String>> customDimensions();
+    }
+
+    /**
+     * Configuration for which OpenTelemetry span attributes to include in traces.
+     *
+     * <p>Platform teams can disable high-cardinality attributes to reduce
+     * storage costs and improve query performance in telemetry backends.
+     * All attributes respect the master {@code aussie.telemetry.enabled} switch.
+     */
+    interface AttributesConfig {
+        // -------------------------------------------------------------------------
+        // Request/Response Sizing
+        // -------------------------------------------------------------------------
+
+        @WithName("request-size")
+        @WithDefault("true")
+        boolean requestSize();
+
+        @WithName("response-size")
+        @WithDefault("true")
+        boolean responseSize();
+
+        // -------------------------------------------------------------------------
+        // Upstream Attributes
+        // -------------------------------------------------------------------------
+
+        @WithName("upstream-host")
+        @WithDefault("true")
+        boolean upstreamHost();
+
+        @WithName("upstream-port")
+        @WithDefault("true")
+        boolean upstreamPort();
+
+        /** High-cardinality: full upstream URI with query params. */
+        @WithName("upstream-uri")
+        @WithDefault("false")
+        boolean upstreamUri();
+
+        @WithName("upstream-latency")
+        @WithDefault("true")
+        boolean upstreamLatency();
+
+        // -------------------------------------------------------------------------
+        // Rate Limiting Attributes
+        // -------------------------------------------------------------------------
+
+        @WithName("rate-limited")
+        @WithDefault("true")
+        boolean rateLimited();
+
+        @WithName("rate-limit-remaining")
+        @WithDefault("true")
+        boolean rateLimitRemaining();
+
+        @WithName("rate-limit-type")
+        @WithDefault("true")
+        boolean rateLimitType();
+
+        @WithName("rate-limit-retry-after")
+        @WithDefault("true")
+        boolean rateLimitRetryAfter();
     }
 }
