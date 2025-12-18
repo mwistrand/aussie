@@ -1,8 +1,6 @@
 package aussie.adapter.out.telemetry;
 
 import java.time.Duration;
-import java.util.List;
-import java.util.Optional;
 
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
@@ -87,20 +85,6 @@ public interface TelemetryConfig {
          */
         @WithDefault("false")
         boolean enabled();
-
-        /**
-         * Histogram buckets for proxy latency metrics (in milliseconds).
-         */
-        @WithName("proxy-latency-buckets")
-        @WithDefault("5,10,25,50,100,250,500,1000,2500,5000,10000")
-        List<Double> proxyLatencyBuckets();
-
-        /**
-         * Histogram buckets for request size metrics (in bytes).
-         */
-        @WithName("request-size-buckets")
-        @WithDefault("100,1000,10000,100000,1000000")
-        List<Double> requestSizeBuckets();
     }
 
     /**
@@ -173,14 +157,6 @@ public interface TelemetryConfig {
         boolean enabled();
 
         /**
-         * Include request headers in attribution dimensions.
-         * May impact performance and increase metric cardinality.
-         */
-        @WithName("include-headers")
-        @WithDefault("false")
-        boolean includeHeaders();
-
-        /**
          * Header name for team identification.
          */
         @WithName("team-header")
@@ -200,13 +176,6 @@ public interface TelemetryConfig {
         @WithName("client-app-header")
         @WithDefault("X-Client-Application")
         String clientAppHeader();
-
-        /**
-         * Custom dimension headers to include in attribution.
-         * Comma-separated list of header names.
-         */
-        @WithName("custom-dimensions")
-        Optional<List<String>> customDimensions();
     }
 
     /**

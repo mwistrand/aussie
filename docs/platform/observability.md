@@ -75,7 +75,6 @@ aussie.telemetry.attribution.enabled=true
 aussie.telemetry.attribution.team-header=X-Team-ID
 aussie.telemetry.attribution.tenant-header=X-Tenant-ID
 aussie.telemetry.attribution.client-app-header=X-Client-App
-aussie.telemetry.attribution.include-headers=false
 ```
 
 ## Backend Integrations

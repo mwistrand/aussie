@@ -111,17 +111,6 @@ public interface RateLimitingConfig {
          */
         @WithDefault("false")
         boolean enabled();
-
-        /**
-         * Key prefix for rate limit entries in Redis.
-         *
-         * <p>All rate limit keys will be prefixed with this value,
-         * allowing multiple applications to share a Redis instance.
-         *
-         * @return key prefix (default: "aussie:ratelimit:")
-         */
-        @WithDefault("aussie:ratelimit:")
-        String keyPrefix();
     }
 
     /**

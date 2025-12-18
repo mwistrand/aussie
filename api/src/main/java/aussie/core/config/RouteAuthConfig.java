@@ -16,14 +16,12 @@ import io.smallrye.config.WithName;
  * Platform teams can configure TTL limits at multiple levels:
  * <ul>
  * <li>Global: {@code jws.max-token-ttl} - Maximum TTL for any issued token</li>
- * <li>Per-provider: {@code providers.{name}.max-token-ttl} - Max TTL for tokens
- * from this provider</li>
  * <li>Default: {@code jws.token-ttl} - Default TTL when not specified</li>
  * </ul>
  *
  * <p>
- * Token TTL is clamped to the most restrictive of: incoming token expiry,
- * provider max TTL, and global max TTL.
+ * Token TTL is clamped to the most restrictive of: incoming token expiry
+ * and global max TTL.
  */
 @ConfigMapping(prefix = "aussie.auth.route-auth")
 public interface RouteAuthConfig {
@@ -86,32 +84,6 @@ public interface RouteAuthConfig {
         @WithName("claims-mapping")
         @WithDefault("")
         Map<String, String> claimsMapping();
-
-        /**
-         * Maximum token TTL for tokens from this provider.
-         *
-         * <p>
-         * Tokens with longer expiry will have their TTL clamped to this value
-         * when Aussie issues the downstream token.
-         *
-         * <p>
-         * If not set, falls back to the global {@code jws.max-token-ttl}.
-         */
-        @WithName("max-token-ttl")
-        Optional<Duration> maxTokenTtl();
-
-        /**
-         * Require group membership for authentication.
-         *
-         * <p>
-         * If set, tokens from this provider must include at least one
-         * of these groups in their claims to be considered valid.
-         *
-         * <p>
-         * Note: This feature is not yet implemented.
-         */
-        @WithName("required-groups")
-        Optional<Set<String>> requiredGroups();
     }
 
     /**
