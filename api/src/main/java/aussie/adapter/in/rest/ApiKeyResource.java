@@ -94,9 +94,7 @@ public class ApiKeyResource {
                     return Response.status(Response.Status.CREATED)
                             .entity(responseBody)
                             .build();
-                })
-                .onFailure(IllegalArgumentException.class)
-                .transform(e -> GatewayProblem.validationError(e.getMessage()));
+                });
     }
 
     /**

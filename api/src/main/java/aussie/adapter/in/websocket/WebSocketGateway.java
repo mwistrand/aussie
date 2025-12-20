@@ -19,6 +19,7 @@ import io.vertx.core.http.WebSocketConnectOptions;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.core.config.WebSocketConfig;
 import aussie.core.model.ratelimit.MessageRateLimitHandler;
@@ -27,6 +28,7 @@ import aussie.core.model.websocket.WebSocketProxySession;
 import aussie.core.model.websocket.WebSocketUpgradeRequest;
 import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
+import aussie.core.service.auth.JwksCacheService.JwksFetchException;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
 
 /**
@@ -125,8 +127,10 @@ public class WebSocketGateway {
                             }
                         },
                         error -> {
-                            LOG.errorv(error, "WebSocket upgrade failed");
-                            ctx.response().setStatusCode(500).end("Internal error");
+                            int statusCode = mapErrorToStatusCode(error);
+                            String message = mapErrorToMessage(error, statusCode);
+                            LOG.warnv(error, "WebSocket upgrade failed with status {0}: {1}", statusCode, message);
+                            ctx.response().setStatusCode(statusCode).end(message);
                         });
     }
 
@@ -291,6 +295,28 @@ public class WebSocketGateway {
             LOG.infov("Closing {0} WebSocket session(s) due to logout", sessionsToClose.size());
             sessionsToClose.forEach(session -> session.closeWithReason((short) 1000, "Session logged out"));
         }
+    }
+
+    private int mapErrorToStatusCode(Throwable error) {
+        Throwable cause = error;
+        while (cause != null) {
+            if (cause instanceof JwksFetchException || cause instanceof TokenParseException) {
+                return 502;
+            }
+            if (cause instanceof IllegalArgumentException) {
+                return 400;
+            }
+            cause = cause.getCause();
+        }
+        return 500;
+    }
+
+    private String mapErrorToMessage(Throwable error, int statusCode) {
+        return switch (statusCode) {
+            case 400 -> "Bad request: " + error.getMessage();
+            case 502 -> "Identity provider unavailable";
+            default -> "Internal error";
+        };
     }
 
     private int getPort(URI uri) {

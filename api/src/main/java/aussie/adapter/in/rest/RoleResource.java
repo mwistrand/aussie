@@ -69,9 +69,7 @@ public class RoleResource {
         return roleService
                 .create(request.id(), request.displayName(), request.description(), request.permissions())
                 .map(role ->
-                        Response.status(Response.Status.CREATED).entity(role).build())
-                .onFailure(IllegalArgumentException.class)
-                .transform(e -> GatewayProblem.validationError(e.getMessage()));
+                        Response.status(Response.Status.CREATED).entity(role).build());
     }
 
     /**
