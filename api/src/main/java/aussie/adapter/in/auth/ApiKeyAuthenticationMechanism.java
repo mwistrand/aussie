@@ -19,7 +19,7 @@ import io.vertx.ext.web.RoutingContext;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 
-import aussie.core.model.auth.Permissions;
+import aussie.core.model.auth.Permission;
 
 /**
  * Quarkus HTTP authentication mechanism for API key authentication.
@@ -68,38 +68,42 @@ public class ApiKeyAuthenticationMechanism implements HttpAuthenticationMechanis
 
         var builder = QuarkusSecurityIdentity.builder()
                 .setPrincipal(() -> "development-mode")
-                .addRole(Permissions.ADMIN)
-                .addRole(Permissions.SERVICE_CONFIG_READ)
-                .addRole(Permissions.SERVICE_CONFIG_CREATE)
-                .addRole(Permissions.SERVICE_CONFIG_UPDATE)
-                .addRole(Permissions.SERVICE_CONFIG_DELETE)
-                .addRole(Permissions.SERVICE_PERMISSIONS_READ)
-                .addRole(Permissions.SERVICE_PERMISSIONS_WRITE)
-                .addRole(Permissions.APIKEYS_READ)
-                .addRole(Permissions.APIKEYS_WRITE)
-                .addRole(Permissions.AUTH_ROLES_READ)
-                .addRole(Permissions.AUTH_ROLES_CREATE)
-                .addRole(Permissions.AUTH_ROLES_UPDATE)
-                .addRole(Permissions.AUTH_ROLES_DELETE)
+                .addRole(Permission.ADMIN.value())
+                .addRole(Permission.SERVICE_CONFIG_READ.value())
+                .addRole(Permission.SERVICE_CONFIG_CREATE.value())
+                .addRole(Permission.SERVICE_CONFIG_UPDATE.value())
+                .addRole(Permission.SERVICE_CONFIG_DELETE.value())
+                .addRole(Permission.SERVICE_PERMISSIONS_READ.value())
+                .addRole(Permission.SERVICE_PERMISSIONS_WRITE.value())
+                .addRole(Permission.APIKEYS_READ.value())
+                .addRole(Permission.APIKEYS_WRITE.value())
+                .addRole(Permission.AUTH_ROLES_READ.value())
+                .addRole(Permission.AUTH_ROLES_CREATE.value())
+                .addRole(Permission.AUTH_ROLES_UPDATE.value())
+                .addRole(Permission.AUTH_ROLES_DELETE.value())
+                .addRole(Permission.TOKENS_READ.value())
+                .addRole(Permission.TOKENS_REVOKE.value())
                 // Add permissions attribute with wildcard for gateway-level authorization
-                .addAttribute("permissions", Set.of(Permissions.ALL))
+                .addAttribute("permissions", Set.of(Permission.ALL.value()))
                 // Add claims attribute with wildcard for service-level authorization
-                .addAttribute("claims", Set.of(Permissions.ALL));
+                .addAttribute("claims", Set.of(Permission.ALL.value()));
 
         // Add StringPermission objects for @PermissionsAllowed checks
-        builder.addPermission(new StringPermission(Permissions.ADMIN));
-        builder.addPermission(new StringPermission(Permissions.SERVICE_CONFIG_READ));
-        builder.addPermission(new StringPermission(Permissions.SERVICE_CONFIG_CREATE));
-        builder.addPermission(new StringPermission(Permissions.SERVICE_CONFIG_UPDATE));
-        builder.addPermission(new StringPermission(Permissions.SERVICE_CONFIG_DELETE));
-        builder.addPermission(new StringPermission(Permissions.SERVICE_PERMISSIONS_READ));
-        builder.addPermission(new StringPermission(Permissions.SERVICE_PERMISSIONS_WRITE));
-        builder.addPermission(new StringPermission(Permissions.APIKEYS_READ));
-        builder.addPermission(new StringPermission(Permissions.APIKEYS_WRITE));
-        builder.addPermission(new StringPermission(Permissions.AUTH_ROLES_READ));
-        builder.addPermission(new StringPermission(Permissions.AUTH_ROLES_CREATE));
-        builder.addPermission(new StringPermission(Permissions.AUTH_ROLES_UPDATE));
-        builder.addPermission(new StringPermission(Permissions.AUTH_ROLES_DELETE));
+        builder.addPermission(new StringPermission(Permission.ADMIN.value()));
+        builder.addPermission(new StringPermission(Permission.SERVICE_CONFIG_READ.value()));
+        builder.addPermission(new StringPermission(Permission.SERVICE_CONFIG_CREATE.value()));
+        builder.addPermission(new StringPermission(Permission.SERVICE_CONFIG_UPDATE.value()));
+        builder.addPermission(new StringPermission(Permission.SERVICE_CONFIG_DELETE.value()));
+        builder.addPermission(new StringPermission(Permission.SERVICE_PERMISSIONS_READ.value()));
+        builder.addPermission(new StringPermission(Permission.SERVICE_PERMISSIONS_WRITE.value()));
+        builder.addPermission(new StringPermission(Permission.APIKEYS_READ.value()));
+        builder.addPermission(new StringPermission(Permission.APIKEYS_WRITE.value()));
+        builder.addPermission(new StringPermission(Permission.AUTH_ROLES_READ.value()));
+        builder.addPermission(new StringPermission(Permission.AUTH_ROLES_CREATE.value()));
+        builder.addPermission(new StringPermission(Permission.AUTH_ROLES_UPDATE.value()));
+        builder.addPermission(new StringPermission(Permission.AUTH_ROLES_DELETE.value()));
+        builder.addPermission(new StringPermission(Permission.TOKENS_READ.value()));
+        builder.addPermission(new StringPermission(Permission.TOKENS_REVOKE.value()));
 
         return builder.build();
     }

@@ -13,6 +13,7 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 - [Request Size Limits](#request-size-limits)
 - [Per-Route Authentication](#per-route-authentication)
 - [WebSocket Configuration](websocket-configuration.md)
+- [Token Revocation](token-revocation.md)
 - [Admin API](#admin-api)
 - [Service Permission Policies](#service-permission-policies)
 - [Environment Variables Reference](#environment-variables-reference)
@@ -691,6 +692,25 @@ With the permission policy above:
 | `AUSSIE_RATE_LIMITING_ALGORITHM` | `BUCKET` | Algorithm: BUCKET, FIXED_WINDOW, SLIDING_WINDOW |
 | `AUSSIE_RATE_LIMITING_DEFAULT_REQUESTS_PER_WINDOW` | `100` | Default requests per window |
 | `AUSSIE_RATE_LIMITING_WINDOW_SECONDS` | `60` | Window duration in seconds |
+
+### Token Revocation
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_AUTH_REVOCATION_ENABLED` | `true` | Enable token revocation checks |
+| `AUSSIE_AUTH_REVOCATION_CHECK_USER_REVOCATION` | `true` | Enable user-level revocation |
+| `AUSSIE_AUTH_REVOCATION_CHECK_THRESHOLD` | `PT30S` | Skip check for tokens expiring within this threshold |
+| `AUSSIE_AUTH_REVOCATION_BLOOM_FILTER_ENABLED` | `true` | Enable bloom filter optimization |
+| `AUSSIE_AUTH_REVOCATION_BLOOM_FILTER_EXPECTED_INSERTIONS` | `100000` | Expected number of revoked tokens |
+| `AUSSIE_AUTH_REVOCATION_BLOOM_FILTER_FALSE_POSITIVE_PROBABILITY` | `0.001` | Bloom filter false positive rate |
+| `AUSSIE_AUTH_REVOCATION_BLOOM_FILTER_REBUILD_INTERVAL` | `PT1H` | Bloom filter rebuild interval |
+| `AUSSIE_AUTH_REVOCATION_CACHE_ENABLED` | `true` | Enable local revocation cache |
+| `AUSSIE_AUTH_REVOCATION_CACHE_MAX_SIZE` | `10000` | Maximum cache entries |
+| `AUSSIE_AUTH_REVOCATION_CACHE_TTL` | `PT5M` | Cache entry TTL |
+| `AUSSIE_AUTH_REVOCATION_PUBSUB_ENABLED` | `true` | Enable pub/sub for multi-instance sync |
+| `AUSSIE_AUTH_REVOCATION_PUBSUB_CHANNEL` | `aussie:revocation:events` | Redis pub/sub channel name |
+
+See [Token Revocation](token-revocation.md) for implementation details.
 
 ### Telemetry
 

@@ -21,7 +21,7 @@ import io.smallrye.mutiny.Uni;
 import aussie.adapter.in.dto.CreateRoleRequest;
 import aussie.adapter.in.dto.UpdateRoleRequest;
 import aussie.adapter.in.problem.GatewayProblem;
-import aussie.core.model.auth.Permissions;
+import aussie.core.model.auth.Permission;
 import aussie.core.model.auth.Role;
 import aussie.core.service.auth.RoleService;
 
@@ -60,7 +60,7 @@ public class RoleResource {
      * @return 201 Created with the new role, or 400 if validation fails
      */
     @POST
-    @PermissionsAllowed({Permissions.AUTH_ROLES_CREATE, Permissions.ADMIN})
+    @PermissionsAllowed({Permission.AUTH_ROLES_CREATE_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> createRole(CreateRoleRequest request) {
         if (request == null || request.id() == null || request.id().isBlank()) {
             throw GatewayProblem.badRequest("id is required");
@@ -78,7 +78,7 @@ public class RoleResource {
      * @return list of all roles
      */
     @GET
-    @PermissionsAllowed({Permissions.AUTH_ROLES_READ, Permissions.ADMIN})
+    @PermissionsAllowed({Permission.AUTH_ROLES_READ_VALUE, Permission.ADMIN_VALUE})
     public Uni<List<Role>> listRoles() {
         return roleService.list();
     }
@@ -91,7 +91,7 @@ public class RoleResource {
      */
     @GET
     @Path("/{roleId}")
-    @PermissionsAllowed({Permissions.AUTH_ROLES_READ, Permissions.ADMIN})
+    @PermissionsAllowed({Permission.AUTH_ROLES_READ_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> getRole(@PathParam("roleId") String roleId) {
         return roleService.get(roleId).map(opt -> opt.map(
                         role -> Response.ok(role).build())
@@ -116,7 +116,7 @@ public class RoleResource {
      */
     @PUT
     @Path("/{roleId}")
-    @PermissionsAllowed({Permissions.AUTH_ROLES_UPDATE, Permissions.ADMIN})
+    @PermissionsAllowed({Permission.AUTH_ROLES_UPDATE_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> updateRole(@PathParam("roleId") String roleId, UpdateRoleRequest request) {
         if (request == null) {
             throw GatewayProblem.badRequest("Request body is required");
@@ -148,7 +148,7 @@ public class RoleResource {
      */
     @DELETE
     @Path("/{roleId}")
-    @PermissionsAllowed({Permissions.AUTH_ROLES_DELETE, Permissions.ADMIN})
+    @PermissionsAllowed({Permission.AUTH_ROLES_DELETE_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> deleteRole(@PathParam("roleId") String roleId) {
         return roleService.delete(roleId).map(deleted -> {
             if (deleted) {

@@ -18,7 +18,6 @@ import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.adapter.out.telemetry.SecurityMonitor;
 import aussie.core.model.auth.ApiKey;
 import aussie.core.model.auth.Permission;
-import aussie.core.model.auth.Permissions;
 import aussie.core.port.in.ApiKeyManagement;
 
 /**
@@ -113,9 +112,9 @@ public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthentica
         // Add permissions for service-level authorization
         if (apiKey.permissions() != null) {
             for (String permission : apiKey.permissions()) {
-                if (Permissions.ALL.equals(permission)) {
+                if (Permission.ALL.value().equals(permission)) {
                     // Wildcard grants full admin access
-                    effectivePermissions.add(Permissions.ADMIN_CLAIM);
+                    effectivePermissions.add(Permission.ADMIN_CLAIM.value());
                 }
                 effectivePermissions.add(permission);
             }

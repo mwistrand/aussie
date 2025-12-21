@@ -26,7 +26,8 @@ import aussie.core.port.out.ApiKeyRepository;
 /**
  * Service for managing API keys used for authentication.
  *
- * <p>Handles key generation, hashing, validation, and revocation. Keys are
+ * <p>
+ * Handles key generation, hashing, validation, and revocation. Keys are
  * stored as SHA-256 hashes; the plaintext is only returned once at creation.
  */
 @ApplicationScoped

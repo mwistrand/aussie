@@ -1,13 +1,13 @@
 package aussie.core.service.auth;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
-import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
@@ -20,8 +20,13 @@ import aussie.spi.TokenValidatorProvider;
 /**
  * Service that orchestrates token validation across configured providers.
  *
- * <p>Loads provider configurations from application properties and delegates
+ * <p>
+ * Loads provider configurations from application properties and delegates
  * validation to the appropriate {@link TokenValidatorProvider} implementation.
+ *
+ * <p>
+ * After successful signature verification, tokens are checked against
+ * the revocation list via {@link TokenRevocationService}.
  */
 @ApplicationScoped
 public class TokenValidationService {
@@ -30,16 +35,20 @@ public class TokenValidationService {
 
     private final List<TokenValidatorProvider> validators;
     private final Map<String, TokenProviderConfig> providerConfigs;
+    private final TokenRevocationService revocationService;
     private final boolean enabled;
 
-    @Inject
-    public TokenValidationService(Instance<TokenValidatorProvider> validatorInstances, RouteAuthConfig config) {
+    public TokenValidationService(
+            Instance<TokenValidatorProvider> validatorInstances,
+            RouteAuthConfig config,
+            TokenRevocationService revocationService) {
         this.validators = validatorInstances.stream()
                 .sorted((a, b) -> Integer.compare(b.priority(), a.priority()))
                 .filter(TokenValidatorProvider::isAvailable)
                 .toList();
         this.enabled = config.enabled();
         this.providerConfigs = new ConcurrentHashMap<>();
+        this.revocationService = revocationService;
 
         if (enabled) {
             loadProviderConfigs(config);
@@ -125,13 +134,78 @@ public class TokenValidationService {
 
         var validator = validators.get(index);
         return validator.validate(token, config).flatMap(result -> {
-            if (result instanceof TokenValidationResult.Valid) {
+            if (result instanceof TokenValidationResult.Valid valid) {
                 LOG.debugv("Token validated by {0} for issuer {1}", validator.name(), config.issuer());
-                return Uni.createFrom().item(result);
+                // Check revocation after successful signature validation
+                return checkRevocation(valid);
             }
             // Try next validator
             return validateWithValidators(token, config, index + 1);
         });
+    }
+
+    /**
+     * Check if a validated token has been revoked.
+     *
+     * @param valid the validated token result
+     * @return the original valid result if not revoked, or Invalid if revoked
+     */
+    private Uni<TokenValidationResult> checkRevocation(TokenValidationResult.Valid valid) {
+        if (!revocationService.isEnabled()) {
+            return Uni.createFrom().item(valid);
+        }
+
+        // Extract JTI (JWT ID) claim - may be null if not present
+        var jti = extractStringClaim(valid.claims(), "jti");
+        if (jti == null) {
+            LOG.debug("Token has no jti claim, skipping JTI revocation check");
+        }
+
+        // Extract issued-at claim for user-level revocation
+        var issuedAt = extractInstantClaim(valid.claims(), "iat");
+        if (issuedAt == null) {
+            issuedAt = Instant.now(); // Fallback to now if no iat
+        }
+
+        // Use subject as user ID
+        var userId = valid.subject();
+        var expiresAt = valid.expiresAt();
+        final var effectiveIssuedAt = issuedAt;
+
+        return revocationService
+                .isRevoked(jti, userId, effectiveIssuedAt, expiresAt)
+                .map(revoked -> {
+                    if (revoked) {
+                        LOG.infov("Token revoked: jti={0}, subject={1}", jti, userId);
+                        return new TokenValidationResult.Invalid("Token has been revoked");
+                    }
+                    return valid;
+                });
+    }
+
+    private String extractStringClaim(Map<String, Object> claims, String name) {
+        var value = claims.get(name);
+        return value != null ? value.toString() : null;
+    }
+
+    private Instant extractInstantClaim(Map<String, Object> claims, String name) {
+        var value = claims.get(name);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number num) {
+            // JWT iat/exp are typically seconds since epoch
+            return Instant.ofEpochSecond(num.longValue());
+        }
+        if (value instanceof Instant instant) {
+            return instant;
+        }
+        try {
+            return Instant.ofEpochSecond(Long.parseLong(value.toString()));
+        } catch (NumberFormatException e) {
+            LOG.warnv("Failed to parse {0} claim as Instant: {1}", name, value);
+            return null;
+        }
     }
 
     /**

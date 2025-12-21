@@ -78,6 +78,7 @@ services:
     environment:
       - QUARKUS_PROFILE=dev
       - CASSANDRA_CONTACT_POINTS=cassandra:9042
+      - QUARKUS_REDIS_HOSTS=redis://redis:6379
       # Demo app URL for JWKS fetching (Docker hostname)
       - DEMO_APP_URL=http://demo:3000
       # CORS configuration for demo

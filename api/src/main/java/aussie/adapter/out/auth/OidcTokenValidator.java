@@ -27,12 +27,13 @@ import aussie.spi.TokenValidatorProvider;
 /**
  * OIDC-compliant token validator using JWKS for signature verification.
  *
- * <p>Validates JWT tokens according to OIDC Core 1.0 specification:
+ * <p>
+ * Validates JWT tokens according to OIDC Core 1.0 specification:
  * <ul>
- *   <li>Verifies signature using JWKS from the provider</li>
- *   <li>Validates issuer (iss) claim</li>
- *   <li>Validates audience (aud) claim if configured</li>
- *   <li>Validates expiration (exp) and not-before (nbf) claims</li>
+ * <li>Verifies signature using JWKS from the provider</li>
+ * <li>Validates issuer (iss) claim</li>
+ * <li>Validates audience (aud) claim if configured</li>
+ * <li>Validates expiration (exp) and not-before (nbf) claims</li>
  * </ul>
  */
 @ApplicationScoped

@@ -1,14 +1,16 @@
 package aussie.core.model.auth;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Permission enum for Aussie API authentication.
  *
- * <p>Each enum constant encapsulates a permission string value. For use in
- * annotations (which require compile-time constants), use the string constants
- * in {@link Permissions} instead.
+ * <p>Each enum constant encapsulates a permission string value. The static constants
+ * in this class (e.g., {@link #ALL_VALUE}, {@link #ADMIN_VALUE}) can be used in
+ * annotations that require compile-time string constants.
  *
  * <p>Permissions follow a hierarchical format and represent operations that can be
  * performed on services and resources. These are the canonical operation names
@@ -31,125 +33,136 @@ import java.util.Set;
 public enum Permission {
 
     // ========================================================================
-    // Wildcard permission
+    // Enum constants (must come first in Java enums)
     // ========================================================================
 
-    /**
-     * Wildcard permission that grants access to everything.
-     */
-    ALL(Permissions.ALL),
+    /** Wildcard permission that grants access to everything. */
+    ALL("*"),
 
-    /**
-     * Default admin claim used for service-level authorization.
-     */
-    ADMIN_CLAIM(Permissions.ADMIN_CLAIM),
+    /** Default admin claim used for service-level authorization. */
+    ADMIN_CLAIM("aussie:admin"),
 
-    // ========================================================================
-    // Role constants (used by @RolesAllowed via Permissions class)
-    // ========================================================================
+    /** Role for full admin access (granted by wildcard permission). */
+    ADMIN("admin"),
 
-    /**
-     * Role for full admin access (granted by wildcard permission).
-     */
-    ADMIN(Permissions.ADMIN),
+    /** Role for reading service configurations. */
+    SERVICE_CONFIG_READ("service.config.read"),
 
-    /**
-     * Role for reading service configurations.
-     */
-    SERVICE_CONFIG_READ(Permissions.SERVICE_CONFIG_READ),
+    /** Role for creating service configurations. */
+    SERVICE_CONFIG_CREATE("service.config.create"),
 
-    /**
-     * Role for creating service configurations.
-     */
-    SERVICE_CONFIG_CREATE(Permissions.SERVICE_CONFIG_CREATE),
+    /** Role for updating service configurations. */
+    SERVICE_CONFIG_UPDATE("service.config.update"),
 
-    /**
-     * Role for updating service configurations.
-     */
-    SERVICE_CONFIG_UPDATE(Permissions.SERVICE_CONFIG_UPDATE),
+    /** Role for deleting service configurations. */
+    SERVICE_CONFIG_DELETE("service.config.delete"),
 
-    /**
-     * Role for deleting service configurations.
-     */
-    SERVICE_CONFIG_DELETE(Permissions.SERVICE_CONFIG_DELETE),
+    /** Role for reading service permission policies. */
+    SERVICE_PERMISSIONS_READ("service.permissions.read"),
 
-    /**
-     * Role for reading service permission policies.
-     */
-    SERVICE_PERMISSIONS_READ(Permissions.SERVICE_PERMISSIONS_READ),
+    /** Role for writing service permission policies. */
+    SERVICE_PERMISSIONS_WRITE("service.permissions.write"),
 
-    /**
-     * Role for writing service permission policies.
-     */
-    SERVICE_PERMISSIONS_WRITE(Permissions.SERVICE_PERMISSIONS_WRITE),
+    /** Role for reading API keys. */
+    APIKEYS_READ("apikeys.read"),
 
-    /**
-     * Role for reading API keys.
-     */
-    APIKEYS_READ(Permissions.APIKEYS_READ),
+    /** Role for writing API keys. */
+    APIKEYS_WRITE("apikeys.write"),
 
-    /**
-     * Role for writing API keys.
-     */
-    APIKEYS_WRITE(Permissions.APIKEYS_WRITE),
+    /** Permission for creating roles. */
+    AUTH_ROLES_CREATE("auth.roles.create"),
 
-    // ========================================================================
-    // Role management permissions
-    // ========================================================================
+    /** Permission for reading roles. */
+    AUTH_ROLES_READ("auth.roles.read"),
 
-    /**
-     * Permission for creating roles.
-     */
-    AUTH_ROLES_CREATE(Permissions.AUTH_ROLES_CREATE),
+    /** Permission for updating roles. */
+    AUTH_ROLES_UPDATE("auth.roles.update"),
 
-    /**
-     * Permission for reading roles.
-     */
-    AUTH_ROLES_READ(Permissions.AUTH_ROLES_READ),
+    /** Permission for deleting roles. */
+    AUTH_ROLES_DELETE("auth.roles.delete"),
 
-    /**
-     * Permission for updating roles.
-     */
-    AUTH_ROLES_UPDATE(Permissions.AUTH_ROLES_UPDATE),
+    /** Permission for reading token revocation status. */
+    TOKENS_READ("tokens.read"),
 
-    /**
-     * Permission for deleting roles.
-     */
-    AUTH_ROLES_DELETE(Permissions.AUTH_ROLES_DELETE),
+    /** Permission for revoking tokens. */
+    TOKENS_REVOKE("tokens.revoke"),
+
+    /** Service configuration create operation (alias for SERVICE_CONFIG_CREATE). */
+    CONFIG_CREATE("service.config.create"),
+
+    /** Service configuration read operation (alias for SERVICE_CONFIG_READ). */
+    CONFIG_READ("service.config.read"),
+
+    /** Service configuration update operation (alias for SERVICE_CONFIG_UPDATE). */
+    CONFIG_UPDATE("service.config.update"),
+
+    /** Service configuration delete operation (alias for SERVICE_CONFIG_DELETE). */
+    CONFIG_DELETE("service.config.delete"),
+
+    /** Permission policy read operation (alias for SERVICE_PERMISSIONS_READ). */
+    PERMISSIONS_READ("service.permissions.read"),
+
+    /** Permission policy update operation (alias for SERVICE_PERMISSIONS_WRITE). */
+    PERMISSIONS_WRITE("service.permissions.write");
 
     // ========================================================================
-    // Service operation constants (for permission policies)
+    // String constants for use in annotations (compile-time constants)
+    // These MUST be declared after enum constants in Java
     // ========================================================================
 
-    /**
-     * Service configuration create operation.
-     */
-    CONFIG_CREATE(Permissions.CONFIG_CREATE),
+    /** Wildcard permission value. */
+    public static final String ALL_VALUE = "*";
+    /** Admin claim value for service-level authorization. */
+    public static final String ADMIN_CLAIM_VALUE = "aussie:admin";
+    /** Admin role value. */
+    public static final String ADMIN_VALUE = "admin";
+    /** Service config read permission value. */
+    public static final String SERVICE_CONFIG_READ_VALUE = "service.config.read";
+    /** Service config create permission value. */
+    public static final String SERVICE_CONFIG_CREATE_VALUE = "service.config.create";
+    /** Service config update permission value. */
+    public static final String SERVICE_CONFIG_UPDATE_VALUE = "service.config.update";
+    /** Service config delete permission value. */
+    public static final String SERVICE_CONFIG_DELETE_VALUE = "service.config.delete";
+    /** Service permissions read permission value. */
+    public static final String SERVICE_PERMISSIONS_READ_VALUE = "service.permissions.read";
+    /** Service permissions write permission value. */
+    public static final String SERVICE_PERMISSIONS_WRITE_VALUE = "service.permissions.write";
+    /** API keys read permission value. */
+    public static final String APIKEYS_READ_VALUE = "apikeys.read";
+    /** API keys write permission value. */
+    public static final String APIKEYS_WRITE_VALUE = "apikeys.write";
+    /** Auth roles create permission value. */
+    public static final String AUTH_ROLES_CREATE_VALUE = "auth.roles.create";
+    /** Auth roles read permission value. */
+    public static final String AUTH_ROLES_READ_VALUE = "auth.roles.read";
+    /** Auth roles update permission value. */
+    public static final String AUTH_ROLES_UPDATE_VALUE = "auth.roles.update";
+    /** Auth roles delete permission value. */
+    public static final String AUTH_ROLES_DELETE_VALUE = "auth.roles.delete";
+    /** Tokens read permission value. */
+    public static final String TOKENS_READ_VALUE = "tokens.read";
+    /** Tokens revoke permission value. */
+    public static final String TOKENS_REVOKE_VALUE = "tokens.revoke";
 
-    /**
-     * Service configuration read operation.
-     */
-    CONFIG_READ(Permissions.CONFIG_READ),
+    // ========================================================================
+    // Static set of all permission values (populated at class initialization)
+    // ========================================================================
 
-    /**
-     * Service configuration update operation.
-     */
-    CONFIG_UPDATE(Permissions.CONFIG_UPDATE),
+    /** Unmodifiable set of all permission string values. */
+    private static final Set<String> ALL_PERMISSION_VALUES;
 
-    /**
-     * Service configuration delete operation.
-     */
-    CONFIG_DELETE(Permissions.CONFIG_DELETE),
+    static {
+        Set<String> values = new TreeSet<>();
+        for (Permission p : Permission.values()) {
+            values.add(p.value);
+        }
+        ALL_PERMISSION_VALUES = Collections.unmodifiableSet(values);
+    }
 
-    /**
-     * Permission policy read operation.
-     */
-    PERMISSIONS_READ(Permissions.PERMISSIONS_READ),
-
-    /**
-     * Permission policy update operation.
-     */
-    PERMISSIONS_WRITE(Permissions.PERMISSIONS_WRITE);
+    // ========================================================================
+    // Instance field and constructor
+    // ========================================================================
 
     private final String value;
 
@@ -189,21 +202,9 @@ public enum Permission {
         Set<String> roles = new HashSet<>();
 
         for (String permission : permissions) {
-            if (Permissions.ALL.equals(permission)) {
+            if (ALL_VALUE.equals(permission)) {
                 // Wildcard grants all roles
-                roles.add(Permissions.ADMIN);
-                roles.add(Permissions.SERVICE_CONFIG_READ);
-                roles.add(Permissions.SERVICE_CONFIG_CREATE);
-                roles.add(Permissions.SERVICE_CONFIG_UPDATE);
-                roles.add(Permissions.SERVICE_CONFIG_DELETE);
-                roles.add(Permissions.SERVICE_PERMISSIONS_READ);
-                roles.add(Permissions.SERVICE_PERMISSIONS_WRITE);
-                roles.add(Permissions.APIKEYS_READ);
-                roles.add(Permissions.APIKEYS_WRITE);
-                roles.add(Permissions.AUTH_ROLES_CREATE);
-                roles.add(Permissions.AUTH_ROLES_READ);
-                roles.add(Permissions.AUTH_ROLES_UPDATE);
-                roles.add(Permissions.AUTH_ROLES_DELETE);
+                roles.addAll(ALL_PERMISSION_VALUES);
             } else {
                 roles.add(permission);
             }
@@ -222,8 +223,8 @@ public enum Permission {
         if (permission == null) {
             return null;
         }
-        if (Permissions.ALL.equals(permission)) {
-            return Permissions.ADMIN;
+        if (ALL_VALUE.equals(permission)) {
+            return ADMIN_VALUE;
         }
         return permission;
     }

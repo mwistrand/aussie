@@ -24,7 +24,7 @@ import aussie.adapter.in.auth.ApiKeyIdentityProvider.ApiKeyPrincipal;
 import aussie.adapter.in.dto.CreateApiKeyRequest;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.auth.ApiKey;
-import aussie.core.model.auth.Permissions;
+import aussie.core.model.auth.Permission;
 import aussie.core.port.in.ApiKeyManagement;
 
 /**
@@ -65,7 +65,7 @@ public class ApiKeyResource {
      * It cannot be retrieved later - only the hash is stored.
      */
     @POST
-    @PermissionsAllowed({Permissions.APIKEYS_WRITE, Permissions.ADMIN})
+    @PermissionsAllowed({Permission.APIKEYS_WRITE_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> createKey(CreateApiKeyRequest request) {
         if (request == null || request.name() == null || request.name().isBlank()) {
             throw GatewayProblem.badRequest("name is required");
@@ -115,7 +115,7 @@ public class ApiKeyResource {
      * Key hashes are redacted in the response.
      */
     @GET
-    @PermissionsAllowed({Permissions.APIKEYS_READ, Permissions.ADMIN})
+    @PermissionsAllowed({Permission.APIKEYS_READ_VALUE, Permission.ADMIN_VALUE})
     public Uni<List<ApiKey>> listKeys() {
         return apiKeyService.list();
     }
@@ -128,7 +128,7 @@ public class ApiKeyResource {
      */
     @GET
     @Path("/{keyId}")
-    @PermissionsAllowed({Permissions.APIKEYS_READ, Permissions.ADMIN})
+    @PermissionsAllowed({Permission.APIKEYS_READ_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> getKey(@PathParam("keyId") String keyId) {
         return apiKeyService.get(keyId).map(opt -> opt.map(
                         key -> Response.ok(key).build())
@@ -144,7 +144,7 @@ public class ApiKeyResource {
      */
     @DELETE
     @Path("/{keyId}")
-    @PermissionsAllowed({Permissions.APIKEYS_WRITE, Permissions.ADMIN})
+    @PermissionsAllowed({Permission.APIKEYS_WRITE_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> revokeKey(@PathParam("keyId") String keyId) {
         return apiKeyService.revoke(keyId).map(revoked -> {
             if (revoked) {

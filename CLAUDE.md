@@ -36,8 +36,15 @@ Project layout:
 - Never block threads unless absolutely required, instead preferring reactive interfaces
 - Always use `@Override`
 - Prefer `Optional` over null for API return types
+- Always use constructor injection
 
 ## Database
 
 - Cassandra and Redis by default
 - Always include migration scripts when necessary
+
+## Documentation
+
+All documentation should be added to the top-level docs/ directory:
+- Documentation for platform teams running Aussie is at docs/platform
+- Documentation for API teams is at docs/api

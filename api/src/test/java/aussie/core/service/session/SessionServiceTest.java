@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -20,8 +21,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import aussie.adapter.out.storage.memory.InMemoryRevocationEventPublisher;
 import aussie.adapter.out.storage.memory.InMemorySessionRepository;
+import aussie.adapter.out.storage.memory.InMemoryTokenRevocationRepository;
 import aussie.core.model.session.Session;
+import aussie.core.service.auth.RevocationBloomFilter;
+import aussie.core.service.auth.RevocationCache;
+import aussie.core.service.auth.TokenRevocationService;
 
 @DisplayName("SessionService")
 class SessionServiceTest {
@@ -37,12 +43,20 @@ class SessionServiceTest {
 
         // Create a mock registry that returns our repository
         var registry = new TestSessionStorageProviderRegistry(repository);
+        var idGenerator = new SessionIdGenerator();
+        var sessionInvalidatedEvent = new NoOpEvent<aussie.core.model.session.SessionInvalidatedEvent>();
 
-        sessionService = new SessionService();
-        sessionService.storageRegistry = registry;
-        sessionService.idGenerator = new SessionIdGenerator();
-        sessionService.config = config;
-        sessionService.sessionInvalidatedEvent = new NoOpEvent<>();
+        // Create a mock token revocation service with mocked dependencies
+        var revocationConfig = new TestTokenRevocationConfig();
+        var revocationRepository = new InMemoryTokenRevocationRepository();
+        var revocationEventPublisher = new InMemoryRevocationEventPublisher();
+        var bloomFilter = mock(RevocationBloomFilter.class);
+        var revocationCache = mock(RevocationCache.class);
+        var tokenRevocationService = new TokenRevocationService(
+                revocationConfig, revocationRepository, revocationEventPublisher, bloomFilter, revocationCache);
+
+        sessionService =
+                new SessionService(registry, idGenerator, config, sessionInvalidatedEvent, tokenRevocationService);
     }
 
     @Nested
@@ -432,6 +446,86 @@ class SessionServiceTest {
         @Override
         public aussie.core.port.out.SessionRepository getRepository() {
             return repository;
+        }
+    }
+
+    /**
+     * Test configuration for TokenRevocationService.
+     */
+    static class TestTokenRevocationConfig implements aussie.core.config.TokenRevocationConfig {
+        @Override
+        public boolean enabled() {
+            return true;
+        }
+
+        @Override
+        public boolean checkUserRevocation() {
+            return true;
+        }
+
+        @Override
+        public Duration checkThreshold() {
+            return Duration.ofSeconds(30);
+        }
+
+        @Override
+        public BloomFilterConfig bloomFilter() {
+            return new BloomFilterConfig() {
+                @Override
+                public boolean enabled() {
+                    return true;
+                }
+
+                @Override
+                public int expectedInsertions() {
+                    return 10000;
+                }
+
+                @Override
+                public double falsePositiveProbability() {
+                    return 0.01;
+                }
+
+                @Override
+                public Duration rebuildInterval() {
+                    return Duration.ofMinutes(5);
+                }
+            };
+        }
+
+        @Override
+        public CacheConfig cache() {
+            return new CacheConfig() {
+                @Override
+                public boolean enabled() {
+                    return true;
+                }
+
+                @Override
+                public int maxSize() {
+                    return 1000;
+                }
+
+                @Override
+                public Duration ttl() {
+                    return Duration.ofMinutes(5);
+                }
+            };
+        }
+
+        @Override
+        public PubSubConfig pubsub() {
+            return new PubSubConfig() {
+                @Override
+                public boolean enabled() {
+                    return false;
+                }
+
+                @Override
+                public String channel() {
+                    return "test-revocation";
+                }
+            };
         }
     }
 

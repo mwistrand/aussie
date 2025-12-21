@@ -7,7 +7,6 @@ import java.util.Set;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
-import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
@@ -17,29 +16,40 @@ import aussie.core.model.session.Session;
 import aussie.core.model.session.SessionInvalidatedEvent;
 import aussie.core.port.in.SessionManagement;
 import aussie.core.port.out.SessionRepository;
+import aussie.core.service.auth.TokenRevocationService;
 
 /**
  * Implementation of session management operations.
  *
  * <p>Handles session lifecycle including creation with collision retry,
  * validation, refresh (sliding expiration), and invalidation.
+ *
+ * <p>On logout-everywhere, tokens are also revoked via {@link TokenRevocationService}
+ * to ensure immediate invalidation even if downstream services cache tokens.
  */
 @ApplicationScoped
 public class SessionService implements SessionManagement {
 
     private static final Logger LOG = Logger.getLogger(SessionService.class);
 
-    @Inject
-    SessionStorageProviderRegistry storageRegistry;
+    private final SessionStorageProviderRegistry storageRegistry;
+    private final SessionIdGenerator idGenerator;
+    private final SessionConfig config;
+    private final Event<SessionInvalidatedEvent> sessionInvalidatedEvent;
+    private final TokenRevocationService tokenRevocationService;
 
-    @Inject
-    SessionIdGenerator idGenerator;
-
-    @Inject
-    SessionConfig config;
-
-    @Inject
-    Event<SessionInvalidatedEvent> sessionInvalidatedEvent;
+    public SessionService(
+            SessionStorageProviderRegistry storageRegistry,
+            SessionIdGenerator idGenerator,
+            SessionConfig config,
+            Event<SessionInvalidatedEvent> sessionInvalidatedEvent,
+            TokenRevocationService tokenRevocationService) {
+        this.storageRegistry = storageRegistry;
+        this.idGenerator = idGenerator;
+        this.config = config;
+        this.sessionInvalidatedEvent = sessionInvalidatedEvent;
+        this.tokenRevocationService = tokenRevocationService;
+    }
 
     @Override
     public Uni<Session> createSession(
@@ -161,10 +171,20 @@ public class SessionService implements SessionManagement {
     @Override
     public Uni<Void> invalidateAllUserSessions(String userId) {
         LOG.infof("Invalidating all sessions for user: %s", userId);
-        return getRepository().deleteByUserId(userId).invoke(() -> {
-            // Fire event to notify WebSocket connections to close
-            sessionInvalidatedEvent.fireAsync(SessionInvalidatedEvent.forUser(userId));
-        });
+        return getRepository()
+                .deleteByUserId(userId)
+                .flatMap(v -> {
+                    // Revoke all tokens for the user to ensure immediate invalidation
+                    // even if downstream services have cached tokens
+                    if (tokenRevocationService.isEnabled()) {
+                        return tokenRevocationService.revokeAllUserTokens(userId);
+                    }
+                    return Uni.createFrom().voidItem();
+                })
+                .invoke(() -> {
+                    // Fire event to notify WebSocket connections to close
+                    sessionInvalidatedEvent.fireAsync(SessionInvalidatedEvent.forUser(userId));
+                });
     }
 
     private SessionRepository getRepository() {

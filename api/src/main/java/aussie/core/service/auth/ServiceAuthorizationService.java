@@ -5,7 +5,7 @@ import java.util.Set;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import aussie.core.model.auth.Permissions;
+import aussie.core.model.auth.Permission;
 import aussie.core.model.auth.ServicePermissionPolicy;
 import aussie.core.model.service.ServiceRegistration;
 
@@ -44,7 +44,7 @@ public class ServiceAuthorizationService {
      */
     public boolean isAuthorizedForService(ServiceRegistration service, String operation, Set<String> permissions) {
         // Wildcard permission bypasses all checks
-        if (permissions != null && permissions.contains(Permissions.ALL)) {
+        if (permissions != null && permissions.contains(Permission.ALL.value())) {
             return true;
         }
 
@@ -68,10 +68,10 @@ public class ServiceAuthorizationService {
      * @return true if authorized to create services, false otherwise
      */
     public boolean canCreateService(Set<String> permissions) {
-        if (permissions != null && permissions.contains(Permissions.ALL)) {
+        if (permissions != null && permissions.contains(Permission.ALL.value())) {
             return true;
         }
 
-        return defaultPolicy.getPolicy().isAllowed(Permissions.CONFIG_CREATE, permissions);
+        return defaultPolicy.getPolicy().isAllowed(Permission.CONFIG_CREATE.value(), permissions);
     }
 }

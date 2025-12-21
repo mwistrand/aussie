@@ -15,7 +15,7 @@ import io.quarkus.security.PermissionsAllowed;
 import io.quarkus.security.identity.SecurityIdentity;
 
 import aussie.adapter.in.auth.ApiKeyIdentityProvider.ApiKeyPrincipal;
-import aussie.core.model.auth.Permissions;
+import aussie.core.model.auth.Permission;
 
 /**
  * REST resource for authentication-related endpoints.
@@ -51,19 +51,21 @@ public class AuthResource {
     @GET
     @Path("/whoami")
     @PermissionsAllowed({
-        Permissions.ADMIN,
-        Permissions.SERVICE_CONFIG_READ,
-        Permissions.SERVICE_CONFIG_CREATE,
-        Permissions.SERVICE_CONFIG_UPDATE,
-        Permissions.SERVICE_CONFIG_DELETE,
-        Permissions.SERVICE_PERMISSIONS_READ,
-        Permissions.SERVICE_PERMISSIONS_WRITE,
-        Permissions.APIKEYS_READ,
-        Permissions.APIKEYS_WRITE,
-        Permissions.AUTH_ROLES_READ,
-        Permissions.AUTH_ROLES_CREATE,
-        Permissions.AUTH_ROLES_UPDATE,
-        Permissions.AUTH_ROLES_DELETE
+        Permission.ADMIN_VALUE,
+        Permission.SERVICE_CONFIG_READ_VALUE,
+        Permission.SERVICE_CONFIG_CREATE_VALUE,
+        Permission.SERVICE_CONFIG_UPDATE_VALUE,
+        Permission.SERVICE_CONFIG_DELETE_VALUE,
+        Permission.SERVICE_PERMISSIONS_READ_VALUE,
+        Permission.SERVICE_PERMISSIONS_WRITE_VALUE,
+        Permission.APIKEYS_READ_VALUE,
+        Permission.APIKEYS_WRITE_VALUE,
+        Permission.AUTH_ROLES_READ_VALUE,
+        Permission.AUTH_ROLES_CREATE_VALUE,
+        Permission.AUTH_ROLES_UPDATE_VALUE,
+        Permission.AUTH_ROLES_DELETE_VALUE,
+        Permission.TOKENS_READ_VALUE,
+        Permission.TOKENS_REVOKE_VALUE
     })
     public Map<String, Object> whoami() {
         var result = new java.util.LinkedHashMap<String, Object>();

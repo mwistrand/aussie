@@ -9,8 +9,12 @@ package aussie.core.model.auth;
  * <p>Permissions follow a hierarchical format and represent operations that can be
  * performed on services and resources.
  *
+ * @deprecated Use {@link Permission} instead. This class will be removed in a future version.
+ *             For annotation constants, use {@code Permission.*_VALUE} constants (e.g.,
+ *             {@link Permission#ADMIN_VALUE}, {@link Permission#TOKENS_READ_VALUE}).
  * @see Permission
  */
+@Deprecated(forRemoval = true)
 public final class Permissions {
 
     private Permissions() {
@@ -105,6 +109,20 @@ public final class Permissions {
      * Permission for deleting roles.
      */
     public static final String AUTH_ROLES_DELETE = "auth.roles.delete";
+
+    // ========================================================================
+    // Token revocation permissions
+    // ========================================================================
+
+    /**
+     * Permission for reading token revocation status.
+     */
+    public static final String TOKENS_READ = "tokens.read";
+
+    /**
+     * Permission for revoking tokens.
+     */
+    public static final String TOKENS_REVOKE = "tokens.revoke";
 
     // ========================================================================
     // Service operation constants (for permission policies)
