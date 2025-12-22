@@ -54,7 +54,7 @@ import aussie.spi.SecurityEvent;
  * <li>Session ID from cookie or header</li>
  * <li>Authorization header (bearer token hash)</li>
  * <li>API key ID header</li>
- * <li>Client IP from X-Forwarded-For or remote address</li>
+ * <li>Client IP from Forwarded or X-Forwarded-For or remote address</li>
  * </ol>
  */
 @Provider
@@ -235,11 +235,60 @@ public class RateLimitFilter implements ContainerRequestFilter, ContainerRespons
     }
 
     private String extractClientIp(ContainerRequestContext ctx) {
-        final var forwarded = ctx.getHeaderString("X-Forwarded-For");
+        // RFC 7239 Forwarded header (preferred)
+        final var forwarded = ctx.getHeaderString("Forwarded");
         if (forwarded != null) {
-            return "ip:" + forwarded.split(",")[0].trim();
+            final var ip = parseForwardedFor(forwarded);
+            if (ip != null) {
+                return "ip:" + ip;
+            }
         }
+
+        // X-Forwarded-For fallback
+        final var xForwardedFor = ctx.getHeaderString("X-Forwarded-For");
+        if (xForwardedFor != null) {
+            return "ip:" + xForwardedFor.split(",")[0].trim();
+        }
+
         return "ip:unknown";
+    }
+
+    /**
+     * Parse the client IP from RFC 7239 Forwarded header.
+     *
+     * @param forwarded the Forwarded header value
+     * @return the client IP, or null if not found
+     */
+    private String parseForwardedFor(String forwarded) {
+        // Handle multiple forwarded entries (take first one - closest to client)
+        final var firstEntry = forwarded.split(",")[0].trim();
+
+        for (final var part : firstEntry.split(";")) {
+            final var trimmed = part.trim();
+            if (trimmed.toLowerCase().startsWith("for=")) {
+                var value = trimmed.substring(4);
+                // Remove quotes if present
+                if (value.startsWith("\"") && value.endsWith("\"")) {
+                    value = value.substring(1, value.length() - 1);
+                }
+                // Handle IPv6 brackets - extract address and skip port stripping
+                if (value.startsWith("[")) {
+                    final var bracketEnd = value.indexOf(']');
+                    if (bracketEnd > 0) {
+                        // Extract just the IPv6 address without brackets (port is after bracket)
+                        return value.substring(1, bracketEnd);
+                    }
+                }
+                // Remove port if present (for IPv4 only - identified by having exactly one colon)
+                final var colonCount = value.length() - value.replace(":", "").length();
+                if (colonCount == 1) {
+                    final var colonIndex = value.indexOf(':');
+                    value = value.substring(0, colonIndex);
+                }
+                return value;
+            }
+        }
+        return null;
     }
 
     private EffectiveRateLimit resolveEffectiveLimit(RouteLookupResult routeResult) {

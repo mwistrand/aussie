@@ -73,7 +73,9 @@ public class BootstrapIntegrationTest {
                     Map.entry("aussie.auth.route-auth.enabled", "false"),
                     // Rate limiting disabled for tests (avoids event loop blocking issues)
                     Map.entry("aussie.rate-limiting.enabled", "false"),
-                    Map.entry("aussie.rate-limiting.redis.enabled", "false"));
+                    Map.entry("aussie.rate-limiting.redis.enabled", "false"),
+                    // Auth rate limiting disabled for tests
+                    Map.entry("aussie.auth.rate-limit.enabled", "false"));
         }
     }
 

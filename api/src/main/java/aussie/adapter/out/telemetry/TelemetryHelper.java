@@ -107,4 +107,26 @@ public class TelemetryHelper {
             span.setAttribute(SpanAttributes.RATE_LIMIT_RETRY_AFTER, value);
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Authentication Rate Limiting (Brute Force Protection)
+    // -------------------------------------------------------------------------
+
+    public void setAuthRateLimited(Span span, boolean value) {
+        if (isTracingEnabled() && attrs().authRateLimited()) {
+            span.setAttribute(SpanAttributes.AUTH_RATE_LIMITED, value);
+        }
+    }
+
+    public void setAuthLockoutKey(Span span, String value) {
+        if (isTracingEnabled() && attrs().authLockoutKey()) {
+            span.setAttribute(SpanAttributes.AUTH_LOCKOUT_KEY, value);
+        }
+    }
+
+    public void setAuthLockoutRetryAfter(Span span, long value) {
+        if (isTracingEnabled() && attrs().authLockoutRetryAfter()) {
+            span.setAttribute(SpanAttributes.AUTH_LOCKOUT_RETRY_AFTER, value);
+        }
+    }
 }

@@ -1,4 +1,4 @@
-package aussie.core.port.out;
+package aussie.spi;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;

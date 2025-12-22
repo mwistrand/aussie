@@ -87,6 +87,12 @@ public enum Permission {
     /** Permission for revoking tokens. */
     TOKENS_REVOKE("tokens.revoke"),
 
+    /** Permission for reading lockout status. */
+    LOCKOUTS_READ("lockouts.read"),
+
+    /** Permission for clearing lockouts. */
+    LOCKOUTS_WRITE("lockouts.write"),
+
     /** Service configuration create operation (alias for SERVICE_CONFIG_CREATE). */
     CONFIG_CREATE("service.config.create"),
 
@@ -144,6 +150,10 @@ public enum Permission {
     public static final String TOKENS_READ_VALUE = "tokens.read";
     /** Tokens revoke permission value. */
     public static final String TOKENS_REVOKE_VALUE = "tokens.revoke";
+    /** Lockouts read permission value. */
+    public static final String LOCKOUTS_READ_VALUE = "lockouts.read";
+    /** Lockouts write permission value. */
+    public static final String LOCKOUTS_WRITE_VALUE = "lockouts.write";
 
     // ========================================================================
     // Static set of all permission values (populated at class initialization)

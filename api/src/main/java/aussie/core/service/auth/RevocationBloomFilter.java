@@ -14,7 +14,7 @@ import org.jboss.logging.Logger;
 import aussie.core.config.TokenRevocationConfig;
 import aussie.core.model.auth.RevocationEvent;
 import aussie.core.port.out.RevocationEventPublisher;
-import aussie.core.port.out.TokenRevocationRepository;
+import aussie.spi.TokenRevocationRepository;
 
 /**
  * Thread-safe bloom filter for O(1) "definitely not revoked" checks.

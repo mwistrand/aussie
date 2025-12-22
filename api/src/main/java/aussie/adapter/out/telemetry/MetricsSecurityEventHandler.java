@@ -75,6 +75,7 @@ public class MetricsSecurityEventHandler implements SecurityEventHandler {
         // Record type-specific metrics
         switch (event) {
             case SecurityEvent.AuthenticationFailure e -> recordAuthFailure(e);
+            case SecurityEvent.AuthenticationLockout e -> recordAuthLockout(e);
             case SecurityEvent.AccessDenied e -> recordAccessDenied(e);
             case SecurityEvent.RateLimitExceeded e -> recordRateLimitExceeded(e);
             case SecurityEvent.SuspiciousPattern e -> recordSuspiciousPattern(e);
@@ -100,6 +101,23 @@ public class MetricsSecurityEventHandler implements SecurityEventHandler {
                 .tag("client_ip_hash", event.clientIdentifier())
                 .register(registry)
                 .increment();
+    }
+
+    private void recordAuthLockout(SecurityEvent.AuthenticationLockout event) {
+        Counter.builder("aussie.security.auth.lockouts")
+                .description("Authentication lockouts (brute force protection)")
+                .tag("key_type", extractKeyType(event.lockedKey()))
+                .tag("client_ip_hash", event.clientIdentifier())
+                .register(registry)
+                .increment();
+    }
+
+    private String extractKeyType(String lockedKey) {
+        if (lockedKey == null) {
+            return "unknown";
+        }
+        int colonIndex = lockedKey.indexOf(':');
+        return colonIndex > 0 ? lockedKey.substring(0, colonIndex) : "unknown";
     }
 
     private void recordAccessDenied(SecurityEvent.AccessDenied event) {

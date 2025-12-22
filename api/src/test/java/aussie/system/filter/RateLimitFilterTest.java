@@ -129,6 +129,7 @@ class RateLimitFilterTest {
     private void setupRequestContext(String serviceId, String clientIp, ServiceRegistration service) {
         // Set up path so ServicePath.parse() extracts the service ID
         when(uriInfo.getPath()).thenReturn("/" + serviceId + "/api/test");
+        when(requestContext.getHeaderString("Forwarded")).thenReturn(null);
         when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn(clientIp);
         when(requestContext.getHeaderString("Authorization")).thenReturn(null);
         when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
@@ -179,6 +180,7 @@ class RateLimitFilterTest {
             var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
 
             when(uriInfo.getPath()).thenReturn("/service-1/api/users");
+            when(requestContext.getHeaderString("Forwarded")).thenReturn(null);
             when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn("192.168.1.1");
             when(requestContext.getHeaderString("Authorization")).thenReturn(null);
             when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
@@ -211,6 +213,7 @@ class RateLimitFilterTest {
         @DisplayName("should use resolvePlatformDefaults when no service found")
         void shouldUsePlatformDefaultsWhenNoServiceFound() throws InterruptedException {
             when(uriInfo.getPath()).thenReturn("/service-1/api/users");
+            when(requestContext.getHeaderString("Forwarded")).thenReturn(null);
             when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn("192.168.1.1");
             when(requestContext.getHeaderString("Authorization")).thenReturn(null);
             when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
@@ -253,6 +256,7 @@ class RateLimitFilterTest {
             var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
 
             when(uriInfo.getPath()).thenReturn("/service-1/api/users");
+            when(requestContext.getHeaderString("Forwarded")).thenReturn(null);
             when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn("192.168.1.1");
             when(requestContext.getHeaderString("Authorization")).thenReturn(null);
             when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
@@ -287,6 +291,7 @@ class RateLimitFilterTest {
         @DisplayName("should have empty endpoint path in key when no RouteMatch")
         void shouldHaveEmptyEndpointPathWhenNoRouteMatch() throws InterruptedException {
             when(uriInfo.getPath()).thenReturn("/service-1/api/users");
+            when(requestContext.getHeaderString("Forwarded")).thenReturn(null);
             when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn("192.168.1.1");
             when(requestContext.getHeaderString("Authorization")).thenReturn(null);
             when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
@@ -463,6 +468,7 @@ class RateLimitFilterTest {
         @DisplayName("should use session cookie when available")
         void shouldUseSessionCookieWhenAvailable() throws InterruptedException {
             when(uriInfo.getPath()).thenReturn("/service-1/api/test");
+            when(requestContext.getHeaderString("Forwarded")).thenReturn(null);
             when(serviceRegistry.getService("service-1"))
                     .thenReturn(Uni.createFrom().item(Optional.empty()));
 
@@ -503,6 +509,7 @@ class RateLimitFilterTest {
             when(requestContext.getHeaderString("X-Session-ID")).thenReturn(null);
             when(requestContext.getHeaderString("Authorization")).thenReturn("Bearer token123");
             when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Forwarded")).thenReturn(null);
             when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn(null);
 
             var decision = RateLimitDecision.allow();
@@ -538,6 +545,7 @@ class RateLimitFilterTest {
             when(requestContext.getHeaderString("X-Session-ID")).thenReturn(null);
             when(requestContext.getHeaderString("Authorization")).thenReturn(null);
             when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn("key-456");
+            when(requestContext.getHeaderString("Forwarded")).thenReturn(null);
             when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn(null);
 
             var decision = RateLimitDecision.allow();
@@ -601,6 +609,7 @@ class RateLimitFilterTest {
             when(requestContext.getHeaderString("X-Session-ID")).thenReturn(null);
             when(requestContext.getHeaderString("Authorization")).thenReturn(null);
             when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Forwarded")).thenReturn(null);
             when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn("10.0.0.1, 192.168.1.1, 172.16.0.1");
 
             var decision = RateLimitDecision.allow();
@@ -624,6 +633,258 @@ class RateLimitFilterTest {
             verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
 
             assertEquals("ip:10.0.0.1", keyCaptor.getValue().clientId());
+        }
+
+        @Test
+        @DisplayName("should prefer RFC 7239 Forwarded header over X-Forwarded-For")
+        void shouldPreferRfc7239ForwardedHeader() throws InterruptedException {
+            when(uriInfo.getPath()).thenReturn("/service-1/api/test");
+            when(serviceRegistry.getService("service-1"))
+                    .thenReturn(Uni.createFrom().item(Optional.empty()));
+            when(requestContext.getCookies()).thenReturn(new HashMap<>());
+            when(requestContext.getHeaderString("X-Session-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Authorization")).thenReturn(null);
+            when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Forwarded")).thenReturn("for=203.0.113.195");
+            when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn("10.0.0.1");
+
+            var decision = RateLimitDecision.allow();
+            when(rateLimiter.checkAndConsume(any(), any()))
+                    .thenReturn(Uni.createFrom().item(decision));
+
+            CountDownLatch latch = new CountDownLatch(1);
+            doAnswer(invocation -> {
+                        latch.countDown();
+                        return null;
+                    })
+                    .when(requestContext)
+                    .setProperty(eq("aussie.ratelimit.decision"), any());
+
+            filter.filter(requestContext);
+
+            boolean completed = latch.await(1, TimeUnit.SECONDS);
+            assertTrue(completed, "setProperty was not called in time");
+
+            ArgumentCaptor<RateLimitKey> keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
+            verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
+
+            assertEquals("ip:203.0.113.195", keyCaptor.getValue().clientId());
+        }
+
+        @Test
+        @DisplayName("should parse RFC 7239 Forwarded header with multiple directives")
+        void shouldParseForwardedHeaderWithMultipleDirectives() throws InterruptedException {
+            when(uriInfo.getPath()).thenReturn("/service-1/api/test");
+            when(serviceRegistry.getService("service-1"))
+                    .thenReturn(Uni.createFrom().item(Optional.empty()));
+            when(requestContext.getCookies()).thenReturn(new HashMap<>());
+            when(requestContext.getHeaderString("X-Session-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Authorization")).thenReturn(null);
+            when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Forwarded")).thenReturn("for=192.0.2.60;proto=http;by=203.0.113.43");
+            when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn(null);
+
+            var decision = RateLimitDecision.allow();
+            when(rateLimiter.checkAndConsume(any(), any()))
+                    .thenReturn(Uni.createFrom().item(decision));
+
+            CountDownLatch latch = new CountDownLatch(1);
+            doAnswer(invocation -> {
+                        latch.countDown();
+                        return null;
+                    })
+                    .when(requestContext)
+                    .setProperty(eq("aussie.ratelimit.decision"), any());
+
+            filter.filter(requestContext);
+
+            boolean completed = latch.await(1, TimeUnit.SECONDS);
+            assertTrue(completed, "setProperty was not called in time");
+
+            ArgumentCaptor<RateLimitKey> keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
+            verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
+
+            assertEquals("ip:192.0.2.60", keyCaptor.getValue().clientId());
+        }
+
+        @Test
+        @DisplayName("should parse RFC 7239 Forwarded header with IPv6 address")
+        void shouldParseForwardedHeaderWithIPv6() throws InterruptedException {
+            when(uriInfo.getPath()).thenReturn("/service-1/api/test");
+            when(serviceRegistry.getService("service-1"))
+                    .thenReturn(Uni.createFrom().item(Optional.empty()));
+            when(requestContext.getCookies()).thenReturn(new HashMap<>());
+            when(requestContext.getHeaderString("X-Session-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Authorization")).thenReturn(null);
+            when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Forwarded")).thenReturn("for=\"[2001:db8:cafe::17]\"");
+            when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn(null);
+
+            var decision = RateLimitDecision.allow();
+            when(rateLimiter.checkAndConsume(any(), any()))
+                    .thenReturn(Uni.createFrom().item(decision));
+
+            CountDownLatch latch = new CountDownLatch(1);
+            doAnswer(invocation -> {
+                        latch.countDown();
+                        return null;
+                    })
+                    .when(requestContext)
+                    .setProperty(eq("aussie.ratelimit.decision"), any());
+
+            filter.filter(requestContext);
+
+            boolean completed = latch.await(1, TimeUnit.SECONDS);
+            assertTrue(completed, "setProperty was not called in time");
+
+            ArgumentCaptor<RateLimitKey> keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
+            verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
+
+            assertEquals("ip:2001:db8:cafe::17", keyCaptor.getValue().clientId());
+        }
+
+        @Test
+        @DisplayName("should parse RFC 7239 Forwarded header with port")
+        void shouldParseForwardedHeaderWithPort() throws InterruptedException {
+            when(uriInfo.getPath()).thenReturn("/service-1/api/test");
+            when(serviceRegistry.getService("service-1"))
+                    .thenReturn(Uni.createFrom().item(Optional.empty()));
+            when(requestContext.getCookies()).thenReturn(new HashMap<>());
+            when(requestContext.getHeaderString("X-Session-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Authorization")).thenReturn(null);
+            when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Forwarded")).thenReturn("for=192.0.2.60:8080");
+            when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn(null);
+
+            var decision = RateLimitDecision.allow();
+            when(rateLimiter.checkAndConsume(any(), any()))
+                    .thenReturn(Uni.createFrom().item(decision));
+
+            CountDownLatch latch = new CountDownLatch(1);
+            doAnswer(invocation -> {
+                        latch.countDown();
+                        return null;
+                    })
+                    .when(requestContext)
+                    .setProperty(eq("aussie.ratelimit.decision"), any());
+
+            filter.filter(requestContext);
+
+            boolean completed = latch.await(1, TimeUnit.SECONDS);
+            assertTrue(completed, "setProperty was not called in time");
+
+            ArgumentCaptor<RateLimitKey> keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
+            verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
+
+            assertEquals("ip:192.0.2.60", keyCaptor.getValue().clientId());
+        }
+
+        @Test
+        @DisplayName("should extract first IP from RFC 7239 Forwarded header with multiple proxies")
+        void shouldExtractFirstIpFromForwardedHeaderWithMultipleProxies() throws InterruptedException {
+            when(uriInfo.getPath()).thenReturn("/service-1/api/test");
+            when(serviceRegistry.getService("service-1"))
+                    .thenReturn(Uni.createFrom().item(Optional.empty()));
+            when(requestContext.getCookies()).thenReturn(new HashMap<>());
+            when(requestContext.getHeaderString("X-Session-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Authorization")).thenReturn(null);
+            when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Forwarded")).thenReturn("for=192.0.2.60, for=198.51.100.178");
+            when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn(null);
+
+            var decision = RateLimitDecision.allow();
+            when(rateLimiter.checkAndConsume(any(), any()))
+                    .thenReturn(Uni.createFrom().item(decision));
+
+            CountDownLatch latch = new CountDownLatch(1);
+            doAnswer(invocation -> {
+                        latch.countDown();
+                        return null;
+                    })
+                    .when(requestContext)
+                    .setProperty(eq("aussie.ratelimit.decision"), any());
+
+            filter.filter(requestContext);
+
+            boolean completed = latch.await(1, TimeUnit.SECONDS);
+            assertTrue(completed, "setProperty was not called in time");
+
+            ArgumentCaptor<RateLimitKey> keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
+            verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
+
+            assertEquals("ip:192.0.2.60", keyCaptor.getValue().clientId());
+        }
+
+        @Test
+        @DisplayName("should fallback to X-Forwarded-For when Forwarded header has no for directive")
+        void shouldFallbackToXForwardedForWhenNoForDirective() throws InterruptedException {
+            when(uriInfo.getPath()).thenReturn("/service-1/api/test");
+            when(serviceRegistry.getService("service-1"))
+                    .thenReturn(Uni.createFrom().item(Optional.empty()));
+            when(requestContext.getCookies()).thenReturn(new HashMap<>());
+            when(requestContext.getHeaderString("X-Session-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Authorization")).thenReturn(null);
+            when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Forwarded")).thenReturn("proto=https;by=203.0.113.43");
+            when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn("10.0.0.1");
+
+            var decision = RateLimitDecision.allow();
+            when(rateLimiter.checkAndConsume(any(), any()))
+                    .thenReturn(Uni.createFrom().item(decision));
+
+            CountDownLatch latch = new CountDownLatch(1);
+            doAnswer(invocation -> {
+                        latch.countDown();
+                        return null;
+                    })
+                    .when(requestContext)
+                    .setProperty(eq("aussie.ratelimit.decision"), any());
+
+            filter.filter(requestContext);
+
+            boolean completed = latch.await(1, TimeUnit.SECONDS);
+            assertTrue(completed, "setProperty was not called in time");
+
+            ArgumentCaptor<RateLimitKey> keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
+            verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
+
+            assertEquals("ip:10.0.0.1", keyCaptor.getValue().clientId());
+        }
+
+        @Test
+        @DisplayName("should handle case-insensitive for directive in Forwarded header")
+        void shouldHandleCaseInsensitiveForDirective() throws InterruptedException {
+            when(uriInfo.getPath()).thenReturn("/service-1/api/test");
+            when(serviceRegistry.getService("service-1"))
+                    .thenReturn(Uni.createFrom().item(Optional.empty()));
+            when(requestContext.getCookies()).thenReturn(new HashMap<>());
+            when(requestContext.getHeaderString("X-Session-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Authorization")).thenReturn(null);
+            when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
+            when(requestContext.getHeaderString("Forwarded")).thenReturn("FOR=192.0.2.60");
+            when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn(null);
+
+            var decision = RateLimitDecision.allow();
+            when(rateLimiter.checkAndConsume(any(), any()))
+                    .thenReturn(Uni.createFrom().item(decision));
+
+            CountDownLatch latch = new CountDownLatch(1);
+            doAnswer(invocation -> {
+                        latch.countDown();
+                        return null;
+                    })
+                    .when(requestContext)
+                    .setProperty(eq("aussie.ratelimit.decision"), any());
+
+            filter.filter(requestContext);
+
+            boolean completed = latch.await(1, TimeUnit.SECONDS);
+            assertTrue(completed, "setProperty was not called in time");
+
+            ArgumentCaptor<RateLimitKey> keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
+            verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
+
+            assertEquals("ip:192.0.2.60", keyCaptor.getValue().clientId());
         }
     }
 
@@ -708,6 +969,7 @@ class RateLimitFilterTest {
             when(serviceRegistry.getService("my-service"))
                     .thenReturn(Uni.createFrom().item(Optional.empty()));
             when(requestContext.getCookies()).thenReturn(new HashMap<>());
+            when(requestContext.getHeaderString("Forwarded")).thenReturn(null);
             when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn("10.0.0.1");
             when(requestContext.getHeaderString("Authorization")).thenReturn(null);
             when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);
@@ -743,6 +1005,7 @@ class RateLimitFilterTest {
             when(serviceRegistry.getService("unknown"))
                     .thenReturn(Uni.createFrom().item(Optional.empty()));
             when(requestContext.getCookies()).thenReturn(new HashMap<>());
+            when(requestContext.getHeaderString("Forwarded")).thenReturn(null);
             when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn("10.0.0.1");
             when(requestContext.getHeaderString("Authorization")).thenReturn(null);
             when(requestContext.getHeaderString("X-API-Key-ID")).thenReturn(null);

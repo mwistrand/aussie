@@ -1,4 +1,4 @@
-package aussie.core.port.out;
+package aussie.spi;
 
 import java.time.Instant;
 

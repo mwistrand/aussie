@@ -14,7 +14,7 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
-import aussie.core.port.out.TokenRevocationRepository;
+import aussie.spi.TokenRevocationRepository;
 
 /**
  * Redis implementation of TokenRevocationRepository.

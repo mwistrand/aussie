@@ -24,6 +24,12 @@
       "authRequired": false
     },
     {
+      "path": "/api/auth/fail",
+      "methods": ["GET", "POST"],
+      "visibility": "PUBLIC",
+      "authRequired": false
+    },
+    {
       "path": "/login",
       "methods": ["GET"],
       "visibility": "PUBLIC",

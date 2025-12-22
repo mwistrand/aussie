@@ -19,7 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.core.config.TokenRevocationConfig;
 import aussie.core.port.out.RevocationEventPublisher;
-import aussie.core.port.out.TokenRevocationRepository;
+import aussie.spi.TokenRevocationRepository;
 
 @DisplayName("RevocationBloomFilter")
 @ExtendWith(MockitoExtension.class)

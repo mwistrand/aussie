@@ -12,6 +12,7 @@ import java.util.Map;
  * <p>Event types:
  * <ul>
  *   <li>{@link AuthenticationFailure} - Failed authentication attempt</li>
+ *   <li>{@link AuthenticationLockout} - Client locked out due to failed attempts</li>
  *   <li>{@link AccessDenied} - Request blocked by access control</li>
  *   <li>{@link RateLimitExceeded} - Client exceeded rate limits</li>
  *   <li>{@link SuspiciousPattern} - Anomalous traffic pattern detected</li>
@@ -70,6 +71,40 @@ public sealed interface SecurityEvent {
         @Override
         public Severity severity() {
             return failureCount >= 5 ? Severity.WARNING : Severity.INFO;
+        }
+    }
+
+    /**
+     * Authentication lockout event.
+     *
+     * <p>Triggered when a client is locked out due to repeated failed
+     * authentication attempts (brute force protection).
+     *
+     * @param timestamp when the lockout was triggered
+     * @param clientIdentifier hashed client IP
+     * @param lockedKey the key that was locked out (ip:xxx, user:xxx, apikey:xxx)
+     * @param failedAttempts number of failed attempts that triggered lockout
+     * @param lockoutDurationSeconds how long the lockout lasts
+     * @param lockoutCount number of times this key has been locked out (for progressive lockout)
+     */
+    record AuthenticationLockout(
+            Instant timestamp,
+            String clientIdentifier,
+            String lockedKey,
+            int failedAttempts,
+            long lockoutDurationSeconds,
+            int lockoutCount)
+            implements SecurityEvent {
+
+        @Override
+        public Severity severity() {
+            // Progressive severity based on lockout count
+            if (lockoutCount >= 3) {
+                return Severity.CRITICAL;
+            } else if (lockoutCount >= 2 || failedAttempts >= 10) {
+                return Severity.WARNING;
+            }
+            return Severity.INFO;
         }
     }
 

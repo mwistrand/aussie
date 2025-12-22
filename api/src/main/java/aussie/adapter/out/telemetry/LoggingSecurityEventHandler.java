@@ -53,6 +53,14 @@ public class LoggingSecurityEventHandler implements SecurityEventHandler {
                     "AUTH_FAILURE: client=%s reason=%s method=%s failures=%d",
                     e.clientIdentifier(), e.reason(), e.attemptedMethod(), e.failureCount());
 
+            case SecurityEvent.AuthenticationLockout e -> String.format(
+                    "AUTH_LOCKOUT: client=%s key=%s attempts=%d duration=%ds lockout_count=%d",
+                    e.clientIdentifier(),
+                    e.lockedKey(),
+                    e.failedAttempts(),
+                    e.lockoutDurationSeconds(),
+                    e.lockoutCount());
+
             case SecurityEvent.AccessDenied e -> String.format(
                     "ACCESS_DENIED: client=%s service=%s path=%s reason=%s",
                     e.clientIdentifier(), e.serviceId(), e.path(), e.reason());

@@ -11,7 +11,7 @@ import org.jboss.logging.Logger;
 
 import aussie.core.config.TokenRevocationConfig;
 import aussie.core.port.out.RevocationEventPublisher;
-import aussie.core.port.out.TokenRevocationRepository;
+import aussie.spi.TokenRevocationRepository;
 
 /**
  * Service for token revocation operations.

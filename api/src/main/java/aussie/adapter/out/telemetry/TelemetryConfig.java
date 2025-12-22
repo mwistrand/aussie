@@ -238,5 +238,21 @@ public interface TelemetryConfig {
         @WithName("rate-limit-retry-after")
         @WithDefault("true")
         boolean rateLimitRetryAfter();
+
+        // -------------------------------------------------------------------------
+        // Authentication Rate Limiting (Brute Force Protection)
+        // -------------------------------------------------------------------------
+
+        @WithName("auth-rate-limited")
+        @WithDefault("true")
+        boolean authRateLimited();
+
+        @WithName("auth-lockout-key")
+        @WithDefault("true")
+        boolean authLockoutKey();
+
+        @WithName("auth-lockout-retry-after")
+        @WithDefault("true")
+        boolean authLockoutRetryAfter();
     }
 }

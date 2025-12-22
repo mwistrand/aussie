@@ -13,7 +13,7 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
-import aussie.core.port.out.TokenRevocationRepository;
+import aussie.spi.TokenRevocationRepository;
 
 /**
  * In-memory implementation of TokenRevocationRepository.

@@ -26,7 +26,7 @@ import org.mockito.quality.Strictness;
 
 import aussie.core.config.TokenRevocationConfig;
 import aussie.core.port.out.RevocationEventPublisher;
-import aussie.core.port.out.TokenRevocationRepository;
+import aussie.spi.TokenRevocationRepository;
 
 /**
  * Integration tests for TokenRevocationService using real bloom filter and cache.

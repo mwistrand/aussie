@@ -2,8 +2,8 @@ package aussie.adapter.out.storage.memory;
 
 import org.junit.jupiter.api.AfterEach;
 
-import aussie.core.port.out.TokenRevocationRepository;
-import aussie.core.port.out.TokenRevocationRepositoryContractTest;
+import aussie.spi.TokenRevocationRepository;
+import aussie.spi.TokenRevocationRepositoryContractTest;
 
 /**
  * Contract test implementation for InMemoryTokenRevocationRepository.

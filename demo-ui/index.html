@@ -766,6 +766,83 @@
                 </table>
             </div>
         </div>
+
+        <div class="card">
+            <h2>Auth Rate Limit Testing (Brute Force Protection)</h2>
+            <p style="margin-bottom: 1rem; color: #666;">
+                Test the authentication rate limiter by sending repeated failed login attempts.
+                This simulates a brute force attack to verify lockout behavior.
+            </p>
+
+            <div class="info-banner">
+                <h4>How It Works</h4>
+                <ul>
+                    <li>Sends requests to <code>/api/auth/fail</code> which always returns 401</li>
+                    <li>Aussie tracks failed attempts by IP and username</li>
+                    <li>After <strong>max attempts</strong> (default: 5), returns 429 with lockout</li>
+                    <li>Progressive lockout: each lockout increases duration (1.5x multiplier)</li>
+                </ul>
+            </div>
+
+            <div id="authRateLimitLiveCounter" class="live-counter" style="display: none;">
+                <div class="pulse"></div>
+                <span>Attempts: <strong id="authRateLimitLiveCount">0</strong></span>
+            </div>
+
+            <div id="authRateLimitStats" class="rate-limit-stats" style="display: none;">
+                <div class="stat-box danger">
+                    <div class="stat-value" id="authStatFailedCount">0</div>
+                    <div class="stat-label">Failed (401)</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="authStatTotalCount">0</div>
+                    <div class="stat-label">Total Sent</div>
+                </div>
+                <div class="stat-box warning">
+                    <div class="stat-value" id="authStatLockedOutAt">-</div>
+                    <div class="stat-label">Locked Out At</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="authStatRetryAfter">-</div>
+                    <div class="stat-label">Retry After</div>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+                <div class="form-row" style="margin-bottom: 1rem;">
+                    <div class="form-group">
+                        <label for="authTestUsername">Test Username</label>
+                        <input type="text" id="authTestUsername" class="url-input" value="attacker@example.com" style="margin-bottom: 0;">
+                    </div>
+                    <div class="form-group">
+                        <label for="authTestMaxAttempts">Max Attempts</label>
+                        <input type="number" id="authTestMaxAttempts" class="url-input" value="10" min="1" max="50" style="margin-bottom: 0;">
+                    </div>
+                </div>
+                <button id="authRateLimitStartBtn" class="btn btn-danger" onclick="startAuthRateLimitTest()">Start Brute Force Test</button>
+                <button id="authRateLimitStopBtn" class="btn btn-secondary" onclick="stopAuthRateLimitTest()" style="margin-left: 0.5rem; display: none;">Stop</button>
+                <button id="authRateLimitClearBtn" class="btn btn-secondary" onclick="clearAuthRateLimitResults()" style="margin-left: 0.5rem; display: none;">Clear</button>
+            </div>
+
+            <div id="authRateLimitHeaders" class="headers-display" style="display: none;">
+                <h4 style="margin-top: 0; margin-bottom: 0.5rem;">Lockout Response Headers</h4>
+                <dl id="authRateLimitHeadersList"></dl>
+            </div>
+
+            <div id="authRateLimitLog" class="request-log" style="display: none; margin-top: 1rem;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Status</th>
+                            <th>Response</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="authRateLimitLogBody"></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1700,6 +1777,178 @@
             document.getElementById('wsMsgClearBtn').style.display = 'none';
             document.getElementById('wsMsgMessages').style.display = 'none';
             document.getElementById('wsMsgMessages').innerHTML = '';
+        }
+
+        // ========== Auth Rate Limit Test Functions ==========
+
+        let authRateLimitAbortController = null;
+        let authRateLimitRequests = [];
+
+        async function startAuthRateLimitTest() {
+            const config = getConfig();
+            const username = document.getElementById('authTestUsername').value || 'attacker@example.com';
+            const maxAttempts = parseInt(document.getElementById('authTestMaxAttempts').value) || 10;
+            const url = `${config.aussieUrl}/${config.serviceId}/api/auth/fail`;
+
+            // Reset state
+            authRateLimitRequests = [];
+            authRateLimitAbortController = new AbortController();
+
+            // Update UI
+            document.getElementById('authRateLimitStartBtn').disabled = true;
+            document.getElementById('authRateLimitStopBtn').style.display = 'inline-block';
+            document.getElementById('authRateLimitLiveCounter').style.display = 'flex';
+            document.getElementById('authRateLimitStats').style.display = 'none';
+            document.getElementById('authRateLimitClearBtn').style.display = 'none';
+            document.getElementById('authRateLimitHeaders').style.display = 'none';
+            document.getElementById('authRateLimitLog').style.display = 'none';
+            document.getElementById('authRateLimitLogBody').innerHTML = '';
+
+            let failedCount = 0;
+            let totalAttempted = 0;
+            let lockedOutAt = null;
+            let lastHeaders = {};
+            let lastResponse = null;
+
+            try {
+                // Send failed auth requests until locked out or max attempts reached
+                while (!authRateLimitAbortController.signal.aborted && totalAttempted < maxAttempts) {
+                    totalAttempted++;
+                    document.getElementById('authRateLimitLiveCount').textContent = totalAttempted;
+
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            username: username,
+                            password: 'wrong-password-' + totalAttempted
+                        }),
+                        signal: authRateLimitAbortController.signal
+                    });
+
+                    let responseText = '';
+                    try {
+                        const data = await response.json();
+                        responseText = data.error || data.message || JSON.stringify(data);
+                    } catch {
+                        responseText = await response.text();
+                    }
+
+                    const requestResult = {
+                        requestNumber: totalAttempted,
+                        status: response.status,
+                        response: responseText.substring(0, 50),
+                        timestamp: new Date(),
+                        retryAfter: response.headers.get('Retry-After'),
+                        xAuthRateLimitRemaining: response.headers.get('X-Auth-RateLimit-Remaining'),
+                        xAuthRateLimitReset: response.headers.get('X-Auth-RateLimit-Reset')
+                    };
+
+                    authRateLimitRequests.push(requestResult);
+                    lastResponse = response;
+
+                    if (response.status === 429) {
+                        // Locked out!
+                        lockedOutAt = totalAttempted;
+                        lastHeaders = {
+                            'Retry-After': requestResult.retryAfter,
+                            'X-Auth-RateLimit-Remaining': requestResult.xAuthRateLimitRemaining,
+                            'X-Auth-RateLimit-Reset': requestResult.xAuthRateLimitReset
+                        };
+                        break;
+                    }
+
+                    if (response.status === 401) {
+                        failedCount++;
+                    }
+
+                    // Brief delay between attempts
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.error('Auth rate limit test error:', err);
+                }
+            }
+
+            // Update stats
+            document.getElementById('authStatFailedCount').textContent = failedCount;
+            document.getElementById('authStatTotalCount').textContent = totalAttempted;
+            document.getElementById('authStatLockedOutAt').textContent = lockedOutAt ? `#${lockedOutAt}` : '-';
+
+            // Calculate retry after in human-readable format
+            const retryAfter = lastHeaders['Retry-After'];
+            if (retryAfter) {
+                const seconds = parseInt(retryAfter);
+                if (seconds >= 60) {
+                    document.getElementById('authStatRetryAfter').textContent = `${Math.round(seconds / 60)}m`;
+                } else {
+                    document.getElementById('authStatRetryAfter').textContent = `${seconds}s`;
+                }
+            } else {
+                document.getElementById('authStatRetryAfter').textContent = '-';
+            }
+
+            // Show headers if we got locked out
+            if (lockedOutAt) {
+                const headersList = document.getElementById('authRateLimitHeadersList');
+                headersList.innerHTML = '';
+                Object.entries(lastHeaders).forEach(([key, value]) => {
+                    if (value) {
+                        const dt = document.createElement('dt');
+                        dt.textContent = `${key}:`;
+                        const dd = document.createElement('dd');
+                        dd.textContent = value;
+                        if (key === 'X-Auth-RateLimit-Reset' && value) {
+                            dd.textContent += ` (${new Date(parseInt(value) * 1000).toLocaleTimeString()})`;
+                        }
+                        headersList.appendChild(dt);
+                        headersList.appendChild(dd);
+                    }
+                });
+                document.getElementById('authRateLimitHeaders').style.display = 'block';
+            }
+
+            // Show request log
+            const logBody = document.getElementById('authRateLimitLogBody');
+            authRateLimitRequests.forEach(req => {
+                const row = document.createElement('tr');
+                const statusClass = req.status === 401 ? 'status-error' : req.status === 429 ? 'status-429' : 'status-200';
+                row.innerHTML = `
+                    <td>${req.requestNumber}</td>
+                    <td><span class="status-badge ${statusClass}">${req.status}</span></td>
+                    <td>${req.response}</td>
+                    <td>${req.timestamp.toLocaleTimeString()}</td>
+                `;
+                logBody.appendChild(row);
+            });
+
+            // Update UI
+            document.getElementById('authRateLimitStartBtn').disabled = false;
+            document.getElementById('authRateLimitStopBtn').style.display = 'none';
+            document.getElementById('authRateLimitLiveCounter').style.display = 'none';
+            document.getElementById('authRateLimitStats').style.display = 'grid';
+            document.getElementById('authRateLimitClearBtn').style.display = 'inline-block';
+            document.getElementById('authRateLimitLog').style.display = 'block';
+        }
+
+        function stopAuthRateLimitTest() {
+            if (authRateLimitAbortController) {
+                authRateLimitAbortController.abort();
+            }
+        }
+
+        function clearAuthRateLimitResults() {
+            authRateLimitRequests = [];
+            document.getElementById('authRateLimitStats').style.display = 'none';
+            document.getElementById('authRateLimitClearBtn').style.display = 'none';
+            document.getElementById('authRateLimitHeaders').style.display = 'none';
+            document.getElementById('authRateLimitLog').style.display = 'none';
+            document.getElementById('authRateLimitLogBody').innerHTML = '';
         }
     </script>
 </body>
