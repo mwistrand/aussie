@@ -28,7 +28,6 @@ import java.util.TreeSet;
  * access to admin REST endpoints.</li>
  * </ul>
  *
- * @see Permissions
  */
 public enum Permission {
 

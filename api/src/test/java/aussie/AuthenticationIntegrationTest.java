@@ -12,7 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.auth.Permissions;
+import aussie.core.model.auth.Permission;
 import aussie.core.port.in.ApiKeyManagement;
 
 /**
@@ -41,13 +41,13 @@ public class AuthenticationIntegrationTest {
         // Create API keys for testing
         // Use wildcard permission for full access (includes service-level authorization)
         var fullAccessResult = apiKeyService
-                .create("test-full", null, Set.of(Permissions.ALL), null, "test")
+                .create("test-full", null, Set.of(Permission.ALL_VALUE), null, "test")
                 .await()
                 .indefinitely();
         validApiKey = fullAccessResult.plaintextKey();
 
         var readOnlyResult = apiKeyService
-                .create("test-readonly", null, Set.of(Permissions.SERVICE_CONFIG_READ), null, "test")
+                .create("test-readonly", null, Set.of(Permission.SERVICE_CONFIG_READ_VALUE), null, "test")
                 .await()
                 .indefinitely();
         readOnlyApiKey = readOnlyResult.plaintextKey();

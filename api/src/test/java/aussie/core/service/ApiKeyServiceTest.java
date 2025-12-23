@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 
 import aussie.adapter.out.storage.memory.InMemoryApiKeyRepository;
 import aussie.core.config.ApiKeyConfig;
-import aussie.core.model.auth.Permissions;
+import aussie.core.model.auth.Permission;
 import aussie.core.service.auth.*;
 
 @DisplayName("ApiKeyService")
@@ -46,10 +46,10 @@ class ApiKeyServiceTest {
                             "test-key",
                             "Test description",
                             Set.of(
-                                    Permissions.SERVICE_CONFIG_READ,
-                                    Permissions.SERVICE_CONFIG_CREATE,
-                                    Permissions.SERVICE_CONFIG_UPDATE,
-                                    Permissions.SERVICE_CONFIG_DELETE,
+                                    Permission.SERVICE_CONFIG_READ_VALUE,
+                                    Permission.SERVICE_CONFIG_CREATE_VALUE,
+                                    Permission.SERVICE_CONFIG_UPDATE_VALUE,
+                                    Permission.SERVICE_CONFIG_DELETE_VALUE,
                                     "demo-service.admin"),
                             null,
                             "test-creator")
@@ -61,10 +61,10 @@ class ApiKeyServiceTest {
             assertEquals("test-key", result.metadata().name());
             assertEquals("Test description", result.metadata().description());
             assertEquals("test-creator", result.metadata().createdBy());
-            assertTrue(result.metadata().permissions().contains(Permissions.SERVICE_CONFIG_READ));
-            assertTrue(result.metadata().permissions().contains(Permissions.SERVICE_CONFIG_CREATE));
-            assertTrue(result.metadata().permissions().contains(Permissions.SERVICE_CONFIG_UPDATE));
-            assertTrue(result.metadata().permissions().contains(Permissions.SERVICE_CONFIG_DELETE));
+            assertTrue(result.metadata().permissions().contains(Permission.SERVICE_CONFIG_READ_VALUE));
+            assertTrue(result.metadata().permissions().contains(Permission.SERVICE_CONFIG_CREATE_VALUE));
+            assertTrue(result.metadata().permissions().contains(Permission.SERVICE_CONFIG_UPDATE_VALUE));
+            assertTrue(result.metadata().permissions().contains(Permission.SERVICE_CONFIG_DELETE_VALUE));
             assertTrue(result.metadata().permissions().contains("demo-service.admin"));
         }
 
@@ -129,7 +129,7 @@ class ApiKeyServiceTest {
         @DisplayName("should validate existing key")
         void shouldValidateExistingKey() {
             var createResult = apiKeyService
-                    .create("valid-key", null, Set.of(Permissions.SERVICE_CONFIG_READ), null, "test")
+                    .create("valid-key", null, Set.of(Permission.SERVICE_CONFIG_READ_VALUE), null, "test")
                     .await()
                     .indefinitely();
 
@@ -290,10 +290,10 @@ class ApiKeyServiceTest {
                             "bootstrap-key",
                             "Bootstrap key for testing",
                             Set.of(
-                                    Permissions.SERVICE_CONFIG_READ,
-                                    Permissions.SERVICE_CONFIG_CREATE,
-                                    Permissions.SERVICE_CONFIG_UPDATE,
-                                    Permissions.SERVICE_CONFIG_DELETE,
+                                    Permission.SERVICE_CONFIG_READ_VALUE,
+                                    Permission.SERVICE_CONFIG_CREATE_VALUE,
+                                    Permission.SERVICE_CONFIG_UPDATE_VALUE,
+                                    Permission.SERVICE_CONFIG_DELETE_VALUE,
                                     "demo-service.admin"),
                             null,
                             specifiedKey,
@@ -317,7 +317,7 @@ class ApiKeyServiceTest {
                     .createWithKey(
                             "validate-test",
                             null,
-                            Set.of(Permissions.SERVICE_CONFIG_READ),
+                            Set.of(Permission.SERVICE_CONFIG_READ_VALUE),
                             null,
                             specifiedKey,
                             "bootstrap")

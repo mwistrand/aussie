@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.core.model.auth.OperationPermission;
-import aussie.core.model.auth.Permissions;
+import aussie.core.model.auth.Permission;
 import aussie.core.model.auth.ServicePermissionPolicy;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.service.auth.*;
@@ -38,39 +38,43 @@ class ServiceAuthorizationServiceTest {
         void shouldAllowWildcardPermission() {
             var service = createServiceWithPolicy(null);
 
-            assertTrue(authService.isAuthorizedForService(service, Permissions.CONFIG_READ, Set.of("*")));
-            assertTrue(authService.isAuthorizedForService(service, Permissions.CONFIG_UPDATE, Set.of("*")));
-            assertTrue(authService.isAuthorizedForService(service, Permissions.PERMISSIONS_WRITE, Set.of("*")));
+            assertTrue(authService.isAuthorizedForService(service, Permission.SERVICE_CONFIG_READ_VALUE, Set.of("*")));
+            assertTrue(
+                    authService.isAuthorizedForService(service, Permission.SERVICE_CONFIG_UPDATE_VALUE, Set.of("*")));
+            assertTrue(authService.isAuthorizedForService(
+                    service, Permission.SERVICE_PERMISSIONS_WRITE_VALUE, Set.of("*")));
         }
 
         @Test
         @DisplayName("Should deny when permissions are null")
         void shouldDenyWhenPermissionsNull() {
             var service = createServiceWithPolicy(new ServicePermissionPolicy(
-                    Map.of(Permissions.CONFIG_READ, new OperationPermission(Set.of("admin")))));
+                    Map.of(Permission.SERVICE_CONFIG_READ_VALUE, new OperationPermission(Set.of("admin")))));
 
-            assertFalse(authService.isAuthorizedForService(service, Permissions.CONFIG_READ, null));
+            assertFalse(authService.isAuthorizedForService(service, Permission.SERVICE_CONFIG_READ_VALUE, null));
         }
 
         @Test
         @DisplayName("Should deny when permissions are empty")
         void shouldDenyWhenPermissionsEmpty() {
             var service = createServiceWithPolicy(new ServicePermissionPolicy(
-                    Map.of(Permissions.CONFIG_READ, new OperationPermission(Set.of("admin")))));
+                    Map.of(Permission.SERVICE_CONFIG_READ_VALUE, new OperationPermission(Set.of("admin")))));
 
-            assertFalse(authService.isAuthorizedForService(service, Permissions.CONFIG_READ, Set.of()));
+            assertFalse(authService.isAuthorizedForService(service, Permission.SERVICE_CONFIG_READ_VALUE, Set.of()));
         }
 
         @Test
         @DisplayName("Should use service policy when present")
         void shouldUseServicePolicyWhenPresent() {
             var policy = new ServicePermissionPolicy(
-                    Map.of(Permissions.CONFIG_READ, new OperationPermission(Set.of("service-reader"))));
+                    Map.of(Permission.SERVICE_CONFIG_READ_VALUE, new OperationPermission(Set.of("service-reader"))));
             var service = createServiceWithPolicy(policy);
 
-            assertTrue(authService.isAuthorizedForService(service, Permissions.CONFIG_READ, Set.of("service-reader")));
+            assertTrue(authService.isAuthorizedForService(
+                    service, Permission.SERVICE_CONFIG_READ_VALUE, Set.of("service-reader")));
             // aussie:admin should NOT work because service has its own policy
-            assertFalse(authService.isAuthorizedForService(service, Permissions.CONFIG_READ, Set.of("aussie:admin")));
+            assertFalse(authService.isAuthorizedForService(
+                    service, Permission.SERVICE_CONFIG_READ_VALUE, Set.of("aussie:admin")));
         }
 
         @Test
@@ -79,8 +83,10 @@ class ServiceAuthorizationServiceTest {
             var service = createServiceWithPolicy(null);
 
             // Default policy requires aussie:admin
-            assertTrue(authService.isAuthorizedForService(service, Permissions.CONFIG_READ, Set.of("aussie:admin")));
-            assertFalse(authService.isAuthorizedForService(service, Permissions.CONFIG_READ, Set.of("other-claim")));
+            assertTrue(authService.isAuthorizedForService(
+                    service, Permission.SERVICE_CONFIG_READ_VALUE, Set.of("aussie:admin")));
+            assertFalse(authService.isAuthorizedForService(
+                    service, Permission.SERVICE_CONFIG_READ_VALUE, Set.of("other-claim")));
         }
 
         @Test
@@ -89,7 +95,8 @@ class ServiceAuthorizationServiceTest {
             var service = createServiceWithPolicy(ServicePermissionPolicy.empty());
 
             // Default policy requires aussie:admin
-            assertTrue(authService.isAuthorizedForService(service, Permissions.CONFIG_READ, Set.of("aussie:admin")));
+            assertTrue(authService.isAuthorizedForService(
+                    service, Permission.SERVICE_CONFIG_READ_VALUE, Set.of("aussie:admin")));
         }
     }
 

@@ -11,7 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.auth.Permissions;
+import aussie.core.model.auth.Permission;
 import aussie.core.model.auth.ServicePermissionPolicy;
 import aussie.core.service.auth.*;
 
@@ -45,32 +45,41 @@ class DefaultPermissionPolicyTest {
         @Test
         @DisplayName("Should allow aussie:admin permission for service.config.create")
         void shouldAllowAdminPermissionForConfigCreate() {
-            assertTrue(defaultPolicy.getPolicy().isAllowed(Permissions.CONFIG_CREATE, Set.of(Permissions.ADMIN_CLAIM)));
+            assertTrue(defaultPolicy
+                    .getPolicy()
+                    .isAllowed(Permission.SERVICE_CONFIG_CREATE_VALUE, Set.of(Permission.ADMIN_CLAIM_VALUE)));
         }
 
         @Test
         @DisplayName("Should allow aussie:admin permission for service.config.read")
         void shouldAllowAdminPermissionForConfigRead() {
-            assertTrue(defaultPolicy.getPolicy().isAllowed(Permissions.CONFIG_READ, Set.of(Permissions.ADMIN_CLAIM)));
+            assertTrue(defaultPolicy
+                    .getPolicy()
+                    .isAllowed(Permission.SERVICE_CONFIG_READ_VALUE, Set.of(Permission.ADMIN_CLAIM_VALUE)));
         }
 
         @Test
         @DisplayName("Should allow aussie:admin permission for service.config.update")
         void shouldAllowAdminPermissionForConfigUpdate() {
-            assertTrue(defaultPolicy.getPolicy().isAllowed(Permissions.CONFIG_UPDATE, Set.of(Permissions.ADMIN_CLAIM)));
+            assertTrue(defaultPolicy
+                    .getPolicy()
+                    .isAllowed(Permission.SERVICE_CONFIG_UPDATE_VALUE, Set.of(Permission.ADMIN_CLAIM_VALUE)));
         }
 
         @Test
         @DisplayName("Should allow aussie:admin permission for service.config.delete")
         void shouldAllowAdminPermissionForConfigDelete() {
-            assertTrue(defaultPolicy.getPolicy().isAllowed(Permissions.CONFIG_DELETE, Set.of(Permissions.ADMIN_CLAIM)));
+            assertTrue(defaultPolicy
+                    .getPolicy()
+                    .isAllowed(Permission.SERVICE_CONFIG_DELETE_VALUE, Set.of(Permission.ADMIN_CLAIM_VALUE)));
         }
 
         @Test
         @DisplayName("Should allow aussie:admin permission for service.permissions.read")
         void shouldAllowAdminPermissionForPermissionsRead() {
-            assertTrue(
-                    defaultPolicy.getPolicy().isAllowed(Permissions.PERMISSIONS_READ, Set.of(Permissions.ADMIN_CLAIM)));
+            assertTrue(defaultPolicy
+                    .getPolicy()
+                    .isAllowed(Permission.SERVICE_PERMISSIONS_READ_VALUE, Set.of(Permission.ADMIN_CLAIM_VALUE)));
         }
 
         @Test
@@ -78,7 +87,7 @@ class DefaultPermissionPolicyTest {
         void shouldAllowAdminPermissionForPermissionsWrite() {
             assertTrue(defaultPolicy
                     .getPolicy()
-                    .isAllowed(Permissions.PERMISSIONS_WRITE, Set.of(Permissions.ADMIN_CLAIM)));
+                    .isAllowed(Permission.SERVICE_PERMISSIONS_WRITE_VALUE, Set.of(Permission.ADMIN_CLAIM_VALUE)));
         }
 
         @Test
@@ -86,31 +95,38 @@ class DefaultPermissionPolicyTest {
         void shouldDenyNonAdminPermissions() {
             Set<String> nonAdminPermissions = Set.of("user", "readonly", "other-service.admin");
 
-            assertFalse(defaultPolicy.getPolicy().isAllowed(Permissions.CONFIG_CREATE, nonAdminPermissions));
-            assertFalse(defaultPolicy.getPolicy().isAllowed(Permissions.CONFIG_READ, nonAdminPermissions));
-            assertFalse(defaultPolicy.getPolicy().isAllowed(Permissions.CONFIG_UPDATE, nonAdminPermissions));
-            assertFalse(defaultPolicy.getPolicy().isAllowed(Permissions.CONFIG_DELETE, nonAdminPermissions));
-            assertFalse(defaultPolicy.getPolicy().isAllowed(Permissions.PERMISSIONS_READ, nonAdminPermissions));
-            assertFalse(defaultPolicy.getPolicy().isAllowed(Permissions.PERMISSIONS_WRITE, nonAdminPermissions));
+            assertFalse(
+                    defaultPolicy.getPolicy().isAllowed(Permission.SERVICE_CONFIG_CREATE_VALUE, nonAdminPermissions));
+            assertFalse(defaultPolicy.getPolicy().isAllowed(Permission.SERVICE_CONFIG_READ_VALUE, nonAdminPermissions));
+            assertFalse(
+                    defaultPolicy.getPolicy().isAllowed(Permission.SERVICE_CONFIG_UPDATE_VALUE, nonAdminPermissions));
+            assertFalse(
+                    defaultPolicy.getPolicy().isAllowed(Permission.SERVICE_CONFIG_DELETE_VALUE, nonAdminPermissions));
+            assertFalse(defaultPolicy
+                    .getPolicy()
+                    .isAllowed(Permission.SERVICE_PERMISSIONS_READ_VALUE, nonAdminPermissions));
+            assertFalse(defaultPolicy
+                    .getPolicy()
+                    .isAllowed(Permission.SERVICE_PERMISSIONS_WRITE_VALUE, nonAdminPermissions));
         }
 
         @Test
         @DisplayName("Should deny empty permissions")
         void shouldDenyEmptyPermissions() {
-            assertFalse(defaultPolicy.getPolicy().isAllowed(Permissions.CONFIG_READ, Set.of()));
+            assertFalse(defaultPolicy.getPolicy().isAllowed(Permission.SERVICE_CONFIG_READ_VALUE, Set.of()));
         }
 
         @Test
         @DisplayName("Should deny null permissions")
         void shouldDenyNullPermissions() {
-            assertFalse(defaultPolicy.getPolicy().isAllowed(Permissions.CONFIG_READ, null));
+            assertFalse(defaultPolicy.getPolicy().isAllowed(Permission.SERVICE_CONFIG_READ_VALUE, null));
         }
 
         @Test
         @DisplayName("Should allow aussie:admin among other permissions")
         void shouldAllowAdminAmongOtherPermissions() {
-            Set<String> mixedPermissions = Set.of("user", Permissions.ADMIN_CLAIM, "reader");
-            assertTrue(defaultPolicy.getPolicy().isAllowed(Permissions.CONFIG_UPDATE, mixedPermissions));
+            Set<String> mixedPermissions = Set.of("user", Permission.ADMIN_CLAIM_VALUE, "reader");
+            assertTrue(defaultPolicy.getPolicy().isAllowed(Permission.SERVICE_CONFIG_UPDATE_VALUE, mixedPermissions));
         }
     }
 }

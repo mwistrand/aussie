@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 import aussie.adapter.out.storage.memory.InMemoryApiKeyRepository;
 import aussie.core.config.ApiKeyConfig;
 import aussie.core.model.auth.AuthenticationResult;
-import aussie.core.model.auth.Permissions;
+import aussie.core.model.auth.Permission;
 import aussie.core.service.auth.ApiKeyService;
 
 @DisplayName("ApiKeyAuthProvider")
@@ -105,10 +105,10 @@ class ApiKeyAuthProviderTest {
                             "test-key",
                             null,
                             Set.of(
-                                    Permissions.SERVICE_CONFIG_READ,
-                                    Permissions.SERVICE_CONFIG_CREATE,
-                                    Permissions.SERVICE_CONFIG_UPDATE,
-                                    Permissions.SERVICE_CONFIG_DELETE,
+                                    Permission.SERVICE_CONFIG_READ_VALUE,
+                                    Permission.SERVICE_CONFIG_CREATE_VALUE,
+                                    Permission.SERVICE_CONFIG_UPDATE_VALUE,
+                                    Permission.SERVICE_CONFIG_DELETE_VALUE,
                                     "demo-service.admin"),
                             null,
                             "test")
@@ -123,10 +123,10 @@ class ApiKeyAuthProviderTest {
             assertInstanceOf(AuthenticationResult.Success.class, result);
             var success = (AuthenticationResult.Success) result;
             assertEquals("test-key", success.context().principal().name());
-            assertTrue(success.context().hasPermission(Permissions.SERVICE_CONFIG_READ));
-            assertTrue(success.context().hasPermission(Permissions.SERVICE_CONFIG_CREATE));
-            assertTrue(success.context().hasPermission(Permissions.SERVICE_CONFIG_UPDATE));
-            assertTrue(success.context().hasPermission(Permissions.SERVICE_CONFIG_DELETE));
+            assertTrue(success.context().hasPermission(Permission.SERVICE_CONFIG_READ_VALUE));
+            assertTrue(success.context().hasPermission(Permission.SERVICE_CONFIG_CREATE_VALUE));
+            assertTrue(success.context().hasPermission(Permission.SERVICE_CONFIG_UPDATE_VALUE));
+            assertTrue(success.context().hasPermission(Permission.SERVICE_CONFIG_DELETE_VALUE));
         }
 
         @Test
