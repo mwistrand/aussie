@@ -14,6 +14,7 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 - [Per-Route Authentication](#per-route-authentication)
 - [WebSocket Configuration](websocket-configuration.md)
 - [Token Revocation](token-revocation.md)
+- [PKCE](pkce.md)
 - [Admin API](#admin-api)
 - [Service Permission Policies](#service-permission-policies)
 - [Environment Variables Reference](#environment-variables-reference)
@@ -727,6 +728,18 @@ With the permission policy above:
 | `AUSSIE_AUTH_REVOCATION_PUBSUB_CHANNEL` | `aussie:revocation:events` | Redis pub/sub channel name |
 
 See [Token Revocation](token-revocation.md) for implementation details.
+
+### PKCE Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_AUTH_PKCE_ENABLED` | `true` | Enable PKCE support |
+| `AUSSIE_AUTH_PKCE_REQUIRED` | `true` | Require PKCE for authorization requests |
+| `AUSSIE_AUTH_PKCE_CHALLENGE_TTL` | `PT10M` | Challenge TTL (time-to-live) |
+| `AUSSIE_AUTH_PKCE_STORAGE_PROVIDER` | `redis` | Storage provider: redis, memory |
+| `AUSSIE_AUTH_PKCE_STORAGE_REDIS_KEY_PREFIX` | `aussie:pkce:` | Redis key prefix |
+
+See [PKCE](pkce.md) for implementation details.
 
 ### Telemetry
 

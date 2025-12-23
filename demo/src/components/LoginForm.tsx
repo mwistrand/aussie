@@ -2,12 +2,22 @@
 
 import { useState, FormEvent } from 'react';
 
+interface OidcParams {
+  clientId?: string;
+  redirectUri?: string;
+  state?: string;
+  codeChallenge?: string;
+  codeChallengeMethod?: string;
+  scope?: string;
+}
+
 interface LoginFormProps {
   redirectUrl?: string;
   errorMessage?: string;
   callbackUrl?: string;
   flow?: string;
   deviceCode?: string;
+  oidcParams?: OidcParams;
 }
 
 // Available groups for the demo service
@@ -18,7 +28,14 @@ const DEMO_GROUPS = [
   { id: 'demo-service.readonly', label: 'Read Only', description: 'View-only access' },
 ] as const;
 
-export default function LoginForm({ redirectUrl, errorMessage, callbackUrl, flow, deviceCode }: LoginFormProps) {
+export default function LoginForm({
+  redirectUrl,
+  errorMessage,
+  callbackUrl,
+  flow,
+  deviceCode,
+  oidcParams,
+}: LoginFormProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('demo-service.dev');
@@ -54,7 +71,42 @@ export default function LoginForm({ redirectUrl, errorMessage, callbackUrl, flow
         // Show success message - user can close the window
         setError('');
         setIsLoading(false);
-        alert('Device authorized! You can close this window and return to your CLI.');
+        alert(
+          'Device authorized! You can close this window and return to your CLI.'
+        );
+        return;
+      }
+
+      // OIDC Authorization Code flow with PKCE
+      if (flow === 'oidc' && oidcParams?.clientId && oidcParams?.redirectUri) {
+        const response = await fetch('/api/auth/oidc/callback', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            username,
+            group: selectedGroup,
+            client_id: oidcParams.clientId,
+            redirect_uri: oidcParams.redirectUri,
+            state: oidcParams.state,
+            code_challenge: oidcParams.codeChallenge,
+            code_challenge_method: oidcParams.codeChallengeMethod,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'OIDC authorization failed');
+        }
+
+        // Redirect back to Aussie with the authorization code
+        if (data.redirectUrl) {
+          window.location.href = data.redirectUrl;
+        } else {
+          throw new Error('No redirect URL returned');
+        }
         return;
       }
 

@@ -44,14 +44,27 @@ public record RouteMatch(
     }
 
     /**
-     * Return the full target URI for this route match.
+     * Return the full target URI for this route match without query parameters.
      */
     public URI targetUri() {
+        return targetUri(null);
+    }
+
+    /**
+     * Return the full target URI for this route match with optional query string.
+     *
+     * @param query the query string to append (without leading '?'), or null
+     * @return the complete target URI
+     */
+    public URI targetUri(String query) {
         var base = service.baseUrl().toString();
         if (base.endsWith("/")) {
             base = base.substring(0, base.length() - 1);
         }
         var path = targetPath.startsWith("/") ? targetPath : "/" + targetPath;
+        if (query != null && !query.isEmpty()) {
+            return URI.create(base + path + "?" + query);
+        }
         return URI.create(base + path);
     }
 }

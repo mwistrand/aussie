@@ -140,6 +140,48 @@ class RouteMatchTest {
 
             assertEquals(URI.create("http://backend:8080/"), routeMatch.targetUri());
         }
+
+        @Test
+        @DisplayName("Should append query string to target URI")
+        void shouldAppendQueryString() {
+            var service = ServiceRegistration.builder("test")
+                    .baseUrl("http://backend:8080")
+                    .endpoints(List.of())
+                    .build();
+            var endpoint = createTestEndpoint();
+
+            var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
+
+            assertEquals(URI.create("http://backend:8080/api/users?foo=bar"), routeMatch.targetUri("foo=bar"));
+        }
+
+        @Test
+        @DisplayName("Should handle null query string")
+        void shouldHandleNullQueryString() {
+            var service = ServiceRegistration.builder("test")
+                    .baseUrl("http://backend:8080")
+                    .endpoints(List.of())
+                    .build();
+            var endpoint = createTestEndpoint();
+
+            var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
+
+            assertEquals(URI.create("http://backend:8080/api/users"), routeMatch.targetUri(null));
+        }
+
+        @Test
+        @DisplayName("Should handle empty query string")
+        void shouldHandleEmptyQueryString() {
+            var service = ServiceRegistration.builder("test")
+                    .baseUrl("http://backend:8080")
+                    .endpoints(List.of())
+                    .build();
+            var endpoint = createTestEndpoint();
+
+            var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
+
+            assertEquals(URI.create("http://backend:8080/api/users"), routeMatch.targetUri(""));
+        }
     }
 
     @Nested

@@ -311,6 +311,30 @@ class PassThroughServiceTest {
             var forwardedRequest = proxyClient.getLastRequest();
             assertEquals("/api/users/123/orders", forwardedRequest.targetUri().getPath());
         }
+
+        @Test
+        @DisplayName("Should preserve query parameters in target URI")
+        void shouldPreserveQueryParametersInTargetUri() {
+            registerService("my-service", "http://backend:9090");
+            proxyClient.setResponse(new ProxyResponse(200, Map.of(), new byte[0]));
+
+            // Create request with query parameters
+            var request = new GatewayRequest(
+                    "GET",
+                    "/api/auth/oidc/authorize",
+                    Map.of(),
+                    URI.create(
+                            "http://gateway:8080/api/auth/oidc/authorize?response_type=code&client_id=demo-ui&scope=openid%20profile"),
+                    null,
+                    "192.168.1.100");
+
+            passThroughService.forward("my-service", request).await().indefinitely();
+
+            var forwardedRequest = proxyClient.getLastRequest();
+            var targetUri = forwardedRequest.targetUri();
+            assertEquals("/api/auth/oidc/authorize", targetUri.getPath());
+            assertEquals("response_type=code&client_id=demo-ui&scope=openid%20profile", targetUri.getRawQuery());
+        }
     }
 
     @Nested
