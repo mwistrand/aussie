@@ -7,8 +7,25 @@ import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointType;
 import aussie.core.model.routing.EndpointVisibility;
 
+/**
+ * DTO for endpoint configuration in service registration requests.
+ *
+ * @param path         the endpoint path pattern
+ * @param methods      HTTP methods this endpoint accepts
+ * @param visibility   PUBLIC or PRIVATE
+ * @param pathRewrite  optional path transformation
+ * @param authRequired whether authentication is required
+ * @param type         HTTP or WEBSOCKET
+ * @param audience     optional audience claim for tokens issued to this endpoint
+ */
 public record EndpointConfigDto(
-        String path, Set<String> methods, String visibility, String pathRewrite, Boolean authRequired, String type) {
+        String path,
+        Set<String> methods,
+        String visibility,
+        String pathRewrite,
+        Boolean authRequired,
+        String type,
+        String audience) {
 
     public EndpointConfig toModel() {
         return toModel(false);
@@ -19,7 +36,15 @@ public record EndpointConfigDto(
         var auth = authRequired != null ? authRequired : defaultAuthRequired;
         var endpointType = type != null ? EndpointType.valueOf(type.toUpperCase()) : EndpointType.HTTP;
 
-        return new EndpointConfig(path, methods, vis, Optional.ofNullable(pathRewrite), auth, endpointType);
+        return new EndpointConfig(
+                path,
+                methods,
+                vis,
+                Optional.ofNullable(pathRewrite),
+                auth,
+                endpointType,
+                Optional.empty(), // rateLimitConfig
+                Optional.ofNullable(audience));
     }
 
     public static EndpointConfigDto fromModel(EndpointConfig model) {
@@ -29,6 +54,7 @@ public record EndpointConfigDto(
                 model.visibility().name(),
                 model.pathRewrite().orElse(null),
                 model.authRequired(),
-                model.type().name());
+                model.type().name(),
+                model.audience().orElse(null));
     }
 }

@@ -58,10 +58,14 @@ public class TokenIssuanceService {
                     config.jws().keyId(),
                     config.jws().tokenTtl(),
                     config.jws().maxTokenTtl(),
-                    config.jws().forwardedClaims());
+                    config.jws().forwardedClaims(),
+                    config.jws().defaultAudience(),
+                    config.jws().requireAudience());
             LOG.infov(
-                    "TokenIssuanceService initialized with {0} issuers, max TTL: {1}",
-                    issuers.size(), config.jws().maxTokenTtl());
+                    "TokenIssuanceService initialized with {0} issuers, max TTL: {1}, default audience: {2}",
+                    issuers.size(),
+                    config.jws().maxTokenTtl(),
+                    config.jws().defaultAudience().orElse("(none)"));
         } else {
             this.jwsConfig = null;
         }
@@ -84,6 +88,20 @@ public class TokenIssuanceService {
      * @return the signed Aussie token, or empty if issuance is not configured
      */
     public Optional<AussieToken> issue(TokenValidationResult.Valid validated) {
+        return issue(validated, Optional.empty());
+    }
+
+    /**
+     * Issue a signed Aussie token for the validated request with audience support.
+     *
+     * <p>This synchronous method is provided for backward compatibility.
+     * Use {@link #issueAsync(TokenValidationResult.Valid, Optional, String)} for full role expansion.
+     *
+     * @param validated the validated incoming token
+     * @param audience  the audience claim to include in the token
+     * @return the signed Aussie token, or empty if issuance is not configured
+     */
+    public Optional<AussieToken> issue(TokenValidationResult.Valid validated, Optional<String> audience) {
         if (!isEnabled()) {
             LOG.debug("Token issuance not enabled or no issuers available");
             return Optional.empty();
@@ -92,8 +110,10 @@ public class TokenIssuanceService {
         try {
             // Use the first available issuer
             final TokenIssuerProvider issuer = issuers.get(0);
-            final AussieToken token = issuer.issue(validated, jwsConfig);
-            LOG.debugv("Issued token for subject {0} using {1}", validated.subject(), issuer.name());
+            final AussieToken token = issuer.issue(validated, jwsConfig, audience);
+            LOG.debugv(
+                    "Issued token for subject {0} using {1}, audience: {2}",
+                    validated.subject(), issuer.name(), audience.orElse("(none)"));
             return Optional.of(token);
         } catch (Exception e) {
             LOG.errorv(e, "Failed to issue token for subject {0}", validated.subject());
@@ -111,17 +131,37 @@ public class TokenIssuanceService {
      * @return Uni with the signed Aussie token, or empty if issuance is not configured
      */
     public Uni<Optional<AussieToken>> issueAsync(TokenValidationResult.Valid validated) {
+        return issueAsync(validated, Optional.empty(), null);
+    }
+
+    /**
+     * Issue a signed Aussie token with role expansion and audience support.
+     *
+     * <p>This method expands any roles in the token claims to their effective
+     * permissions and adds them to the issued token. If an audience is configured
+     * for the route, it will be included in the token.
+     *
+     * @param validated     the validated incoming token
+     * @param routeAudience the audience configured for this route (if any)
+     * @param serviceId     the service ID (used as fallback audience if required)
+     * @return Uni with the signed Aussie token, or empty if issuance is not configured
+     */
+    public Uni<Optional<AussieToken>> issueAsync(
+            TokenValidationResult.Valid validated, Optional<String> routeAudience, String serviceId) {
         if (!isEnabled()) {
             LOG.debug("Token issuance not enabled or no issuers available");
             return Uni.createFrom().item(Optional.empty());
         }
+
+        // Resolve the effective audience
+        final Optional<String> effectiveAudience = jwsConfig.resolveAudience(routeAudience, serviceId);
 
         // Extract roles from claims
         final Set<String> roles = extractRoles(validated.claims());
 
         if (roles.isEmpty()) {
             // No roles to expand, use synchronous issuance
-            return Uni.createFrom().item(issue(validated));
+            return Uni.createFrom().item(issue(validated, effectiveAudience));
         }
 
         // Expand roles to permissions
@@ -130,10 +170,13 @@ public class TokenIssuanceService {
                 // Create a new validated result with expanded permissions in claims
                 final var enrichedValidated = enrichWithPermissions(validated, expandedPermissions);
                 final TokenIssuerProvider issuer = issuers.get(0);
-                final AussieToken token = issuer.issue(enrichedValidated, jwsConfig);
+                final AussieToken token = issuer.issue(enrichedValidated, jwsConfig, effectiveAudience);
                 LOG.debugv(
-                        "Issued token for subject {0} with {1} roles expanded to {2} permissions",
-                        validated.subject(), roles.size(), expandedPermissions.size());
+                        "Issued token for subject {0} with {1} roles expanded to {2} permissions, audience: {3}",
+                        validated.subject(),
+                        roles.size(),
+                        expandedPermissions.size(),
+                        effectiveAudience.orElse("(none)"));
                 return Optional.of(token);
             } catch (Exception e) {
                 LOG.errorv(e, "Failed to issue token for subject {0}", validated.subject());

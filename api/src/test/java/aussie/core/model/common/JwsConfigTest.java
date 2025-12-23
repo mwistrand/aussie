@@ -1,9 +1,12 @@
 package aussie.core.model.common;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.Set;
 
 import org.junit.jupiter.api.DisplayName;
@@ -143,6 +146,133 @@ class JwsConfigTest {
 
             assertEquals(Duration.ofHours(24), config.maxTokenTtl());
             assertEquals(Duration.ofMinutes(10), config.tokenTtl());
+        }
+
+        @Test
+        @DisplayName("5-arg constructor should default audience settings")
+        void fiveArgConstructorShouldDefaultAudience() {
+            final var config =
+                    new JwsConfig("issuer", "keyId", Duration.ofMinutes(10), Duration.ofHours(1), Set.of("sub"));
+
+            assertTrue(config.defaultAudience().isEmpty());
+            assertFalse(config.requireAudience());
+        }
+    }
+
+    @Nested
+    @DisplayName("resolveAudience()")
+    class ResolveAudienceTests {
+
+        @Test
+        @DisplayName("should return route audience when present")
+        void shouldReturnRouteAudienceWhenPresent() {
+            final var config = new JwsConfig(
+                    "issuer",
+                    "keyId",
+                    Duration.ofMinutes(5),
+                    Duration.ofHours(1),
+                    Set.of(),
+                    Optional.of("default-aud"),
+                    true);
+
+            final var result = config.resolveAudience(Optional.of("route-aud"), "service-id");
+
+            assertEquals(Optional.of("route-aud"), result);
+        }
+
+        @Test
+        @DisplayName("should return default audience when route audience is empty")
+        void shouldReturnDefaultAudienceWhenRouteEmpty() {
+            final var config = new JwsConfig(
+                    "issuer",
+                    "keyId",
+                    Duration.ofMinutes(5),
+                    Duration.ofHours(1),
+                    Set.of(),
+                    Optional.of("default-aud"),
+                    false);
+
+            final var result = config.resolveAudience(Optional.empty(), "service-id");
+
+            assertEquals(Optional.of("default-aud"), result);
+        }
+
+        @Test
+        @DisplayName("should return service ID when require audience is true and no audience configured")
+        void shouldReturnServiceIdWhenRequireAudienceTrue() {
+            final var config = new JwsConfig(
+                    "issuer", "keyId", Duration.ofMinutes(5), Duration.ofHours(1), Set.of(), Optional.empty(), true);
+
+            final var result = config.resolveAudience(Optional.empty(), "my-service");
+
+            assertEquals(Optional.of("my-service"), result);
+        }
+
+        @Test
+        @DisplayName("should return empty when require audience is false and no audience configured")
+        void shouldReturnEmptyWhenRequireAudienceFalse() {
+            final var config = new JwsConfig(
+                    "issuer", "keyId", Duration.ofMinutes(5), Duration.ofHours(1), Set.of(), Optional.empty(), false);
+
+            final var result = config.resolveAudience(Optional.empty(), "my-service");
+
+            assertTrue(result.isEmpty());
+        }
+
+        @Test
+        @DisplayName("should return empty when require audience is true but service ID is null")
+        void shouldReturnEmptyWhenServiceIdIsNull() {
+            final var config = new JwsConfig(
+                    "issuer", "keyId", Duration.ofMinutes(5), Duration.ofHours(1), Set.of(), Optional.empty(), true);
+
+            final var result = config.resolveAudience(Optional.empty(), null);
+
+            assertTrue(result.isEmpty());
+        }
+
+        @Test
+        @DisplayName("should return empty when require audience is true but service ID is blank")
+        void shouldReturnEmptyWhenServiceIdIsBlank() {
+            final var config = new JwsConfig(
+                    "issuer", "keyId", Duration.ofMinutes(5), Duration.ofHours(1), Set.of(), Optional.empty(), true);
+
+            final var result = config.resolveAudience(Optional.empty(), "   ");
+
+            assertTrue(result.isEmpty());
+        }
+
+        @Test
+        @DisplayName("route audience should take priority over default audience")
+        void routeAudienceTakesPriorityOverDefault() {
+            final var config = new JwsConfig(
+                    "issuer",
+                    "keyId",
+                    Duration.ofMinutes(5),
+                    Duration.ofHours(1),
+                    Set.of(),
+                    Optional.of("default-aud"),
+                    true);
+
+            final var result = config.resolveAudience(Optional.of("route-aud"), "service-id");
+
+            assertEquals(Optional.of("route-aud"), result);
+        }
+
+        @Test
+        @DisplayName("default audience should take priority over service ID")
+        void defaultAudienceTakesPriorityOverServiceId() {
+            final var config = new JwsConfig(
+                    "issuer",
+                    "keyId",
+                    Duration.ofMinutes(5),
+                    Duration.ofHours(1),
+                    Set.of(),
+                    Optional.of("default-aud"),
+                    true);
+
+            final var result = config.resolveAudience(Optional.empty(), "service-id");
+
+            assertEquals(Optional.of("default-aud"), result);
         }
     }
 }

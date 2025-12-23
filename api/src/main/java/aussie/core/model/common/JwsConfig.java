@@ -1,6 +1,7 @@
 package aussie.core.model.common;
 
 import java.time.Duration;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -11,9 +12,17 @@ import java.util.Set;
  * @param tokenTtl        default TTL for issued JWS tokens
  * @param maxTokenTtl     maximum allowed TTL (tokens with longer expiry are clamped)
  * @param forwardedClaims claims to forward from the original token
+ * @param defaultAudience default audience claim when not specified per-route
+ * @param requireAudience whether to require an audience claim in all tokens
  */
 public record JwsConfig(
-        String issuer, String keyId, Duration tokenTtl, Duration maxTokenTtl, Set<String> forwardedClaims) {
+        String issuer,
+        String keyId,
+        Duration tokenTtl,
+        Duration maxTokenTtl,
+        Set<String> forwardedClaims,
+        Optional<String> defaultAudience,
+        boolean requireAudience) {
 
     private static final Duration DEFAULT_TTL = Duration.ofMinutes(5);
     private static final Duration DEFAULT_MAX_TTL = Duration.ofHours(24);
@@ -34,13 +43,24 @@ public record JwsConfig(
         if (forwardedClaims == null) {
             forwardedClaims = Set.of("sub", "email", "name");
         }
+        if (defaultAudience == null) {
+            defaultAudience = Optional.empty();
+        }
     }
 
     /**
-     * Constructor for backward compatibility (without maxTokenTtl).
+     * Constructor for backward compatibility (without audience configuration).
+     */
+    public JwsConfig(
+            String issuer, String keyId, Duration tokenTtl, Duration maxTokenTtl, Set<String> forwardedClaims) {
+        this(issuer, keyId, tokenTtl, maxTokenTtl, forwardedClaims, Optional.empty(), false);
+    }
+
+    /**
+     * Constructor for backward compatibility (without maxTokenTtl and audience).
      */
     public JwsConfig(String issuer, String keyId, Duration tokenTtl, Set<String> forwardedClaims) {
-        this(issuer, keyId, tokenTtl, DEFAULT_MAX_TTL, forwardedClaims);
+        this(issuer, keyId, tokenTtl, DEFAULT_MAX_TTL, forwardedClaims, Optional.empty(), false);
     }
 
     /**
@@ -61,6 +81,40 @@ public record JwsConfig(
     }
 
     /**
+     * Resolve the effective audience for a route.
+     *
+     * <p>
+     * Priority:
+     * <ol>
+     *   <li>Route-specific audience (if provided)</li>
+     *   <li>Default audience from configuration</li>
+     *   <li>Service ID (if requireAudience is true and no audience found)</li>
+     * </ol>
+     *
+     * @param routeAudience route-specific audience
+     * @param serviceId     fallback service ID
+     * @return the effective audience, or empty if none required
+     */
+    public Optional<String> resolveAudience(Optional<String> routeAudience, String serviceId) {
+        // Route-specific audience takes priority
+        if (routeAudience.isPresent()) {
+            return routeAudience;
+        }
+
+        // Fall back to default audience
+        if (defaultAudience.isPresent()) {
+            return defaultAudience;
+        }
+
+        // If audience is required but not configured, use service ID
+        if (requireAudience && serviceId != null && !serviceId.isBlank()) {
+            return Optional.of(serviceId);
+        }
+
+        return Optional.empty();
+    }
+
+    /**
      * Default configuration for development/testing.
      */
     public static JwsConfig defaults() {
@@ -69,6 +123,8 @@ public record JwsConfig(
                 "v1",
                 DEFAULT_TTL,
                 DEFAULT_MAX_TTL,
-                Set.of("sub", "email", "name", "groups", "roles", "effective_permissions"));
+                Set.of("sub", "email", "name", "groups", "roles", "effective_permissions"),
+                Optional.empty(),
+                false);
     }
 }

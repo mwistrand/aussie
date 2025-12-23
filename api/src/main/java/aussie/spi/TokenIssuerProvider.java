@@ -1,5 +1,7 @@
 package aussie.spi;
 
+import java.util.Optional;
+
 import aussie.core.model.auth.AussieToken;
 import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.model.common.JwsConfig;
@@ -41,4 +43,26 @@ public interface TokenIssuerProvider {
      * @return signed Aussie token
      */
     AussieToken issue(TokenValidationResult.Valid validated, JwsConfig config);
+
+    /**
+     * Issue a signed JWS token for backend services with audience support.
+     *
+     * <p>The token should include:
+     * <ul>
+     *   <li>Standard JWT claims (iss, sub, iat, exp)</li>
+     *   <li>Claims forwarded from the original token</li>
+     *   <li>The original issuer as "original_iss" claim</li>
+     *   <li>The audience claim (aud) if provided</li>
+     * </ul>
+     *
+     * @param validated the validated incoming token
+     * @param config    JWS configuration
+     * @param audience  the audience claim to include (if present)
+     * @return signed Aussie token
+     */
+    default AussieToken issue(TokenValidationResult.Valid validated, JwsConfig config, Optional<String> audience) {
+        // Default implementation ignores audience for backward compatibility
+        // Implementations should override this method to include the audience claim
+        return issue(validated, config);
+    }
 }

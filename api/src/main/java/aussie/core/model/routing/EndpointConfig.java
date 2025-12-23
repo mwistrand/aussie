@@ -5,6 +5,18 @@ import java.util.Set;
 
 import aussie.core.model.ratelimit.EndpointRateLimitConfig;
 
+/**
+ * Configuration for a specific endpoint within a service.
+ *
+ * @param path            the endpoint path pattern (may include {param} placeholders)
+ * @param methods         HTTP methods this endpoint accepts
+ * @param visibility      whether this endpoint is PUBLIC or PRIVATE
+ * @param pathRewrite     optional path transformation for the upstream request
+ * @param authRequired    whether authentication is required for this endpoint
+ * @param type            HTTP or WEBSOCKET
+ * @param rateLimitConfig optional endpoint-specific rate limiting
+ * @param audience        optional audience claim for tokens issued to this endpoint
+ */
 public record EndpointConfig(
         String path,
         Set<String> methods,
@@ -12,7 +24,8 @@ public record EndpointConfig(
         Optional<String> pathRewrite,
         boolean authRequired,
         EndpointType type,
-        Optional<EndpointRateLimitConfig> rateLimitConfig) {
+        Optional<EndpointRateLimitConfig> rateLimitConfig,
+        Optional<String> audience) {
 
     public EndpointConfig {
         if (path == null || path.isBlank()) {
@@ -30,6 +43,9 @@ public record EndpointConfig(
         if (rateLimitConfig == null) {
             rateLimitConfig = Optional.empty();
         }
+        if (audience == null) {
+            audience = Optional.empty();
+        }
         // For WebSocket endpoints, default methods to GET if not specified
         if (type == EndpointType.WEBSOCKET && (methods == null || methods.isEmpty())) {
             methods = Set.of("GET");
@@ -41,7 +57,21 @@ public record EndpointConfig(
     }
 
     /**
-     * Convenience constructor without rate limit config and type (defaults to HTTP).
+     * Convenience constructor without audience (defaults to empty).
+     */
+    public EndpointConfig(
+            String path,
+            Set<String> methods,
+            EndpointVisibility visibility,
+            Optional<String> pathRewrite,
+            boolean authRequired,
+            EndpointType type,
+            Optional<EndpointRateLimitConfig> rateLimitConfig) {
+        this(path, methods, visibility, pathRewrite, authRequired, type, rateLimitConfig, Optional.empty());
+    }
+
+    /**
+     * Convenience constructor without rate limit config and audience (defaults to HTTP).
      */
     public EndpointConfig(
             String path,
@@ -50,11 +80,11 @@ public record EndpointConfig(
             Optional<String> pathRewrite,
             boolean authRequired,
             EndpointType type) {
-        this(path, methods, visibility, pathRewrite, authRequired, type, Optional.empty());
+        this(path, methods, visibility, pathRewrite, authRequired, type, Optional.empty(), Optional.empty());
     }
 
     /**
-     * Convenience constructor without type (defaults to HTTP).
+     * Convenience constructor without type, rate limit config, and audience (defaults to HTTP).
      */
     public EndpointConfig(
             String path,
@@ -62,16 +92,23 @@ public record EndpointConfig(
             EndpointVisibility visibility,
             Optional<String> pathRewrite,
             boolean authRequired) {
-        this(path, methods, visibility, pathRewrite, authRequired, EndpointType.HTTP, Optional.empty());
+        this(
+                path,
+                methods,
+                visibility,
+                pathRewrite,
+                authRequired,
+                EndpointType.HTTP,
+                Optional.empty(),
+                Optional.empty());
     }
 
     /**
-     * Convenience constructor without authRequired and type (defaults to false and
-     * HTTP).
+     * Convenience constructor without authRequired, type, rate limit config, and audience.
      */
     public EndpointConfig(
             String path, Set<String> methods, EndpointVisibility visibility, Optional<String> pathRewrite) {
-        this(path, methods, visibility, pathRewrite, false, EndpointType.HTTP, Optional.empty());
+        this(path, methods, visibility, pathRewrite, false, EndpointType.HTTP, Optional.empty(), Optional.empty());
     }
 
     public static EndpointConfig publicEndpoint(String path, Set<String> methods) {
@@ -90,6 +127,7 @@ public record EndpointConfig(
                 Optional.empty(),
                 authRequired,
                 EndpointType.WEBSOCKET,
+                Optional.empty(),
                 Optional.empty());
     }
 
@@ -101,6 +139,7 @@ public record EndpointConfig(
                 Optional.empty(),
                 authRequired,
                 EndpointType.WEBSOCKET,
+                Optional.empty(),
                 Optional.empty());
     }
 

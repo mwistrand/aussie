@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -67,12 +68,17 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
 
     @Override
     public AussieToken issue(TokenValidationResult.Valid validated, JwsConfig config) {
+        return issue(validated, config, Optional.empty());
+    }
+
+    @Override
+    public AussieToken issue(TokenValidationResult.Valid validated, JwsConfig config, Optional<String> audience) {
         if (!available) {
             throw new TokenIssuanceException("RSA signing key not configured");
         }
 
         try {
-            JwtClaims claims = buildClaims(validated, config);
+            JwtClaims claims = buildClaims(validated, config, audience);
             String jws = signToken(claims, config);
             Instant expiresAt = Instant.now().plus(config.tokenTtl());
 
@@ -89,7 +95,7 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
         }
     }
 
-    private JwtClaims buildClaims(TokenValidationResult.Valid validated, JwsConfig config) {
+    private JwtClaims buildClaims(TokenValidationResult.Valid validated, JwsConfig config, Optional<String> audience) {
         JwtClaims claims = new JwtClaims();
 
         // Standard claims
@@ -98,6 +104,9 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
         claims.setIssuedAtToNow();
         claims.setExpirationTimeMinutesInTheFuture((float) config.tokenTtl().toMinutes());
         claims.setGeneratedJwtId();
+
+        // Set audience claim if provided
+        audience.ifPresent(claims::setAudience);
 
         // Preserve original issuer
         claims.setClaim("original_iss", validated.issuer());
@@ -116,6 +125,7 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
     private boolean isStandardClaim(String claimName) {
         return "iss".equals(claimName)
                 || "sub".equals(claimName)
+                || "aud".equals(claimName)
                 || "iat".equals(claimName)
                 || "exp".equals(claimName)
                 || "jti".equals(claimName);

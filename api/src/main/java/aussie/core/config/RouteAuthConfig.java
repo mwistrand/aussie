@@ -143,5 +143,29 @@ public interface RouteAuthConfig {
          */
         @WithName("signing-key")
         Optional<String> signingKey();
+
+        /**
+         * Default audience claim for issued tokens.
+         *
+         * <p>
+         * Used when an endpoint does not specify a per-route audience.
+         * If empty, no audience claim is added to tokens for endpoints
+         * without explicit audience configuration.
+         */
+        @WithName("default-audience")
+        Optional<String> defaultAudience();
+
+        /**
+         * Whether to require an audience claim in all issued tokens.
+         *
+         * <p>
+         * When true, tokens will always include an audience claim,
+         * using either the endpoint-specific audience or the default audience.
+         * If no default is configured and the endpoint has no audience,
+         * the service ID is used as the audience.
+         */
+        @WithName("require-audience")
+        @WithDefault("false")
+        boolean requireAudience();
     }
 }

@@ -82,4 +82,17 @@ public sealed interface RouteLookupResult permits RouteMatch, ServiceOnlyMatch {
                         new ServiceRateLimitConfig(erc.requestsPerWindow(), erc.windowSeconds(), erc.burstCapacity()))
                 .or(() -> service().rateLimitConfig());
     }
+
+    /**
+     * Return the audience claim to include in tokens issued for this route.
+     *
+     * <p>
+     * If a specific endpoint was matched and has an audience configured, returns that.
+     * Otherwise, returns empty. The caller may apply a default audience if needed.
+     *
+     * @return the audience claim, or empty if none configured
+     */
+    default Optional<String> audience() {
+        return endpoint().flatMap(EndpointConfig::audience);
+    }
 }

@@ -23,7 +23,7 @@ class ServiceRegistrationRequestTest {
         @Test
         @DisplayName("Endpoints should inherit defaultAuthRequired=true when not specified")
         void shouldInheritDefaultAuthRequiredTrue() {
-            var endpoint = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null);
+            var endpoint = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null, null);
             var request = new ServiceRegistrationRequest(
                     1L,
                     "test-service",
@@ -48,7 +48,7 @@ class ServiceRegistrationRequestTest {
         @Test
         @DisplayName("Endpoints should inherit defaultAuthRequired=false when not specified")
         void shouldInheritDefaultAuthRequiredFalse() {
-            var endpoint = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null);
+            var endpoint = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null, null);
             var request = new ServiceRegistrationRequest(
                     1L,
                     "test-service",
@@ -73,8 +73,9 @@ class ServiceRegistrationRequestTest {
         @Test
         @DisplayName("Endpoints with explicit authRequired should override default")
         void shouldOverrideDefaultWithExplicitValue() {
-            var publicEndpoint = new EndpointConfigDto("/api/public", Set.of("GET"), "PUBLIC", null, false, null);
-            var protectedEndpoint = new EndpointConfigDto("/api/protected", Set.of("GET"), "PUBLIC", null, null, null);
+            var publicEndpoint = new EndpointConfigDto("/api/public", Set.of("GET"), "PUBLIC", null, false, null, null);
+            var protectedEndpoint =
+                    new EndpointConfigDto("/api/protected", Set.of("GET"), "PUBLIC", null, null, null, null);
             var request = new ServiceRegistrationRequest(
                     1L,
                     "test-service",
@@ -100,7 +101,7 @@ class ServiceRegistrationRequestTest {
         @Test
         @DisplayName("Should default defaultAuthRequired to true when not specified")
         void shouldDefaultToTrueWhenNotSpecified() {
-            var endpoint = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null);
+            var endpoint = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null, null);
             var request = new ServiceRegistrationRequest(
                     1L,
                     "test-service",

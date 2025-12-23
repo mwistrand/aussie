@@ -512,9 +512,23 @@ Backends only need to trust Aussie's signing key. The forwarded token includes:
 |-------|-------------|
 | `iss` | Aussie's issuer (e.g., "aussie-gateway") |
 | `sub` | Original token subject |
+| `aud` | Audience claim (if configured per-endpoint or via default) |
 | `original_iss` | Original token issuer |
 | `iat`, `exp` | Issued/expiration times |
 | Forwarded claims | Configurable (email, name, groups, roles, etc.) |
+
+### Audience Configuration
+Configure audience claims to prevent cross-service token replay attacks:
+```bash
+# Optional: Default audience for all endpoints without explicit audience
+export AUSSIE_AUTH_ROUTE_AUTH_JWS_DEFAULT_AUDIENCE=aussie-gateway
+
+# Optional: Require audience claim in all issued tokens
+# When true and no audience is configured, the serviceId is used
+export AUSSIE_AUTH_ROUTE_AUTH_JWS_REQUIRE_AUDIENCE=true
+```
+
+Services can also configure per-endpoint audiences in their registration. See the [Token Audience Validation](../api/token-audience.md) guide for details.
 
 To verify tokens in your backend, configure your JWT library to trust Aussie's public key:
 ```bash
@@ -655,6 +669,8 @@ With the permission policy above:
 | `AUSSIE_AUTH_ROUTE_AUTH_JWS_TOKEN_TTL` | `PT5M` | Default TTL for issued tokens |
 | `AUSSIE_AUTH_ROUTE_AUTH_JWS_MAX_TOKEN_TTL` | `PT24H` | Maximum allowed JWT token TTL |
 | `AUSSIE_AUTH_ROUTE_AUTH_JWS_ISSUER` | `aussie-gateway` | Issuer claim for JWS tokens |
+| `AUSSIE_AUTH_ROUTE_AUTH_JWS_DEFAULT_AUDIENCE` | - | Default audience claim for issued tokens |
+| `AUSSIE_AUTH_ROUTE_AUTH_JWS_REQUIRE_AUDIENCE` | `false` | Require audience claim in all tokens |
 | `AUSSIE_JWS_SIGNING_KEY` | - | RSA signing key (base64-encoded PKCS#8 PEM) |
 
 ### Bootstrap Configuration

@@ -15,7 +15,8 @@
     {
       "path": "/api/users",
       "methods": ["GET", "POST"],
-      "visibility": "PUBLIC"
+      "visibility": "PUBLIC",
+      "audience": "demo-service"
     },
     {
       "path": "/api/auth/test",

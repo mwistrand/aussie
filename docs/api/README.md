@@ -433,6 +433,49 @@ When `authRequired: true`:
 2. Aussie validates the token against configured identity providers
 3. Your backend receives a signed Aussie token with the validated identity
 
+### Audience Validation
+To prevent cross-service token replay attacks, you can configure an `audience` claim for authenticated endpoints. When configured, the Aussie token issued to your backend will include an `aud` (audience) claim that your service can validate.
+
+```json
+{
+  "path": "/api/billing/{invoiceId}",
+  "methods": ["GET", "PUT"],
+  "visibility": "PUBLIC",
+  "authRequired": true,
+  "audience": "billing-service"
+}
+```
+
+When `audience` is configured:
+1. The issued Aussie token includes an `aud` claim with the specified value
+2. Your backend should validate the `aud` claim matches its expected audience
+3. Tokens intended for other services will have different audience values and should be rejected
+
+**Example validation in your backend (Java/Quarkus):**
+```java
+@Inject
+JsonWebToken jwt;
+
+@GET
+@Path("/api/billing/{id}")
+public Response getBilling(@PathParam("id") String id) {
+    // Validate the token was issued for this service
+    if (!jwt.getAudience().contains("billing-service")) {
+        return Response.status(403)
+            .entity("Token not intended for this service")
+            .build();
+    }
+    // Process the request...
+}
+```
+
+**Benefits of audience validation:**
+- Prevents tokens issued for one service from being replayed against another
+- Enables per-service authorization boundaries
+- Provides defense-in-depth when services have different permission models
+
+See [Token Audience Validation](token-audience.md) for detailed implementation guidance.
+
 ## CLI Reference
 
 ### Authentication Commands
