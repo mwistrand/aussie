@@ -11,7 +11,7 @@ var authCmd = &cobra.Command{
 
 Authentication Methods:
   1. IdP Authentication (recommended):
-     Use 'aussie auth login' to authenticate via your organization's
+     Use 'aussie login' to authenticate via your organization's
      identity provider. Tokens are short-lived and automatically managed.
 
   2. API Key (fallback):
@@ -26,7 +26,7 @@ Configuration (.aussierc):
   mode = "browser"  # or "device_code" for headless environments
 
 Examples:
-  aussie auth login      # Authenticate via IdP
+  aussie login      # Authenticate via IdP
   aussie auth status     # Show current authentication state
   aussie auth logout     # Clear stored credentials`,
 }

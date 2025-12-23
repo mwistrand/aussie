@@ -131,7 +131,7 @@ func runLockoutClear(cmd *cobra.Command, args []string) error {
 		fmt.Printf("✓ Cleared lockout for %s %s\n", identifierType, identifierValue)
 		return nil
 	case http.StatusUnauthorized:
-		return fmt.Errorf("authentication failed. Run 'aussie auth login' to re-authenticate")
+		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
 	case http.StatusForbidden:
 		return fmt.Errorf("insufficient permissions to clear lockouts")
 	case http.StatusServiceUnavailable:
@@ -189,7 +189,7 @@ func runLockoutClearAll() error {
 	case http.StatusBadRequest:
 		return fmt.Errorf("must set force=true to clear all lockouts")
 	case http.StatusUnauthorized:
-		return fmt.Errorf("authentication failed. Run 'aussie auth login' to re-authenticate")
+		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
 	case http.StatusForbidden:
 		return fmt.Errorf("insufficient permissions to clear all lockouts")
 	case http.StatusServiceUnavailable:

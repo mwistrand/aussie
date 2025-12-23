@@ -48,7 +48,7 @@ refresh_url = "https://sso.yourcompany.com/auth/aussie/refresh"
 #   "cli_callback" - CLI starts a local server and displays URL
 #                    Best for: environments where browser can't auto-open
 #
-# Can be overridden with: aussie auth login --mode <mode>
+# Can be overridden with: aussie login --mode <mode>
 mode = "browser"
 
 # =============================================================================

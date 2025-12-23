@@ -92,7 +92,7 @@ func runLockoutList(cmd *cobra.Command, args []string) error {
 		}
 		return nil
 	case http.StatusUnauthorized:
-		return fmt.Errorf("authentication failed. Run 'aussie auth login' to re-authenticate")
+		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
 	case http.StatusForbidden:
 		return fmt.Errorf("insufficient permissions to list lockouts")
 	case http.StatusServiceUnavailable:

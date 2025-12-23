@@ -43,7 +43,7 @@ mode = "browser"  # Options: browser, device_code, cli_callback
 
 **2. Login:**
 ```bash
-./aussie auth login
+./aussie login
 ```
 This opens your browser for SSO authentication. After successful login, your token is stored locally.
 
@@ -83,7 +83,7 @@ Server Status: Authenticated
 **Using device code mode (for headless environments):**
 ```bash
 # Override mode for this invocation
-./aussie auth login --mode device_code
+./aussie login --mode device_code
 ```
 **Output:**
 ```
@@ -119,7 +119,7 @@ api_key = "your-api-key"
 ### Authentication Precedence
 
 When both IdP credentials and API key are available, the CLI uses this precedence:
-1. JWT token from `aussie auth login` (stored in `~/.aussie/credentials`)
+1. JWT token from `aussie login` (stored in `~/.aussie/credentials`)
 2. API key from `.aussierc`
 
 ### Checking Credentials

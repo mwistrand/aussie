@@ -19,7 +19,7 @@ var statusCmd = &cobra.Command{
 	Long: `Display information about the current authentication state.
 
 This command checks for:
-  1. JWT token credentials (from 'aussie auth login')
+  1. JWT token credentials (from 'aussie login')
   2. API key (fallback, if configured in .aussierc)
 
 The active authentication method is validated against the Aussie API gateway.
@@ -55,7 +55,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println("Status: Not authenticated")
 	fmt.Println()
 	fmt.Println("To authenticate, run:")
-	fmt.Println("  aussie auth login")
+	fmt.Println("  aussie login")
 	fmt.Println()
 	fmt.Println("Or configure an API key in .aussierc (if enabled by your platform team).")
 
@@ -78,7 +78,7 @@ func showJWTStatus(cfg *config.Config, creds *auth.StoredCredentials) error {
 	remaining := creds.TimeRemaining()
 	if remaining < time.Hour {
 		fmt.Printf("\n  Warning: Token expires in %s\n", remaining.Round(time.Minute))
-		fmt.Println("  Run 'aussie auth login' to refresh.")
+		fmt.Println("  Run 'aussie login' to refresh.")
 	}
 
 	fmt.Println()
@@ -117,7 +117,7 @@ func validateWithServer(cfg *config.Config, token string) error {
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
 		fmt.Println("Server Status: Invalid or expired credentials")
-		fmt.Println("  Run 'aussie auth login' to re-authenticate.")
+		fmt.Println("  Run 'aussie login' to re-authenticate.")
 		return nil
 	case http.StatusForbidden:
 		fmt.Println("Server Status: Insufficient permissions")

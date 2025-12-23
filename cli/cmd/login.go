@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// topLoginCmd is a top-level alias for "aussie auth login"
+// topLoginCmd is a top-level alias for "aussie login"
 var topLoginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Authenticate with your organization's identity provider",

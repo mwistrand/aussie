@@ -133,7 +133,7 @@ func revokeByFullToken(host, authToken, fullToken string) error {
 	case http.StatusBadRequest:
 		return fmt.Errorf("invalid token format or token does not contain a JTI claim")
 	case http.StatusUnauthorized:
-		return fmt.Errorf("authentication failed. Run 'aussie auth login' to re-authenticate")
+		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
 	case http.StatusForbidden:
 		return fmt.Errorf("insufficient permissions to revoke tokens")
 	case http.StatusServiceUnavailable:
@@ -195,7 +195,7 @@ func revokeByJti(host, authToken, jti string) error {
 		}
 		return nil
 	case http.StatusUnauthorized:
-		return fmt.Errorf("authentication failed. Run 'aussie auth login' to re-authenticate")
+		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
 	case http.StatusForbidden:
 		return fmt.Errorf("insufficient permissions to revoke tokens")
 	case http.StatusServiceUnavailable:

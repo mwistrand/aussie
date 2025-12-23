@@ -105,7 +105,7 @@ func runInspectToken(cmd *cobra.Command, args []string) error {
 	case http.StatusBadRequest:
 		return fmt.Errorf("invalid token format")
 	case http.StatusUnauthorized:
-		return fmt.Errorf("authentication failed. Run 'aussie auth login' to re-authenticate")
+		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
 	case http.StatusForbidden:
 		return fmt.Errorf("insufficient permissions to inspect tokens")
 	default:

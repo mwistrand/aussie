@@ -41,8 +41,8 @@ Configuration:
   authentication endpoint (translation layer).
 
 Examples:
-  aussie auth login                     # Uses mode from config (default: browser)
-  aussie auth login --mode device_code  # Override config for this invocation`,
+  aussie login                     # Uses mode from config (default: browser)
+  aussie login --mode device_code  # Override config for this invocation`,
 	RunE: runLogin,
 }
 
