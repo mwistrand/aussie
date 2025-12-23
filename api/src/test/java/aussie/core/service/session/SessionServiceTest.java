@@ -437,15 +437,17 @@ class SessionServiceTest {
      * Test registry that returns the provided repository.
      */
     static class TestSessionStorageProviderRegistry extends SessionStorageProviderRegistry {
-        private final InMemorySessionRepository repository;
+        private final InMemorySessionRepository testRepository;
 
+        @SuppressWarnings("unchecked")
         TestSessionStorageProviderRegistry(InMemorySessionRepository repository) {
-            this.repository = repository;
+            super(mock(jakarta.enterprise.inject.Instance.class), mock(aussie.core.config.SessionConfig.class));
+            this.testRepository = repository;
         }
 
         @Override
         public aussie.core.port.out.SessionRepository getRepository() {
-            return repository;
+            return testRepository;
         }
     }
 

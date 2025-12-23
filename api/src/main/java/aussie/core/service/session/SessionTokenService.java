@@ -40,14 +40,17 @@ public class SessionTokenService {
 
     private static final Logger LOG = Logger.getLogger(SessionTokenService.class);
 
-    @Inject
-    SessionConfig config;
-
-    @Inject
-    RouteAuthConfig routeAuthConfig;
+    private final SessionConfig config;
+    private final RouteAuthConfig routeAuthConfig;
 
     private PrivateKey signingKey;
     private boolean signingAvailable;
+
+    @Inject
+    public SessionTokenService(SessionConfig config, RouteAuthConfig routeAuthConfig) {
+        this.config = config;
+        this.routeAuthConfig = routeAuthConfig;
+    }
 
     @PostConstruct
     void init() {

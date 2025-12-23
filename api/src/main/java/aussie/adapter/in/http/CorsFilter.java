@@ -38,8 +38,12 @@ public class CorsFilter {
     private static final String ACCESS_CONTROL_REQUEST_METHOD = "Access-Control-Request-Method";
     private static final String VARY = "Vary";
 
+    private final Instance<GatewayCorsConfig> corsConfigInstance;
+
     @Inject
-    Instance<GatewayCorsConfig> corsConfigInstance;
+    public CorsFilter(Instance<GatewayCorsConfig> corsConfigInstance) {
+        this.corsConfigInstance = corsConfigInstance;
+    }
 
     /**
      * Route filter that handles CORS for all incoming requests.

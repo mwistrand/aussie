@@ -30,15 +30,18 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
     private static final Logger LOG = Logger.getLogger(RedisSessionStorageProvider.class);
     private static final int PRIORITY = 100; // High priority
 
-    @Inject
-    ReactiveRedisDataSource redisDataSource;
-
-    @Inject
-    SessionConfig sessionConfig;
+    private final ReactiveRedisDataSource redisDataSource;
+    private final SessionConfig sessionConfig;
 
     private RedisSessionRepository repository;
     private final AtomicBoolean available = new AtomicBoolean(false);
     private final CountDownLatch checkLatch = new CountDownLatch(1);
+
+    @Inject
+    public RedisSessionStorageProvider(ReactiveRedisDataSource redisDataSource, SessionConfig sessionConfig) {
+        this.redisDataSource = redisDataSource;
+        this.sessionConfig = sessionConfig;
+    }
 
     @PostConstruct
     void checkAvailability() {

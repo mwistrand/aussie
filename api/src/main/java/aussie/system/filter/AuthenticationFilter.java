@@ -60,8 +60,12 @@ public class AuthenticationFilter implements ContainerRequestFilter {
      */
     public static final String AUTH_CONTEXT_PROPERTY = "aussie.auth.context";
 
+    private final Instance<AuthenticationProvider> providers;
+
     @Inject
-    Instance<AuthenticationProvider> providers;
+    public AuthenticationFilter(Instance<AuthenticationProvider> providers) {
+        this.providers = providers;
+    }
 
     private boolean isAuthEnabled() {
         return ConfigProvider.getConfig()

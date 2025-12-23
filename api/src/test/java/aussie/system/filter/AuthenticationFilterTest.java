@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 
+import jakarta.enterprise.inject.Instance;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.UriInfo;
@@ -16,6 +17,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+
+import aussie.spi.AuthenticationProvider;
 
 /**
  * Test for the deprecated {@link AuthenticationFilter}.
@@ -26,15 +29,18 @@ import org.junit.jupiter.api.Test;
  * legacy mode is disabled (the default).
  */
 @DisplayName("AuthenticationFilter (deprecated)")
+@SuppressWarnings("unchecked")
 class AuthenticationFilterTest {
 
     private ContainerRequestContext requestContext;
     private UriInfo uriInfo;
+    private Instance<AuthenticationProvider> providers;
 
     @BeforeEach
     void setUp() {
         requestContext = mock(ContainerRequestContext.class);
         uriInfo = mock(UriInfo.class);
+        providers = mock(Instance.class);
         when(requestContext.getUriInfo()).thenReturn(uriInfo);
         when(requestContext.getHeaders()).thenReturn(new MultivaluedHashMap<>());
     }
@@ -48,7 +54,7 @@ class AuthenticationFilterTest {
         void shouldSkipProcessingForAdminPaths() throws IOException {
             when(uriInfo.getPath()).thenReturn("admin/services");
 
-            var filter = new AuthenticationFilter();
+            var filter = new AuthenticationFilter(providers);
             filter.filter(requestContext);
 
             // Filter should not abort or set any properties when legacy mode is disabled
@@ -61,7 +67,7 @@ class AuthenticationFilterTest {
         void shouldSkipProcessingForGatewayPaths() throws IOException {
             when(uriInfo.getPath()).thenReturn("gateway/api/users");
 
-            var filter = new AuthenticationFilter();
+            var filter = new AuthenticationFilter(providers);
             filter.filter(requestContext);
 
             verify(requestContext, never()).abortWith(any());
@@ -73,7 +79,7 @@ class AuthenticationFilterTest {
         void shouldSkipProcessingForHealthPaths() throws IOException {
             when(uriInfo.getPath()).thenReturn("q/health");
 
-            var filter = new AuthenticationFilter();
+            var filter = new AuthenticationFilter(providers);
             filter.filter(requestContext);
 
             verify(requestContext, never()).abortWith(any());

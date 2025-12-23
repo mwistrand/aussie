@@ -38,20 +38,25 @@ public class SessionAuthenticationMechanism implements HttpAuthenticationMechani
 
     private static final Logger LOG = Logger.getLogger(SessionAuthenticationMechanism.class);
 
-    @Inject
-    SessionConfig config;
+    private final SessionConfig config;
+    private final SessionCookieManager cookieManager;
+    private final SessionManagement sessionManagement;
+    private final GatewayMetrics metrics;
+    private final SecurityMonitor securityMonitor;
 
     @Inject
-    SessionCookieManager cookieManager;
-
-    @Inject
-    SessionManagement sessionManagement;
-
-    @Inject
-    GatewayMetrics metrics;
-
-    @Inject
-    SecurityMonitor securityMonitor;
+    public SessionAuthenticationMechanism(
+            SessionConfig config,
+            SessionCookieManager cookieManager,
+            SessionManagement sessionManagement,
+            GatewayMetrics metrics,
+            SecurityMonitor securityMonitor) {
+        this.config = config;
+        this.cookieManager = cookieManager;
+        this.sessionManagement = sessionManagement;
+        this.metrics = metrics;
+        this.securityMonitor = securityMonitor;
+    }
 
     @Override
     public Uni<SecurityIdentity> authenticate(RoutingContext context, IdentityProviderManager identityProviderManager) {

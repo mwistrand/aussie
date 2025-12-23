@@ -40,20 +40,25 @@ public class SessionResource {
 
     private static final Logger LOG = Logger.getLogger(SessionResource.class);
 
-    @Inject
-    SessionManagement sessionManagement;
-
-    @Inject
-    SessionCookieManager cookieManager;
-
-    @Inject
-    SessionConfig config;
-
-    @Inject
-    SecurityIdentity securityIdentity;
+    private final SessionManagement sessionManagement;
+    private final SessionCookieManager cookieManager;
+    private final SessionConfig config;
+    private final SecurityIdentity securityIdentity;
 
     @Context
     HttpServerRequest request;
+
+    @Inject
+    public SessionResource(
+            SessionManagement sessionManagement,
+            SessionCookieManager cookieManager,
+            SessionConfig config,
+            SecurityIdentity securityIdentity) {
+        this.sessionManagement = sessionManagement;
+        this.cookieManager = cookieManager;
+        this.config = config;
+        this.securityIdentity = securityIdentity;
+    }
 
     /**
      * Create a new session after successful authentication.

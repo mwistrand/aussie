@@ -14,8 +14,12 @@ import aussie.core.config.SessionConfig;
 @ApplicationScoped
 public class SessionFeatureFlag {
 
+    private final SessionConfig config;
+
     @Inject
-    SessionConfig config;
+    public SessionFeatureFlag(SessionConfig config) {
+        this.config = config;
+    }
 
     /**
      * Check if session management is enabled.

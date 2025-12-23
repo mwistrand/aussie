@@ -31,14 +31,19 @@ public class ConflictingAuthFilter implements ContainerRequestFilter {
 
     private static final Logger LOG = Logger.getLogger(ConflictingAuthFilter.class);
 
-    @Inject
-    Instance<SessionConfig> sessionConfigInstance;
+    private final Instance<SessionConfig> sessionConfigInstance;
+    private final Instance<SessionCookieManager> cookieManagerInstance;
+    private final RoutingContext routingContext;
 
     @Inject
-    Instance<SessionCookieManager> cookieManagerInstance;
-
-    @Inject
-    RoutingContext routingContext;
+    public ConflictingAuthFilter(
+            Instance<SessionConfig> sessionConfigInstance,
+            Instance<SessionCookieManager> cookieManagerInstance,
+            RoutingContext routingContext) {
+        this.sessionConfigInstance = sessionConfigInstance;
+        this.cookieManagerInstance = cookieManagerInstance;
+        this.routingContext = routingContext;
+    }
 
     @Override
     public void filter(ContainerRequestContext requestContext) {

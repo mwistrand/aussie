@@ -18,8 +18,12 @@ import aussie.core.model.session.Session;
 @ApplicationScoped
 public class SessionCookieManager {
 
+    private final SessionConfig config;
+
     @Inject
-    SessionConfig config;
+    public SessionCookieManager(SessionConfig config) {
+        this.config = config;
+    }
 
     /**
      * Create a session cookie for the given session.

@@ -32,14 +32,17 @@ public class SessionStorageProviderRegistry {
 
     private static final Logger LOG = Logger.getLogger(SessionStorageProviderRegistry.class);
 
-    @Inject
-    Instance<SessionStorageProvider> providers;
-
-    @Inject
-    SessionConfig config;
+    private final Instance<SessionStorageProvider> providers;
+    private final SessionConfig config;
 
     private SessionStorageProvider selectedProvider;
     private SessionRepository repository;
+
+    @Inject
+    public SessionStorageProviderRegistry(Instance<SessionStorageProvider> providers, SessionConfig config) {
+        this.providers = providers;
+        this.config = config;
+    }
 
     /**
      * Get the session repository from the selected provider.
