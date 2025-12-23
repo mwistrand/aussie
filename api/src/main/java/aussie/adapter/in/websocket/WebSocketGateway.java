@@ -333,8 +333,11 @@ public class WebSocketGateway {
         ctx.request().headers().forEach(entry -> headers.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
                 .add(entry.getValue()));
 
+        var remoteAddress = ctx.request().remoteAddress();
+        var clientIp = remoteAddress != null ? remoteAddress.host() : null;
+
         return new WebSocketUpgradeRequest(
-                path, headers, URI.create(ctx.request().absoluteURI()));
+                path, headers, URI.create(ctx.request().absoluteURI()), clientIp);
     }
 
     /**

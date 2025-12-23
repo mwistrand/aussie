@@ -24,18 +24,22 @@ class Rfc7239ForwardedHeaderBuilderTest {
         builder = new Rfc7239ForwardedHeaderBuilder();
     }
 
-    private GatewayRequest createRequest(Map<String, String> headers, URI requestUri) {
+    private GatewayRequest createRequest(Map<String, String> headers, URI requestUri, String clientIp) {
         Map<String, List<String>> headerMap = new HashMap<>();
         headers.forEach((k, v) -> headerMap.put(k, List.of(v)));
-        return new GatewayRequest("GET", "/api/test", headerMap, requestUri, null);
+        return new GatewayRequest("GET", "/api/test", headerMap, requestUri, null, clientIp);
     }
 
     private GatewayRequest createRequest(Map<String, String> headers) {
-        return createRequest(headers, null);
+        return createRequest(headers, null, null);
     }
 
     private GatewayRequest createRequest(URI requestUri) {
-        return createRequest(Map.of(), requestUri);
+        return createRequest(Map.of(), requestUri, null);
+    }
+
+    private GatewayRequest createRequestWithClientIp(String clientIp) {
+        return createRequest(Map.of(), null, clientIp);
     }
 
     @Nested
@@ -45,13 +49,14 @@ class Rfc7239ForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should build Forwarded header with all components")
         void shouldBuildForwardedHeaderWithAllComponents() {
-            var request =
-                    createRequest(Map.of("Host", "api.example.com"), URI.create("https://localhost:8080/api/test"));
+            var request = createRequest(
+                    Map.of("Host", "api.example.com"), URI.create("https://gateway:8080/api/test"), "192.168.1.100");
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api/test"));
 
             assertTrue(headers.containsKey("Forwarded"));
             var forwarded = headers.get("Forwarded");
+            assertTrue(forwarded.contains("for=192.168.1.100"));
             assertTrue(forwarded.contains("proto="));
             assertTrue(forwarded.contains("host="));
         }
@@ -147,7 +152,9 @@ class Rfc7239ForwardedHeaderBuilderTest {
         @DisplayName("Should append to existing Forwarded header")
         void shouldAppendToExistingForwarded() {
             var request = createRequest(
-                    Map.of("Forwarded", "for=192.168.1.1;proto=https"), URI.create("http://localhost:8080/api"));
+                    Map.of("Forwarded", "for=192.168.1.1;proto=https"),
+                    URI.create("http://localhost:8080/api"),
+                    "10.0.0.1");
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 

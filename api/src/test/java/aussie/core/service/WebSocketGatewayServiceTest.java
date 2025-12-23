@@ -90,7 +90,8 @@ class WebSocketGatewayServiceTest {
         return new WebSocketUpgradeRequest(
                 path,
                 Map.of("Upgrade", List.of("websocket"), "Connection", List.of("Upgrade")),
-                URI.create("http://gateway:8080" + path));
+                URI.create("http://gateway:8080" + path),
+                "192.168.1.100");
     }
 
     private void registerWebSocketService(String serviceId, String baseUrl, String endpointPath, boolean authRequired) {

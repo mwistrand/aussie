@@ -19,6 +19,7 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.Response;
 
 import io.smallrye.mutiny.Uni;
+import io.vertx.ext.web.RoutingContext;
 
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.gateway.GatewayRequest;
@@ -37,10 +38,12 @@ import aussie.core.port.in.GatewayUseCase;
 public class GatewayResource {
 
     private final GatewayUseCase gatewayUseCase;
+    private final RoutingContext routingContext;
 
     @Inject
-    public GatewayResource(GatewayUseCase gatewayUseCase) {
+    public GatewayResource(GatewayUseCase gatewayUseCase, RoutingContext routingContext) {
         this.gatewayUseCase = gatewayUseCase;
+        this.routingContext = routingContext;
     }
 
     @GET
@@ -99,12 +102,20 @@ public class GatewayResource {
             headers.put(entry.getKey(), List.copyOf(entry.getValue()));
         }
 
+        var clientIp = extractClientIp();
+
         return new GatewayRequest(
                 requestContext.getMethod(),
                 path,
                 headers,
                 requestContext.getUriInfo().getRequestUri(),
-                body);
+                body,
+                clientIp);
+    }
+
+    private String extractClientIp() {
+        var remoteAddress = routingContext.request().remoteAddress();
+        return remoteAddress != null ? remoteAddress.host() : null;
     }
 
     private Response toResponse(GatewayResult result) {

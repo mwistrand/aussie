@@ -38,7 +38,8 @@ class ProxyRequestPreparerTest {
     }
 
     private GatewayRequest createRequest(Map<String, List<String>> headers) {
-        return new GatewayRequest("GET", "/api/test", headers, URI.create("http://client:8080/api/test"), null);
+        return new GatewayRequest(
+                "GET", "/api/test", headers, URI.create("http://client:8080/api/test"), null, "192.168.1.100");
     }
 
     private RouteMatch createRoute(String targetUrl) {
@@ -57,7 +58,7 @@ class ProxyRequestPreparerTest {
         void shouldCreatePreparedRequest() {
             var headers = Map.of("Accept", List.of("application/json"));
             var body = "test body".getBytes();
-            var request = new GatewayRequest("POST", "/api/test", headers, null, body);
+            var request = new GatewayRequest("POST", "/api/test", headers, null, body, "192.168.1.100");
             var route = createRoute("http://backend:9090");
 
             var prepared = preparer.prepare(request, route);

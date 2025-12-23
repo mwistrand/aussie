@@ -25,22 +25,26 @@ class XForwardedHeaderBuilderTest {
         builder = new XForwardedHeaderBuilder();
     }
 
-    private GatewayRequest createRequest(Map<String, String> headers, URI requestUri) {
+    private GatewayRequest createRequest(Map<String, String> headers, URI requestUri, String clientIp) {
         Map<String, List<String>> headerMap = new HashMap<>();
         headers.forEach((k, v) -> headerMap.put(k, List.of(v)));
-        return new GatewayRequest("GET", "/api/test", headerMap, requestUri, null);
+        return new GatewayRequest("GET", "/api/test", headerMap, requestUri, null, clientIp);
     }
 
     private GatewayRequest createRequest(Map<String, String> headers) {
-        return createRequest(headers, null);
+        return createRequest(headers, null, null);
     }
 
     private GatewayRequest createRequest(URI requestUri) {
-        return createRequest(Map.of(), requestUri);
+        return createRequest(Map.of(), requestUri, null);
+    }
+
+    private GatewayRequest createRequestWithClientIp(String clientIp) {
+        return createRequest(Map.of(), null, clientIp);
     }
 
     private GatewayRequest createEmptyRequest() {
-        return new GatewayRequest("GET", "/api/test", Map.of(), null, null);
+        return new GatewayRequest("GET", "/api/test", Map.of(), null, null, null);
     }
 
     @Nested
@@ -48,9 +52,9 @@ class XForwardedHeaderBuilderTest {
     class XForwardedForTests {
 
         @Test
-        @DisplayName("Should create X-Forwarded-For from request URI host")
-        void shouldCreateXForwardedForFromRequestUri() {
-            var request = createRequest(URI.create("http://192.168.1.100:8080/api/test"));
+        @DisplayName("Should create X-Forwarded-For from client IP")
+        void shouldCreateXForwardedForFromClientIp() {
+            var request = createRequestWithClientIp("192.168.1.100");
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
@@ -61,9 +65,7 @@ class XForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should append to existing X-Forwarded-For chain")
         void shouldAppendToExistingChain() {
-            var request = createRequest(
-                    Map.of("X-Forwarded-For", "203.0.113.50, 192.168.1.1"),
-                    URI.create("http://10.0.0.1:8080/api/test"));
+            var request = createRequest(Map.of("X-Forwarded-For", "203.0.113.50, 192.168.1.1"), null, "10.0.0.1");
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
@@ -166,7 +168,7 @@ class XForwardedHeaderBuilderTest {
             headerMap.put("Host", List.of("api.example.com"));
             headerMap.put("X-Forwarded-Proto", List.of("https"));
             var request = new GatewayRequest(
-                    "GET", "/api/test", headerMap, URI.create("http://192.168.1.100:8080/api/test"), null);
+                    "GET", "/api/test", headerMap, URI.create("http://gateway:8080/api/test"), null, "192.168.1.100");
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 

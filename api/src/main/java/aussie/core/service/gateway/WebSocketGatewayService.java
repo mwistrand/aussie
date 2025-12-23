@@ -115,7 +115,8 @@ public class WebSocketGatewayService implements WebSocketGatewayUseCase {
     private Uni<WebSocketUpgradeResult> authenticateAndPrepare(WebSocketUpgradeRequest request, RouteMatch route) {
 
         // Convert to GatewayRequest for auth service compatibility
-        var gatewayRequest = new GatewayRequest("GET", request.path(), request.headers(), request.requestUri(), null);
+        var gatewayRequest = new GatewayRequest(
+                "GET", request.path(), request.headers(), request.requestUri(), null, request.clientIp());
 
         return routeAuthService.authenticate(gatewayRequest, route).map(authResult -> switch (authResult) {
             case RouteAuthResult.Authenticated auth -> new WebSocketUpgradeResult.Authorized(

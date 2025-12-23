@@ -8,6 +8,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.port.out.ForwardedHeaderBuilder;
+import aussie.core.service.common.ClientIpExtractor;
 
 /**
  * Build RFC 7239 compliant Forwarded header.
@@ -21,7 +22,7 @@ public class Rfc7239ForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         var parts = new ArrayList<String>();
 
         // for - client IP address
-        var clientIp = extractClientIp(originalRequest);
+        var clientIp = ClientIpExtractor.extract(originalRequest);
         if (clientIp != null) {
             parts.add("for=" + quoteIfNeeded(clientIp));
         }
@@ -51,36 +52,11 @@ public class Rfc7239ForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         return Map.of("Forwarded", newForwarded);
     }
 
-    private String extractClientIp(GatewayRequest request) {
-        // First check if there's already a Forwarded header with 'for'
-        var forwarded = request.getHeaderString("Forwarded");
-        if (forwarded != null) {
-            var forMatch = extractForwardedParam(forwarded, "for");
-            if (forMatch != null) {
-                return forMatch;
-            }
-        }
-
-        // Check X-Forwarded-For as fallback
-        var xForwardedFor = request.getHeaderString("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-
-        // Fall back to request URI host (in real impl, would get from socket)
-        var requestUri = request.requestUri();
-        if (requestUri != null) {
-            return requestUri.getHost();
-        }
-
-        return null;
-    }
-
     private String extractProtocol(GatewayRequest request) {
         // Check existing Forwarded header
         var forwarded = request.getHeaderString("Forwarded");
         if (forwarded != null) {
-            var proto = extractForwardedParam(forwarded, "proto");
+            var proto = ClientIpExtractor.extractForwardedParam(forwarded, "proto");
             if (proto != null) {
                 return proto;
             }
@@ -99,31 +75,6 @@ public class Rfc7239ForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         }
 
         return "http";
-    }
-
-    private String extractForwardedParam(String forwarded, String param) {
-        // Parse last entry in Forwarded header
-        var entries = forwarded.split(",");
-        if (entries.length == 0) {
-            return null;
-        }
-
-        var lastEntry = entries[entries.length - 1].trim();
-        var parts = lastEntry.split(";");
-
-        for (var part : parts) {
-            var keyValue = part.trim().split("=", 2);
-            if (keyValue.length == 2 && keyValue[0].equalsIgnoreCase(param)) {
-                var value = keyValue[1];
-                // Remove quotes if present
-                if (value.startsWith("\"") && value.endsWith("\"")) {
-                    value = value.substring(1, value.length() - 1);
-                }
-                return value;
-            }
-        }
-
-        return null;
     }
 
     private String quoteIfNeeded(String value) {

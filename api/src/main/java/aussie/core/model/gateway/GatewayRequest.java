@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 public record GatewayRequest(
-        String method, String path, Map<String, List<String>> headers, URI requestUri, byte[] body) {
+        String method, String path, Map<String, List<String>> headers, URI requestUri, byte[] body, String clientIp) {
 
     public GatewayRequest {
         if (method == null || method.isBlank()) {

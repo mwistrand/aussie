@@ -8,6 +8,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.port.out.ForwardedHeaderBuilder;
+import aussie.core.service.common.ClientIpExtractor;
 
 /**
  * Build legacy X-Forwarded-* headers.
@@ -23,7 +24,7 @@ public class XForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         Map<String, String> headers = new HashMap<>();
 
         // X-Forwarded-For - client IP (append to existing if present)
-        var clientIp = extractClientIp(originalRequest);
+        var clientIp = ClientIpExtractor.extract(originalRequest);
         var existingXff = originalRequest.getHeaderString("X-Forwarded-For");
         if (clientIp != null) {
             if (existingXff != null && !existingXff.isEmpty()) {
@@ -46,22 +47,6 @@ public class XForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         }
 
         return headers;
-    }
-
-    private String extractClientIp(GatewayRequest request) {
-        // Check existing X-Forwarded-For
-        var xForwardedFor = request.getHeaderString("X-Forwarded-For");
-        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-
-        // Fall back to request URI host
-        var requestUri = request.requestUri();
-        if (requestUri != null) {
-            return requestUri.getHost();
-        }
-
-        return null;
     }
 
     private String extractProtocol(GatewayRequest request) {

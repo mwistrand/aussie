@@ -105,7 +105,8 @@ class GatewayServiceTest {
     }
 
     private GatewayRequest createRequest(String method, String path) {
-        return new GatewayRequest(method, path, Map.of(), URI.create("http://gateway:8080" + path), null);
+        return new GatewayRequest(
+                method, path, Map.of(), URI.create("http://gateway:8080" + path), null, "192.168.1.100");
     }
 
     private void registerService(String serviceId, String baseUrl, String endpointPath, Set<String> methods) {
