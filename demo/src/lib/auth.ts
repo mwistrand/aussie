@@ -1,4 +1,5 @@
 import * as jose from 'jose';
+import crypto from 'crypto';
 
 // Demo app RSA key pair for signing tokens
 // In production, these would be loaded from environment/secrets
@@ -279,4 +280,162 @@ export function parseRedirectUrl(redirect: string | null): string {
 
   // Default to demo-ui
   return 'http://localhost:8080/';
+}
+
+// =============================================================================
+// PKCE (Proof Key for Code Exchange) Utilities
+// =============================================================================
+
+/**
+ * Generate a cryptographically secure code verifier for PKCE.
+ * Per RFC 7636, the verifier must be 43-128 characters using unreserved chars.
+ *
+ * @returns URL-safe base64 encoded random string (86 characters)
+ */
+export function generateCodeVerifier(): string {
+  const buffer = crypto.randomBytes(64);
+  return buffer.toString('base64url');
+}
+
+/**
+ * Generate an S256 code challenge from a verifier.
+ * Computes: BASE64URL(SHA256(verifier))
+ *
+ * @param verifier - The code verifier
+ * @returns The code challenge
+ */
+export function generateCodeChallenge(verifier: string): string {
+  const hash = crypto.createHash('sha256').update(verifier, 'ascii').digest();
+  return hash.toString('base64url');
+}
+
+/**
+ * Verify that a code verifier matches a code challenge.
+ *
+ * @param verifier - The code verifier from the token request
+ * @param challenge - The stored code challenge
+ * @returns true if the verifier matches the challenge
+ */
+export function verifyCodeChallenge(
+  verifier: string,
+  challenge: string
+): boolean {
+  const computedChallenge = generateCodeChallenge(verifier);
+  return computedChallenge === challenge;
+}
+
+// =============================================================================
+// Authorization Code Storage (for OIDC Authorization Code Flow)
+// =============================================================================
+
+interface AuthorizationCodeEntry {
+  code: string;
+  clientId: string;
+  redirectUri: string;
+  codeChallenge?: string;
+  codeChallengeMethod?: string;
+  claims: TokenClaims;
+  state?: string;
+  expiresAt: number;
+  used: boolean;
+}
+
+const authorizationCodes = new Map<string, AuthorizationCodeEntry>();
+
+/**
+ * Create an authorization code for the OIDC authorization code flow.
+ *
+ * @param params - Authorization parameters
+ * @returns The authorization code
+ */
+export function createAuthorizationCode(params: {
+  clientId: string;
+  redirectUri: string;
+  codeChallenge?: string;
+  codeChallengeMethod?: string;
+  claims: TokenClaims;
+  state?: string;
+}): string {
+  const code = crypto.randomBytes(32).toString('base64url');
+  const expiresIn = 60; // 1 minute - authorization codes should be short-lived
+
+  authorizationCodes.set(code, {
+    code,
+    clientId: params.clientId,
+    redirectUri: params.redirectUri,
+    codeChallenge: params.codeChallenge,
+    codeChallengeMethod: params.codeChallengeMethod,
+    claims: params.claims,
+    state: params.state,
+    expiresAt: Date.now() + expiresIn * 1000,
+    used: false,
+  });
+
+  // Clean up after expiry
+  setTimeout(() => {
+    authorizationCodes.delete(code);
+  }, expiresIn * 1000 + 5000); // Add 5s grace period
+
+  return code;
+}
+
+/**
+ * Exchange an authorization code for tokens.
+ *
+ * @param code - The authorization code
+ * @param clientId - The client ID (must match)
+ * @param redirectUri - The redirect URI (must match)
+ * @param codeVerifier - The PKCE code verifier (required if challenge was provided)
+ * @returns The token claims or null if invalid
+ */
+export function exchangeAuthorizationCode(
+  code: string,
+  clientId: string,
+  redirectUri: string,
+  codeVerifier?: string
+): { claims: TokenClaims; error?: never } | { error: string; claims?: never } {
+  const entry = authorizationCodes.get(code);
+
+  if (!entry) {
+    return { error: 'invalid_grant: Authorization code not found' };
+  }
+
+  if (entry.used) {
+    // Code replay attack - invalidate and reject
+    authorizationCodes.delete(code);
+    return { error: 'invalid_grant: Authorization code already used' };
+  }
+
+  if (Date.now() > entry.expiresAt) {
+    authorizationCodes.delete(code);
+    return { error: 'invalid_grant: Authorization code expired' };
+  }
+
+  if (entry.clientId !== clientId) {
+    return { error: 'invalid_grant: Client ID mismatch' };
+  }
+
+  if (entry.redirectUri !== redirectUri) {
+    return { error: 'invalid_grant: Redirect URI mismatch' };
+  }
+
+  // Verify PKCE if challenge was provided
+  if (entry.codeChallenge) {
+    if (!codeVerifier) {
+      return { error: 'invalid_grant: Code verifier required' };
+    }
+
+    if (entry.codeChallengeMethod !== 'S256') {
+      return { error: 'invalid_request: Only S256 challenge method supported' };
+    }
+
+    if (!verifyCodeChallenge(codeVerifier, entry.codeChallenge)) {
+      return { error: 'invalid_grant: PKCE verification failed' };
+    }
+  }
+
+  // Mark as used (one-time use)
+  entry.used = true;
+
+  return { claims: entry.claims };
 }

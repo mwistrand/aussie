@@ -250,6 +250,34 @@ class ProxyRequestPreparerTest {
             assertEquals(List.of("original.com"), prepared.headers().get("X-Forwarded-Host"));
             assertEquals(List.of("https"), prepared.headers().get("X-Forwarded-Proto"));
         }
+
+        @Test
+        @DisplayName("Should add X-Forwarded-Prefix from route prefix")
+        void shouldAddXForwardedPrefix() {
+            var request = createRequest(Map.of());
+            var service = ServiceRegistration.builder("my-service")
+                    .baseUrl("http://backend:9090")
+                    .routePrefix("/my-service")
+                    .build();
+            var endpoint = new EndpointConfig("/api/test", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var route = new RouteMatch(service, endpoint, "/api/test", Map.of());
+
+            var prepared = preparer.prepare(request, route);
+
+            assertEquals(List.of("/my-service"), prepared.headers().get("X-Forwarded-Prefix"));
+        }
+
+        @Test
+        @DisplayName("Should use default route prefix from service ID")
+        void shouldUseDefaultRoutePrefixFromServiceId() {
+            var request = createRequest(Map.of());
+            // When routePrefix is not explicitly set, it defaults to /{serviceId}
+            var route = createRoute("http://backend:9090");
+
+            var prepared = preparer.prepare(request, route);
+
+            assertEquals(List.of("/test-service"), prepared.headers().get("X-Forwarded-Prefix"));
+        }
     }
 
     @Nested

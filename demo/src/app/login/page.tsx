@@ -2,7 +2,20 @@ import { Suspense } from 'react';
 import LoginForm from '@/components/LoginForm';
 
 interface PageProps {
-  searchParams: Promise<{ redirect?: string; error?: string; callback?: string; flow?: string; code?: string }>;
+  searchParams: Promise<{
+    redirect?: string;
+    error?: string;
+    callback?: string;
+    flow?: string;
+    code?: string;
+    // OIDC PKCE parameters
+    client_id?: string;
+    redirect_uri?: string;
+    state?: string;
+    code_challenge?: string;
+    code_challenge_method?: string;
+    scope?: string;
+  }>;
 }
 
 export default async function LoginPage({ searchParams }: PageProps) {
@@ -12,6 +25,19 @@ export default async function LoginPage({ searchParams }: PageProps) {
   const callbackUrl = params.callback;
   const flow = params.flow;
   const deviceCode = params.code;
+
+  // OIDC PKCE parameters
+  const oidcParams =
+    flow === 'oidc'
+      ? {
+          clientId: params.client_id,
+          redirectUri: params.redirect_uri,
+          state: params.state,
+          codeChallenge: params.code_challenge,
+          codeChallengeMethod: params.code_challenge_method,
+          scope: params.scope,
+        }
+      : undefined;
 
   return (
     <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-gray-50">
@@ -33,6 +59,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
               callbackUrl={callbackUrl}
               flow={flow}
               deviceCode={deviceCode}
+              oidcParams={oidcParams}
             />
           </Suspense>
 

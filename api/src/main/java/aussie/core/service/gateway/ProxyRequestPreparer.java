@@ -60,11 +60,19 @@ public class ProxyRequestPreparer {
      * @return prepared proxy request
      */
     public PreparedProxyRequest prepare(GatewayRequest request, RouteMatch route, Optional<AussieToken> token) {
-        var targetUri = route.targetUri();
+        // Preserve query string from original request
+        var query = request.requestUri() != null ? request.requestUri().getRawQuery() : null;
+        var targetUri = route.targetUri(query);
         var headers = buildHeaders(request, targetUri);
 
         // Set Authorization header with Aussie token if present
         token.ifPresent(t -> headers.put("Authorization", List.of("Bearer " + t.jws())));
+
+        // Add X-Forwarded-Prefix to inform backend of the path prefix that was stripped
+        var routePrefix = route.service().routePrefix();
+        if (routePrefix != null && !routePrefix.isEmpty()) {
+            headers.put("X-Forwarded-Prefix", List.of(routePrefix));
+        }
 
         return new PreparedProxyRequest(request.method(), targetUri, headers, request.body());
     }
