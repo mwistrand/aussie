@@ -29,6 +29,9 @@ dependencies {
     // Health checks
     implementation 'io.quarkus:quarkus-smallrye-health'
 
+    // Scheduler for scheduled tasks (key rotation)
+    implementation 'io.quarkus:quarkus-scheduler'
+
     // OpenTelemetry for distributed tracing
     implementation 'io.quarkus:quarkus-opentelemetry'
 

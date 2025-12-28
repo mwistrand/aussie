@@ -1,10 +1,7 @@
 package aussie.core.service.session;
 
-import java.security.KeyFactory;
 import java.security.PrivateKey;
-import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -25,6 +22,7 @@ import org.jose4j.lang.JoseException;
 
 import aussie.core.config.RouteAuthConfig;
 import aussie.core.config.SessionConfig;
+import aussie.core.model.auth.SigningKeyRecord;
 import aussie.core.model.session.Session;
 import aussie.core.model.session.SessionToken;
 
@@ -58,10 +56,10 @@ public class SessionTokenService {
         Optional<String> keyData = routeAuthConfig.jws().signingKey();
         if (keyData.isPresent()) {
             try {
-                signingKey = loadPrivateKey(keyData.get());
+                signingKey = SigningKeyRecord.parsePrivateKey(keyData.get());
                 signingAvailable = true;
                 LOG.info("Session token service initialized with signing key");
-            } catch (Exception e) {
+            } catch (IllegalArgumentException e) {
                 LOG.warnf("Failed to load signing key for session tokens: %s", e.getMessage());
                 signingAvailable = false;
             }
@@ -153,19 +151,6 @@ public class SessionTokenService {
                 || "exp".equals(claimName)
                 || "jti".equals(claimName)
                 || "aud".equals(claimName);
-    }
-
-    private PrivateKey loadPrivateKey(String keyData) throws Exception {
-        String keyContent = keyData.replace("-----BEGIN PRIVATE KEY-----", "")
-                .replace("-----END PRIVATE KEY-----", "")
-                .replace("-----BEGIN RSA PRIVATE KEY-----", "")
-                .replace("-----END RSA PRIVATE KEY-----", "")
-                .replaceAll("\\s", "");
-
-        byte[] keyBytes = Base64.getDecoder().decode(keyContent);
-        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyBytes);
-        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-        return keyFactory.generatePrivate(keySpec);
     }
 
     private Map<String, Object> buildClaims(

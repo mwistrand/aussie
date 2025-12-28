@@ -39,8 +39,8 @@ func TestStatusCmd_Initialized(t *testing.T) {
 func TestAuthCmd_HasSubcommands(t *testing.T) {
 	subcommands := authCmd.Commands()
 
-	if len(subcommands) != 6 {
-		t.Errorf("authCmd has %d subcommands, want 6", len(subcommands))
+	if len(subcommands) != 7 {
+		t.Errorf("authCmd has %d subcommands, want 7", len(subcommands))
 	}
 
 	// Check that all subcommands are present
@@ -49,7 +49,7 @@ func TestAuthCmd_HasSubcommands(t *testing.T) {
 		subcommandNames[cmd.Use] = true
 	}
 
-	expectedCommands := []string{"login", "logout", "status", "revoke", "inspect <token>", "lockout"}
+	expectedCommands := []string{"login", "logout", "status", "revoke", "inspect <token>", "lockout", "keys"}
 	for _, name := range expectedCommands {
 		if !subcommandNames[name] {
 			t.Errorf("authCmd missing subcommand '%s'", name)

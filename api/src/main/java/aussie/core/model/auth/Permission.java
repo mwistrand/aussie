@@ -92,6 +92,15 @@ public enum Permission {
     /** Permission for clearing lockouts. */
     LOCKOUTS_WRITE("lockouts.write"),
 
+    /** Permission for reading signing keys. */
+    KEYS_READ("keys.read"),
+
+    /** Permission for writing/managing signing keys. */
+    KEYS_WRITE("keys.write"),
+
+    /** Permission for rotating signing keys. */
+    KEYS_ROTATE("keys.rotate"),
+
     /** Service configuration create operation (alias for SERVICE_CONFIG_CREATE). */
     CONFIG_CREATE("service.config.create"),
 
@@ -153,6 +162,12 @@ public enum Permission {
     public static final String LOCKOUTS_READ_VALUE = "lockouts.read";
     /** Lockouts write permission value. */
     public static final String LOCKOUTS_WRITE_VALUE = "lockouts.write";
+    /** Keys read permission value. */
+    public static final String KEYS_READ_VALUE = "keys.read";
+    /** Keys write permission value. */
+    public static final String KEYS_WRITE_VALUE = "keys.write";
+    /** Keys rotate permission value. */
+    public static final String KEYS_ROTATE_VALUE = "keys.rotate";
 
     // ========================================================================
     // Static set of all permission values (populated at class initialization)
