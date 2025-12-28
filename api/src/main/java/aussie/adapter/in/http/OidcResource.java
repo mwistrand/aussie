@@ -3,7 +3,10 @@ package aussie.adapter.in.http;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -20,7 +23,15 @@ import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
 import aussie.adapter.in.problem.GatewayProblem;
+import aussie.core.config.OidcConfig;
 import aussie.core.config.PkceConfig;
+import aussie.core.config.SessionConfig;
+import aussie.core.model.auth.OidcTokenExchangeRequest;
+import aussie.core.model.auth.OidcTokenExchangeRequest.ClientAuthMethod;
+import aussie.core.model.auth.OidcTokenExchangeResponse;
+import aussie.core.port.in.SessionManagement;
+import aussie.core.port.out.OidcRefreshTokenRepository;
+import aussie.core.service.auth.OidcTokenExchangeProviderRegistry;
 import aussie.core.service.auth.PkceService;
 
 /**
@@ -40,11 +51,28 @@ public class OidcResource {
 
     private final PkceService pkceService;
     private final PkceConfig pkceConfig;
+    private final OidcConfig oidcConfig;
+    private final SessionConfig sessionConfig;
+    private final OidcTokenExchangeProviderRegistry tokenExchangeRegistry;
+    private final SessionManagement sessionManagement;
+    private final OidcRefreshTokenRepository refreshTokenRepository;
 
     @Inject
-    public OidcResource(PkceService pkceService, PkceConfig pkceConfig) {
+    public OidcResource(
+            PkceService pkceService,
+            PkceConfig pkceConfig,
+            OidcConfig oidcConfig,
+            SessionConfig sessionConfig,
+            OidcTokenExchangeProviderRegistry tokenExchangeRegistry,
+            SessionManagement sessionManagement,
+            OidcRefreshTokenRepository refreshTokenRepository) {
         this.pkceService = pkceService;
         this.pkceConfig = pkceConfig;
+        this.oidcConfig = oidcConfig;
+        this.sessionConfig = sessionConfig;
+        this.tokenExchangeRegistry = tokenExchangeRegistry;
+        this.sessionManagement = sessionManagement;
+        this.refreshTokenRepository = refreshTokenRepository;
     }
 
     /**
@@ -171,29 +199,192 @@ public class OidcResource {
                 }
 
                 LOG.debugf("PKCE verification successful for state: %s", state);
-                return completeTokenExchange(code, redirectUri);
+                return completeTokenExchange(code, redirectUri, Optional.of(codeVerifier));
             });
         }
 
         // No verifier provided and PKCE is optional - proceed with token exchange
-        return completeTokenExchange(code, redirectUri);
+        return completeTokenExchange(code, redirectUri, Optional.empty());
     }
 
     /**
      * Complete the token exchange with the identity provider.
      *
-     * <p>This method should be extended to actually exchange the code
-     * with the IdP. For now, it returns a placeholder response.
+     * <p>Exchanges the authorization code for tokens, optionally creates
+     * a session, and stores refresh tokens if configured.
+     *
+     * @param code The authorization code from the IdP
+     * @param redirectUri The redirect URI used in the authorization request
+     * @param codeVerifier Optional PKCE code verifier
+     * @return Token response with session info if session creation is enabled
      */
-    private Uni<Response> completeTokenExchange(String code, String redirectUri) {
-        // TODO: Implement actual token exchange with IdP
+    private Uni<Response> completeTokenExchange(String code, String redirectUri, Optional<String> codeVerifier) {
+        // Validate token exchange is enabled
+        if (!oidcConfig.tokenExchange().enabled()) {
+            throw GatewayProblem.featureDisabled("OIDC Token Exchange");
+        }
+
+        // Validate required configuration
+        final var tokenEndpoint = oidcConfig
+                .tokenExchange()
+                .tokenEndpoint()
+                .orElseThrow(() -> GatewayProblem.internalError("OIDC token endpoint not configured"));
+        final var clientId = oidcConfig
+                .tokenExchange()
+                .clientId()
+                .orElseThrow(() -> GatewayProblem.internalError("OIDC client ID not configured"));
+        final var clientSecret = oidcConfig.tokenExchange().clientSecret().orElse(null);
+
+        // Parse client auth method
+        final var authMethod = parseClientAuthMethod(oidcConfig.tokenExchange().clientAuthMethod());
+
+        // Build scopes string
+        final var scopes = oidcConfig.tokenExchange().scopes();
+        final var scopesStr = scopes.isEmpty() ? Optional.<String>empty() : Optional.of(String.join(" ", scopes));
+
+        // Build token exchange request
+        final var request = new OidcTokenExchangeRequest(
+                code, redirectUri, codeVerifier, tokenEndpoint, clientId, clientSecret, authMethod, scopesStr);
+
         LOG.debugf("Token exchange initiated for code: %s", code.substring(0, Math.min(8, code.length())) + "...");
 
-        return Uni.createFrom()
-                .item(Response.ok(Map.of(
-                                "message", "Token exchange successful",
-                                "note", "Actual IdP token exchange not yet implemented"))
-                        .build());
+        // Execute token exchange
+        return tokenExchangeRegistry
+                .getProvider()
+                .exchange(request)
+                .flatMap(tokenResponse -> handleTokenResponse(tokenResponse));
+    }
+
+    /**
+     * Handle the token response from the IdP.
+     *
+     * <p>Creates a session if configured and stores refresh tokens.
+     */
+    private Uni<Response> handleTokenResponse(OidcTokenExchangeResponse tokenResponse) {
+        // Check if session creation is enabled
+        final var shouldCreateSession = sessionConfig.enabled()
+                && oidcConfig.tokenExchange().createSession()
+                && tokenResponse.idToken().isPresent();
+
+        if (shouldCreateSession) {
+            return createSessionFromToken(tokenResponse);
+        }
+
+        // Return tokens directly without session creation
+        return buildTokenResponse(tokenResponse, Optional.empty());
+    }
+
+    /**
+     * Create a session from the ID token claims.
+     */
+    private Uni<Response> createSessionFromToken(OidcTokenExchangeResponse tokenResponse) {
+        // Extract claims from ID token (simple JWT parsing - no validation here)
+        // Full validation should happen via TokenValidationService if configured
+        final var idToken = tokenResponse.idToken().orElseThrow();
+        final var claims = parseIdTokenClaims(idToken);
+
+        final var userId = claims.getOrDefault("sub", "unknown").toString();
+        final var issuer = claims.getOrDefault("iss", "unknown").toString();
+
+        // Extract permissions/roles from claims
+        final var permissions = extractPermissions(claims);
+
+        return sessionManagement
+                .createSession(userId, issuer, claims, permissions, null, null)
+                .flatMap(session -> {
+                    // Store refresh token with session ID
+                    Uni<Void> storeRefresh = Uni.createFrom().voidItem();
+                    if (oidcConfig.tokenExchange().refreshToken().store()
+                            && tokenResponse.refreshToken().isPresent()) {
+                        final var ttl =
+                                oidcConfig.tokenExchange().refreshToken().defaultTtl();
+                        storeRefresh = refreshTokenRepository.store(
+                                session.id(), tokenResponse.refreshToken().get(), ttl);
+                    }
+
+                    return storeRefresh.replaceWith(session);
+                })
+                .flatMap(session -> buildTokenResponse(tokenResponse, Optional.of(session.id())));
+    }
+
+    /**
+     * Build the final HTTP response from the token exchange result.
+     */
+    private Uni<Response> buildTokenResponse(OidcTokenExchangeResponse tokenResponse, Optional<String> sessionId) {
+        Map<String, Object> responseBody = new HashMap<>();
+        responseBody.put("access_token", tokenResponse.accessToken());
+        responseBody.put("token_type", tokenResponse.tokenType());
+        responseBody.put("expires_in", tokenResponse.expiresIn());
+
+        tokenResponse.idToken().ifPresent(idToken -> responseBody.put("id_token", idToken));
+        tokenResponse.scope().ifPresent(scope -> responseBody.put("scope", scope));
+
+        // Include session ID if created
+        sessionId.ifPresent(id -> responseBody.put("session_id", id));
+
+        // Note: refresh_token is intentionally not returned to the client
+        // as it's stored server-side for automatic renewal
+
+        LOG.debugf(
+                "Token exchange successful, expires_in: %d, session: %s",
+                tokenResponse.expiresIn(), sessionId.orElse("none"));
+
+        return Uni.createFrom().item(Response.ok(responseBody).build());
+    }
+
+    /**
+     * Parse ID token claims from a JWT.
+     *
+     * <p>This is a simple parser that extracts the payload without validation.
+     * For production use with untrusted tokens, validation via JWKS should be performed.
+     */
+    private Map<String, Object> parseIdTokenClaims(String idToken) {
+        try {
+            final var parts = idToken.split("\\.");
+            if (parts.length != 3) {
+                LOG.warn("Invalid ID token format");
+                return Map.of();
+            }
+
+            final var payload = new String(java.util.Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+
+            return new io.vertx.core.json.JsonObject(payload).getMap();
+        } catch (Exception e) {
+            LOG.warnf(e, "Failed to parse ID token claims");
+            return Map.of();
+        }
+    }
+
+    /**
+     * Extract permissions/roles from token claims.
+     */
+    private Set<String> extractPermissions(Map<String, Object> claims) {
+        // Common claim names for roles/permissions
+        final var roleClaimNames = Set.of("roles", "groups", "permissions", "scope");
+
+        for (String claimName : roleClaimNames) {
+            final var value = claims.get(claimName);
+            if (value instanceof java.util.Collection<?> collection) {
+                return collection.stream()
+                        .filter(String.class::isInstance)
+                        .map(String.class::cast)
+                        .collect(java.util.stream.Collectors.toSet());
+            } else if (value instanceof String str) {
+                return Set.of(str.split("[\\s,]+"));
+            }
+        }
+
+        return Set.of();
+    }
+
+    /**
+     * Parse client authentication method from configuration string.
+     */
+    private ClientAuthMethod parseClientAuthMethod(String method) {
+        return switch (method.toLowerCase().replace("-", "_")) {
+            case "client_secret_post" -> ClientAuthMethod.CLIENT_SECRET_POST;
+            default -> ClientAuthMethod.CLIENT_SECRET_BASIC;
+        };
     }
 
     /**

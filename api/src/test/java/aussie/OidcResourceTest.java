@@ -230,7 +230,8 @@ public class OidcResourceTest {
                     .post("/auth/oidc/token")
                     .then()
                     .statusCode(200)
-                    .body("message", notNullValue());
+                    .body("access_token", notNullValue())
+                    .body("token_type", equalTo("Bearer"));
         }
 
         @Test
