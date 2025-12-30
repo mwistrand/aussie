@@ -25,7 +25,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.core.model.auth.TokenValidationResult;
+import aussie.core.model.auth.TranslatedClaims;
 import aussie.core.port.in.RoleManagement;
+import aussie.core.service.auth.TokenTranslationService;
 import aussie.core.service.auth.TokenValidationService;
 
 @DisplayName("JwtIdentityProvider")
@@ -34,15 +36,17 @@ class JwtIdentityProviderTest {
     private JwtIdentityProvider provider;
     private TokenValidationService tokenValidationService;
     private RoleManagement roleManagement;
+    private TokenTranslationService tokenTranslationService;
     private AuthenticationRequestContext context;
 
     @BeforeEach
     void setUp() {
         tokenValidationService = mock(TokenValidationService.class);
         roleManagement = mock(RoleManagement.class);
+        tokenTranslationService = mock(TokenTranslationService.class);
         context = mock(AuthenticationRequestContext.class);
 
-        provider = new JwtIdentityProvider(tokenValidationService, roleManagement);
+        provider = new JwtIdentityProvider(tokenValidationService, roleManagement, tokenTranslationService);
     }
 
     @Nested
@@ -108,6 +112,9 @@ class JwtIdentityProviderTest {
 
             when(tokenValidationService.validate(any()))
                     .thenReturn(Uni.createFrom().item(validResult));
+            when(tokenTranslationService.translate(any(), any(), any()))
+                    .thenReturn(Uni.createFrom()
+                            .item(new TranslatedClaims(Set.of("demo-service.admin"), Set.of("admin:read"), Map.of())));
             when(roleManagement.expandRoles(anySet()))
                     .thenReturn(Uni.createFrom().item(Set.of("service.config.read", "service.config.write")));
 
@@ -133,6 +140,10 @@ class JwtIdentityProviderTest {
 
             when(tokenValidationService.validate(any()))
                     .thenReturn(Uni.createFrom().item(validResult));
+            when(tokenTranslationService.translate(any(), any(), any()))
+                    .thenReturn(Uni.createFrom()
+                            .item(new TranslatedClaims(
+                                    Set.of("demo-service.admin", "demo-service.dev"), Set.of(), Map.of())));
             when(roleManagement.expandRoles(anySet()))
                     .thenReturn(Uni.createFrom().item(Set.of("admin:read", "admin:write", "service:read")));
 
@@ -162,6 +173,10 @@ class JwtIdentityProviderTest {
 
             when(tokenValidationService.validate(any()))
                     .thenReturn(Uni.createFrom().item(validResult));
+            when(tokenTranslationService.translate(any(), any(), any()))
+                    .thenReturn(Uni.createFrom()
+                            .item(new TranslatedClaims(
+                                    Set.of("demo-service.dev"), Set.of("custom:permission"), Map.of())));
             when(roleManagement.expandRoles(anySet()))
                     .thenReturn(Uni.createFrom().item(Set.of("dev:read")));
 
@@ -187,8 +202,32 @@ class JwtIdentityProviderTest {
 
             when(tokenValidationService.validate(any()))
                     .thenReturn(Uni.createFrom().item(validResult));
+            when(tokenTranslationService.translate(any(), any(), any()))
+                    .thenReturn(Uni.createFrom()
+                            .item(new TranslatedClaims(Set.of("demo-service.dev"), Set.of(), Map.of())));
             when(roleManagement.expandRoles(anySet()))
                     .thenReturn(Uni.createFrom().failure(new RuntimeException("Database connection failed")));
+
+            var request = new JwtAuthenticationRequest("valid-token");
+
+            assertThrows(
+                    RuntimeException.class,
+                    () -> provider.authenticate(request, context).await().indefinitely());
+        }
+
+        @Test
+        @DisplayName("should propagate exception when token translation fails")
+        void shouldPropagateExceptionWhenTokenTranslationFails() {
+            when(tokenValidationService.isEnabled()).thenReturn(true);
+
+            var claims = Map.<String, Object>of("sub", "test-user");
+            var validResult = new TokenValidationResult.Valid(
+                    "test-user", "demo-app", claims, Instant.now().plusSeconds(3600));
+
+            when(tokenValidationService.validate(any()))
+                    .thenReturn(Uni.createFrom().item(validResult));
+            when(tokenTranslationService.translate(any(), any(), any()))
+                    .thenReturn(Uni.createFrom().failure(new RuntimeException("Translation provider unavailable")));
 
             var request = new JwtAuthenticationRequest("valid-token");
 
@@ -208,6 +247,8 @@ class JwtIdentityProviderTest {
 
             when(tokenValidationService.validate(any()))
                     .thenReturn(Uni.createFrom().item(validResult));
+            when(tokenTranslationService.translate(any(), any(), any()))
+                    .thenReturn(Uni.createFrom().item(TranslatedClaims.empty()));
             // Note: expandRoles should not be called when roles list is empty
 
             var request = new JwtAuthenticationRequest("valid-token");
@@ -231,6 +272,8 @@ class JwtIdentityProviderTest {
 
             when(tokenValidationService.validate(any()))
                     .thenReturn(Uni.createFrom().item(validResult));
+            when(tokenTranslationService.translate(any(), any(), any()))
+                    .thenReturn(Uni.createFrom().item(TranslatedClaims.empty()));
 
             var request = new JwtAuthenticationRequest("valid-token");
             SecurityIdentity result =

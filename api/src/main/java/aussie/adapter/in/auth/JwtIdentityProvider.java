@@ -1,7 +1,7 @@
 package aussie.adapter.in.auth;
 
 import java.security.Principal;
-import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -21,19 +21,24 @@ import org.jboss.logging.Logger;
 import aussie.core.model.auth.Permission;
 import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.port.in.RoleManagement;
+import aussie.core.service.auth.TokenTranslationService;
 import aussie.core.service.auth.TokenValidationService;
 
 /**
- * Quarkus identity provider that validates JWT tokens from configured OIDC providers.
+ * Quarkus identity provider that validates JWT tokens from configured OIDC
+ * providers.
  *
- * <p>This provider validates JWT tokens via {@link TokenValidationService} and maps
+ * <p>
+ * This provider validates JWT tokens via {@link TokenValidationService} and
+ * maps
  * the token's claims to Quarkus Security roles.
  *
- * <p>The resulting {@link SecurityIdentity} contains:
+ * <p>
+ * The resulting {@link SecurityIdentity} contains:
  * <ul>
- *   <li>Principal name: The subject (sub) claim from the JWT</li>
- *   <li>Roles: Mapped from JWT roles/permissions claims</li>
- *   <li>Attributes: All JWT claims including roles and permissions</li>
+ * <li>Principal name: The subject (sub) claim from the JWT</li>
+ * <li>Roles: Mapped from JWT roles/permissions claims</li>
+ * <li>Attributes: All JWT claims including roles and permissions</li>
  * </ul>
  */
 @ApplicationScoped
@@ -43,11 +48,16 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
 
     private final TokenValidationService tokenValidationService;
     private final RoleManagement roleManagement;
+    private final TokenTranslationService tokenTranslationService;
 
     @Inject
-    public JwtIdentityProvider(TokenValidationService tokenValidationService, RoleManagement roleManagement) {
+    public JwtIdentityProvider(
+            TokenValidationService tokenValidationService,
+            RoleManagement roleManagement,
+            TokenTranslationService tokenTranslationService) {
         this.tokenValidationService = tokenValidationService;
         this.roleManagement = roleManagement;
+        this.tokenTranslationService = tokenTranslationService;
     }
 
     @Override
@@ -77,49 +87,45 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
     }
 
     private Uni<SecurityIdentity> buildIdentity(TokenValidationResult.Valid validResult) {
-        String subject = validResult.subject();
-        Map<String, Object> claims = validResult.claims();
-        Instant expiry = validResult.expiresAt();
+        final var subject = validResult.subject();
+        final var issuer = validResult.issuer();
+        final var claims = validResult.claims();
+        final var expiry = validResult.expiresAt();
 
-        // Extract roles from claims
-        @SuppressWarnings("unchecked")
-        List<String> tokenRoles = claims.get("roles") instanceof List<?> list
-                ? list.stream().map(Object::toString).toList()
-                : List.of();
+        // Translate claims to roles and permissions
+        return tokenTranslationService.translate(issuer, subject, claims).flatMap(translated -> {
+            final var tokenRoles = new ArrayList<>(translated.roles());
+            final var directPermissions = translated.permissions();
 
-        // Extract direct permissions from claims
-        @SuppressWarnings("unchecked")
-        List<String> directPermissions = claims.get("permissions") instanceof List<?> list
-                ? list.stream().map(Object::toString).toList()
-                : List.of();
+            // Expand roles to permissions
+            return expandRolesToPermissions(tokenRoles).map(rolePermissions -> {
+                // Combine direct permissions with role-expanded permissions
+                final var allPermissions = new HashSet<String>(directPermissions);
+                allPermissions.addAll(rolePermissions);
 
-        // Expand roles to permissions
-        return expandRolesToPermissions(tokenRoles).map(rolePermissions -> {
-            // Combine direct permissions with role-expanded permissions
-            Set<String> allPermissions = new HashSet<>(directPermissions);
-            allPermissions.addAll(rolePermissions);
+                // Map permissions to Quarkus Security roles
+                final Set<String> securityRoles = Permission.toRoles(allPermissions);
 
-            // Map permissions to Quarkus Security roles
-            Set<String> securityRoles = Permission.toRoles(allPermissions);
+                // Build security identity
+                final var builder = QuarkusSecurityIdentity.builder()
+                        .setPrincipal(new JwtPrincipal(subject, claims))
+                        .addRoles(securityRoles)
+                        .addAttribute("claims", claims)
+                        .addAttribute("roles", tokenRoles)
+                        .addAttribute("permissions", allPermissions)
+                        .addAttribute("expiresAt", expiry);
 
-            // Build security identity
-            var builder = QuarkusSecurityIdentity.builder()
-                    .setPrincipal(new JwtPrincipal(subject, claims))
-                    .addRoles(securityRoles)
-                    .addAttribute("claims", claims)
-                    .addAttribute("roles", tokenRoles)
-                    .addAttribute("permissions", allPermissions)
-                    .addAttribute("expiresAt", expiry);
+                // Add StringPermission objects for @PermissionsAllowed checks
+                for (var role : securityRoles) {
+                    builder.addPermission(new StringPermission(role));
+                }
 
-            // Add StringPermission objects for @PermissionsAllowed checks
-            for (String role : securityRoles) {
-                builder.addPermission(new StringPermission(role));
-            }
+                LOG.debugv(
+                        "JWT authenticated: subject={0}, roles={1}, permissions={2}",
+                        subject, tokenRoles, allPermissions);
 
-            LOG.debugv(
-                    "JWT authenticated: subject={0}, roles={1}, permissions={2}", subject, tokenRoles, allPermissions);
-
-            return builder.build();
+                return builder.build();
+            });
         });
     }
 
@@ -134,7 +140,8 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
     /**
      * Principal representing an authenticated JWT user.
      *
-     * <p>Claims are stored as an immutable copy to prevent external modification.
+     * <p>
+     * Claims are stored as an immutable copy to prevent external modification.
      */
     public static class JwtPrincipal implements Principal {
         private final String subject;
@@ -149,7 +156,7 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
         @Override
         public String getName() {
             // Use name claim if available, otherwise use subject
-            Object name = claims.get("name");
+            final Object name = claims.get("name");
             return name != null ? name.toString() : subject;
         }
 
@@ -158,12 +165,20 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
         }
 
         /**
-         * Returns an unmodifiable view of the claims.
+         * Returns an unmodifiable view of all claims from the JWT.
+         *
+         * @return immutable map of claim names to values
          */
         public Map<String, Object> getClaims() {
             return claims;
         }
 
+        /**
+         * Returns a specific claim value by name.
+         *
+         * @param name the claim name
+         * @return the claim value, or null if not present
+         */
         public Object getClaim(String name) {
             return claims.get(name);
         }
