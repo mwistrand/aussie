@@ -1,4 +1,4 @@
-package aussie.adapter.out.auth.config;
+package aussie.core.model.auth;
 
 import java.util.List;
 import java.util.Map;

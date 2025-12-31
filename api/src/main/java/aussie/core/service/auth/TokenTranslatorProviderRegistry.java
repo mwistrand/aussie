@@ -46,14 +46,11 @@ public class TokenTranslatorProviderRegistry {
      * @return Selected provider
      * @throws IllegalStateException if no providers are available
      */
-    public TokenTranslatorProvider getProvider() {
-        synchronized (this) {
-            var result = selectedProvider;
-            if (result == null) {
-                selectedProvider = result = selectProvider();
-            }
-            return result;
+    public synchronized TokenTranslatorProvider getProvider() {
+        if (selectedProvider == null) {
+            selectedProvider = selectProvider();
         }
+        return selectedProvider;
     }
 
     private TokenTranslatorProvider selectProvider() {

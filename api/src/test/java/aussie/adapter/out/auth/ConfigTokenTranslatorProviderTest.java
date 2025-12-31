@@ -593,4 +593,54 @@ class ConfigTokenTranslatorProviderTest {
             assertEquals(Set.of("admin"), result.permissions());
         }
     }
+
+    @Nested
+    @DisplayName("Config reload")
+    class ConfigReload {
+
+        @Test
+        @DisplayName("should reload configuration from file")
+        void shouldReloadConfig() throws IOException {
+            // Initial config
+            initProviderWithConfig(
+                    """
+                    {
+                      "version": 1,
+                      "sources": [{ "name": "roles", "claim": "roles", "type": "array" }],
+                      "transforms": [],
+                      "mappings": {
+                        "roleToPermissions": { "admin": ["old.permission"] },
+                        "directPermissions": {}
+                      },
+                      "defaults": { "denyIfNoMatch": true, "includeUnmapped": false }
+                    }
+                    """);
+
+            var claims = Map.<String, Object>of("roles", List.of("admin"));
+            var result1 = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            assertEquals(Set.of("old.permission"), result1.permissions());
+
+            // Update config file
+            Files.writeString(
+                    configFile,
+                    """
+                    {
+                      "version": 2,
+                      "sources": [{ "name": "roles", "claim": "roles", "type": "array" }],
+                      "transforms": [],
+                      "mappings": {
+                        "roleToPermissions": { "admin": ["new.permission"] },
+                        "directPermissions": {}
+                      },
+                      "defaults": { "denyIfNoMatch": true, "includeUnmapped": false }
+                    }
+                    """);
+
+            // Reload
+            provider.reloadConfig();
+
+            var result2 = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            assertEquals(Set.of("new.permission"), result2.permissions());
+        }
+    }
 }

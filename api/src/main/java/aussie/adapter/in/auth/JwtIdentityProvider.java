@@ -144,7 +144,6 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
 
         public JwtPrincipal(String subject, Map<String, Object> claims) {
             this.subject = subject;
-            // Defensive copy to prevent external modification
             this.claims = claims != null ? Map.copyOf(claims) : Map.of();
         }
 

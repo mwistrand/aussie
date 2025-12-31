@@ -586,6 +586,33 @@ All admin endpoints require authentication. See [Authentication Configuration](#
 ./aussie keys revoke <key-id>
 ```
 
+### Translation Config Management
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/translation-config` | GET | List all config versions |
+| `/admin/translation-config` | POST | Upload a new config version |
+| `/admin/translation-config/active` | GET | Get the active config |
+| `/admin/translation-config/{versionId}` | GET | Get a specific version |
+| `/admin/translation-config/{versionId}/activate` | PUT | Activate a version |
+| `/admin/translation-config/rollback/{versionNumber}` | POST | Rollback to version |
+| `/admin/translation-config/{versionId}` | DELETE | Delete a version |
+| `/admin/translation-config/validate` | POST | Validate config |
+| `/admin/translation-config/test` | POST | Test translation |
+
+**CLI equivalents:**
+```bash
+aussie translation-config upload config.json
+aussie translation-config list
+aussie translation-config get
+aussie translation-config validate config.json
+aussie translation-config test --claims '{"roles": ["admin"]}'
+aussie translation-config activate <version-id>
+aussie translation-config rollback <version-number>
+aussie translation-config delete <version-id>
+```
+
+See [Token Translation](token-translation.md) for full documentation.
+
 ## Service Permission Policies
 
 Service permission policies control which permissions are allowed to perform specific operations on a service. This enables fine-grained access control where different teams or roles can have different levels of access to each service's configuration.

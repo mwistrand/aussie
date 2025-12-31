@@ -231,6 +231,93 @@ Set the provider name in configuration:
 aussie.auth.token-translation.provider=my-provider
 ```
 
+## Dynamic Configuration Management
+
+For production environments, use the API or CLI to manage translation configurations with version history and rollback support.
+
+### REST API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/translation-config` | GET | List all config versions |
+| `/admin/translation-config` | POST | Upload a new config version |
+| `/admin/translation-config/active` | GET | Get the active config |
+| `/admin/translation-config/{versionId}` | GET | Get a specific version |
+| `/admin/translation-config/{versionId}/activate` | PUT | Activate a version |
+| `/admin/translation-config/rollback/{versionNumber}` | POST | Rollback to version |
+| `/admin/translation-config/{versionId}` | DELETE | Delete a version |
+| `/admin/translation-config/validate` | POST | Validate config |
+| `/admin/translation-config/test` | POST | Test translation |
+
+#### Upload Config
+
+```bash
+curl -X POST http://localhost:8080/admin/translation-config \
+  -H "Content-Type: application/json" \
+  -d '{
+    "config": { ... },
+    "comment": "Added admin role mapping",
+    "activate": true
+  }'
+```
+
+#### Test Translation
+
+```bash
+curl -X POST http://localhost:8080/admin/translation-config/test \
+  -H "Content-Type: application/json" \
+  -d '{
+    "claims": { "realm_access": { "roles": ["admin"] } },
+    "issuer": "https://auth.example.com",
+    "subject": "user-123"
+  }'
+```
+
+### CLI Commands
+
+```bash
+# Upload a configuration
+aussie translation-config upload config.json --comment "Initial setup"
+
+# Upload and activate
+aussie translation-config upload config.json --comment "Fix mapping"
+
+# Upload without activating
+aussie translation-config upload config.json --no-activate
+
+# List all versions
+aussie translation-config list
+
+# Get active config
+aussie translation-config get
+
+# Get specific version
+aussie translation-config get <version-id>
+
+# Validate config file
+aussie translation-config validate config.json
+
+# Test translation
+aussie translation-config test --claims '{"roles": ["admin"]}'
+aussie translation-config test --claims-file sample-claims.json
+
+# Activate a version
+aussie translation-config activate <version-id>
+
+# Rollback to version number
+aussie translation-config rollback <version-number>
+
+# Delete a version
+aussie translation-config delete <version-id>
+```
+
+### Required Permissions
+
+| Operation | Permission |
+|-----------|------------|
+| Read (list, get, validate, test) | `translation.config.read` or `admin` |
+| Write (upload, activate, delete) | `translation.config.write` or `admin` |
+
 ## Environment Variables Reference
 
 | Variable | Default | Description |

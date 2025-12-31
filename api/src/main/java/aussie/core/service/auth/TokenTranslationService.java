@@ -13,7 +13,9 @@ import org.jboss.logging.Logger;
 import aussie.core.cache.CaffeineLocalCache;
 import aussie.core.cache.LocalCache;
 import aussie.core.config.TokenTranslationConfig;
+import aussie.core.model.auth.ClaimTranslator;
 import aussie.core.model.auth.TranslatedClaims;
+import aussie.core.model.auth.TranslationConfigSchema;
 
 /**
  * Service for translating external IdP token claims to Aussie's authorization model.
@@ -85,18 +87,29 @@ public class TokenTranslationService {
     }
 
     /**
-     * Builds a cache key from token claims.
+     * Translate token claims using a specific configuration schema.
      *
-     * <p>Uses the JWT ID (jti) if present, otherwise creates a composite key
-     * from issuer, subject, and issued-at time.
+     * <p>This method does not cache results and is intended for testing configurations.
+     *
+     * @param schema  the translation configuration to use
+     * @param issuer  the token issuer (iss claim)
+     * @param subject the token subject (sub claim)
+     * @param claims  all claims from the validated token
+     * @return translated roles and permissions
      */
+    public Uni<TranslatedClaims> translateWithConfig(
+            TranslationConfigSchema schema, String issuer, String subject, Map<String, Object> claims) {
+
+        LOG.debugf("Testing translation with config: issuer=%s, subject=%s", issuer, subject);
+        return Uni.createFrom().item(ClaimTranslator.translate(schema, claims));
+    }
+
     private String buildCacheKey(String issuer, String subject, Map<String, Object> claims) {
         final var jti = claims.get("jti");
         if (jti != null) {
             return jti.toString();
         }
 
-        // Fall back to composite key
         final var iat = claims.get("iat");
         final var iatStr = iat != null ? iat.toString() : "0";
         return issuer + ":" + subject + ":" + iatStr;

@@ -117,7 +117,13 @@ public enum Permission {
     PERMISSIONS_READ("service.permissions.read"),
 
     /** Permission policy update operation (alias for SERVICE_PERMISSIONS_WRITE). */
-    PERMISSIONS_WRITE("service.permissions.write");
+    PERMISSIONS_WRITE("service.permissions.write"),
+
+    /** Permission for reading token translation configuration. */
+    TRANSLATION_CONFIG_READ("translation.config.read"),
+
+    /** Permission for writing/managing token translation configuration. */
+    TRANSLATION_CONFIG_WRITE("translation.config.write");
 
     // ========================================================================
     // String constants for use in annotations (compile-time constants)
@@ -168,6 +174,10 @@ public enum Permission {
     public static final String KEYS_WRITE_VALUE = "keys.write";
     /** Keys rotate permission value. */
     public static final String KEYS_ROTATE_VALUE = "keys.rotate";
+    /** Translation config read permission value. */
+    public static final String TRANSLATION_CONFIG_READ_VALUE = "translation.config.read";
+    /** Translation config write permission value. */
+    public static final String TRANSLATION_CONFIG_WRITE_VALUE = "translation.config.write";
 
     // ========================================================================
     // Static set of all permission values (populated at class initialization)
