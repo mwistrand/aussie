@@ -15,15 +15,13 @@ import aussie.spi.TokenTranslatorProvider;
 /**
  * Registry for token translator providers.
  *
- * <p>
- * Discovers available providers via CDI and selects the appropriate one
+ * <p>Discovers available providers via CDI and selects the appropriate one
  * based on configuration and availability.
  *
- * <p>
- * Selection order:
+ * <p>Selection order:
  * <ol>
- * <li>Configured provider (aussie.auth.token-translation.provider)</li>
- * <li>Highest priority available provider</li>
+ *   <li>Configured provider (aussie.auth.token-translation.provider)</li>
+ *   <li>Highest priority available provider</li>
  * </ol>
  */
 @ApplicationScoped

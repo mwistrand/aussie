@@ -1,5 +1,8 @@
 package aussie.core.config;
 
+import java.time.Duration;
+import java.util.Optional;
+
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
 
@@ -50,6 +53,8 @@ public interface TokenTranslationConfig {
      * <p>Available providers:
      * <ul>
      *   <li>default - Extracts from standard "roles" and "permissions" claims</li>
+     *   <li>config - JSON/YAML configuration-driven translation</li>
+     *   <li>remote - HTTP-based external translation service</li>
      *   <li>Custom SPI implementations</li>
      * </ul>
      *
@@ -63,6 +68,16 @@ public interface TokenTranslationConfig {
      */
     @WithDefault("default")
     String provider();
+
+    /**
+     * Configuration for the config-driven translator.
+     */
+    Config config();
+
+    /**
+     * Configuration for the remote translator.
+     */
+    Remote remote();
 
     /**
      * Cache configuration for translated claims.
@@ -92,5 +107,63 @@ public interface TokenTranslationConfig {
          */
         @WithDefault("10000")
         long maxSize();
+    }
+
+    /**
+     * Settings for the config-driven translator provider.
+     */
+    interface Config {
+        /**
+         * Path to the translation configuration file (JSON or YAML).
+         *
+         * <p>The file defines how to extract claims from external IdP tokens
+         * and map them to Aussie's authorization model.
+         *
+         * <p>Example: {@code /etc/aussie/token-translation.json}
+         *
+         * @return path to the configuration file
+         */
+        Optional<String> path();
+    }
+
+    /**
+     * Settings for the remote translator provider.
+     */
+    interface Remote {
+        /**
+         * URL of the remote translation service.
+         *
+         * <p>The service must accept POST requests with JSON body containing
+         * issuer, subject, and claims, and return roles and permissions.
+         *
+         * @return URL of the translation service
+         */
+        Optional<String> url();
+
+        /**
+         * Request timeout for the remote translation service.
+         *
+         * @return timeout duration (default: 100ms)
+         */
+        @WithDefault("PT0.1S")
+        Duration timeout();
+
+        /**
+         * Behavior when the remote service fails.
+         *
+         * @return fail mode (default: DENY)
+         */
+        @WithDefault("deny")
+        FailMode failMode();
+
+        /**
+         * How to handle remote translation failures.
+         */
+        enum FailMode {
+            /** Deny access when translation fails */
+            deny,
+            /** Allow with empty roles/permissions when translation fails */
+            allow_empty
+        }
     }
 }

@@ -25,20 +25,16 @@ import aussie.core.service.auth.TokenTranslationService;
 import aussie.core.service.auth.TokenValidationService;
 
 /**
- * Quarkus identity provider that validates JWT tokens from configured OIDC
- * providers.
+ * Quarkus identity provider that validates JWT tokens from configured OIDC providers.
  *
- * <p>
- * This provider validates JWT tokens via {@link TokenValidationService} and
- * maps
+ * <p>This provider validates JWT tokens via {@link TokenValidationService} and maps
  * the token's claims to Quarkus Security roles.
  *
- * <p>
- * The resulting {@link SecurityIdentity} contains:
+ * <p>The resulting {@link SecurityIdentity} contains:
  * <ul>
- * <li>Principal name: The subject (sub) claim from the JWT</li>
- * <li>Roles: Mapped from JWT roles/permissions claims</li>
- * <li>Attributes: All JWT claims including roles and permissions</li>
+ *   <li>Principal name: The subject (sub) claim from the JWT</li>
+ *   <li>Roles: Mapped from JWT roles/permissions claims</li>
+ *   <li>Attributes: All JWT claims including roles and permissions</li>
  * </ul>
  */
 @ApplicationScoped
@@ -140,8 +136,7 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
     /**
      * Principal representing an authenticated JWT user.
      *
-     * <p>
-     * Claims are stored as an immutable copy to prevent external modification.
+     * <p>Claims are stored as an immutable copy to prevent external modification.
      */
     public static class JwtPrincipal implements Principal {
         private final String subject;

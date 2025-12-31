@@ -14,6 +14,7 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 - [Per-Route Authentication](#per-route-authentication)
 - [WebSocket Configuration](websocket-configuration.md)
 - [Token Revocation](token-revocation.md)
+- [Token Translation](token-translation.md)
 - [PKCE](pkce.md)
 - [Admin API](#admin-api)
 - [Service Permission Policies](#service-permission-policies)
