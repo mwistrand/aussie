@@ -1,0 +1,2 @@
+aussie.adapter.out.storage.cassandra.CassandraTranslationConfigStorageProvider
+aussie.adapter.out.storage.memory.InMemoryTranslationConfigStorageProvider
