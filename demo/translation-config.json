@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "name": "groups",
+      "claim": "groups",
+      "type": "array"
+    },
+    {
+      "name": "permissions",
+      "claim": "permissions",
+      "type": "array"
+    }
+  ],
+  "transforms": [],
+  "mappings": {
+    "roleToPermissions": {
+      "platform-team": [
+        "*"
+      ],
+      "demo-service.admin": [
+        "demo-service.config.*",
+        "demo-service.permissions.*",
+        "translation.config.read",
+        "translation.config.write",
+        "admin"
+      ],
+      "demo-service.lead": [
+        "demo-service.config.read",
+        "demo-service.config.update",
+        "demo-service.permissions.write"
+      ],
+      "demo-service.dev": [
+        "demo-service.config.read",
+        "demo-service.config.update"
+      ],
+      "demo-service.readonly": [
+        "demo-service.config.read"
+      ],
+      "admin": [
+        "*"
+      ]
+    },
+    "directPermissions": {
+      "*": "*"
+    }
+  },
+  "defaults": {
+    "denyIfNoMatch": false,
+    "includeUnmapped": true
+  }
+}

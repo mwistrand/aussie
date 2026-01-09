@@ -220,7 +220,7 @@ Platform teams must provide a **translation layer** between the CLI and their Id
 
 1. Receives authentication requests from the Aussie CLI
 2. Delegates to the organization's IdP (SAML, OIDC, etc.)
-3. Maps IdP claims (roles, groups) to Aussie groups
+3. Maps IdP claims (roles, groups) to Aussie roles
 4. Returns an Aussie-compatible JWT
 
 #### Required Endpoints
@@ -265,7 +265,7 @@ Your translation layer must return a JWT with this structure:
 
 ### Group Mapping Example
 
-Map your IdP roles/groups to Aussie groups in your translation layer:
+Map your IdP roles/groups to Aussie roles in your translation layer:
 
 ```javascript
 // Example mapping in translation layer
@@ -386,13 +386,13 @@ Groups can be managed via the CLI in addition to the Admin API:
 
 #### Create a group
 ```bash
-aussie groups create --id demo-service.admin \
+aussie roles create --id demo-service.admin \
   --display-name "Demo Service Admins" \
   --description "Full admin access for demo-service" \
   --permissions "service.config.update,service.config.read,service.config.delete,service.permissions.write"
 
 # Create with minimal options
-aussie groups create --id demo-service.dev --permissions "service.config.update,service.config.read"
+aussie roles create --id demo-service.dev --permissions "service.config.update,service.config.read"
 ```
 
 | Flag | Short | Required | Description |
@@ -404,21 +404,21 @@ aussie groups create --id demo-service.dev --permissions "service.config.update,
 
 #### List groups
 ```bash
-aussie groups list
+aussie roles list
 ```
 
 #### Get a group
 ```bash
-aussie groups get demo-service.admin
+aussie roles get demo-service.admin
 ```
 
 #### Update a group
 ```bash
 # Update permissions
-aussie groups update demo-service.admin --permissions "*" # DANGEROUS
+aussie roles update demo-service.admin --permissions "*" # DANGEROUS
 
 # Update display name
-aussie groups update demo-service.admin --display-name "Demo Service Administrators"
+aussie roles update demo-service.admin --display-name "Demo Service Administrators"
 ```
 
 | Flag | Short | Description |
@@ -429,7 +429,7 @@ aussie groups update demo-service.admin --display-name "Demo Service Administrat
 
 #### Delete a group
 ```bash
-aussie groups delete demo-service.readonly
+aussie roles delete demo-service.readonly
 ```
 
 ## Access Control
