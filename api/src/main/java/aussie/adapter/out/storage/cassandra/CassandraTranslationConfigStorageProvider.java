@@ -29,7 +29,7 @@ import aussie.spi.TranslationConfigStorageProvider;
  *   <li>aussie.storage.cassandra.password - Password for authentication (optional)</li>
  * </ul>
  */
-public class CassandraTranslationConfigStorageProvider implements TranslationConfigStorageProvider {
+public class CassandraTranslationConfigStorageProvider implements TranslationConfigStorageProvider, AutoCloseable {
 
     private static final Logger LOG = Logger.getLogger(CassandraTranslationConfigStorageProvider.class);
 
@@ -65,6 +65,14 @@ public class CassandraTranslationConfigStorageProvider implements TranslationCon
         this.session = buildSession(config);
         LOG.info("Created Cassandra translation config repository");
         return new CassandraTranslationConfigRepository(session);
+    }
+
+    @Override
+    public void close() {
+        if (session != null && !session.isClosed()) {
+            LOG.info("Closing Cassandra session for translation config storage");
+            session.close();
+        }
     }
 
     @Override

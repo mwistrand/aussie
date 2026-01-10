@@ -1,6 +1,7 @@
 package aussie.adapter.out.storage.redis;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -46,11 +47,15 @@ public class RedisTranslationConfigCache implements TranslationConfigCache {
 
     private static final TypeReference<List<TranslationConfigVersion>> VERSION_LIST_TYPE = new TypeReference<>() {};
 
+    private static final int SCAN_BATCH_SIZE = 100;
+
+    private final ReactiveRedisDataSource dataSource;
     private final ReactiveValueCommands<String, String> valueCommands;
     private final ReactiveKeyCommands<String> keyCommands;
     private final Duration defaultTtl;
 
     public RedisTranslationConfigCache(ReactiveRedisDataSource ds, Duration defaultTtl) {
+        this.dataSource = ds;
         this.valueCommands = ds.value(String.class, String.class);
         this.keyCommands = ds.key(String.class);
         this.defaultTtl = defaultTtl;
@@ -101,12 +106,40 @@ public class RedisTranslationConfigCache implements TranslationConfigCache {
 
     @Override
     public Uni<Void> invalidateAll() {
-        return keyCommands.keys(KEY_PREFIX + "*").flatMap(keys -> {
-            if (keys.isEmpty()) {
-                return Uni.createFrom().voidItem();
-            }
-            return keyCommands.del(keys.toArray(new String[0])).replaceWithVoid();
-        });
+        // Use SCAN instead of KEYS to avoid blocking Redis with large key sets
+        return scanAndDeleteKeys("0");
+    }
+
+    /**
+     * Recursively scans and deletes keys matching the cache prefix using SCAN.
+     * SCAN is safer than KEYS because it doesn't block Redis for the entire operation.
+     */
+    private Uni<Void> scanAndDeleteKeys(String cursor) {
+        return dataSource
+                .execute("SCAN", cursor, "MATCH", KEY_PREFIX + "*", "COUNT", String.valueOf(SCAN_BATCH_SIZE))
+                .flatMap(response -> {
+                    // SCAN returns an array: [cursor, [keys...]]
+                    final var newCursor = response.get(0).toString();
+                    final var keysResponse = response.get(1);
+
+                    final List<String> keys = new ArrayList<>();
+                    for (var i = 0; i < keysResponse.size(); i++) {
+                        keys.add(keysResponse.get(i).toString());
+                    }
+
+                    // Delete found keys if any
+                    final Uni<Void> deleteUni = keys.isEmpty()
+                            ? Uni.createFrom().voidItem()
+                            : keyCommands.del(keys.toArray(new String[0])).replaceWithVoid();
+
+                    // Continue scanning if cursor is not "0"
+                    return deleteUni.flatMap(v -> {
+                        if ("0".equals(newCursor)) {
+                            return Uni.createFrom().voidItem();
+                        }
+                        return scanAndDeleteKeys(newCursor);
+                    });
+                });
     }
 
     @Override

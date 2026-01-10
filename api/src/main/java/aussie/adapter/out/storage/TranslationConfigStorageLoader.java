@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.ServiceLoader;
 
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.Produces;
@@ -122,6 +123,26 @@ public class TranslationConfigStorageLoader {
         getCacheProvider().flatMap(p -> p.createHealthIndicator(config)).ifPresent(indicators::add);
 
         return indicators;
+    }
+
+    @PreDestroy
+    void shutdown() {
+        if (storageProvider instanceof AutoCloseable closeable) {
+            try {
+                LOG.info("Closing translation config storage provider");
+                closeable.close();
+            } catch (Exception e) {
+                LOG.warn("Error closing storage provider", e);
+            }
+        }
+        if (cacheProvider instanceof AutoCloseable closeable) {
+            try {
+                LOG.info("Closing translation config cache provider");
+                closeable.close();
+            } catch (Exception e) {
+                LOG.warn("Error closing cache provider", e);
+            }
+        }
     }
 
     private synchronized TranslationConfigStorageProvider getStorageProvider() {

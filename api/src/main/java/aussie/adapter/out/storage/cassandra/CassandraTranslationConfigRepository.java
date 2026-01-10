@@ -5,8 +5,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Executor;
+import java.util.function.Supplier;
 
 import com.datastax.oss.driver.api.core.CqlSession;
+import com.datastax.oss.driver.api.core.cql.BoundStatement;
 import com.datastax.oss.driver.api.core.cql.PreparedStatement;
 import com.datastax.oss.driver.api.core.cql.Row;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -33,7 +35,6 @@ import aussie.core.port.out.TranslationConfigRepository;
  *     id text PRIMARY KEY,
  *     version int,
  *     config_json text,
- *     active boolean,
  *     created_by text,
  *     created_at timestamp,
  *     comment text
@@ -45,11 +46,15 @@ import aussie.core.port.out.TranslationConfigRepository;
  *     updated_at timestamp
  * );
  * </pre>
+ *
+ * <p>The active version is determined by the {@code active_version_id} entry in the
+ * metadata table, not by a row-level flag. This ensures consistency and avoids stale data.
  */
 public class CassandraTranslationConfigRepository implements TranslationConfigRepository {
 
     private static final String ACTIVE_VERSION_KEY = "active_version_id";
     private static final String VERSION_COUNTER_KEY = "version_counter";
+    private static final int MAX_CAS_RETRIES = 5;
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
             .registerModule(new Jdk8Module())
@@ -63,6 +68,8 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
     private final PreparedStatement deleteStmt;
     private final PreparedStatement getMetadataStmt;
     private final PreparedStatement setMetadataStmt;
+    private final PreparedStatement casMetadataStmt;
+    private final PreparedStatement insertMetadataStmt;
 
     public CassandraTranslationConfigRepository(CqlSession session) {
         this.session = session;
@@ -73,13 +80,15 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
         this.deleteStmt = prepareDelete();
         this.getMetadataStmt = prepareGetMetadata();
         this.setMetadataStmt = prepareSetMetadata();
+        this.casMetadataStmt = prepareCasMetadata();
+        this.insertMetadataStmt = prepareInsertMetadata();
     }
 
     private PreparedStatement prepareInsertVersion() {
         return session.prepare(
                 """
-                INSERT INTO translation_config_versions (id, version, config_json, active, created_by, created_at, comment)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO translation_config_versions (id, version, config_json, created_by, created_at, comment)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """);
     }
 
@@ -111,6 +120,25 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
                 """);
     }
 
+    private PreparedStatement prepareCasMetadata() {
+        return session.prepare(
+                """
+                UPDATE translation_config_metadata
+                SET value = ?, updated_at = toTimestamp(now())
+                WHERE key = ?
+                IF value = ?
+                """);
+    }
+
+    private PreparedStatement prepareInsertMetadata() {
+        return session.prepare(
+                """
+                INSERT INTO translation_config_metadata (key, value, updated_at)
+                VALUES (?, ?, toTimestamp(now()))
+                IF NOT EXISTS
+                """);
+    }
+
     @Override
     public Uni<Void> save(TranslationConfigVersion version) {
         final var executor = getContextExecutor();
@@ -121,7 +149,6 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
                             version.id(),
                             version.version(),
                             configJson,
-                            version.active(),
                             version.createdBy(),
                             version.createdAt(),
                             version.comment());
@@ -209,16 +236,48 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
 
     @Override
     public Uni<Integer> getNextVersionNumber() {
+        return attemptVersionIncrement(0);
+    }
+
+    /**
+     * Attempts to atomically increment the version counter using LWT (Lightweight Transactions).
+     * Uses compare-and-swap to prevent race conditions when multiple instances try to
+     * increment the counter simultaneously.
+     */
+    private Uni<Integer> attemptVersionIncrement(int attempt) {
+        if (attempt >= MAX_CAS_RETRIES) {
+            return Uni.createFrom()
+                    .failure(new RuntimeException(
+                            "Failed to claim next version number after " + MAX_CAS_RETRIES + " attempts"));
+        }
+
         final var executor = getContextExecutor();
         return getMetadataValue(VERSION_COUNTER_KEY).flatMap(current -> {
             final var nextVersion = current.map(v -> Integer.parseInt(v) + 1).orElse(1);
+
+            // Use different statement depending on whether counter exists
+            final Supplier<BoundStatement> boundSupplier;
+            if (current.isEmpty()) {
+                // First version: use INSERT IF NOT EXISTS
+                boundSupplier = () -> insertMetadataStmt.bind(VERSION_COUNTER_KEY, String.valueOf(nextVersion));
+            } else {
+                // Subsequent versions: use UPDATE IF value = current
+                boundSupplier =
+                        () -> casMetadataStmt.bind(String.valueOf(nextVersion), VERSION_COUNTER_KEY, current.get());
+            }
+
             return Uni.createFrom()
-                    .completionStage(() -> {
-                        final var bound = setMetadataStmt.bind(VERSION_COUNTER_KEY, String.valueOf(nextVersion));
-                        return session.executeAsync(bound).toCompletableFuture();
-                    })
+                    .completionStage(
+                            () -> session.executeAsync(boundSupplier.get()).toCompletableFuture())
                     .emitOn(executor)
-                    .map(rs -> nextVersion);
+                    .flatMap(rs -> {
+                        final var wasApplied = rs.wasApplied();
+                        if (wasApplied) {
+                            return Uni.createFrom().item(nextVersion);
+                        }
+                        // CAS failed: another instance won the race, retry
+                        return attemptVersionIncrement(attempt + 1);
+                    });
         });
     }
 
@@ -278,11 +337,12 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
     private TranslationConfigVersion fromRow(Row row) {
         final var configJson = row.getString("config_json");
         final var config = deserializeConfig(configJson);
+        // Active state is determined by metadata lookup, not the row itself
         return new TranslationConfigVersion(
                 row.getString("id"),
                 row.getInt("version"),
                 config,
-                row.getBoolean("active"),
+                false,
                 row.getString("created_by"),
                 row.getInstant("created_at"),
                 row.getString("comment"));
