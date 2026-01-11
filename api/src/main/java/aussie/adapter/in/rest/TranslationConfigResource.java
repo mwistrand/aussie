@@ -22,6 +22,7 @@ import jakarta.ws.rs.core.SecurityContext;
 
 import io.quarkus.security.PermissionsAllowed;
 import io.smallrye.mutiny.Uni;
+import org.jboss.logging.Logger;
 
 import aussie.adapter.in.dto.TranslationConfigUploadDto;
 import aussie.adapter.in.dto.TranslationConfigValidationDto;
@@ -55,6 +56,8 @@ import aussie.core.service.auth.TranslationConfigService.ConfigValidationExcepti
 @Consumes(MediaType.APPLICATION_JSON)
 public class TranslationConfigResource {
 
+    private static final Logger LOG = Logger.getLogger(TranslationConfigResource.class);
+
     private final TranslationConfigService configService;
     private final TokenTranslationService translationService;
 
@@ -83,6 +86,9 @@ public class TranslationConfigResource {
 
         return configService
                 .upload(request.config(), createdBy, request.comment(), request.activate())
+                .invoke(version -> LOG.infof(
+                        "Translation config uploaded: versionId=%s, version=%d, activate=%b, actor=%s",
+                        version.id(), version.version(), request.activate(), createdBy))
                 .map(version -> Response.status(Response.Status.CREATED)
                         .entity(TranslationConfigVersionDto.fromModel(version))
                         .build())
@@ -206,14 +212,17 @@ public class TranslationConfigResource {
      * Activate a specific configuration version.
      *
      * @param versionId the version ID to activate
+     * @param ctx security context for determining the actor
      * @return 204 No Content if activated, or 404 if not found
      */
     @PUT
     @Path("/{versionId}/activate")
     @PermissionsAllowed({Permission.TRANSLATION_CONFIG_WRITE_VALUE, Permission.ADMIN_VALUE})
-    public Uni<Response> activateVersion(@PathParam("versionId") String versionId) {
+    public Uni<Response> activateVersion(@PathParam("versionId") String versionId, @Context SecurityContext ctx) {
+        final var actor = getUserId(ctx);
         return configService.activate(versionId).map(activated -> {
             if (activated) {
+                LOG.infof("Translation config activated: versionId=%s, actor=%s", versionId, actor);
                 return Response.noContent().build();
             } else {
                 throw GatewayProblem.resourceNotFound("TranslationConfigVersion", versionId);
@@ -225,16 +234,22 @@ public class TranslationConfigResource {
      * Rollback to a specific version number.
      *
      * @param versionNumber the version number to rollback to
+     * @param ctx security context for determining the actor
      * @return the activated version or 404 if not found
      */
     @POST
     @Path("/rollback/{versionNumber}")
     @PermissionsAllowed({Permission.TRANSLATION_CONFIG_WRITE_VALUE, Permission.ADMIN_VALUE})
-    public Uni<Response> rollback(@PathParam("versionNumber") int versionNumber) {
-        return configService.rollback(versionNumber).map(opt -> opt.map(
-                        version -> Response.ok(TranslationConfigVersionDto.fromModel(version))
+    public Uni<Response> rollback(@PathParam("versionNumber") int versionNumber, @Context SecurityContext ctx) {
+        final var actor = getUserId(ctx);
+        return configService
+                .rollback(versionNumber)
+                .invoke(opt -> opt.ifPresent(version -> LOG.infof(
+                        "Translation config rollback: versionNumber=%d, versionId=%s, actor=%s",
+                        versionNumber, version.id(), actor)))
+                .map(opt -> opt.map(version -> Response.ok(TranslationConfigVersionDto.fromModel(version))
                                 .build())
-                .orElseThrow(() -> GatewayProblem.notFound("Version " + versionNumber + " not found")));
+                        .orElseThrow(() -> GatewayProblem.notFound("Version " + versionNumber + " not found")));
     }
 
     /**
@@ -243,14 +258,17 @@ public class TranslationConfigResource {
      * <p>Active versions cannot be deleted.
      *
      * @param versionId the version ID to delete
+     * @param ctx security context for determining the actor
      * @return 204 No Content if deleted, or 404 if not found
      */
     @DELETE
     @Path("/{versionId}")
     @PermissionsAllowed({Permission.TRANSLATION_CONFIG_WRITE_VALUE, Permission.ADMIN_VALUE})
-    public Uni<Response> deleteVersion(@PathParam("versionId") String versionId) {
+    public Uni<Response> deleteVersion(@PathParam("versionId") String versionId, @Context SecurityContext ctx) {
+        final var actor = getUserId(ctx);
         return configService.delete(versionId).map(deleted -> {
             if (deleted) {
+                LOG.infof("Translation config deleted: versionId=%s, actor=%s", versionId, actor);
                 return Response.noContent().build();
             } else {
                 throw GatewayProblem.resourceNotFound("TranslationConfigVersion", versionId);
@@ -291,13 +309,16 @@ public class TranslationConfigResource {
      * Use this after updating translation configuration to ensure
      * the new configuration takes effect immediately.
      *
+     * @param ctx security context for determining the actor
      * @return 204 No Content
      */
     @POST
     @Path("/cache/invalidate")
     @PermissionsAllowed({Permission.TRANSLATION_CONFIG_WRITE_VALUE, Permission.ADMIN_VALUE})
-    public Uni<Response> invalidateCache() {
+    public Uni<Response> invalidateCache(@Context SecurityContext ctx) {
+        final var actor = getUserId(ctx);
         translationService.invalidateCache();
+        LOG.infof("Translation cache invalidated: actor=%s", actor);
         return Uni.createFrom().item(Response.noContent().build());
     }
 

@@ -77,10 +77,13 @@ public class ConfigTokenTranslatorProvider implements TokenTranslatorProvider {
         final var builder = HealthCheckResponse.named("token-translator-config").withData("provider", NAME);
 
         if (available && schema != null) {
+            final int sourcesCount = schema.sources() != null ? schema.sources().size() : 0;
+            final int transformsCount =
+                    schema.transforms() != null ? schema.transforms().size() : 0;
             builder.up()
                     .withData("configVersion", schema.version())
-                    .withData("sourcesCount", schema.sources().size())
-                    .withData("transformsCount", schema.transforms().size());
+                    .withData("sourcesCount", sourcesCount)
+                    .withData("transformsCount", transformsCount);
         } else {
             builder.down().withData("reason", "Configuration not loaded");
         }
@@ -122,15 +125,14 @@ public class ConfigTokenTranslatorProvider implements TokenTranslatorProvider {
             final var duration = System.currentTimeMillis() - startTime;
             metrics.recordConfigReload(true);
 
+            final int sourcesCount = schema.sources() != null ? schema.sources().size() : 0;
+            final int transformsCount =
+                    schema.transforms() != null ? schema.transforms().size() : 0;
+            final int mappingsCount = getMappingsCount(schema);
+
             LOG.infof(
                     "Loaded token translation config: path=%s, version=%d, sources=%d, transforms=%d, mappings=%d, duration=%dms",
-                    path,
-                    schema.version(),
-                    schema.sources().size(),
-                    schema.transforms().size(),
-                    schema.mappings().roleToPermissions().size()
-                            + schema.mappings().directPermissions().size(),
-                    duration);
+                    path, schema.version(), sourcesCount, transformsCount, mappingsCount, duration);
         } catch (IOException e) {
             final var duration = System.currentTimeMillis() - startTime;
             metrics.recordConfigReload(false);
@@ -144,5 +146,18 @@ public class ConfigTokenTranslatorProvider implements TokenTranslatorProvider {
      */
     public void reloadConfig() {
         config.config().path().ifPresent(this::loadConfig);
+    }
+
+    private int getMappingsCount(TranslationConfigSchema schema) {
+        if (schema.mappings() == null) {
+            return 0;
+        }
+        final int roleToPermissions = schema.mappings().roleToPermissions() != null
+                ? schema.mappings().roleToPermissions().size()
+                : 0;
+        final int directPermissions = schema.mappings().directPermissions() != null
+                ? schema.mappings().directPermissions().size()
+                : 0;
+        return roleToPermissions + directPermissions;
     }
 }

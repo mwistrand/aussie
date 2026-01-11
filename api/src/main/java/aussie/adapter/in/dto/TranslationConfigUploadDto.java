@@ -7,11 +7,11 @@ import aussie.core.model.auth.TranslationConfigSchema;
  *
  * @param config   the translation configuration schema
  * @param comment  optional description of changes
- * @param activate whether to immediately activate this version
+ * @param activate whether to immediately activate this version (defaults to false)
  */
 public record TranslationConfigUploadDto(TranslationConfigSchema config, String comment, boolean activate) {
 
     public TranslationConfigUploadDto(TranslationConfigSchema config, String comment) {
-        this(config, comment, true);
+        this(config, comment, false);
     }
 }

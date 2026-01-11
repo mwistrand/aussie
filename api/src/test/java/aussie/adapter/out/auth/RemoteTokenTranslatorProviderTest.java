@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import io.vertx.mutiny.core.Vertx;
@@ -54,11 +55,13 @@ class RemoteTokenTranslatorProviderTest {
 
     private WireMockServer wireMockServer;
     private Vertx vertx;
+    private ObjectMapper objectMapper;
     private RemoteTokenTranslatorProvider provider;
 
     @BeforeEach
     void setUp() {
         vertx = Vertx.vertx();
+        objectMapper = new ObjectMapper();
         wireMockServer = new WireMockServer(WireMockConfiguration.options().dynamicPort());
         wireMockServer.start();
 
@@ -79,7 +82,7 @@ class RemoteTokenTranslatorProviderTest {
 
     private void initProvider(String url) {
         lenient().when(remoteConfig.url()).thenReturn(Optional.ofNullable(url));
-        provider = new RemoteTokenTranslatorProvider(vertx, config, metrics);
+        provider = new RemoteTokenTranslatorProvider(vertx, config, metrics, objectMapper);
     }
 
     @Nested

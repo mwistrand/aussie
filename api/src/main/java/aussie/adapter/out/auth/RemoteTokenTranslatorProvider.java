@@ -8,6 +8,7 @@ import java.util.Set;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.Vertx;
@@ -58,12 +59,15 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
     private final WebClient webClient;
     private final TokenTranslationConfig config;
     private final TokenTranslationMetrics metrics;
+    private final ObjectMapper objectMapper;
 
     @Inject
-    public RemoteTokenTranslatorProvider(Vertx vertx, TokenTranslationConfig config, TokenTranslationMetrics metrics) {
+    public RemoteTokenTranslatorProvider(
+            Vertx vertx, TokenTranslationConfig config, TokenTranslationMetrics metrics, ObjectMapper objectMapper) {
         this.webClient = WebClient.create(vertx);
         this.config = config;
         this.metrics = metrics;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -101,14 +105,22 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public Uni<TranslatedClaims> translate(String issuer, String subject, Map<String, Object> claims) {
         final var url = config.remote().url().orElseThrow(() -> new IllegalStateException("Remote URL not configured"));
         final var startTime = System.currentTimeMillis();
 
-        LOG.debugf("Calling remote translation service: url=%s, issuer=%s, subject=%s", url, issuer, subject);
+        LOG.debugf(
+                "Calling remote translation service: url=%s, issuer=%s, subject=%s, claimsCount=%d",
+                url, issuer, subject, claims.size());
 
-        final var request =
-                new JsonObject().put("issuer", issuer).put("subject", subject).put("claims", new JsonObject(claims));
+        // Use ObjectMapper to safely convert claims to JSON-compatible types
+        // This handles non-JSON-native types like Instant, custom objects, etc.
+        final Map<String, Object> jsonSafeClaims = objectMapper.convertValue(claims, Map.class);
+        final var request = new JsonObject()
+                .put("issuer", issuer)
+                .put("subject", subject)
+                .put("claims", new JsonObject(jsonSafeClaims));
 
         final var timeout = config.remote().timeout().toMillis();
 
@@ -124,8 +136,8 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
 
                     if (response.statusCode() != 200) {
                         LOG.warnf(
-                                "Remote translation failed: url=%s, status=%d, duration=%dms, body=%s",
-                                url, response.statusCode(), duration, response.bodyAsString());
+                                "Remote translation failed: url=%s, status=%d, duration=%dms",
+                                url, response.statusCode(), duration);
                         throw new RemoteTranslationException(
                                 "Remote translation service returned status " + response.statusCode());
                     }
@@ -155,8 +167,6 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
     private TranslatedClaims parseResponse(JsonObject json) {
         final var roles = extractStringSet(json, "roles");
         final var permissions = extractStringSet(json, "permissions");
-
-        LOG.debugf("Remote translation response: roles=%s, permissions=%s", roles, permissions);
 
         return new TranslatedClaims(roles, permissions, Map.of());
     }
