@@ -32,7 +32,7 @@ public class TokenTranslatorProviderRegistry {
     private final Instance<TokenTranslatorProvider> providers;
     private final TokenTranslationConfig config;
 
-    private volatile TokenTranslatorProvider selectedProvider;
+    private TokenTranslatorProvider selectedProvider;
 
     @Inject
     public TokenTranslatorProviderRegistry(Instance<TokenTranslatorProvider> providers, TokenTranslationConfig config) {

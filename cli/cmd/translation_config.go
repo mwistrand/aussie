@@ -19,7 +19,9 @@ Examples:
   aussie translation-config upload config.json --activate --comment "Initial config"
   aussie translation-config validate config.json
   aussie translation-config rollback 1
-  aussie translation-config test --issuer "https://auth.example.com" --subject "user-123" --claims '{"groups": ["admin"]}'`,
+  aussie translation-config test --issuer "https://auth.example.com" --subject "user-123" --claims '{"groups": ["admin"]}'
+  aussie translation-config status
+  aussie translation-config cache-invalidate`,
 }
 
 func init() {

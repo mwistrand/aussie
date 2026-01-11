@@ -15,6 +15,7 @@ import io.vertx.mutiny.ext.web.client.WebClient;
 import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.out.telemetry.TokenTranslationMetrics;
 import aussie.core.config.TokenTranslationConfig;
 import aussie.core.config.TokenTranslationConfig.Remote.FailMode;
 import aussie.core.model.auth.TranslatedClaims;
@@ -56,11 +57,13 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
 
     private final WebClient webClient;
     private final TokenTranslationConfig config;
+    private final TokenTranslationMetrics metrics;
 
     @Inject
-    public RemoteTokenTranslatorProvider(Vertx vertx, TokenTranslationConfig config) {
+    public RemoteTokenTranslatorProvider(Vertx vertx, TokenTranslationConfig config, TokenTranslationMetrics metrics) {
         this.webClient = WebClient.create(vertx);
         this.config = config;
+        this.metrics = metrics;
     }
 
     @Override
@@ -100,6 +103,7 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
     @Override
     public Uni<TranslatedClaims> translate(String issuer, String subject, Map<String, Object> claims) {
         final var url = config.remote().url().orElseThrow(() -> new IllegalStateException("Remote URL not configured"));
+        final var startTime = System.currentTimeMillis();
 
         LOG.debugf("Calling remote translation service: url=%s, issuer=%s, subject=%s", url, issuer, subject);
 
@@ -115,14 +119,34 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
                 .putHeader("Accept", "application/json")
                 .sendJsonObject(request)
                 .map(response -> {
+                    final var duration = System.currentTimeMillis() - startTime;
+                    metrics.recordRemoteCall(response.statusCode(), duration);
+
                     if (response.statusCode() != 200) {
                         LOG.warnf(
-                                "Remote translation failed with status %d: %s",
-                                response.statusCode(), response.bodyAsString());
+                                "Remote translation failed: url=%s, status=%d, duration=%dms, body=%s",
+                                url, response.statusCode(), duration, response.bodyAsString());
                         throw new RemoteTranslationException(
                                 "Remote translation service returned status " + response.statusCode());
                     }
-                    return parseResponse(response.bodyAsJsonObject());
+
+                    final var result = parseResponse(response.bodyAsJsonObject());
+                    LOG.debugf(
+                            "Remote translation success: url=%s, issuer=%s, subject=%s, roles=%d, permissions=%d, duration=%dms",
+                            url,
+                            issuer,
+                            subject,
+                            result.roles().size(),
+                            result.permissions().size(),
+                            duration);
+                    return result;
+                })
+                .onFailure()
+                .invoke(error -> {
+                    final var duration = System.currentTimeMillis() - startTime;
+                    metrics.recordRemoteCall(0, duration);
+                    metrics.recordError(NAME, error.getClass().getSimpleName());
+                    LOG.warnf(error, "Remote translation error: url=%s, duration=%dms", url, duration);
                 })
                 .onFailure()
                 .recoverWithItem(this::handleFailure);

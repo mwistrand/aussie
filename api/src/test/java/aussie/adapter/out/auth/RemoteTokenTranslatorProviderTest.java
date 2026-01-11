@@ -29,6 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.out.telemetry.TokenTranslationMetrics;
 import aussie.core.config.TokenTranslationConfig;
 import aussie.core.config.TokenTranslationConfig.Remote.FailMode;
 
@@ -47,6 +48,9 @@ class RemoteTokenTranslatorProviderTest {
 
     @Mock
     private TokenTranslationConfig.Remote remoteConfig;
+
+    @Mock
+    private TokenTranslationMetrics metrics;
 
     private WireMockServer wireMockServer;
     private Vertx vertx;
@@ -75,7 +79,7 @@ class RemoteTokenTranslatorProviderTest {
 
     private void initProvider(String url) {
         lenient().when(remoteConfig.url()).thenReturn(Optional.ofNullable(url));
-        provider = new RemoteTokenTranslatorProvider(vertx, config);
+        provider = new RemoteTokenTranslatorProvider(vertx, config, metrics);
     }
 
     @Nested

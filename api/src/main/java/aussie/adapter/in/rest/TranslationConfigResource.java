@@ -27,11 +27,13 @@ import aussie.adapter.in.dto.TranslationConfigUploadDto;
 import aussie.adapter.in.dto.TranslationConfigValidationDto;
 import aussie.adapter.in.dto.TranslationConfigVersionDto;
 import aussie.adapter.in.dto.TranslationConfigVersionSummaryDto;
+import aussie.adapter.in.dto.TranslationStatusDto;
 import aussie.adapter.in.dto.TranslationTestRequestDto;
 import aussie.adapter.in.dto.TranslationTestResultDto;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.auth.Permission;
 import aussie.core.model.auth.TranslationConfigSchema;
+import aussie.core.service.auth.TokenTranslationService;
 import aussie.core.service.auth.TranslationConfigService;
 import aussie.core.service.auth.TranslationConfigService.ConfigValidationException;
 
@@ -54,10 +56,13 @@ import aussie.core.service.auth.TranslationConfigService.ConfigValidationExcepti
 public class TranslationConfigResource {
 
     private final TranslationConfigService configService;
+    private final TokenTranslationService translationService;
 
     @Inject
-    public TranslationConfigResource(TranslationConfigService configService) {
+    public TranslationConfigResource(
+            TranslationConfigService configService, TokenTranslationService translationService) {
         this.configService = configService;
+        this.translationService = translationService;
     }
 
     /**
@@ -251,6 +256,49 @@ public class TranslationConfigResource {
                 throw GatewayProblem.resourceNotFound("TranslationConfigVersion", versionId);
             }
         });
+    }
+
+    // -------------------------------------------------------------------------
+    // Introspection Endpoints
+    // -------------------------------------------------------------------------
+
+    /**
+     * Get the current status of the token translation service.
+     *
+     * <p>Returns information about the active provider, cache statistics,
+     * and overall service health.
+     *
+     * @return translation service status
+     */
+    @GET
+    @Path("/status")
+    @PermissionsAllowed({Permission.TRANSLATION_CONFIG_READ_VALUE, Permission.ADMIN_VALUE})
+    public Uni<TranslationStatusDto> getStatus() {
+        return Uni.createFrom()
+                .item(TranslationStatusDto.create(
+                        translationService.isEnabled(),
+                        translationService.getActiveProviderName(),
+                        translationService.isProviderHealthy(),
+                        translationService.getCacheSize(),
+                        translationService.getCacheMaxSize(),
+                        translationService.getCacheTtlSeconds()));
+    }
+
+    /**
+     * Invalidate the translation cache.
+     *
+     * <p>Forces re-translation for all subsequent token validations.
+     * Use this after updating translation configuration to ensure
+     * the new configuration takes effect immediately.
+     *
+     * @return 204 No Content
+     */
+    @POST
+    @Path("/cache/invalidate")
+    @PermissionsAllowed({Permission.TRANSLATION_CONFIG_WRITE_VALUE, Permission.ADMIN_VALUE})
+    public Uni<Response> invalidateCache() {
+        translationService.invalidateCache();
+        return Uni.createFrom().item(Response.noContent().build());
     }
 
     private String getUserId(SecurityContext ctx) {

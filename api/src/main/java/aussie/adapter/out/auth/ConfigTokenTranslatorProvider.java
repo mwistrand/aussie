@@ -15,6 +15,7 @@ import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.out.telemetry.TokenTranslationMetrics;
 import aussie.core.config.TokenTranslationConfig;
 import aussie.core.model.auth.ClaimTranslator;
 import aussie.core.model.auth.TranslatedClaims;
@@ -39,13 +40,16 @@ public class ConfigTokenTranslatorProvider implements TokenTranslatorProvider {
 
     private final TokenTranslationConfig config;
     private final ObjectMapper objectMapper;
+    private final TokenTranslationMetrics metrics;
     private volatile TranslationConfigSchema schema;
     private volatile boolean available;
 
     @Inject
-    public ConfigTokenTranslatorProvider(TokenTranslationConfig config, ObjectMapper objectMapper) {
+    public ConfigTokenTranslatorProvider(
+            TokenTranslationConfig config, ObjectMapper objectMapper, TokenTranslationMetrics metrics) {
         this.config = config;
         this.objectMapper = objectMapper;
+        this.metrics = metrics;
     }
 
     @PostConstruct
@@ -101,11 +105,13 @@ public class ConfigTokenTranslatorProvider implements TokenTranslatorProvider {
     }
 
     private void loadConfig(String path) {
+        final var startTime = System.currentTimeMillis();
         try {
             final var configPath = Path.of(path);
             if (!Files.exists(configPath)) {
-                LOG.warnf("Token translation config file not found: %s", path);
+                LOG.warnf("Token translation config file not found: path=%s", path);
                 available = false;
+                metrics.recordConfigReload(false);
                 return;
             }
 
@@ -113,15 +119,22 @@ public class ConfigTokenTranslatorProvider implements TokenTranslatorProvider {
             schema = objectMapper.readValue(content, TranslationConfigSchema.class);
             available = true;
 
+            final var duration = System.currentTimeMillis() - startTime;
+            metrics.recordConfigReload(true);
+
             LOG.infof(
-                    "Loaded token translation config: version=%d, sources=%d, transforms=%d, mappings=%d",
+                    "Loaded token translation config: path=%s, version=%d, sources=%d, transforms=%d, mappings=%d, duration=%dms",
+                    path,
                     schema.version(),
                     schema.sources().size(),
                     schema.transforms().size(),
                     schema.mappings().roleToPermissions().size()
-                            + schema.mappings().directPermissions().size());
+                            + schema.mappings().directPermissions().size(),
+                    duration);
         } catch (IOException e) {
-            LOG.errorf(e, "Failed to load token translation config from: %s", path);
+            final var duration = System.currentTimeMillis() - startTime;
+            metrics.recordConfigReload(false);
+            LOG.errorf(e, "Failed to load token translation config: path=%s, duration=%dms", path, duration);
             available = false;
         }
     }

@@ -330,3 +330,167 @@ aussie translation-config delete <version-id>
 | `AUSSIE_AUTH_TOKEN_TRANSLATION_REMOTE_FAIL_MODE` | `deny` | Remote failure behavior |
 | `AUSSIE_AUTH_TOKEN_TRANSLATION_CACHE_TTL_SECONDS` | `300` | Cache TTL |
 | `AUSSIE_AUTH_TOKEN_TRANSLATION_CACHE_MAX_SIZE` | `10000` | Max cache entries |
+
+## Observability
+
+Token translation provides comprehensive observability through metrics, structured logging, and introspection endpoints.
+
+### Metrics
+
+The following Prometheus metrics are exposed when telemetry is enabled:
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `aussie_token_translation_total` | Counter | `provider`, `outcome` | Total translation operations |
+| `aussie_token_translation_duration_seconds` | Histogram | `provider`, `outcome` | Translation latency |
+| `aussie_token_translation_cache_hits_total` | Counter | - | Cache hit count |
+| `aussie_token_translation_cache_misses_total` | Counter | - | Cache miss count |
+| `aussie_token_translation_cache_size` | Gauge | - | Current cache size |
+| `aussie_token_translation_errors_total` | Counter | `provider`, `error_type` | Translation errors |
+| `aussie_token_translation_remote_total` | Counter | `status`, `status_class` | Remote service calls |
+| `aussie_token_translation_remote_duration_seconds` | Histogram | `status_class` | Remote service latency |
+| `aussie_token_translation_config_reloads_total` | Counter | `success` | Config reload events |
+
+**Outcome values:** `success`, `error`, `fallback`, `empty`
+
+Example Prometheus queries:
+
+```promql
+# Cache hit rate
+sum(rate(aussie_token_translation_cache_hits_total[5m])) /
+(sum(rate(aussie_token_translation_cache_hits_total[5m])) +
+ sum(rate(aussie_token_translation_cache_misses_total[5m])))
+
+# Translation latency p99
+histogram_quantile(0.99, rate(aussie_token_translation_duration_seconds_bucket[5m]))
+
+# Error rate by provider
+rate(aussie_token_translation_errors_total[5m])
+```
+
+### Logging
+
+Token translation logs structured information at various levels:
+
+| Level | Events |
+|-------|--------|
+| INFO | Service initialization, config load/reload, cache invalidation |
+| DEBUG | Cache hits/misses, translation results, remote calls |
+| WARN | Translation failures, remote errors, missing config |
+| ERROR | Config load failures, critical errors |
+
+Example log output:
+```
+INFO  Token translation service initialized: enabled=true, provider=config, cache.ttl=300s, cache.maxSize=10000
+DEBUG Translation cache miss: subject=user-123, provider=config
+DEBUG Translation complete: issuer=https://auth.example.com, subject=user-123, provider=config, roles=[admin], permissions=[service.config.*], duration=2ms
+```
+
+### Introspection Endpoints
+
+#### Get Service Status
+
+```bash
+GET /admin/translation-config/status
+```
+
+Returns current service status including provider health and cache statistics:
+
+```json
+{
+  "enabled": true,
+  "activeProvider": "config",
+  "providerHealthy": true,
+  "cache": {
+    "currentSize": 1234,
+    "maxSize": 10000,
+    "ttlSeconds": 300
+  }
+}
+```
+
+CLI equivalent:
+```bash
+aussie translation-config status
+```
+
+#### Invalidate Cache
+
+```bash
+POST /admin/translation-config/cache/invalidate
+```
+
+Forces re-translation for all subsequent requests. Returns `204 No Content`.
+
+CLI equivalent:
+```bash
+aussie translation-config cache-invalidate
+```
+
+### Health Checks
+
+Token translation providers participate in the health check system. The config and remote providers report their availability status.
+
+Example health check response:
+```json
+{
+  "status": "UP",
+  "checks": [
+    {
+      "name": "token-translator-config",
+      "status": "UP",
+      "data": {
+        "provider": "config",
+        "configVersion": 1,
+        "sourcesCount": 2,
+        "transformsCount": 1
+      }
+    }
+  ]
+}
+```
+
+## Troubleshooting
+
+### Translation Not Working
+
+1. Verify translation is enabled:
+   ```bash
+   aussie translation-config status
+   ```
+
+2. Check provider health in logs or health endpoint
+
+3. Test translation with sample claims:
+   ```bash
+   aussie translation-config test --claims '{"realm_access": {"roles": ["admin"]}}'
+   ```
+
+### Cache Issues
+
+1. Check cache status:
+   ```bash
+   aussie translation-config status
+   ```
+
+2. Invalidate cache after config changes:
+   ```bash
+   aussie translation-config cache-invalidate
+   ```
+
+### Remote Provider Timeout
+
+1. Check remote service latency in metrics:
+   ```promql
+   histogram_quantile(0.99, rate(aussie_token_translation_remote_duration_seconds_bucket[5m]))
+   ```
+
+2. Increase timeout if needed:
+   ```properties
+   aussie.auth.token-translation.remote.timeout=PT0.5S
+   ```
+
+3. Consider using `allow_empty` fail mode for graceful degradation:
+   ```properties
+   aussie.auth.token-translation.remote.fail-mode=allow_empty
+   ```

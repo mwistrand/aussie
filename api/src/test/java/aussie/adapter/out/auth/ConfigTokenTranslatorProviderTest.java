@@ -24,6 +24,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.out.telemetry.TokenTranslationMetrics;
 import aussie.core.config.TokenTranslationConfig;
 
 /**
@@ -44,6 +45,9 @@ class ConfigTokenTranslatorProviderTest {
 
     @Mock
     private TokenTranslationConfig.Config configConfig;
+
+    @Mock
+    private TokenTranslationMetrics metrics;
 
     private ObjectMapper objectMapper;
     private ConfigTokenTranslatorProvider provider;
@@ -67,7 +71,7 @@ class ConfigTokenTranslatorProviderTest {
         when(config.config()).thenReturn(configConfig);
         when(configConfig.path()).thenReturn(Optional.of(configFile.toString()));
 
-        provider = new ConfigTokenTranslatorProvider(config, objectMapper);
+        provider = new ConfigTokenTranslatorProvider(config, objectMapper, metrics);
         provider.init();
     }
 
@@ -75,7 +79,7 @@ class ConfigTokenTranslatorProviderTest {
         when(config.config()).thenReturn(configConfig);
         when(configConfig.path()).thenReturn(Optional.empty());
 
-        provider = new ConfigTokenTranslatorProvider(config, objectMapper);
+        provider = new ConfigTokenTranslatorProvider(config, objectMapper, metrics);
         provider.init();
     }
 

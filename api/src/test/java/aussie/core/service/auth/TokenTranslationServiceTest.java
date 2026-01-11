@@ -23,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.core.config.TokenTranslationConfig;
 import aussie.core.model.auth.TranslatedClaims;
+import aussie.core.port.out.TranslationMetrics;
 import aussie.spi.TokenTranslatorProvider;
 
 /**
@@ -47,6 +48,9 @@ class TokenTranslationServiceTest {
     @Mock
     private TokenTranslatorProvider provider;
 
+    @Mock
+    private TranslationMetrics metrics;
+
     private TokenTranslationService service;
 
     @BeforeEach
@@ -55,8 +59,9 @@ class TokenTranslationServiceTest {
         lenient().when(cacheConfig.ttlSeconds()).thenReturn(300);
         lenient().when(cacheConfig.maxSize()).thenReturn(10000L);
         lenient().when(registry.getProvider()).thenReturn(provider);
+        lenient().when(provider.name()).thenReturn("test-provider");
 
-        service = new TokenTranslationService(config, registry);
+        service = new TokenTranslationService(config, registry, metrics);
         service.init();
     }
 

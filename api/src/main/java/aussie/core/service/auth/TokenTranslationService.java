@@ -16,6 +16,8 @@ import aussie.core.config.TokenTranslationConfig;
 import aussie.core.model.auth.ClaimTranslator;
 import aussie.core.model.auth.TranslatedClaims;
 import aussie.core.model.auth.TranslationConfigSchema;
+import aussie.core.model.auth.TranslationOutcome;
+import aussie.core.port.out.TranslationMetrics;
 
 /**
  * Service for translating external IdP token claims to Aussie's authorization model.
@@ -33,21 +35,25 @@ public class TokenTranslationService {
 
     private final TokenTranslationConfig config;
     private final TokenTranslatorProviderRegistry registry;
+    private final TranslationMetrics metrics;
     private LocalCache<String, TranslatedClaims> cache;
 
     @Inject
-    public TokenTranslationService(TokenTranslationConfig config, TokenTranslatorProviderRegistry registry) {
+    public TokenTranslationService(
+            TokenTranslationConfig config, TokenTranslatorProviderRegistry registry, TranslationMetrics metrics) {
         this.config = config;
         this.registry = registry;
+        this.metrics = metrics;
     }
 
     @PostConstruct
     void init() {
         final var cacheConfig = config.cache();
         this.cache = new CaffeineLocalCache<>(Duration.ofSeconds(cacheConfig.ttlSeconds()), cacheConfig.maxSize());
-        LOG.debugf(
-                "Token translation cache initialized: ttl=%ds, maxSize=%d",
-                cacheConfig.ttlSeconds(), cacheConfig.maxSize());
+
+        LOG.infof(
+                "Token translation service initialized: enabled=%s, provider=%s, cache.ttl=%ds, cache.maxSize=%d",
+                config.enabled(), config.provider(), cacheConfig.ttlSeconds(), cacheConfig.maxSize());
     }
 
     /**
@@ -63,18 +69,62 @@ public class TokenTranslationService {
      */
     public Uni<TranslatedClaims> translate(String issuer, String subject, Map<String, Object> claims) {
         final var cacheKey = buildCacheKey(issuer, subject, claims);
+        final var startTime = System.currentTimeMillis();
+        final var provider = registry.getProvider();
+        final var providerName = provider.name();
 
         return cache.get(cacheKey)
                 .map(cached -> {
-                    LOG.debugf("Translation cache hit for subject: %s", subject);
+                    LOG.debugf(
+                            "Translation cache hit: subject=%s, provider=%s, roles=%d, permissions=%d",
+                            subject,
+                            providerName,
+                            cached.roles().size(),
+                            cached.permissions().size());
+                    metrics.recordCacheHit();
                     return Uni.createFrom().item(cached);
                 })
                 .orElseGet(() -> {
-                    LOG.debugf("Translation cache miss for subject: %s", subject);
-                    return registry.getProvider()
-                            .translate(issuer, subject, claims)
-                            .invoke(result -> cache.put(cacheKey, result));
+                    LOG.debugf("Translation cache miss: subject=%s, provider=%s", subject, providerName);
+                    metrics.recordCacheMiss();
+
+                    return provider.translate(issuer, subject, claims)
+                            .invoke(result -> {
+                                cache.put(cacheKey, result);
+                                metrics.updateCacheSize(cache.estimatedSize());
+
+                                final var duration = System.currentTimeMillis() - startTime;
+                                final var outcome = determineOutcome(result);
+
+                                metrics.recordTranslation(providerName, outcome, duration);
+
+                                LOG.debugf(
+                                        "Translation complete: issuer=%s, subject=%s, provider=%s, roles=%s, permissions=%s, duration=%dms",
+                                        issuer, subject, providerName, result.roles(), result.permissions(), duration);
+                            })
+                            .onFailure()
+                            .invoke(error -> {
+                                final var duration = System.currentTimeMillis() - startTime;
+                                metrics.recordTranslation(providerName, TranslationOutcome.ERROR, duration);
+                                metrics.recordError(
+                                        providerName, error.getClass().getSimpleName());
+
+                                LOG.warnf(
+                                        error,
+                                        "Translation failed: issuer=%s, subject=%s, provider=%s, duration=%dms",
+                                        issuer,
+                                        subject,
+                                        providerName,
+                                        duration);
+                            });
                 });
+    }
+
+    private TranslationOutcome determineOutcome(TranslatedClaims result) {
+        if (result.roles().isEmpty() && result.permissions().isEmpty()) {
+            return TranslationOutcome.EMPTY;
+        }
+        return TranslationOutcome.SUCCESS;
     }
 
     /**
@@ -113,5 +163,67 @@ public class TokenTranslationService {
         final var iat = claims.get("iat");
         final var iatStr = iat != null ? iat.toString() : "0";
         return issuer + ":" + subject + ":" + iatStr;
+    }
+
+    // -------------------------------------------------------------------------
+    // Introspection Methods
+    // -------------------------------------------------------------------------
+
+    /**
+     * Get the current cache size.
+     *
+     * @return estimated number of entries in the cache
+     */
+    public long getCacheSize() {
+        return cache != null ? cache.estimatedSize() : 0;
+    }
+
+    /**
+     * Get the configured cache TTL in seconds.
+     *
+     * @return cache TTL in seconds
+     */
+    public int getCacheTtlSeconds() {
+        return config.cache().ttlSeconds();
+    }
+
+    /**
+     * Get the configured cache max size.
+     *
+     * @return maximum cache size
+     */
+    public long getCacheMaxSize() {
+        return config.cache().maxSize();
+    }
+
+    /**
+     * Get the name of the currently active provider.
+     *
+     * @return provider name
+     */
+    public String getActiveProviderName() {
+        return registry.getProvider().name();
+    }
+
+    /**
+     * Check if the currently active provider is available and healthy.
+     *
+     * @return true if the provider is available
+     */
+    public boolean isProviderHealthy() {
+        return registry.getProvider().isAvailable();
+    }
+
+    /**
+     * Invalidate all cached translation results.
+     *
+     * <p>This forces re-translation for subsequent requests.
+     */
+    public void invalidateCache() {
+        if (cache != null) {
+            cache.invalidateAll();
+            metrics.updateCacheSize(0);
+            LOG.infof("Token translation cache invalidated");
+        }
     }
 }
