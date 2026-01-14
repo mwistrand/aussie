@@ -123,7 +123,10 @@ public enum Permission {
     TRANSLATION_CONFIG_READ("translation.config.read"),
 
     /** Permission for writing/managing token translation configuration. */
-    TRANSLATION_CONFIG_WRITE("translation.config.write");
+    TRANSLATION_CONFIG_WRITE("translation.config.write"),
+
+    /** Permission for running benchmarks. */
+    BENCHMARK_RUN("benchmark.run");
 
     // ========================================================================
     // String constants for use in annotations (compile-time constants)
@@ -178,6 +181,8 @@ public enum Permission {
     public static final String TRANSLATION_CONFIG_READ_VALUE = "translation.config.read";
     /** Translation config write permission value. */
     public static final String TRANSLATION_CONFIG_WRITE_VALUE = "translation.config.write";
+    /** Benchmark run permission value. */
+    public static final String BENCHMARK_RUN_VALUE = "benchmark.run";
 
     // ========================================================================
     // Static set of all permission values (populated at class initialization)

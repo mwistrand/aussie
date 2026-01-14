@@ -55,6 +55,12 @@
       "authRequired": false
     },
     {
+      "path": "/api/latency-test",
+      "methods": ["GET", "POST"],
+      "visibility": "PRIVATE",
+      "authRequired": true
+    },
+    {
       "path": "/ws/echo",
       "type": "WEBSOCKET",
       "visibility": "PUBLIC",
