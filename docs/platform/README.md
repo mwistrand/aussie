@@ -17,6 +17,7 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 - [Token Translation](token-translation.md)
 - [PKCE](pkce.md)
 - [Admin API](#admin-api)
+- [Benchmarking](#benchmarking)
 - [Service Permission Policies](#service-permission-policies)
 - [Environment Variables Reference](#environment-variables-reference)
 
@@ -107,6 +108,7 @@ Permissions control what operations an API key can perform. They work at two lev
 | Permission | Description |
 |------------|-------------|
 | `*` | Full admin access - can perform all gateway and service operations |
+| `benchmark.run` | Run latency benchmarks through the gateway |
 
 **Service-level access** (per-service operations):
 Service-level permissions are defined by your organization and mapped to operations via each service's permission policy. For example:
@@ -612,6 +614,120 @@ aussie translation-config delete <version-id>
 ```
 
 See [Token Translation](token-translation.md) for full documentation.
+
+## Benchmarking
+
+The `aussie benchmark` command runs authenticated latency benchmarks through the Aussie gateway. This is useful for measuring gateway overhead, validating performance SLAs, and identifying latency regressions.
+
+### Required Permission
+
+Benchmarking requires the `benchmark.run` permission. This permission is restricted to platform teams to prevent unauthorized load testing against production infrastructure.
+
+**Grant via API key:**
+```bash
+./aussie keys create --name benchmark-key --permissions "benchmark.run" --ttl 30
+```
+
+**Grant via role (for IdP users):**
+```bash
+aussie roles create --id platform-benchmarker \
+  --display-name "Platform Benchmarker" \
+  --permissions "benchmark.run"
+```
+
+Users with the wildcard permission (`*`) or admin role automatically have benchmark access.
+
+### Usage
+
+```bash
+# Benchmark an endpoint with defaults (100 requests, 10ms interval)
+aussie benchmark --url http://localhost:8080/my-service/api/health
+
+# Custom number of requests and interval
+aussie benchmark --url http://localhost:8080/my-service/api/health -n 500 --interval 5ms
+
+# Output as JSON (for automation)
+aussie benchmark --url http://localhost:8080/my-service/api/health -o json
+
+# Use a different HTTP method
+aussie benchmark --url http://localhost:8080/my-service/api/ping --method POST
+```
+
+### Options
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--url` | | **(required)** | Target URL to benchmark |
+| `--requests` | `-n` | `100` | Total number of requests to send |
+| `--interval` | | `10ms` | Interval between starting new requests |
+| `--method` | | `GET` | HTTP method to use |
+| `--timeout` | | `30s` | Timeout for each request |
+| `--output` | `-o` | `text` | Output format: `text` or `json` |
+
+### How It Works
+
+The benchmark uses **open-loop load testing** to avoid coordinated omission:
+
+1. Authenticates using your existing session (`aussie login`) or API key
+2. Verifies you have the `benchmark.run` permission
+3. Sends requests at fixed intervals regardless of response time
+4. Measures latency from request start to response completion
+5. Reports statistics including percentiles and histogram
+
+### Example Output
+
+**Text format:**
+```
+Starting benchmark...
+  Target:    http://localhost:8080/my-service/api/health
+  Method:    GET
+  Requests:  100
+  Interval:  10ms
+  Estimated: ~990ms
+
+Results:
+  Total:     100 requests
+  Success:   100 (100.0%)
+  Failed:    0 (0.0%)
+  Duration:  1.023s
+
+Latency:
+  Min:       2.1ms
+  Max:       45.3ms
+  Mean:      8.7ms
+  P50:       7.2ms
+  P90:       15.4ms
+  P95:       22.1ms
+  P99:       38.6ms
+```
+
+**JSON format (for automation):**
+```json
+{
+  "total_requests": 100,
+  "successful": 100,
+  "failed": 0,
+  "duration_ms": 1023,
+  "latency": {
+    "min_ms": 2.1,
+    "max_ms": 45.3,
+    "mean_ms": 8.7,
+    "p50_ms": 7.2,
+    "p90_ms": 15.4,
+    "p95_ms": 22.1,
+    "p99_ms": 38.6
+  }
+}
+```
+
+### Permission Denied
+
+If you don't have the `benchmark.run` permission, you'll see:
+
+```
+Error: permission denied: benchmark.run permission is required
+Contact your platform team to request access
+```
 
 ## Service Permission Policies
 

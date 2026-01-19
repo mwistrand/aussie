@@ -23,6 +23,7 @@ import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.RegistrationResult;
+import aussie.core.model.service.ServicePath;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.ConfigurationCache;
 import aussie.core.port.out.ServiceRegistrationRepository;
@@ -421,15 +422,84 @@ public class ServiceRegistry {
 
     /**
      * Internal method to find a route in the local cache.
+     *
+     * <p>
+     * Handles two routing modes:
+     * <ul>
+     * <li><b>Gateway mode</b> ({@code /gateway/...} or endpoint-only paths): Strips the /gateway
+     *     prefix if present and matches the endpoint path against all services' endpoints.</li>
+     * <li><b>Pass-through mode</b> ({@code /{serviceId}/...}): Extracts the service ID
+     *     from the path and matches the endpoint path against that service's endpoints.</li>
+     * </ul>
+     *
+     * <p>
+     * The method automatically detects which mode to use based on whether the first path
+     * segment matches a registered service ID.
      */
     private Optional<RouteLookupResult> findRouteInCache(String path, String method) {
-        // Iterate through all cached services to find a matching route
-        for (var route : compiledRoutes.values()) {
-            var serviceRegistration = route.service();
-            var routeMatch = serviceRegistration.findRoute(path, method);
+        // Explicit gateway mode: /gateway/api/users -> match /api/users against all services
+        if (path != null && (path.toLowerCase().startsWith("/gateway/") || path.equalsIgnoreCase("/gateway"))) {
+            final var endpointPath = path.length() > "/gateway".length() ? path.substring("/gateway".length()) : "/";
+            return findRouteByEndpointPath(endpointPath, method);
+        }
+
+        // Parse the path to extract potential service ID and endpoint path
+        final var servicePath = ServicePath.parse(path);
+        final var serviceId = servicePath.serviceId();
+        final var endpointPath = servicePath.path();
+
+        // Check if the parsed serviceId corresponds to a registered service
+        final var serviceRoute = compiledRoutes.values().stream()
+                .filter(route -> route.service().serviceId().equals(serviceId))
+                .findFirst();
+
+        if (serviceRoute.isPresent()) {
+            // Pass-through mode: /demo-service/api/users -> match /api/users against demo-service
+            final var serviceRegistration = serviceRoute.get().service();
+            final var routeMatch = serviceRegistration.findRoute(endpointPath, method);
+
             return routeMatch.isPresent()
                     ? routeMatch.map(r -> r) // Widen type from RouteMatch to RouteLookupResult
                     : Optional.of(new ServiceOnlyMatch(serviceRegistration));
+        }
+
+        // Implicit gateway mode: No matching serviceId found, so treat the path as an
+        // endpoint path and search all services. This handles calls from GatewayService
+        // where the path is just the endpoint (e.g., "/api/users" without "/gateway" prefix).
+        return findRouteByEndpointPath(path, method);
+    }
+
+    /**
+     * Find a route by matching the endpoint path against all services.
+     * Used for gateway mode where the path doesn't include a service prefix.
+     *
+     * <p>
+     * If an exact endpoint match is found, returns a {@link RouteMatch}.
+     * If no endpoint matches but at least one service is registered,
+     * returns a {@link ServiceOnlyMatch} for the first service found.
+     * This fallback behavior allows the gateway to proxy requests to a service
+     * even when no explicit endpoint is configured.
+     */
+    private Optional<RouteLookupResult> findRouteByEndpointPath(String endpointPath, String method) {
+        ServiceRegistration firstService = null;
+
+        for (var route : compiledRoutes.values()) {
+            var serviceRegistration = route.service();
+
+            // Track the first service for fallback
+            if (firstService == null) {
+                firstService = serviceRegistration;
+            }
+
+            var routeMatch = serviceRegistration.findRoute(endpointPath, method);
+            if (routeMatch.isPresent()) {
+                return routeMatch.map(r -> r);
+            }
+        }
+
+        // Fallback: return ServiceOnlyMatch for the first service if any exist
+        if (firstService != null) {
+            return Optional.of(new ServiceOnlyMatch(firstService));
         }
 
         return Optional.empty();

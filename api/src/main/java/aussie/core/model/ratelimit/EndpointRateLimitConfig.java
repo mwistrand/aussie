@@ -2,6 +2,9 @@ package aussie.core.model.ratelimit;
 
 import java.util.Optional;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * Rate limit configuration for a specific endpoint.
  *
@@ -15,8 +18,11 @@ import java.util.Optional;
  * @param burstCapacity burst capacity for token bucket (optional)
  */
 public record EndpointRateLimitConfig(
-        Optional<Long> requestsPerWindow, Optional<Long> windowSeconds, Optional<Long> burstCapacity) {
+        @JsonProperty("requestsPerWindow") Optional<Long> requestsPerWindow,
+        @JsonProperty("windowSeconds") Optional<Long> windowSeconds,
+        @JsonProperty("burstCapacity") Optional<Long> burstCapacity) {
 
+    @JsonCreator
     public EndpointRateLimitConfig {
         requestsPerWindow = requestsPerWindow != null ? requestsPerWindow : Optional.empty();
         windowSeconds = windowSeconds != null ? windowSeconds : Optional.empty();

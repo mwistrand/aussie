@@ -123,3 +123,21 @@ func TestBenchmarkCmd_Examples(t *testing.T) {
 		t.Error("long help should include examples")
 	}
 }
+
+func TestBenchmarkCmd_URLFlagRequired(t *testing.T) {
+	flag := benchmarkCmd.Flags().Lookup("url")
+	if flag == nil {
+		t.Fatal("url flag not found")
+	}
+
+	// Check that the flag is marked as required
+	annotations := flag.Annotations
+	if annotations == nil {
+		t.Fatal("url flag has no annotations, expected required annotation")
+	}
+
+	required, ok := annotations["cobra_annotation_bash_completion_one_required_flag"]
+	if !ok || len(required) == 0 {
+		t.Error("url flag should be marked as required")
+	}
+}

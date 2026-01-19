@@ -20,8 +20,10 @@ import io.vertx.core.Vertx;
 
 import aussie.core.model.auth.ServiceAccessConfig;
 import aussie.core.model.auth.ServicePermissionPolicy;
+import aussie.core.model.auth.VisibilityRule;
 import aussie.core.model.common.CorsConfig;
 import aussie.core.model.ratelimit.ServiceRateLimitConfig;
+import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.ServiceRegistrationRepository;
@@ -195,8 +197,8 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                 row.getString("route_prefix"),
                 EndpointVisibility.valueOf(row.getString("default_visibility")),
                 defaultAuthRequired,
-                fromJsonList(row.getString("visibility_rules"), new TypeReference<>() {}),
-                fromJsonList(row.getString("endpoints"), new TypeReference<>() {}),
+                fromJsonList(row.getString("visibility_rules"), new TypeReference<List<VisibilityRule>>() {}),
+                fromJsonList(row.getString("endpoints"), new TypeReference<List<EndpointConfig>>() {}),
                 Optional.ofNullable(row.getString("access_config"))
                         .map(json -> fromJson(json, ServiceAccessConfig.class)),
                 Optional.ofNullable(row.getString("cors_config")).map(json -> fromJson(json, CorsConfig.class)),

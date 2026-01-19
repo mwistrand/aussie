@@ -3,20 +3,19 @@ package aussie.system.filter;
 import java.time.Instant;
 import java.util.Optional;
 
-import jakarta.annotation.Priority;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.Priorities;
+import jakarta.inject.Singleton;
 import jakarta.ws.rs.container.ContainerRequestContext;
-import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.container.ContainerResponseContext;
-import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.ext.Provider;
 
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
-import io.smallrye.mutiny.infrastructure.Infrastructure;
+import io.smallrye.mutiny.Uni;
+import io.vertx.core.http.HttpServerRequest;
+import org.jboss.resteasy.reactive.server.ServerRequestFilter;
+import org.jboss.resteasy.reactive.server.ServerResponseFilter;
 
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
@@ -36,7 +35,7 @@ import aussie.core.service.routing.ServiceRegistry;
 import aussie.spi.SecurityEvent;
 
 /**
- * JAX-RS filter that enforces rate limits on incoming requests.
+ * Reactive filter that enforces rate limits on incoming requests.
  *
  * <p>
  * This filter runs early in the request chain (before authentication) to
@@ -57,9 +56,8 @@ import aussie.spi.SecurityEvent;
  * <li>Client IP from Forwarded or X-Forwarded-For or remote address</li>
  * </ol>
  */
-@Provider
-@Priority(Priorities.AUTHENTICATION - 50)
-public class RateLimitFilter implements ContainerRequestFilter, ContainerResponseFilter {
+@Singleton
+public class RateLimitFilter {
 
     private static final String RATE_LIMIT_DECISION_ATTR = "aussie.ratelimit.decision";
     private static final String SESSION_COOKIE = "aussie_session";
@@ -94,20 +92,26 @@ public class RateLimitFilter implements ContainerRequestFilter, ContainerRespons
         return configInstance.get();
     }
 
-    @Override
-    public void filter(ContainerRequestContext requestContext) {
+    /**
+     * Request filter that checks rate limits.
+     *
+     * <p>Returns null to continue processing, or a Response to abort with rate limit error.
+     */
+    @ServerRequestFilter(priority = jakarta.ws.rs.Priorities.AUTHENTICATION - 50)
+    public Uni<Response> filterRequest(ContainerRequestContext requestContext, HttpServerRequest request) {
         if (!config().enabled()) {
-            return;
+            return Uni.createFrom().nullItem();
         }
 
-        final var path = requestContext.getUriInfo().getPath();
-        final var method = requestContext.getMethod();
+        final var path = request.path();
+        final var method = request.method().name();
         final var servicePath = ServicePath.parse(path);
         final var serviceId = servicePath.serviceId();
-        final var clientId = extractClientId(requestContext);
+        final var clientId = extractClientId(request);
 
         final RouteLookupResult routeResult =
                 serviceRegistry.findRoute(path, method).orElse(null);
+
         final EffectiveRateLimit effectiveLimit =
                 routeResult != null ? resolveEffectiveLimit(routeResult) : rateLimitResolver.resolvePlatformDefaults();
 
@@ -115,32 +119,40 @@ public class RateLimitFilter implements ContainerRequestFilter, ContainerRespons
                 routeResult != null ? routeResult.endpoint().map(e -> e.path()).orElse(null) : null;
         final var key = RateLimitKey.http(clientId, serviceId, endpointId);
 
-        rateLimiter
-                .checkAndConsume(key, effectiveLimit)
-                .emitOn(Infrastructure.getDefaultWorkerPool())
-                .subscribe()
-                .with(decision -> handleDecision(requestContext, decision, serviceId, clientId));
+        return rateLimiter.checkAndConsume(key, effectiveLimit).map(decision -> {
+            requestContext.setProperty(RATE_LIMIT_DECISION_ATTR, decision);
+
+            recordMetrics(serviceId, decision);
+            setSpanAttributes(decision);
+
+            if (!decision.allowed()) {
+                metrics.recordRateLimitExceeded(serviceId, "http");
+                dispatchSecurityEvent(decision, serviceId, clientId);
+                setExceededSpanAttributes(decision);
+                return buildRateLimitResponse(decision);
+            }
+
+            // Return null to continue processing
+            return null;
+        });
     }
 
-    private void handleDecision(
-            ContainerRequestContext ctx, RateLimitDecision decision, String serviceId, String clientId) {
-
-        ctx.setProperty(RATE_LIMIT_DECISION_ATTR, decision);
-        recordMetrics(serviceId, decision);
-        setSpanAttributes(decision);
-
-        if (!decision.allowed()) {
-            handleRateLimitExceeded(ctx, decision, serviceId, clientId);
+    /**
+     * Response filter that adds rate limit headers.
+     */
+    @ServerResponseFilter
+    public void filterResponse(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
+        if (!config().includeHeaders()) {
+            return;
         }
-    }
 
-    private void handleRateLimitExceeded(
-            ContainerRequestContext ctx, RateLimitDecision decision, String serviceId, String clientId) {
-
-        metrics.recordRateLimitExceeded(serviceId, "http");
-        dispatchSecurityEvent(decision, serviceId, clientId);
-        setExceededSpanAttributes(decision);
-        ctx.abortWith(buildRateLimitResponse(decision));
+        // Read decision from request context property
+        final var decision = (RateLimitDecision) requestContext.getProperty(RATE_LIMIT_DECISION_ATTR);
+        if (decision != null && decision.allowed()) {
+            responseContext.getHeaders().add("X-RateLimit-Limit", decision.limit());
+            responseContext.getHeaders().add("X-RateLimit-Remaining", decision.remaining());
+            responseContext.getHeaders().add("X-RateLimit-Reset", decision.resetAtEpochSeconds());
+        }
     }
 
     private void recordMetrics(String serviceId, RateLimitDecision decision) {
@@ -183,60 +195,41 @@ public class RateLimitFilter implements ContainerRequestFilter, ContainerRespons
                 .build();
     }
 
-    @Override
-    public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
-
-        if (!config().includeHeaders()) {
-            return;
-        }
-        addRateLimitHeaders(requestContext, responseContext);
-    }
-
-    private void addRateLimitHeaders(ContainerRequestContext req, ContainerResponseContext res) {
-
-        final var decision = (RateLimitDecision) req.getProperty(RATE_LIMIT_DECISION_ATTR);
-        if (decision != null && decision.allowed()) {
-            res.getHeaders().add("X-RateLimit-Limit", decision.limit());
-            res.getHeaders().add("X-RateLimit-Remaining", decision.remaining());
-            res.getHeaders().add("X-RateLimit-Reset", decision.resetAtEpochSeconds());
-        }
-    }
-
     // -------------------------------------------------------------------------
     // Client Identification (priority: session > auth > api key > IP)
     // -------------------------------------------------------------------------
 
-    private String extractClientId(ContainerRequestContext ctx) {
-        return extractSessionId(ctx)
-                .or(() -> extractAuthHeaderHash(ctx))
-                .or(() -> extractApiKeyId(ctx))
-                .orElseGet(() -> extractClientIp(ctx));
+    private String extractClientId(HttpServerRequest request) {
+        return extractSessionId(request)
+                .or(() -> extractAuthHeaderHash(request))
+                .or(() -> extractApiKeyId(request))
+                .orElseGet(() -> extractClientIp(request));
     }
 
-    private Optional<String> extractSessionId(ContainerRequestContext ctx) {
-        final var cookie = ctx.getCookies().get(SESSION_COOKIE);
+    private Optional<String> extractSessionId(HttpServerRequest request) {
+        final var cookie = request.getCookie(SESSION_COOKIE);
         if (cookie != null) {
             return Optional.of("session:" + cookie.getValue());
         }
-        final var header = ctx.getHeaderString("X-Session-ID");
+        final var header = request.getHeader("X-Session-ID");
         return Optional.ofNullable(header).map(h -> "session:" + h);
     }
 
-    private Optional<String> extractAuthHeaderHash(ContainerRequestContext ctx) {
-        final var auth = ctx.getHeaderString("Authorization");
+    private Optional<String> extractAuthHeaderHash(HttpServerRequest request) {
+        final var auth = request.getHeader("Authorization");
         if (auth != null && auth.startsWith("Bearer ")) {
             return Optional.of("bearer:" + hashToken(auth.substring(7)));
         }
         return Optional.empty();
     }
 
-    private Optional<String> extractApiKeyId(ContainerRequestContext ctx) {
-        return Optional.ofNullable(ctx.getHeaderString("X-API-Key-ID")).map(id -> "apikey:" + id);
+    private Optional<String> extractApiKeyId(HttpServerRequest request) {
+        return Optional.ofNullable(request.getHeader("X-API-Key-ID")).map(id -> "apikey:" + id);
     }
 
-    private String extractClientIp(ContainerRequestContext ctx) {
+    private String extractClientIp(HttpServerRequest request) {
         // RFC 7239 Forwarded header (preferred)
-        final var forwarded = ctx.getHeaderString("Forwarded");
+        final var forwarded = request.getHeader("Forwarded");
         if (forwarded != null) {
             final var ip = parseForwardedFor(forwarded);
             if (ip != null) {
@@ -245,9 +238,15 @@ public class RateLimitFilter implements ContainerRequestFilter, ContainerRespons
         }
 
         // X-Forwarded-For fallback
-        final var xForwardedFor = ctx.getHeaderString("X-Forwarded-For");
+        final var xForwardedFor = request.getHeader("X-Forwarded-For");
         if (xForwardedFor != null) {
             return "ip:" + xForwardedFor.split(",")[0].trim();
+        }
+
+        // Remote address fallback
+        final var remoteAddress = request.remoteAddress();
+        if (remoteAddress != null) {
+            return "ip:" + remoteAddress.host();
         }
 
         return "ip:unknown";

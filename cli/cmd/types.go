@@ -26,12 +26,13 @@ type VisibilityRule struct {
 
 // EndpointConfig defines an endpoint configuration
 type EndpointConfig struct {
-	Path         string   `json:"path"`
-	Methods      []string `json:"methods,omitempty"`
-	Visibility   string   `json:"visibility,omitempty"`
-	PathRewrite  string   `json:"pathRewrite,omitempty"`
-	AuthRequired *bool    `json:"authRequired,omitempty"`
-	Type         string   `json:"type,omitempty"` // "HTTP" (default) or "WEBSOCKET"
+	Path            string                   `json:"path"`
+	Methods         []string                 `json:"methods,omitempty"`
+	Visibility      string                   `json:"visibility,omitempty"`
+	PathRewrite     string                   `json:"pathRewrite,omitempty"`
+	AuthRequired    *bool                    `json:"authRequired,omitempty"`
+	Type            string                   `json:"type,omitempty"` // "HTTP" (default) or "WEBSOCKET"
+	RateLimitConfig *EndpointRateLimitConfig `json:"rateLimitConfig,omitempty"`
 }
 
 // ServiceAccessConfig defines access control settings
@@ -73,6 +74,13 @@ type RateLimitConfig struct {
 	WindowSeconds     *int64                    `json:"windowSeconds,omitempty"`
 	BurstCapacity     *int64                    `json:"burstCapacity,omitempty"`
 	WebSocket         *WebSocketRateLimitConfig `json:"websocket,omitempty"`
+}
+
+// EndpointRateLimitConfig defines rate limiting configuration for a specific endpoint
+type EndpointRateLimitConfig struct {
+	RequestsPerWindow *int64 `json:"requestsPerWindow,omitempty"`
+	WindowSeconds     *int64 `json:"windowSeconds,omitempty"`
+	BurstCapacity     *int64 `json:"burstCapacity,omitempty"`
 }
 
 // WebSocketRateLimitConfig defines rate limiting for WebSocket connections and messages

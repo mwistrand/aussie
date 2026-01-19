@@ -57,8 +57,18 @@
     {
       "path": "/api/latency-test",
       "methods": ["GET", "POST"],
-      "visibility": "PRIVATE",
+      "visibility": "PUBLIC",
       "authRequired": true
+    },
+    {
+      "path": "/api/rate-limit-test",
+      "methods": ["GET"],
+      "visibility": "PUBLIC",
+      "authRequired": false,
+      "rateLimitConfig": {
+        "requestsPerWindow": 100,
+        "burstCapacity": 50
+      }
     },
     {
       "path": "/ws/echo",
@@ -81,8 +91,8 @@
     "maxAge": 3600
   },
   "rateLimitConfig": {
-    "requestsPerWindow": 50,
-    "burstCapacity": 25,
+    "requestsPerWindow": 1500,
+    "burstCapacity": 1000,
     "websocket": {
       "connection": {
         "requestsPerWindow": 10,

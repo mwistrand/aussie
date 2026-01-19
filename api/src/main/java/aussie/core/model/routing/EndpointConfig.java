@@ -3,6 +3,9 @@ package aussie.core.model.routing;
 import java.util.Optional;
 import java.util.Set;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import aussie.core.model.ratelimit.EndpointRateLimitConfig;
 
 /**
@@ -18,15 +21,16 @@ import aussie.core.model.ratelimit.EndpointRateLimitConfig;
  * @param audience        optional audience claim for tokens issued to this endpoint
  */
 public record EndpointConfig(
-        String path,
-        Set<String> methods,
-        EndpointVisibility visibility,
-        Optional<String> pathRewrite,
-        boolean authRequired,
-        EndpointType type,
-        Optional<EndpointRateLimitConfig> rateLimitConfig,
-        Optional<String> audience) {
+        @JsonProperty("path") String path,
+        @JsonProperty("methods") Set<String> methods,
+        @JsonProperty("visibility") EndpointVisibility visibility,
+        @JsonProperty("pathRewrite") Optional<String> pathRewrite,
+        @JsonProperty("authRequired") boolean authRequired,
+        @JsonProperty("type") EndpointType type,
+        @JsonProperty("rateLimitConfig") Optional<EndpointRateLimitConfig> rateLimitConfig,
+        @JsonProperty("audience") Optional<String> audience) {
 
+    @JsonCreator
     public EndpointConfig {
         if (path == null || path.isBlank()) {
             throw new IllegalArgumentException("Path cannot be null or blank");

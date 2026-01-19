@@ -46,17 +46,17 @@ Prerequisites:
   - Ensure the target endpoint is registered with Aussie
 
 Examples:
-  # Run with defaults (100 requests, 10ms interval)
-  aussie benchmark
+  # Benchmark an endpoint with defaults (100 requests, 10ms interval)
+  aussie benchmark --url http://localhost:8080/my-service/api/health
 
   # Custom number of requests and interval
-  aussie benchmark -n 500 --interval 5ms
+  aussie benchmark --url http://localhost:8080/my-service/api/health -n 500 --interval 5ms
 
-  # Target a specific endpoint
-  aussie benchmark --url http://localhost:8080/demo-service/api/endpoint
+  # Output as JSON for automation
+  aussie benchmark --url http://localhost:8080/my-service/api/health -o json
 
-  # Output as JSON
-  aussie benchmark -o json`,
+  # Use POST method
+  aussie benchmark --url http://localhost:8080/my-service/api/ping --method POST`,
 	RunE: runBenchmark,
 }
 
@@ -68,7 +68,8 @@ func init() {
 	benchmarkCmd.Flags().DurationVar(&benchmarkInterval, "interval", 10*time.Millisecond,
 		"Interval between starting new requests (open-loop)")
 	benchmarkCmd.Flags().StringVar(&benchmarkURL, "url", "",
-		"Target URL (default: {host}/demo-service/api/latency-test)")
+		"Target URL to benchmark (required)")
+	_ = benchmarkCmd.MarkFlagRequired("url")
 	benchmarkCmd.Flags().StringVar(&benchmarkMethod, "method", "GET",
 		"HTTP method to use")
 	benchmarkCmd.Flags().DurationVar(&benchmarkTimeout, "timeout", 30*time.Second,
@@ -111,12 +112,6 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Determine target URL
-	targetURL := benchmarkURL
-	if targetURL == "" {
-		targetURL = fmt.Sprintf("%s/demo-service/api/latency-test", strings.TrimSuffix(cfg.Host, "/"))
-	}
-
 	// Validate inputs
 	if benchmarkRequests <= 0 {
 		return fmt.Errorf("requests must be positive")
@@ -133,7 +128,7 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 
 	// Create benchmark configuration
 	benchCfg := benchmark.Config{
-		URL:           targetURL,
+		URL:           benchmarkURL,
 		Method:        strings.ToUpper(benchmarkMethod),
 		TotalRequests: benchmarkRequests,
 		Interval:      benchmarkInterval,
@@ -145,7 +140,7 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 	if outputFormat == benchmark.OutputFormatText {
 		estimatedDuration := benchCfg.EstimatedDuration()
 		fmt.Printf("Starting benchmark...\n")
-		fmt.Printf("  Target:    %s\n", targetURL)
+		fmt.Printf("  Target:    %s\n", benchmarkURL)
 		fmt.Printf("  Method:    %s\n", benchCfg.Method)
 		fmt.Printf("  Requests:  %d\n", benchmarkRequests)
 		fmt.Printf("  Interval:  %s\n", benchmarkInterval)
@@ -179,7 +174,7 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 
 	// Output results
 	outputCfg := benchmark.OutputConfig{
-		URL:    targetURL,
+		URL:    benchmarkURL,
 		Method: benchCfg.Method,
 		Format: outputFormat,
 	}
