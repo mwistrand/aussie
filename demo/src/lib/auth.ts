@@ -47,8 +47,14 @@ export interface TokenClaims {
 // Simulated group mappings (in production, this comes from IdP claims)
 // Maps demo users to their groups
 // Groups follow the pattern: <service-id>.<role>
+// Note: Usernames are derived from role labels (lowercase, no spaces)
 export const USER_GROUPS: Record<string, string[]> = {
+  // Role-derived usernames (from demo login role selection)
   admin: ['platform-team', 'demo-service.admin'],
+  lead: ['demo-service.lead', 'demo-service.dev'],
+  developer: ['demo-service.dev'],
+  readonly: ['demo-service.readonly'],
+  // Legacy named users (for backwards compatibility)
   alice: ['demo-service.admin', 'demo-service.dev'],
   bob: ['demo-service.dev'],
   guest: ['demo-service.readonly'],

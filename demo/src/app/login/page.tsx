@@ -78,11 +78,12 @@ export default async function LoginPage({ searchParams }: PageProps) {
             <div className="mt-6 text-center text-xs text-gray-500">
               <p>
                 This is a mock login page for testing Aussie&apos;s session
-                management. Any username/password combination will work.
+                management. Select a role and your credentials will be set
+                automatically.
               </p>
               <p className="mt-2">
-                Select a role to receive the corresponding group membership.
-                Permissions are derived from the group at validation time.
+                Permissions are derived from the selected role at validation
+                time.
               </p>
             </div>
           </div>

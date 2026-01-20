@@ -9,7 +9,6 @@ import {
 
 export interface LoginRequest {
   username: string;
-  password: string;
   group?: string;
   redirect?: string;
 }
@@ -58,7 +57,6 @@ export async function POST(request: NextRequest) {
       const formData = await request.formData();
       body = {
         username: formData.get('username') as string,
-        password: formData.get('password') as string,
         group: formData.get('group') as string | undefined,
         redirect: formData.get('redirect') as string | undefined,
       };
@@ -69,11 +67,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Username is required' }, { status: 400 });
     }
 
-    if (!body.password || body.password.trim() === '') {
-      return NextResponse.json({ error: 'Password is required' }, { status: 400 });
-    }
-
-    // For demo purposes, accept any password
+    // Demo mode: username and password are derived from the selected role
     // In production, this would validate against an identity provider
 
     // Determine groups based on selected group

@@ -28,6 +28,15 @@ const DEMO_GROUPS = [
   { id: 'demo-service.readonly', label: 'Read Only', description: 'View-only access' },
 ] as const;
 
+// Derive username from role selection (label lowercased, spaces removed)
+function getUsernameFromRole(groupId: string): string {
+  const group = DEMO_GROUPS.find((g) => g.id === groupId);
+  if (group) {
+    return group.label.toLowerCase().replace(/\s+/g, '');
+  }
+  return groupId;
+}
+
 export default function LoginForm({
   redirectUrl,
   errorMessage,
@@ -36,8 +45,6 @@ export default function LoginForm({
   deviceCode,
   oidcParams,
 }: LoginFormProps) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('demo-service.dev');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(errorMessage || '');
@@ -48,6 +55,9 @@ export default function LoginForm({
     setError('');
 
     try {
+      // Derive username from selected role
+      const username = getUsernameFromRole(selectedGroup);
+
       // Device code flow: authorize the pending device code
       if (flow === 'device' && deviceCode) {
         const response = await fetch('/api/auth/device', {
@@ -122,7 +132,6 @@ export default function LoginForm({
         },
         body: JSON.stringify({
           username,
-          password,
           group: selectedGroup,
           redirect: redirectUrl || '/',
         }),
@@ -181,54 +190,7 @@ export default function LoginForm({
       )
 }
 
-<div>
-  <label
-          htmlFor="username"
-className = "block text-sm font-medium text-gray-700"
-  >
-  Username
-  </label>
-  < div className = "mt-1" >
-    <input
-            id="username"
-name = "username"
-type = "text"
-autoComplete = "username"
-required
-value = { username }
-onChange = {(e) => setUsername(e.target.value)}
-className = "block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 placeholder-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-placeholder = "Enter any username"
-  />
-  </div>
-  </div>
-
-  < div >
-  <label
-          htmlFor="password"
-className = "block text-sm font-medium text-gray-700"
-  >
-  Password
-  </label>
-  < div className = "mt-1" >
-    <input
-            id="password"
-name = "password"
-type = "password"
-autoComplete = "current-password"
-required
-value = { password }
-onChange = {(e) => setPassword(e.target.value)}
-className = "block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 placeholder-gray-400 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
-placeholder = "Enter any password"
-  />
-  </div>
-  < p className = "mt-1 text-xs text-gray-500" >
-    Demo mode: any password is accepted
-      </p>
-      </div>
-
-      < div >
+< div >
       <label className="block text-sm font-medium text-gray-700 mb-2" >
         Role
         </label>
@@ -252,6 +214,9 @@ className = "h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-500"
       </div>
           ))}
 </div>
+        <p className="mt-2 text-xs text-gray-500">
+          Demo mode: Your username and password will be set to &quot;{getUsernameFromRole(selectedGroup)}&quot;
+        </p>
   </div>
 
   < div >
