@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   let validationResult = null;
   if (authHeader) {
     try {
-      const aussieHost = process.env.AUSSIE_HOST || "http://localhost:8080";
+      const aussieHost = process.env.AUSSIE_HOST || "http://localhost:1234";
       const response = await fetch(`${aussieHost}/admin/whoami`, {
         headers: {
           Authorization: authHeader,
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const aussieHost = process.env.AUSSIE_HOST || "http://localhost:8080";
+    const aussieHost = process.env.AUSSIE_HOST || "http://localhost:1234";
     const response = await fetch(`${aussieHost}/admin/whoami`, {
       headers: {
         Authorization: `Bearer ${apiKey}`,

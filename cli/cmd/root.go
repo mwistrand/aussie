@@ -18,7 +18,7 @@ Configuration is loaded from (in order of precedence):
   3. Global ~/.aussierc config file
 
 Example config file (.aussierc or ~/.aussierc):
-  host = "http://localhost:8080"
+  host = "http://localhost:1234"
   api_key = "your-api-key"`,
 }
 

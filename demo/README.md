@@ -44,7 +44,7 @@ cd ../cli
 ./aussie service register -f ../demo/aussie-service.json
 
 # Or using curl
-curl -X POST http://localhost:8080/admin/services \
+curl -X POST http://localhost:1234/admin/services \
   -H "Content-Type: application/json" \
   -d @aussie-service.json
 ```
@@ -55,16 +55,16 @@ Once registered, access the demo service through Aussie:
 
 ```bash
 # Public endpoints (accessible by anyone)
-curl http://localhost:8080/gateway/api/health
-curl http://localhost:8080/gateway/api/users
+curl http://localhost:1234/gateway/api/health
+curl http://localhost:1234/gateway/api/users
 
 # Create a user
-curl -X POST http://localhost:8080/gateway/api/users \
+curl -X POST http://localhost:1234/gateway/api/users \
   -H "Content-Type: application/json" \
   -d '{"name": "Test User", "email": "test@example.com"}'
 
 # Private endpoint (requires allowed IP)
-curl http://localhost:8080/gateway/api/admin/stats
+curl http://localhost:1234/gateway/api/admin/stats
 ```
 
 ## Configuration
@@ -72,7 +72,7 @@ curl http://localhost:8080/gateway/api/admin/stats
 The `.aussierc` file in this directory configures the Aussie CLI to connect to the local gateway:
 
 ```toml
-host = "http://localhost:8080"
+host = "http://localhost:1234"
 ```
 
 ## Service Registration
@@ -125,7 +125,7 @@ Register three services (no endpoints needed for pass-through):
 
 ```bash
 # User service
-curl -X POST http://localhost:8080/admin/services \
+curl -X POST http://localhost:1234/admin/services \
   -H "Content-Type: application/json" \
   -d '{
     "serviceId": "users",
@@ -134,7 +134,7 @@ curl -X POST http://localhost:8080/admin/services \
   }'
 
 # Order service
-curl -X POST http://localhost:8080/admin/services \
+curl -X POST http://localhost:1234/admin/services \
   -H "Content-Type: application/json" \
   -d '{
     "serviceId": "orders",
@@ -143,7 +143,7 @@ curl -X POST http://localhost:8080/admin/services \
   }'
 
 # Inventory service
-curl -X POST http://localhost:8080/admin/services \
+curl -X POST http://localhost:1234/admin/services \
   -H "Content-Type: application/json" \
   -d '{
     "serviceId": "inventory",
@@ -158,20 +158,20 @@ Access services by their ID in the URL:
 
 ```bash
 # User service endpoints
-curl http://localhost:8080/users/api/users
-curl http://localhost:8080/users/api/users/123
-curl -X POST http://localhost:8080/users/api/users \
+curl http://localhost:1234/users/api/users
+curl http://localhost:1234/users/api/users/123
+curl -X POST http://localhost:1234/users/api/users \
   -H "Content-Type: application/json" \
   -d '{"name": "Alice", "email": "alice@example.com"}'
 
 # Order service endpoints
-curl http://localhost:8080/orders/api/orders
-curl http://localhost:8080/orders/api/orders/456
-curl http://localhost:8080/orders/api/orders?userId=123
+curl http://localhost:1234/orders/api/orders
+curl http://localhost:1234/orders/api/orders/456
+curl http://localhost:1234/orders/api/orders?userId=123
 
 # Inventory service endpoints
-curl http://localhost:8080/inventory/api/products
-curl http://localhost:8080/inventory/api/products/SKU-001/stock
+curl http://localhost:1234/inventory/api/products
+curl http://localhost:1234/inventory/api/products/SKU-001/stock
 ```
 
 ### Key Points
@@ -192,7 +192,7 @@ Register services with explicit endpoint patterns:
 
 ```bash
 # User service with specific endpoints
-curl -X POST http://localhost:8080/admin/services \
+curl -X POST http://localhost:1234/admin/services \
   -H "Content-Type: application/json" \
   -d '{
     "serviceId": "user-service",
@@ -206,7 +206,7 @@ curl -X POST http://localhost:8080/admin/services \
   }'
 
 # Order service with specific endpoints
-curl -X POST http://localhost:8080/admin/services \
+curl -X POST http://localhost:1234/admin/services \
   -H "Content-Type: application/json" \
   -d '{
     "serviceId": "order-service",
@@ -220,7 +220,7 @@ curl -X POST http://localhost:8080/admin/services \
   }'
 
 # Inventory service with wildcard endpoints
-curl -X POST http://localhost:8080/admin/services \
+curl -X POST http://localhost:1234/admin/services \
   -H "Content-Type: application/json" \
   -d '{
     "serviceId": "inventory-service",
@@ -239,19 +239,19 @@ Access all services through a unified `/gateway` namespace:
 
 ```bash
 # User endpoints (routed to user-service)
-curl http://localhost:8080/gateway/api/users
-curl http://localhost:8080/gateway/api/users/123
-curl http://localhost:8080/gateway/api/users/123/profile
+curl http://localhost:1234/gateway/api/users
+curl http://localhost:1234/gateway/api/users/123
+curl http://localhost:1234/gateway/api/users/123/profile
 
 # Order endpoints (routed to order-service)
-curl http://localhost:8080/gateway/api/orders
-curl http://localhost:8080/gateway/api/orders/456
-curl http://localhost:8080/gateway/api/users/123/orders  # User's orders!
+curl http://localhost:1234/gateway/api/orders
+curl http://localhost:1234/gateway/api/orders/456
+curl http://localhost:1234/gateway/api/users/123/orders  # User's orders!
 
 # Inventory endpoints (routed to inventory-service)
-curl http://localhost:8080/gateway/api/products
-curl http://localhost:8080/gateway/api/products/SKU-001
-curl http://localhost:8080/gateway/api/products/SKU-001/stock
+curl http://localhost:1234/gateway/api/products
+curl http://localhost:1234/gateway/api/products/SKU-001
+curl http://localhost:1234/gateway/api/products/SKU-001/stock
 ```
 
 ### Key Points
@@ -270,7 +270,7 @@ Gateway routing supports path rewriting for API versioning or path transformatio
 ### Setup
 
 ```bash
-curl -X POST http://localhost:8080/admin/services \
+curl -X POST http://localhost:1234/admin/services \
   -H "Content-Type: application/json" \
   -d '{
     "serviceId": "user-service-v2",
@@ -297,7 +297,7 @@ curl -X POST http://localhost:8080/admin/services \
 
 ```bash
 # Client calls v2 API
-curl http://localhost:8080/gateway/api/v2/users/123
+curl http://localhost:1234/gateway/api/v2/users/123
 
 # Gateway rewrites and forwards to backend
 # → GET http://localhost:3001/users/123
@@ -312,7 +312,7 @@ Control which endpoints are public vs private.
 ### Setup
 
 ```bash
-curl -X POST http://localhost:8080/admin/services \
+curl -X POST http://localhost:1234/admin/services \
   -H "Content-Type: application/json" \
   -d '{
     "serviceId": "admin-service",
@@ -334,13 +334,13 @@ curl -X POST http://localhost:8080/admin/services \
 
 ```bash
 # Public endpoint - accessible from anywhere
-curl http://localhost:8080/admin-service/api/health  # 200 OK
+curl http://localhost:1234/admin-service/api/health  # 200 OK
 
 # Private endpoint - blocked unless from allowed IP/domain
-curl http://localhost:8080/admin-service/api/admin/users  # 404 (blocked)
+curl http://localhost:1234/admin-service/api/admin/users  # 404 (blocked)
 
 # From allowed IP (e.g., 10.0.0.50)
-curl http://localhost:8080/admin-service/api/admin/users  # 200 OK
+curl http://localhost:1234/admin-service/api/admin/users  # 200 OK
 ```
 
 ---
@@ -364,7 +364,7 @@ curl http://localhost:8080/admin-service/api/admin/users  # 200 OK
 
 ```bash
 # Check registered services
-curl http://localhost:8080/admin/services
+curl http://localhost:1234/admin/services
 
 # Verify serviceId matches URL
 # URL: /user-service/... requires serviceId: "user-service"
@@ -374,7 +374,7 @@ curl http://localhost:8080/admin/services
 
 ```bash
 # Check registered endpoints
-curl http://localhost:8080/admin/services/user-service
+curl http://localhost:1234/admin/services/user-service
 
 # Verify endpoint path and method match
 # Endpoint: {"path": "/api/users", "methods": ["GET"]}
@@ -390,6 +390,6 @@ These paths cannot be used as service IDs:
 
 ```bash
 # This will fail
-curl -X POST http://localhost:8080/admin/services \
+curl -X POST http://localhost:1234/admin/services \
   -d '{"serviceId": "admin", ...}'  # Reserved!
 ```

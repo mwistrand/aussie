@@ -26,7 +26,7 @@ Aussie is a lightweight API gateway for microservices. It provides two routing s
 ```bash
 make up
 ```
-The gateway will be available at http://localhost:1234 with the Demo UI at http://localhost:8080.
+The gateway will be available at http://localhost:1234 with the Demo app at http://localhost:3000.
 
 ### Build the CLI
 ```bash
@@ -42,10 +42,10 @@ go build -o aussie
 ### Make Requests
 ```bash
 # Pass-through routing (service ID in URL)
-curl http://localhost:8080/my-service/api/endpoint
+curl http://localhost:1234/my-service/api/endpoint
 
 # Gateway routing (unified namespace)
-curl http://localhost:8080/gateway/api/endpoint
+curl http://localhost:1234/gateway/api/endpoint
 ```
 
 ## Project Structure

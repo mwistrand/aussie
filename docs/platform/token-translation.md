@@ -252,7 +252,7 @@ For production environments, use the API or CLI to manage translation configurat
 #### Upload Config
 
 ```bash
-curl -X POST http://localhost:8080/admin/translation-config \
+curl -X POST http://localhost:1234/admin/translation-config \
   -H "Content-Type: application/json" \
   -d '{
     "config": { ... },
@@ -264,7 +264,7 @@ curl -X POST http://localhost:8080/admin/translation-config \
 #### Test Translation
 
 ```bash
-curl -X POST http://localhost:8080/admin/translation-config/test \
+curl -X POST http://localhost:1234/admin/translation-config/test \
   -H "Content-Type: application/json" \
   -d '{
     "claims": { "realm_access": { "roles": ["admin"] } },

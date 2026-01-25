@@ -14,6 +14,35 @@ export default function Home() {
         </header>
 
         <div className="grid gap-6">
+          {/* Testing Dashboard */}
+          <Link
+            href="/testing"
+            className="block p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg hover:border-blue-500 dark:hover:border-blue-500 transition-colors"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+                  Testing Dashboard
+                </h2>
+                <p className="mt-2 text-zinc-600 dark:text-zinc-400">
+                  Comprehensive testing for HTTP, CORS, WebSocket, and rate limiting.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <span className="inline-block px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded">
+                    API Testing
+                  </span>
+                  <span className="inline-block px-2 py-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded">
+                    Rate Limits
+                  </span>
+                  <span className="inline-block px-2 py-1 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">
+                    WebSocket
+                  </span>
+                </div>
+              </div>
+              <span className="text-2xl">&#8594;</span>
+            </div>
+          </Link>
+
           {/* WebSocket Testing */}
           <Link
             href="/websocket"

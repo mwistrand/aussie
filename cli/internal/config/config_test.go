@@ -13,8 +13,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Fatal("DefaultConfig() returned nil")
 	}
 
-	if cfg.Host != "http://localhost:8080" {
-		t.Errorf("DefaultConfig().Host = %q, want %q", cfg.Host, "http://localhost:8080")
+	if cfg.Host != "http://localhost:1234" {
+		t.Errorf("DefaultConfig().Host = %q, want %q", cfg.Host, "http://localhost:1234")
 	}
 }
 
@@ -103,8 +103,8 @@ func TestLoadFromFile_EmptyFile(t *testing.T) {
 	}
 
 	// Should use default values
-	if cfg.Host != "http://localhost:8080" {
-		t.Errorf("LoadFromFile().Host = %q, want default %q", cfg.Host, "http://localhost:8080")
+	if cfg.Host != "http://localhost:1234" {
+		t.Errorf("LoadFromFile().Host = %q, want default %q", cfg.Host, "http://localhost:1234")
 	}
 }
 
@@ -127,8 +127,8 @@ func TestLoad_NoConfigFiles(t *testing.T) {
 	}
 
 	// Should use default values when no config files exist
-	if cfg.Host != "http://localhost:8080" {
-		t.Errorf("Load().Host = %q, want default %q", cfg.Host, "http://localhost:8080")
+	if cfg.Host != "http://localhost:1234" {
+		t.Errorf("Load().Host = %q, want default %q", cfg.Host, "http://localhost:1234")
 	}
 }
 
@@ -184,7 +184,7 @@ func TestConfig_PartialOverride(t *testing.T) {
 
 func TestIsAuthenticated_WithApiKey(t *testing.T) {
 	cfg := &Config{
-		Host:   "http://localhost:8080",
+		Host:   "http://localhost:1234",
 		ApiKey: "test-api-key",
 	}
 
@@ -195,7 +195,7 @@ func TestIsAuthenticated_WithApiKey(t *testing.T) {
 
 func TestIsAuthenticated_WithoutApiKey(t *testing.T) {
 	cfg := &Config{
-		Host:   "http://localhost:8080",
+		Host:   "http://localhost:1234",
 		ApiKey: "",
 	}
 

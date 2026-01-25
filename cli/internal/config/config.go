@@ -77,7 +77,7 @@ type Config struct {
 // DefaultConfig returns a config with default values
 func DefaultConfig() *Config {
 	return &Config{
-		Host: "http://localhost:8080",
+		Host: "http://localhost:1234",
 	}
 }
 

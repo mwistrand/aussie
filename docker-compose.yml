@@ -85,7 +85,7 @@ services:
       - DEMO_APP_URL=http://demo:3000
       # CORS configuration for demo
       - AUSSIE_GATEWAY_CORS_ENABLED=true
-      - AUSSIE_GATEWAY_CORS_ALLOWED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080
+      - AUSSIE_GATEWAY_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
       - AUSSIE_GATEWAY_CORS_ALLOW_CREDENTIALS=true
       # Token translation configuration
       - AUSSIE_AUTH_TOKEN_TRANSLATION_ENABLED=true
@@ -105,14 +105,6 @@ services:
     command: sh -c "npm install --silent && npm run dev -- -H 0.0.0.0"
     environment:
       - NODE_ENV=development
-
-  demo-ui:
-    image: nginx:alpine
-    container_name: aussie-demo-ui
-    ports:
-      - "8080:80"
-    volumes:
-      - ./demo-ui:/usr/share/nginx/html:ro
 
   jaeger:
     image: jaegertracing/all-in-one:1.53

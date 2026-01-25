@@ -159,7 +159,7 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if server flag was provided (overrides config)
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" && serverFlag != "http://localhost:8080" {
+	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" && serverFlag != "http://localhost:1234" {
 		cfg.Host = serverFlag
 	}
 

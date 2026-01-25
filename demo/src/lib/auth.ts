@@ -260,13 +260,11 @@ export async function authorizeDeviceCode(
  */
 export function parseRedirectUrl(redirect: string | null): string {
   if (!redirect) {
-    return 'http://localhost:8080/';
+    return 'http://localhost:3000/';
   }
 
   // Allow known safe origins (preserve full URL for proper redirect)
   const allowedOrigins = [
-    'http://localhost:8080',
-    'http://127.0.0.1:8080',
     'http://localhost:3000',
     'http://127.0.0.1:3000',
   ];
@@ -280,12 +278,12 @@ export function parseRedirectUrl(redirect: string | null): string {
   } catch {
     // Not a valid absolute URL, check if it's a relative path
     if (redirect.startsWith('/') && !redirect.startsWith('//')) {
-      return `http://localhost:8080${redirect}`;
+      return `http://localhost:3000${redirect}`;
     }
   }
 
-  // Default to demo-ui
-  return 'http://localhost:8080/';
+  // Default to demo app
+  return 'http://localhost:3000/';
 }
 
 // =============================================================================

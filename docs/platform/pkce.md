@@ -138,8 +138,8 @@ console.log('Code Challenge:', codeChallenge);
 
 ```bash
 # Redirect to Aussie's OIDC authorize endpoint
-curl -v "http://localhost:8080/auth/oidc/authorize?\
-redirect_uri=http://localhost:8080/\
+curl -v "http://localhost:1234/auth/oidc/authorize?\
+redirect_uri=http://localhost:1234/\
 &idp_url=http://localhost:3000/api/auth/oidc/authorize\
 &code_challenge=${CODE_CHALLENGE}\
 &code_challenge_method=S256"
@@ -150,12 +150,12 @@ redirect_uri=http://localhost:8080/\
 4. **Exchange code for tokens**:
 
 ```bash
-curl -X POST "http://localhost:8080/auth/oidc/token" \
+curl -X POST "http://localhost:1234/auth/oidc/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "code=${AUTHORIZATION_CODE}" \
   -d "code_verifier=${CODE_VERIFIER}" \
   -d "state=${STATE}" \
-  -d "redirect_uri=http://localhost:8080/"
+  -d "redirect_uri=http://localhost:1234/"
 ```
 
 ## Demo App OIDC Endpoints

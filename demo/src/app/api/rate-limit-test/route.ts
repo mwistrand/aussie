@@ -1,5 +1,5 @@
 // Rate limit test endpoint - Returns 200 OK with minimal processing.
-// Used by the demo-ui to test rate limiting behavior.
+// Used by the testing dashboard to test rate limiting behavior.
 // This endpoint has its own rate limit config (100 req/min, burst 50).
 
 export async function GET() {

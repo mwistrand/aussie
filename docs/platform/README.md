@@ -150,7 +150,7 @@ Once created, add your bootstrap key to your configuration and create a permanen
 
 **~/.aussierc:**
 ```toml
-host = "http://localhost:8080"
+host = "http://localhost:1234"
 api_key = "your-secure-bootstrap-key-at-least-32-chars"
 ```
 
@@ -641,16 +641,16 @@ Users with the wildcard permission (`*`) or admin role automatically have benchm
 
 ```bash
 # Benchmark an endpoint with defaults (100 requests, 10ms interval)
-aussie benchmark --url http://localhost:8080/my-service/api/health
+aussie benchmark --url http://localhost:1234/my-service/api/health
 
 # Custom number of requests and interval
-aussie benchmark --url http://localhost:8080/my-service/api/health -n 500 --interval 5ms
+aussie benchmark --url http://localhost:1234/my-service/api/health -n 500 --interval 5ms
 
 # Output as JSON (for automation)
-aussie benchmark --url http://localhost:8080/my-service/api/health -o json
+aussie benchmark --url http://localhost:1234/my-service/api/health -o json
 
 # Use a different HTTP method
-aussie benchmark --url http://localhost:8080/my-service/api/ping --method POST
+aussie benchmark --url http://localhost:1234/my-service/api/ping --method POST
 ```
 
 ### Options
@@ -679,7 +679,7 @@ The benchmark uses **open-loop load testing** to avoid coordinated omission:
 **Text format:**
 ```
 Starting benchmark...
-  Target:    http://localhost:8080/my-service/api/health
+  Target:    http://localhost:1234/my-service/api/health
   Method:    GET
   Requests:  100
   Interval:  10ms

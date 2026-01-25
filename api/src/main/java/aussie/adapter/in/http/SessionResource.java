@@ -382,10 +382,9 @@ public class SessionResource {
             return "/";
         }
 
-        // Allow known safe origins (demo-ui, localhost variants)
+        // Allow known safe origins (demo app, localhost variants)
         // In production, this should be configurable
-        Set<String> allowedOrigins = Set.of(
-                "http://localhost:8080", "http://127.0.0.1:8080", "http://localhost:3000", "http://127.0.0.1:3000");
+        Set<String> allowedOrigins = Set.of("http://localhost:3000", "http://127.0.0.1:3000");
 
         try {
             URI uri = URI.create(normalized);

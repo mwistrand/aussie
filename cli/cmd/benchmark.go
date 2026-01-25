@@ -47,16 +47,16 @@ Prerequisites:
 
 Examples:
   # Benchmark an endpoint with defaults (100 requests, 10ms interval)
-  aussie benchmark --url http://localhost:8080/my-service/api/health
+  aussie benchmark --url http://localhost:1234/my-service/api/health
 
   # Custom number of requests and interval
-  aussie benchmark --url http://localhost:8080/my-service/api/health -n 500 --interval 5ms
+  aussie benchmark --url http://localhost:1234/my-service/api/health -n 500 --interval 5ms
 
   # Output as JSON for automation
-  aussie benchmark --url http://localhost:8080/my-service/api/health -o json
+  aussie benchmark --url http://localhost:1234/my-service/api/health -o json
 
   # Use POST method
-  aussie benchmark --url http://localhost:8080/my-service/api/ping --method POST`,
+  aussie benchmark --url http://localhost:1234/my-service/api/ping --method POST`,
 	RunE: runBenchmark,
 }
 
