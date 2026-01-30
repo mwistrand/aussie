@@ -45,6 +45,7 @@ class EndpointConfigSerializationTest {
                 false,
                 EndpointType.HTTP,
                 Optional.of(rateLimitConfig),
+                Optional.empty(),
                 Optional.empty());
 
         var endpoints = List.of(endpoint);

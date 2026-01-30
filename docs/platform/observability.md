@@ -426,9 +426,26 @@ Access:
 2. Check logs for handler initialization
 3. Verify SPI registration in `META-INF/services/`
 
+## Hierarchical Trace Sampling
+
+For fine-grained control over trace sampling, enable hierarchical sampling:
+
+```properties
+aussie.telemetry.sampling.enabled=true
+aussie.telemetry.sampling.default-rate=0.1
+```
+
+This allows:
+- Platform-wide default sampling rates
+- Service-level overrides
+- Endpoint-level overrides
+- Platform minimum/maximum bounds
+
+See [Hierarchical Sampling Guide](sampling.md) for complete configuration details.
+
 ## Performance Considerations
 
-- **Sampling**: Use `aussie.telemetry.tracing.sample-rate` to reduce trace volume in high-traffic environments
+- **Sampling**: Use hierarchical sampling (`aussie.telemetry.sampling.*`) for granular control, or `aussie.telemetry.tracing.sample-rate` for simple global sampling
 - **Metrics cardinality**: Avoid high-cardinality labels in custom metrics
 - **Security monitoring**: Event dispatch is async and won't block requests
 - **Attribution**: Only enabled for successful requests to minimize overhead

@@ -16,7 +16,10 @@
       "path": "/api/users",
       "methods": ["GET", "POST"],
       "visibility": "PUBLIC",
-      "audience": "demo-service"
+      "audience": "demo-service",
+      "samplingConfig": {
+        "samplingRate": 0.5
+      }
     },
     {
       "path": "/api/auth/test",

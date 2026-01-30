@@ -58,6 +58,18 @@ public interface LocalCacheConfig {
     Duration rateLimitConfigTtl();
 
     /**
+     * TTL for the sampling configuration cache.
+     *
+     * <p>Controls how long service sampling configurations are cached
+     * before re-checking persistent storage. This is the local in-memory
+     * cache TTL; Redis cache TTL is configured separately.
+     *
+     * @return TTL duration (default: 30 seconds)
+     */
+    @WithDefault("PT30S")
+    Duration samplingConfigTtl();
+
+    /**
      * Maximum number of entries in local caches.
      *
      * <p>Prevents unbounded memory growth. When exceeded, least recently

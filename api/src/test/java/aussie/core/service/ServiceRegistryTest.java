@@ -55,6 +55,11 @@ class ServiceRegistryTest {
         }
 
         @Override
+        public Duration samplingConfigTtl() {
+            return Duration.ofMinutes(5);
+        }
+
+        @Override
         public long maxEntries() {
             return 1000;
         }

@@ -16,6 +16,7 @@ import aussie.core.model.ratelimit.ServiceRateLimitConfig;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteMatch;
+import aussie.core.model.sampling.ServiceSamplingConfig;
 
 /**
  * Represents a registered backend service in the gateway.
@@ -46,6 +47,7 @@ import aussie.core.model.routing.RouteMatch;
  * @param corsConfig CORS configuration for cross-origin requests
  * @param permissionPolicy permission policy for authorization
  * @param rateLimitConfig service-level rate limit configuration
+ * @param samplingConfig service-level OTel sampling configuration
  * @param version optimistic locking version for concurrent updates
  */
 public record ServiceRegistration(
@@ -61,6 +63,7 @@ public record ServiceRegistration(
         Optional<CorsConfig> corsConfig,
         Optional<ServicePermissionPolicy> permissionPolicy,
         Optional<ServiceRateLimitConfig> rateLimitConfig,
+        Optional<ServiceSamplingConfig> samplingConfig,
         long version) {
     public ServiceRegistration {
         if (serviceId == null || serviceId.isBlank()) {
@@ -96,6 +99,9 @@ public record ServiceRegistration(
         if (rateLimitConfig == null) {
             rateLimitConfig = Optional.empty();
         }
+        if (samplingConfig == null) {
+            samplingConfig = Optional.empty();
+        }
         if (version < 0) {
             version = 1;
         }
@@ -118,6 +124,7 @@ public record ServiceRegistration(
                 corsConfig,
                 permissionPolicy,
                 rateLimitConfig,
+                samplingConfig,
                 version + 1);
     }
 
@@ -138,6 +145,7 @@ public record ServiceRegistration(
                 corsConfig,
                 Optional.ofNullable(policy),
                 rateLimitConfig,
+                samplingConfig,
                 version);
     }
 
@@ -157,6 +165,28 @@ public record ServiceRegistration(
                 accessConfig,
                 corsConfig,
                 permissionPolicy,
+                Optional.ofNullable(config),
+                samplingConfig,
+                version);
+    }
+
+    /**
+     * Create a new ServiceRegistration with the given sampling config.
+     */
+    public ServiceRegistration withSamplingConfig(ServiceSamplingConfig config) {
+        return new ServiceRegistration(
+                serviceId,
+                displayName,
+                baseUrl,
+                routePrefix,
+                defaultVisibility,
+                defaultAuthRequired,
+                visibilityRules,
+                endpoints,
+                accessConfig,
+                corsConfig,
+                permissionPolicy,
+                rateLimitConfig,
                 Optional.ofNullable(config),
                 version);
     }
@@ -258,6 +288,7 @@ public record ServiceRegistration(
         private CorsConfig corsConfig;
         private ServicePermissionPolicy permissionPolicy;
         private ServiceRateLimitConfig rateLimitConfig;
+        private ServiceSamplingConfig samplingConfig;
         private long version = 1;
 
         private Builder(String serviceId) {
@@ -324,6 +355,11 @@ public record ServiceRegistration(
             return this;
         }
 
+        public Builder samplingConfig(ServiceSamplingConfig samplingConfig) {
+            this.samplingConfig = samplingConfig;
+            return this;
+        }
+
         public Builder version(long version) {
             this.version = version;
             return this;
@@ -343,6 +379,7 @@ public record ServiceRegistration(
                     Optional.ofNullable(corsConfig),
                     Optional.ofNullable(permissionPolicy),
                     Optional.ofNullable(rateLimitConfig),
+                    Optional.ofNullable(samplingConfig),
                     version);
         }
     }

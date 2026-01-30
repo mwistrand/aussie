@@ -9,6 +9,7 @@ import aussie.core.model.ratelimit.EndpointRateLimitConfig;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointType;
 import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.sampling.EndpointSamplingConfig;
 
 /**
  * DTO for endpoint configuration in service registration requests.
@@ -21,6 +22,7 @@ import aussie.core.model.routing.EndpointVisibility;
  * @param type            HTTP or WEBSOCKET
  * @param audience        optional audience claim for tokens issued to this endpoint
  * @param rateLimitConfig optional endpoint-specific rate limiting
+ * @param samplingConfig  optional endpoint-specific OTel sampling configuration
  */
 public record EndpointConfigDto(
         @JsonProperty("path") String path,
@@ -30,7 +32,8 @@ public record EndpointConfigDto(
         @JsonProperty("authRequired") Boolean authRequired,
         @JsonProperty("type") String type,
         @JsonProperty("audience") String audience,
-        @JsonProperty("rateLimitConfig") EndpointRateLimitConfigDto rateLimitConfig) {
+        @JsonProperty("rateLimitConfig") EndpointRateLimitConfigDto rateLimitConfig,
+        @JsonProperty("samplingConfig") EndpointSamplingConfigDto samplingConfig) {
 
     /**
      * DTO for endpoint-specific rate limit configuration.
@@ -55,6 +58,33 @@ public record EndpointConfigDto(
         }
     }
 
+    /**
+     * DTO for endpoint-specific sampling configuration.
+     *
+     * @param samplingRate sampling rate (0.0 to 1.0), where 1.0 means no sampling
+     */
+    public record EndpointSamplingConfigDto(@JsonProperty("samplingRate") Double samplingRate) {
+
+        /**
+         * Convert this DTO to an EndpointSamplingConfig model.
+         *
+         * @return the domain model
+         */
+        public EndpointSamplingConfig toModel() {
+            return new EndpointSamplingConfig(Optional.ofNullable(samplingRate));
+        }
+
+        /**
+         * Create a DTO from an EndpointSamplingConfig model.
+         *
+         * @param model the domain model
+         * @return the DTO representation
+         */
+        public static EndpointSamplingConfigDto fromModel(EndpointSamplingConfig model) {
+            return new EndpointSamplingConfigDto(model.samplingRate().orElse(null));
+        }
+    }
+
     public EndpointConfig toModel() {
         return toModel(false);
     }
@@ -66,6 +96,9 @@ public record EndpointConfigDto(
         var rateLimit = rateLimitConfig != null
                 ? Optional.of(rateLimitConfig.toModel())
                 : Optional.<EndpointRateLimitConfig>empty();
+        var sampling = samplingConfig != null
+                ? Optional.of(samplingConfig.toModel())
+                : Optional.<EndpointSamplingConfig>empty();
 
         return new EndpointConfig(
                 path,
@@ -75,6 +108,7 @@ public record EndpointConfigDto(
                 auth,
                 endpointType,
                 rateLimit,
+                sampling,
                 Optional.ofNullable(audience));
     }
 
@@ -89,6 +123,7 @@ public record EndpointConfigDto(
                 model.audience().orElse(null),
                 model.rateLimitConfig()
                         .map(EndpointRateLimitConfigDto::fromModel)
-                        .orElse(null));
+                        .orElse(null),
+                model.samplingConfig().map(EndpointSamplingConfigDto::fromModel).orElse(null));
     }
 }

@@ -55,6 +55,11 @@ class RateLimitResolverTest {
         }
 
         @Override
+        public Duration samplingConfigTtl() {
+            return Duration.ofMinutes(5);
+        }
+
+        @Override
         public double jitterFactor() {
             return 0.0; // No jitter in tests for predictable behavior
         }

@@ -23,7 +23,8 @@ class ServiceRegistrationRequestTest {
         @Test
         @DisplayName("Endpoints should inherit defaultAuthRequired=true when not specified")
         void shouldInheritDefaultAuthRequiredTrue() {
-            var endpoint = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null);
+            var endpoint =
+                    new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null, null);
             var request = new ServiceRegistrationRequest(
                     1L,
                     "test-service",
@@ -34,6 +35,7 @@ class ServiceRegistrationRequestTest {
                     true,
                     null,
                     List.of(endpoint),
+                    null,
                     null,
                     null,
                     null,
@@ -48,7 +50,8 @@ class ServiceRegistrationRequestTest {
         @Test
         @DisplayName("Endpoints should inherit defaultAuthRequired=false when not specified")
         void shouldInheritDefaultAuthRequiredFalse() {
-            var endpoint = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null);
+            var endpoint =
+                    new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null, null);
             var request = new ServiceRegistrationRequest(
                     1L,
                     "test-service",
@@ -59,6 +62,7 @@ class ServiceRegistrationRequestTest {
                     false,
                     null,
                     List.of(endpoint),
+                    null,
                     null,
                     null,
                     null,
@@ -74,9 +78,9 @@ class ServiceRegistrationRequestTest {
         @DisplayName("Endpoints with explicit authRequired should override default")
         void shouldOverrideDefaultWithExplicitValue() {
             var publicEndpoint =
-                    new EndpointConfigDto("/api/public", Set.of("GET"), "PUBLIC", null, false, null, null, null);
-            var protectedEndpoint =
-                    new EndpointConfigDto("/api/protected", Set.of("GET"), "PUBLIC", null, null, null, null, null);
+                    new EndpointConfigDto("/api/public", Set.of("GET"), "PUBLIC", null, false, null, null, null, null);
+            var protectedEndpoint = new EndpointConfigDto(
+                    "/api/protected", Set.of("GET"), "PUBLIC", null, null, null, null, null, null);
             var request = new ServiceRegistrationRequest(
                     1L,
                     "test-service",
@@ -87,6 +91,7 @@ class ServiceRegistrationRequestTest {
                     true,
                     null,
                     List.of(publicEndpoint, protectedEndpoint),
+                    null,
                     null,
                     null,
                     null,
@@ -102,7 +107,8 @@ class ServiceRegistrationRequestTest {
         @Test
         @DisplayName("Should default defaultAuthRequired to true when not specified")
         void shouldDefaultToTrueWhenNotSpecified() {
-            var endpoint = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null);
+            var endpoint =
+                    new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null, null);
             var request = new ServiceRegistrationRequest(
                     1L,
                     "test-service",
@@ -113,6 +119,7 @@ class ServiceRegistrationRequestTest {
                     null,
                     null,
                     List.of(endpoint),
+                    null,
                     null,
                     null,
                     null,
@@ -145,6 +152,7 @@ class ServiceRegistrationRequestTest {
                     null,
                     null,
                     null,
+                    null,
                     null);
 
             var model = request.toModel();
@@ -160,6 +168,7 @@ class ServiceRegistrationRequestTest {
                     "my-service",
                     null,
                     "http://localhost:8080",
+                    null,
                     null,
                     null,
                     null,
@@ -185,6 +194,7 @@ class ServiceRegistrationRequestTest {
                     "http://localhost:8080",
                     null,
                     "public",
+                    null,
                     null,
                     null,
                     null,

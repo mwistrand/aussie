@@ -114,6 +114,7 @@ class ServiceRegistrationTest {
                     Optional.empty(), // corsConfig
                     Optional.empty(), // permissionPolicy
                     Optional.empty(), // rateLimitConfig
+                    Optional.empty(), // samplingConfig
                     1L); // version
 
             assertNotNull(service);

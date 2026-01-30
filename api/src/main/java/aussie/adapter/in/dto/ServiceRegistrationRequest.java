@@ -7,8 +7,27 @@ import java.util.Optional;
 import aussie.core.model.auth.VisibilityRule;
 import aussie.core.model.common.CorsConfig;
 import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.sampling.ServiceSamplingConfig;
 import aussie.core.model.service.ServiceRegistration;
 
+/**
+ * DTO for service registration requests.
+ *
+ * @param version             optimistic locking version (1 for new services)
+ * @param serviceId           unique service identifier
+ * @param displayName         human-readable service name
+ * @param baseUrl             upstream service base URL
+ * @param routePrefix         URL prefix for routing to this service
+ * @param defaultVisibility   default visibility for endpoints (PUBLIC or PRIVATE)
+ * @param defaultAuthRequired default authentication requirement for endpoints
+ * @param visibilityRules     visibility rules for path patterns
+ * @param endpoints           endpoint configurations
+ * @param accessConfig        service access configuration
+ * @param cors                CORS configuration
+ * @param permissionPolicy    permission policy for authorization
+ * @param rateLimitConfig     service-level rate limiting configuration
+ * @param samplingConfig      service-level OTel sampling configuration
+ */
 public record ServiceRegistrationRequest(
         Long version,
         String serviceId,
@@ -22,7 +41,8 @@ public record ServiceRegistrationRequest(
         ServiceAccessConfigDto accessConfig,
         CorsConfigDto cors,
         ServicePermissionPolicyDto permissionPolicy,
-        ServiceRateLimitConfigDto rateLimitConfig) {
+        ServiceRateLimitConfigDto rateLimitConfig,
+        ServiceSamplingConfigDto samplingConfig) {
     public ServiceRegistration toModel() {
         var defaultVis = defaultVisibility != null
                 ? EndpointVisibility.valueOf(defaultVisibility.toUpperCase())
@@ -52,6 +72,10 @@ public record ServiceRegistrationRequest(
                 ? Optional.of(rateLimitConfig.toModel())
                 : Optional.<aussie.core.model.ratelimit.ServiceRateLimitConfig>empty();
 
+        var samplingConfigModel = samplingConfig != null
+                ? Optional.of(samplingConfig.toModel())
+                : Optional.<ServiceSamplingConfig>empty();
+
         return new ServiceRegistration(
                 serviceId,
                 displayName != null ? displayName : serviceId,
@@ -65,6 +89,7 @@ public record ServiceRegistrationRequest(
                 corsConfigModel,
                 permissionPolicyModel,
                 rateLimitConfigModel,
+                samplingConfigModel,
                 version == null ? 1L : version); // New registrations start at version 1
     }
 }

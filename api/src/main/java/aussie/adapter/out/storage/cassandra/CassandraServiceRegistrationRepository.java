@@ -25,6 +25,7 @@ import aussie.core.model.common.CorsConfig;
 import aussie.core.model.ratelimit.ServiceRateLimitConfig;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.sampling.ServiceSamplingConfig;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.ServiceRegistrationRepository;
 
@@ -63,8 +64,8 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                         INSERT INTO service_registrations
                         (service_id, display_name, base_url, route_prefix,
                          default_visibility, default_auth_required, visibility_rules, endpoints, access_config,
-                         cors_config, permission_policy, rate_limit_config, version, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
+                         cors_config, permission_policy, rate_limit_config, sampling_config, version, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
                         """);
     }
 
@@ -106,6 +107,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                             registration.corsConfig().map(this::toJson).orElse(null),
                             registration.permissionPolicy().map(this::toJson).orElse(null),
                             registration.rateLimitConfig().map(this::toJson).orElse(null),
+                            registration.samplingConfig().map(this::toJson).orElse(null),
                             registration.version());
                     return session.executeAsync(bound).toCompletableFuture();
                 })
@@ -206,6 +208,8 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                         .map(json -> fromJson(json, ServicePermissionPolicy.class)),
                 Optional.ofNullable(row.getString("rate_limit_config"))
                         .map(json -> fromJson(json, ServiceRateLimitConfig.class)),
+                Optional.ofNullable(row.isNull("sampling_config") ? null : row.getString("sampling_config"))
+                        .map(json -> fromJson(json, ServiceSamplingConfig.class)),
                 version);
     }
 
