@@ -5,9 +5,11 @@ import java.util.List;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
+import io.quarkus.runtime.StartupEvent;
 import org.jboss.logging.Logger;
 
 import aussie.core.config.SessionConfig;
@@ -42,6 +44,22 @@ public class SessionStorageProviderRegistry {
     public SessionStorageProviderRegistry(Instance<SessionStorageProvider> providers, SessionConfig config) {
         this.providers = providers;
         this.config = config;
+    }
+
+    /**
+     * Initialize provider selection at startup.
+     *
+     * <p>This ensures provider selection happens during application startup
+     * (on a worker thread) rather than lazily during the first request
+     * (which might be on the Vert.x event loop where blocking is forbidden).
+     *
+     * <p>Using StartupEvent (rather than @PostConstruct) ensures this runs after
+     * all CDI beans are initialized, including provider availability checks.
+     */
+    void onStart(@Observes StartupEvent event) {
+        // Eagerly select provider at startup to avoid blocking on event loop
+        getSelectedProvider();
+        LOG.infof("Session storage provider initialized: %s", selectedProvider.name());
     }
 
     /**

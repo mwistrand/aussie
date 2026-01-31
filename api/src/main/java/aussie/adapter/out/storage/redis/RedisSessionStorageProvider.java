@@ -3,7 +3,6 @@ package aussie.adapter.out.storage.redis;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import jakarta.annotation.PostConstruct;
@@ -78,14 +77,11 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
 
     @Override
     public boolean isAvailable() {
-        // Wait for the async check to complete (with timeout)
-        try {
-            if (!checkLatch.await(6, TimeUnit.SECONDS)) {
-                LOG.warn("Redis availability check timed out");
-                return false;
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        // Return cached availability state immediately - never block.
+        // The availability check runs asynchronously at startup via @PostConstruct.
+        // If the check hasn't completed yet, return false (memory provider will be used).
+        if (checkLatch.getCount() > 0) {
+            LOG.debug("Redis availability check not yet complete, returning false");
             return false;
         }
         return available.get();

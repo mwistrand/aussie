@@ -435,7 +435,9 @@ class SessionServiceTest {
 
     /**
      * Test registry that returns the provided repository.
+     * Vetoed to prevent CDI from discovering it during integration tests.
      */
+    @jakarta.enterprise.inject.Vetoed
     static class TestSessionStorageProviderRegistry extends SessionStorageProviderRegistry {
         private final InMemorySessionRepository testRepository;
 
