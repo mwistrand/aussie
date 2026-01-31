@@ -5,6 +5,8 @@ import java.util.Optional;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
@@ -55,15 +57,32 @@ public class SamplingResolver {
     private final SamplingConfigRepository repository;
     private final LocalCache<String, Optional<ServiceSamplingConfig>> localCache;
 
+    // Metrics counters
+    private final Counter cachePopulateFailures;
+    private final Counter platformDefaultFallbacks;
+
     // Cached platform default to avoid repeated allocation
     private volatile EffectiveSamplingRate cachedPlatformDefault;
 
     @Inject
-    public SamplingResolver(SamplingConfig config, SamplingConfigRepository repository, LocalCacheConfig cacheConfig) {
+    public SamplingResolver(
+            SamplingConfig config,
+            SamplingConfigRepository repository,
+            LocalCacheConfig cacheConfig,
+            MeterRegistry meterRegistry) {
         this.config = config;
         this.repository = repository;
         this.localCache = new CaffeineLocalCache<>(
                 cacheConfig.samplingConfigTtl(), cacheConfig.maxEntries(), cacheConfig.jitterFactor());
+
+        // Initialize metrics
+        this.cachePopulateFailures = Counter.builder("aussie.sampling.cache.populate.failures")
+                .description("Number of failures when populating the sampling config cache")
+                .register(meterRegistry);
+
+        this.platformDefaultFallbacks = Counter.builder("aussie.sampling.platform.fallbacks")
+                .description("Number of times platform default was used due to cache miss or lookup failure")
+                .register(meterRegistry);
     }
 
     /**
@@ -120,6 +139,7 @@ public class SamplingResolver {
 
         // Cache miss - return platform default immediately, populate async
         populateCacheAsync(serviceId);
+        platformDefaultFallbacks.increment();
         return getCachedPlatformDefault();
     }
 
@@ -162,6 +182,8 @@ public class SamplingResolver {
             return resolveRate(Optional.empty(), serviceConfigOpt);
         } catch (Exception e) {
             LOG.warnf(e, "Failed to resolve sampling config for service '%s', using platform default", serviceId);
+            cachePopulateFailures.increment();
+            platformDefaultFallbacks.increment();
             return getCachedPlatformDefault();
         }
     }
@@ -198,6 +220,8 @@ public class SamplingResolver {
                 .recoverWithItem(e -> {
                     LOG.warnf(
                             e, "Failed to resolve sampling config for service '%s', using platform default", serviceId);
+                    cachePopulateFailures.increment();
+                    platformDefaultFallbacks.increment();
                     return getCachedPlatformDefault();
                 });
     }
@@ -279,9 +303,10 @@ public class SamplingResolver {
         repository
                 .findByServiceId(serviceId)
                 .subscribe()
-                .with(
-                        serviceConfigOpt -> localCache.put(serviceId, serviceConfigOpt),
-                        error -> LOG.warnf(error, "Async cache populate failed for service '%s'", serviceId));
+                .with(serviceConfigOpt -> localCache.put(serviceId, serviceConfigOpt), error -> {
+                    LOG.warnf(error, "Async cache populate failed for service '%s'", serviceId);
+                    cachePopulateFailures.increment();
+                });
     }
 
     /**

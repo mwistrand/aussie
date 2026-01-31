@@ -126,6 +126,15 @@ class EffectiveSamplingRateTest {
         }
 
         @Test
+        @DisplayName("isNoSampling should return true for rate very close to 1.0 (epsilon tolerance)")
+        void isNoSamplingShouldReturnTrueForRateCloseToOne() {
+            // Rate within epsilon of 1.0 should be treated as 1.0
+            var rate = new EffectiveSamplingRate(1.0 - 1e-10, SamplingSource.PLATFORM);
+
+            assertTrue(rate.isNoSampling());
+        }
+
+        @Test
         @DisplayName("isDropAll should return true for rate 0.0")
         void isDropAllShouldReturnTrueForRateZero() {
             var rate = new EffectiveSamplingRate(0.0, SamplingSource.PLATFORM);
@@ -139,6 +148,15 @@ class EffectiveSamplingRateTest {
             var rate = new EffectiveSamplingRate(0.01, SamplingSource.PLATFORM);
 
             assertFalse(rate.isDropAll());
+        }
+
+        @Test
+        @DisplayName("isDropAll should return true for rate very close to 0.0 (epsilon tolerance)")
+        void isDropAllShouldReturnTrueForRateCloseToZero() {
+            // Rate within epsilon of 0.0 should be treated as 0.0
+            var rate = new EffectiveSamplingRate(1e-10, SamplingSource.PLATFORM);
+
+            assertTrue(rate.isDropAll());
         }
     }
 }

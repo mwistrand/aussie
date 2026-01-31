@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -39,6 +41,7 @@ class SamplingResolverTest {
     private SamplingConfig config;
     private SamplingConfig.LookupConfig lookupConfig;
     private SamplingConfigRepository repository;
+    private MeterRegistry meterRegistry;
 
     // Test cache config
     private static final LocalCacheConfig TEST_CACHE_CONFIG = new LocalCacheConfig() {
@@ -73,6 +76,7 @@ class SamplingResolverTest {
         config = mock(SamplingConfig.class);
         lookupConfig = mock(SamplingConfig.LookupConfig.class);
         repository = mock(SamplingConfigRepository.class);
+        meterRegistry = new SimpleMeterRegistry();
 
         // Default platform config
         when(config.enabled()).thenReturn(true);
@@ -82,7 +86,7 @@ class SamplingResolverTest {
         when(config.lookup()).thenReturn(lookupConfig);
         when(lookupConfig.timeout()).thenReturn(Duration.ofSeconds(5));
 
-        resolver = new SamplingResolver(config, repository, TEST_CACHE_CONFIG);
+        resolver = new SamplingResolver(config, repository, TEST_CACHE_CONFIG, meterRegistry);
     }
 
     private ServiceRegistration createService(String serviceId, ServiceSamplingConfig samplingConfig) {
@@ -103,7 +107,7 @@ class SamplingResolverTest {
         void shouldReturnPlatformDefaultRate() {
             when(config.defaultRate()).thenReturn(0.5);
             // Need new resolver with new config values
-            resolver = new SamplingResolver(config, repository, TEST_CACHE_CONFIG);
+            resolver = new SamplingResolver(config, repository, TEST_CACHE_CONFIG, meterRegistry);
 
             var rate = resolver.getCachedPlatformDefault();
 
@@ -117,7 +121,7 @@ class SamplingResolverTest {
             when(config.defaultRate()).thenReturn(0.3);
             when(config.minimumRate()).thenReturn(0.5);
             // Need new resolver with new config values
-            resolver = new SamplingResolver(config, repository, TEST_CACHE_CONFIG);
+            resolver = new SamplingResolver(config, repository, TEST_CACHE_CONFIG, meterRegistry);
 
             var rate = resolver.getCachedPlatformDefault();
 
@@ -388,6 +392,16 @@ class SamplingResolverTest {
 
             assertEquals(1.0, rate.rate());
             assertEquals(SamplingSource.PLATFORM, rate.source());
+
+            // Verify metrics were incremented
+            assertEquals(
+                    1.0,
+                    meterRegistry
+                            .counter("aussie.sampling.cache.populate.failures")
+                            .count());
+            assertEquals(
+                    1.0,
+                    meterRegistry.counter("aussie.sampling.platform.fallbacks").count());
         }
 
         @Test
@@ -457,6 +471,11 @@ class SamplingResolverTest {
 
             assertEquals(1.0, rate.rate());
             assertEquals(SamplingSource.PLATFORM, rate.source());
+
+            // Verify fallback metric was incremented
+            assertEquals(
+                    1.0,
+                    meterRegistry.counter("aussie.sampling.platform.fallbacks").count());
         }
 
         @Test
@@ -522,6 +541,16 @@ class SamplingResolverTest {
 
             assertEquals(1.0, rate.rate());
             assertEquals(SamplingSource.PLATFORM, rate.source());
+
+            // Verify metrics were incremented
+            assertEquals(
+                    1.0,
+                    meterRegistry
+                            .counter("aussie.sampling.cache.populate.failures")
+                            .count());
+            assertEquals(
+                    1.0,
+                    meterRegistry.counter("aussie.sampling.platform.fallbacks").count());
         }
 
         @Test

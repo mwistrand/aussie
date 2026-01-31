@@ -12,6 +12,14 @@ package aussie.core.model.sampling;
 public record EffectiveSamplingRate(double rate, SamplingSource source) {
 
     /**
+     * Small epsilon value for floating-point comparisons.
+     *
+     * <p>This accounts for minor precision drift that can occur during
+     * configuration parsing or arithmetic operations on sampling rates.
+     */
+    private static final double EPSILON = 1e-9;
+
+    /**
      * The source of a sampling rate decision.
      */
     public enum SamplingSource {
@@ -47,18 +55,24 @@ public record EffectiveSamplingRate(double rate, SamplingSource source) {
     /**
      * Check if this rate indicates that all requests should be traced.
      *
-     * @return true if rate is 1.0 (no sampling)
+     * <p>Uses epsilon comparison to handle floating-point precision issues
+     * that may arise from configuration parsing.
+     *
+     * @return true if rate is effectively 1.0 (no sampling)
      */
     public boolean isNoSampling() {
-        return rate >= 1.0;
+        return rate >= 1.0 - EPSILON;
     }
 
     /**
      * Check if this rate indicates that no requests should be traced.
      *
-     * @return true if rate is 0.0
+     * <p>Uses epsilon comparison to handle floating-point precision issues
+     * that may arise from configuration parsing.
+     *
+     * @return true if rate is effectively 0.0
      */
     public boolean isDropAll() {
-        return rate <= 0.0;
+        return rate <= EPSILON;
     }
 }

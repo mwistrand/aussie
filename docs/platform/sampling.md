@@ -138,6 +138,8 @@ aussie.cache.sampling-config-ttl=PT30S
 |--------|-------------|
 | `aussie.sampling.decisions.total` | Sampling decisions by service and result |
 | `aussie.sampling.rate.effective` | Effective sampling rate by service |
+| `aussie.sampling.cache.populate.failures` | Number of failures when populating the sampling config cache |
+| `aussie.sampling.platform.fallbacks` | Number of times platform default was used due to cache miss or lookup failure |
 
 ### Alerts
 
