@@ -1,11 +1,14 @@
 package aussie.adapter.out.storage.cassandra;
 
 import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.datastax.oss.driver.api.core.CqlSessionBuilder;
+import com.datastax.oss.driver.api.core.config.DefaultDriverOption;
+import com.datastax.oss.driver.api.core.config.DriverConfigLoader;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
@@ -137,8 +140,18 @@ public class CassandraStorageProvider implements StorageRepositoryProvider {
     private CqlSession buildSessionInternal(StorageAdapterConfig config, String keyspace) {
         String contactPoints = config.getOrDefault("aussie.storage.cassandra.contact-points", "localhost:9042");
         String datacenter = config.getOrDefault("aussie.storage.cassandra.datacenter", "datacenter1");
+        String queryTimeoutStr = config.getOrDefault("aussie.resiliency.cassandra.query-timeout", "PT5S");
+        Duration queryTimeout = Duration.parse(queryTimeoutStr);
 
-        CqlSessionBuilder builder = CqlSession.builder().withLocalDatacenter(datacenter);
+        // Configure driver with request timeout
+        DriverConfigLoader configLoader = DriverConfigLoader.programmaticBuilder()
+                .withDuration(DefaultDriverOption.REQUEST_TIMEOUT, queryTimeout)
+                .build();
+
+        CqlSessionBuilder builder =
+                CqlSession.builder().withLocalDatacenter(datacenter).withConfigLoader(configLoader);
+
+        LOG.infov("Cassandra session configured with query timeout: {0}", queryTimeout);
 
         if (keyspace != null) {
             builder.withKeyspace(keyspace);

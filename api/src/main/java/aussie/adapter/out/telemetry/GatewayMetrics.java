@@ -474,4 +474,126 @@ public class GatewayMetrics implements Metrics {
         var hash = Integer.toHexString(ip.hashCode());
         return hash.substring(0, Math.min(8, hash.length()));
     }
+
+    // -------------------------------------------------------------------------
+    // Resiliency Metrics
+    // -------------------------------------------------------------------------
+
+    /**
+     * Record an HTTP proxy timeout.
+     *
+     * @param serviceId the target service ID
+     * @param timeoutType the type of timeout (connect, request)
+     */
+    @Override
+    public void recordProxyTimeout(String serviceId, String timeoutType) {
+        if (!enabled) {
+            return;
+        }
+
+        Counter.builder("aussie.proxy.timeouts.total")
+                .description("HTTP proxy timeout events")
+                .tag("service_id", nullSafe(serviceId))
+                .tag("timeout_type", timeoutType)
+                .register(registry)
+                .increment();
+    }
+
+    /**
+     * Record an HTTP proxy connection failure (non-timeout).
+     *
+     * @param serviceId the target service ID
+     * @param errorType the type of error (e.g., connection_refused, connection_reset)
+     */
+    @Override
+    public void recordProxyConnectionFailure(String serviceId, String errorType) {
+        if (!enabled) {
+            return;
+        }
+
+        Counter.builder("aussie.proxy.connection.failures.total")
+                .description("HTTP proxy connection failure events (non-timeout)")
+                .tag("service_id", nullSafe(serviceId))
+                .tag("error_type", errorType)
+                .register(registry)
+                .increment();
+    }
+
+    /**
+     * Record a JWKS fetch timeout.
+     *
+     * @param jwksUriHost the JWKS URI host
+     */
+    @Override
+    public void recordJwksFetchTimeout(String jwksUriHost) {
+        if (!enabled) {
+            return;
+        }
+
+        Counter.builder("aussie.jwks.fetch.timeouts.total")
+                .description("JWKS fetch timeout events")
+                .tag("jwks_uri_host", nullSafe(jwksUriHost))
+                .register(registry)
+                .increment();
+    }
+
+    /**
+     * Record a Cassandra query timeout.
+     *
+     * @param repository the repository name
+     * @param operation the operation that timed out
+     */
+    @Override
+    public void recordCassandraTimeout(String repository, String operation) {
+        if (!enabled) {
+            return;
+        }
+
+        Counter.builder("aussie.cassandra.timeouts.total")
+                .description("Cassandra query timeout events")
+                .tag("repository", nullSafe(repository))
+                .tag("operation", nullSafe(operation))
+                .register(registry)
+                .increment();
+    }
+
+    /**
+     * Record a Redis operation timeout.
+     *
+     * @param repository the repository name
+     * @param operation the operation that timed out
+     */
+    @Override
+    public void recordRedisTimeout(String repository, String operation) {
+        if (!enabled) {
+            return;
+        }
+
+        Counter.builder("aussie.redis.timeouts.total")
+                .description("Redis operation timeout events")
+                .tag("repository", nullSafe(repository))
+                .tag("operation", nullSafe(operation))
+                .register(registry)
+                .increment();
+    }
+
+    /**
+     * Record a Redis operation failure (non-timeout).
+     *
+     * @param repository the repository name
+     * @param operation the operation that failed
+     */
+    @Override
+    public void recordRedisFailure(String repository, String operation) {
+        if (!enabled) {
+            return;
+        }
+
+        Counter.builder("aussie.redis.failures.total")
+                .description("Redis operation failure events (non-timeout)")
+                .tag("repository", nullSafe(repository))
+                .tag("operation", nullSafe(operation))
+                .register(registry)
+                .increment();
+    }
 }

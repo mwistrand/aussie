@@ -31,43 +31,51 @@ public class RedisAuthKeyCache implements AuthKeyCache {
     private final ReactiveValueCommands<String, String> valueCommands;
     private final ReactiveKeyCommands<String> keyCommands;
     private final Duration defaultTtl;
+    private final RedisTimeoutHelper timeoutHelper;
 
-    public RedisAuthKeyCache(ReactiveRedisDataSource ds, Duration defaultTtl) {
+    public RedisAuthKeyCache(ReactiveRedisDataSource ds, Duration defaultTtl, RedisTimeoutHelper timeoutHelper) {
         this.valueCommands = ds.value(String.class, String.class);
         this.keyCommands = ds.key(String.class);
         this.defaultTtl = defaultTtl;
+        this.timeoutHelper = timeoutHelper;
     }
 
     @Override
     public Uni<Optional<ApiKey>> get(String keyHash) {
-        return valueCommands.get(cacheKey(keyHash)).map(cached -> {
+        var operation = valueCommands.get(cacheKey(keyHash)).map(cached -> {
             if (cached == null) {
-                return Optional.empty();
+                return null;
             }
-            return Optional.of(deserialize(cached, keyHash));
+            return deserialize(cached, keyHash);
         });
+        return timeoutHelper.withTimeoutGraceful(operation, "get");
     }
 
     @Override
     public Uni<Void> put(String keyHash, ApiKey apiKey) {
         String cacheKey = cacheKey(keyHash);
         String serialized = serialize(apiKey);
-        return valueCommands.setex(cacheKey, defaultTtl.toSeconds(), serialized).replaceWithVoid();
+        var operation = valueCommands
+                .setex(cacheKey, defaultTtl.toSeconds(), serialized)
+                .replaceWithVoid();
+        return timeoutHelper.withTimeoutSilent(operation, "put");
     }
 
     @Override
     public Uni<Void> invalidate(String keyHash) {
-        return keyCommands.del(cacheKey(keyHash)).replaceWithVoid();
+        var operation = keyCommands.del(cacheKey(keyHash)).replaceWithVoid();
+        return timeoutHelper.withTimeoutSilent(operation, "invalidate");
     }
 
     @Override
     public Uni<Void> invalidateAll() {
-        return keyCommands.keys(KEY_PREFIX + "*").flatMap(keys -> {
+        var operation = keyCommands.keys(KEY_PREFIX + "*").flatMap(keys -> {
             if (keys.isEmpty()) {
                 return Uni.createFrom().voidItem();
             }
             return keyCommands.del(keys.toArray(new String[0])).replaceWithVoid();
         });
+        return timeoutHelper.withTimeoutSilent(operation, "invalidateAll");
     }
 
     private String cacheKey(String keyHash) {

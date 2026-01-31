@@ -34,12 +34,15 @@ public class RedisSessionRepository implements SessionRepository {
     private final ReactiveKeyCommands<String> keyCommands;
     private final String keyPrefix;
     private final Duration sessionTtl;
+    private final RedisTimeoutHelper timeoutHelper;
 
-    public RedisSessionRepository(ReactiveRedisDataSource redisDataSource, SessionConfig config) {
+    public RedisSessionRepository(
+            ReactiveRedisDataSource redisDataSource, SessionConfig config, RedisTimeoutHelper timeoutHelper) {
         this.valueCommands = redisDataSource.value(String.class, String.class);
         this.keyCommands = redisDataSource.key(String.class);
         this.keyPrefix = config.storage().redis().keyPrefix();
         this.sessionTtl = config.ttl();
+        this.timeoutHelper = timeoutHelper;
     }
 
     @Override
@@ -50,7 +53,7 @@ public class RedisSessionRepository implements SessionRepository {
         // Use SETNX semantics (SET with NX flag)
         SetArgs args = new SetArgs().nx().ex(sessionTtl);
 
-        return valueCommands.set(key, value, args).map(result -> {
+        var operation = valueCommands.set(key, value, args).map(result -> {
             if (result != null) {
                 // Successfully set - update user index
                 updateUserIndex(session.userId(), session.id());
@@ -60,6 +63,7 @@ public class RedisSessionRepository implements SessionRepository {
             LOG.debugf("Session ID collision in Redis: %s", session.id());
             return false;
         });
+        return timeoutHelper.withTimeout(operation, "saveIfAbsent");
     }
 
     @Override
@@ -67,22 +71,24 @@ public class RedisSessionRepository implements SessionRepository {
         String key = keyPrefix + session.id();
         String value = serialize(session);
 
-        return valueCommands
+        var operation = valueCommands
                 .setex(key, sessionTtl.toSeconds(), value)
                 .replaceWith(session)
                 .invoke(() -> updateUserIndex(session.userId(), session.id()));
+        return timeoutHelper.withTimeout(operation, "save");
     }
 
     @Override
     public Uni<Optional<Session>> findById(String sessionId) {
         String key = keyPrefix + sessionId;
 
-        return valueCommands.get(key).map(value -> {
+        var operation = valueCommands.get(key).map(value -> {
             if (value == null) {
                 return Optional.<Session>empty();
             }
             return Optional.of(deserialize(value));
         });
+        return timeoutHelper.withTimeout(operation, "findById");
     }
 
     @Override
@@ -91,20 +97,21 @@ public class RedisSessionRepository implements SessionRepository {
         String value = serialize(session);
 
         // Keep existing TTL by using SETEX with remaining TTL
-        return keyCommands
+        var operation = keyCommands
                 .ttl(key)
                 .flatMap(ttl -> {
                     long seconds = ttl > 0 ? ttl : sessionTtl.toSeconds();
                     return valueCommands.setex(key, seconds, value);
                 })
                 .replaceWith(session);
+        return timeoutHelper.withTimeout(operation, "update");
     }
 
     @Override
     public Uni<Void> delete(String sessionId) {
         String key = keyPrefix + sessionId;
 
-        return findById(sessionId)
+        var operation = findById(sessionId)
                 .flatMap(sessionOpt -> {
                     if (sessionOpt.isPresent()) {
                         removeFromUserIndex(sessionOpt.get().userId(), sessionId);
@@ -112,13 +119,14 @@ public class RedisSessionRepository implements SessionRepository {
                     return keyCommands.del(key);
                 })
                 .replaceWithVoid();
+        return timeoutHelper.withTimeout(operation, "delete");
     }
 
     @Override
     public Uni<Void> deleteByUserId(String userId) {
         String userIndexKey = USER_INDEX_PREFIX + userId;
 
-        return valueCommands.get(userIndexKey).flatMap(sessionIds -> {
+        var operation = valueCommands.get(userIndexKey).flatMap(sessionIds -> {
             if (sessionIds == null || sessionIds.isBlank()) {
                 return Uni.createFrom().voidItem();
             }
@@ -138,13 +146,15 @@ public class RedisSessionRepository implements SessionRepository {
                     .flatMap(results -> keyCommands.del(userIndexKey))
                     .replaceWithVoid();
         });
+        return timeoutHelper.withTimeout(operation, "deleteByUserId");
     }
 
     @Override
     public Uni<Boolean> exists(String sessionId) {
         String key = keyPrefix + sessionId;
         // exists(String key) returns Uni<Boolean> directly
-        return keyCommands.exists(key);
+        var operation = keyCommands.exists(key);
+        return timeoutHelper.withTimeout(operation, "exists");
     }
 
     private void updateUserIndex(String userId, String sessionId) {

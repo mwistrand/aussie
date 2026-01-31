@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import io.quarkus.arc.DefaultBean;
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
@@ -14,6 +15,8 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
+import aussie.core.config.ResiliencyConfig;
+import aussie.core.port.out.Metrics;
 import aussie.spi.TokenRevocationRepository;
 
 /**
@@ -50,10 +53,15 @@ public class RedisTokenRevocationRepository implements TokenRevocationRepository
 
     private final ReactiveValueCommands<String, String> valueCommands;
     private final ReactiveKeyCommands<String> keyCommands;
+    private final RedisTimeoutHelper timeoutHelper;
 
-    public RedisTokenRevocationRepository(ReactiveRedisDataSource redisDataSource) {
+    @Inject
+    public RedisTokenRevocationRepository(
+            ReactiveRedisDataSource redisDataSource, ResiliencyConfig resiliencyConfig, Metrics metrics) {
         this.valueCommands = redisDataSource.value(String.class, String.class);
         this.keyCommands = redisDataSource.key(String.class);
+        this.timeoutHelper = new RedisTimeoutHelper(
+                resiliencyConfig.redis().operationTimeout(), metrics, "TokenRevocationRepository");
         LOG.info("Initialized Redis token revocation repository");
     }
 
@@ -67,16 +75,22 @@ public class RedisTokenRevocationRepository implements TokenRevocationRepository
             return Uni.createFrom().voidItem();
         }
 
-        return valueCommands
+        var operation = valueCommands
                 .setex(key, ttlSeconds, REVOKED_VALUE)
                 .replaceWithVoid()
                 .invoke(() -> LOG.debugf("Revoked token in Redis: %s (TTL: %ds)", jti, ttlSeconds));
+        return timeoutHelper.withTimeoutSilent(operation, "revoke");
     }
 
     @Override
     public Uni<Boolean> isRevoked(String jti) {
         var key = JTI_PREFIX + jti;
-        return keyCommands.exists(key);
+        var operation = keyCommands.exists(key);
+        // Fail-closed: return true on timeout (treat as revoked for security)
+        return timeoutHelper.withTimeoutFallback(operation, "isRevoked", () -> {
+            LOG.warnf("Revocation check timed out for jti %s, treating as revoked (fail-closed)", jti);
+            return true;
+        });
     }
 
     @Override
@@ -92,19 +106,20 @@ public class RedisTokenRevocationRepository implements TokenRevocationRepository
         // Store the issuedBefore timestamp as the value
         var value = String.valueOf(issuedBefore.toEpochMilli());
 
-        return valueCommands
+        var operation = valueCommands
                 .setex(key, ttlSeconds, value)
                 .replaceWithVoid()
                 .invoke(() -> LOG.debugf(
                         "Revoked all tokens for user in Redis: %s (issuedBefore: %s, TTL: %ds)",
                         userId, issuedBefore, ttlSeconds));
+        return timeoutHelper.withTimeoutSilent(operation, "revokeAllForUser");
     }
 
     @Override
     public Uni<Boolean> isUserRevoked(String userId, Instant issuedAt) {
         var key = USER_PREFIX + userId;
 
-        return valueCommands.get(key).map(value -> {
+        var operation = valueCommands.get(key).map(value -> {
             if (value == null) {
                 return false;
             }
@@ -116,6 +131,11 @@ public class RedisTokenRevocationRepository implements TokenRevocationRepository
                 LOG.warnf("Invalid user revocation value for %s: %s", userId, value);
                 return false;
             }
+        });
+        // Fail-closed: return true on timeout (treat as revoked for security)
+        return timeoutHelper.withTimeoutFallback(operation, "isUserRevoked", () -> {
+            LOG.warnf("User revocation check timed out for %s, treating as revoked (fail-closed)", userId);
+            return true;
         });
     }
 

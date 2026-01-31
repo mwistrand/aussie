@@ -3,11 +3,14 @@ package aussie.adapter.out.storage.redis;
 import java.time.Duration;
 import java.util.Optional;
 
+import jakarta.enterprise.inject.spi.CDI;
+
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import io.smallrye.mutiny.Uni;
 
 import aussie.core.model.common.StorageHealth;
 import aussie.core.port.out.AuthKeyCache;
+import aussie.core.port.out.Metrics;
 import aussie.core.port.out.StorageHealthIndicator;
 import aussie.spi.AuthKeyCacheProvider;
 import aussie.spi.StorageAdapterConfig;
@@ -30,6 +33,7 @@ import aussie.spi.StorageProviderException;
 public class RedisAuthKeyCacheProvider implements AuthKeyCacheProvider {
 
     private static final Duration DEFAULT_TTL = Duration.ofMinutes(5);
+    private static final Duration DEFAULT_OPERATION_TIMEOUT = Duration.ofSeconds(1);
 
     private ReactiveRedisDataSource dataSource;
 
@@ -78,7 +82,19 @@ public class RedisAuthKeyCacheProvider implements AuthKeyCacheProvider {
         }
 
         Duration ttl = config.getDuration("aussie.auth.cache.ttl").orElse(DEFAULT_TTL);
-        return new RedisAuthKeyCache(dataSource, ttl);
+        Duration operationTimeout =
+                config.getDuration("aussie.resiliency.redis.operation-timeout").orElse(DEFAULT_OPERATION_TIMEOUT);
+
+        // Get metrics from CDI if available
+        Metrics metrics = null;
+        try {
+            metrics = CDI.current().select(Metrics.class).get();
+        } catch (Exception e) {
+            // Metrics not available, continue without
+        }
+
+        var timeoutHelper = new RedisTimeoutHelper(operationTimeout, metrics, "AuthKeyCache");
+        return new RedisAuthKeyCache(dataSource, ttl, timeoutHelper);
     }
 
     @Override

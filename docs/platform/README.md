@@ -885,6 +885,26 @@ See [Token Revocation](token-revocation.md) for implementation details.
 
 See [PKCE](pkce.md) for implementation details.
 
+### Resiliency
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_RESILIENCY_HTTP_CONNECT_TIMEOUT` | `PT5S` | Maximum time to establish connection to upstream service |
+| `AUSSIE_RESILIENCY_HTTP_REQUEST_TIMEOUT` | `PT30S` | Maximum time to wait for response from upstream (returns 504 if exceeded) |
+| `AUSSIE_RESILIENCY_JWKS_FETCH_TIMEOUT` | `PT5S` | Maximum time to fetch JWKS from identity provider |
+| `AUSSIE_RESILIENCY_JWKS_MAX_CACHE_ENTRIES` | `100` | Maximum number of JWKS entries to cache (LRU eviction) |
+| `AUSSIE_RESILIENCY_JWKS_CACHE_TTL` | `PT1H` | Time-to-live for cached JWKS entries |
+| `AUSSIE_RESILIENCY_CASSANDRA_QUERY_TIMEOUT` | `PT5S` | Maximum time to wait for Cassandra queries |
+| `AUSSIE_RESILIENCY_REDIS_OPERATION_TIMEOUT` | `PT1S` | Maximum time to wait for Redis operations |
+
+**Timeout Behavior by Operation:**
+- **HTTP Proxy**: Returns 504 Gateway Timeout if upstream doesn't respond
+- **JWKS Fetch**: Falls back to cached keys if available on timeout
+- **Session Operations**: Propagate error (critical operations)
+- **Cache Reads**: Treat timeout as cache miss
+- **Rate Limiting**: Fail-open (allow request) on timeout
+- **Token Revocation**: Fail-closed (deny request) on timeout for security
+
 ### Telemetry
 
 | Variable | Default | Description |

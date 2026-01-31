@@ -13,7 +13,9 @@ import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.jboss.logging.Logger;
 
+import aussie.core.config.ResiliencyConfig;
 import aussie.core.config.SessionConfig;
+import aussie.core.port.out.Metrics;
 import aussie.core.port.out.SessionRepository;
 import aussie.spi.SessionStorageProvider;
 
@@ -31,15 +33,23 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
 
     private final ReactiveRedisDataSource redisDataSource;
     private final SessionConfig sessionConfig;
+    private final ResiliencyConfig resiliencyConfig;
+    private final Metrics metrics;
 
     private RedisSessionRepository repository;
     private final AtomicBoolean available = new AtomicBoolean(false);
     private final CountDownLatch checkLatch = new CountDownLatch(1);
 
     @Inject
-    public RedisSessionStorageProvider(ReactiveRedisDataSource redisDataSource, SessionConfig sessionConfig) {
+    public RedisSessionStorageProvider(
+            ReactiveRedisDataSource redisDataSource,
+            SessionConfig sessionConfig,
+            ResiliencyConfig resiliencyConfig,
+            Metrics metrics) {
         this.redisDataSource = redisDataSource;
         this.sessionConfig = sessionConfig;
+        this.resiliencyConfig = resiliencyConfig;
+        this.metrics = metrics;
     }
 
     @PostConstruct
@@ -90,7 +100,9 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
     @Override
     public SessionRepository createRepository() {
         if (repository == null) {
-            repository = new RedisSessionRepository(redisDataSource, sessionConfig);
+            var timeoutHelper =
+                    new RedisTimeoutHelper(resiliencyConfig.redis().operationTimeout(), metrics, "SessionRepository");
+            repository = new RedisSessionRepository(redisDataSource, sessionConfig, timeoutHelper);
             LOG.info("Created Redis session repository with prefix: "
                     + sessionConfig.storage().redis().keyPrefix());
         }

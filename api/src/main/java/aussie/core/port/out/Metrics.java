@@ -142,4 +142,53 @@ public interface Metrics {
      * @param limitType the type of limit (http, ws_connection, ws_message)
      */
     void recordRateLimitExceeded(String serviceId, String limitType);
+
+    // ========== Resiliency Metrics ==========
+
+    /**
+     * Record an HTTP proxy timeout.
+     *
+     * @param serviceId the target service ID
+     * @param timeoutType the type of timeout (connect, request)
+     */
+    void recordProxyTimeout(String serviceId, String timeoutType);
+
+    /**
+     * Record an HTTP proxy connection failure (non-timeout).
+     *
+     * @param serviceId the target service ID
+     * @param errorType the type of error (e.g., connection_refused, connection_reset)
+     */
+    void recordProxyConnectionFailure(String serviceId, String errorType);
+
+    /**
+     * Record a JWKS fetch timeout.
+     *
+     * @param jwksUriHost the JWKS URI host
+     */
+    void recordJwksFetchTimeout(String jwksUriHost);
+
+    /**
+     * Record a Cassandra query timeout.
+     *
+     * @param repository the repository name
+     * @param operation the operation that timed out
+     */
+    void recordCassandraTimeout(String repository, String operation);
+
+    /**
+     * Record a Redis operation timeout.
+     *
+     * @param repository the repository name
+     * @param operation the operation that timed out
+     */
+    void recordRedisTimeout(String repository, String operation);
+
+    /**
+     * Record a Redis operation failure (non-timeout).
+     *
+     * @param repository the repository name
+     * @param operation the operation that failed
+     */
+    void recordRedisFailure(String repository, String operation);
 }

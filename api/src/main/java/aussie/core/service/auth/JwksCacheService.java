@@ -1,7 +1,6 @@
 package aussie.core.service.auth;
 
 import java.net.URI;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
@@ -10,6 +9,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 import io.smallrye.mutiny.Uni;
 import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.buffer.Buffer;
@@ -20,7 +23,9 @@ import org.jose4j.jwk.JsonWebKey;
 import org.jose4j.jwk.JsonWebKeySet;
 import org.jose4j.lang.JoseException;
 
+import aussie.core.config.ResiliencyConfig;
 import aussie.core.port.out.JwksCache;
+import aussie.core.port.out.Metrics;
 
 /**
  * Service for caching and retrieving JSON Web Key Sets (JWKS).
@@ -40,20 +45,34 @@ import aussie.core.port.out.JwksCache;
 public class JwksCacheService implements JwksCache {
 
     private static final Logger LOG = Logger.getLogger(JwksCacheService.class);
-    private static final Duration DEFAULT_CACHE_TTL = Duration.ofHours(1);
 
     private final WebClient webClient;
-    private final Map<URI, CachedKeySet> cache = new ConcurrentHashMap<>();
+    private final Cache<URI, CachedKeySet> cache;
     private final Map<URI, Uni<JsonWebKeySet>> inFlightFetches = new ConcurrentHashMap<>();
+    private final ResiliencyConfig.JwksConfig jwksConfig;
+    private final Metrics metrics;
 
     @Inject
-    public JwksCacheService(Vertx vertx) {
+    public JwksCacheService(
+            Vertx vertx, ResiliencyConfig resiliencyConfig, MeterRegistry meterRegistry, Metrics metrics) {
         this.webClient = WebClient.create(vertx);
+        this.jwksConfig = resiliencyConfig.jwks();
+        this.metrics = metrics;
+
+        // Build bounded Caffeine cache with LRU eviction
+        this.cache = Caffeine.newBuilder()
+                .maximumSize(jwksConfig.maxCacheEntries())
+                .expireAfterWrite(jwksConfig.cacheTtl())
+                .recordStats()
+                .build();
+
+        // Register cache metrics with Micrometer
+        CaffeineCacheMetrics.monitor(meterRegistry, cache, "aussie.jwks.cache");
     }
 
     @Override
     public Uni<JsonWebKeySet> getKeySet(URI jwksUri) {
-        var cached = cache.get(jwksUri);
+        var cached = cache.getIfPresent(jwksUri);
         if (cached != null && !cached.isExpired()) {
             LOG.debugv("Using cached JWKS for {0}", jwksUri);
             return Uni.createFrom().item(cached.keySet());
@@ -89,7 +108,7 @@ public class JwksCacheService implements JwksCache {
     @Override
     public Uni<JsonWebKeySet> refresh(URI jwksUri) {
         LOG.infov("Force refreshing JWKS for {0}", jwksUri);
-        cache.remove(jwksUri);
+        cache.invalidate(jwksUri);
         inFlightFetches.remove(jwksUri); // Clear any stale in-flight fetch
         return getOrCreateFetch(jwksUri);
     }
@@ -97,7 +116,7 @@ public class JwksCacheService implements JwksCache {
     @Override
     public void invalidate(URI jwksUri) {
         LOG.infov("Invalidating cached JWKS for {0}", jwksUri);
-        cache.remove(jwksUri);
+        cache.invalidate(jwksUri);
         inFlightFetches.remove(jwksUri);
     }
 
@@ -108,14 +127,30 @@ public class JwksCacheService implements JwksCache {
                 .getAbs(jwksUri.toString())
                 .ssl(jwksUri.getScheme().equals("https"))
                 .send()
+                .ifNoItem()
+                .after(jwksConfig.fetchTimeout())
+                .failWith(() -> {
+                    LOG.warnv("JWKS fetch timeout for {0} after {1}", jwksUri, jwksConfig.fetchTimeout());
+                    metrics.recordJwksFetchTimeout(jwksUri.getHost());
+                    return new JwksFetchException("Timeout fetching JWKS from " + jwksUri);
+                })
                 .map(this::parseResponse)
                 .invoke(keySet -> {
-                    cache.put(jwksUri, new CachedKeySet(keySet, Instant.now().plus(DEFAULT_CACHE_TTL)));
+                    cache.put(jwksUri, new CachedKeySet(keySet, Instant.now().plus(jwksConfig.cacheTtl())));
                     LOG.infov(
                             "Cached {0} keys from {1}", keySet.getJsonWebKeys().size(), jwksUri);
                 })
                 .onFailure()
-                .invoke(error -> LOG.errorv(error, "Failed to fetch JWKS from {0}", jwksUri));
+                .recoverWithUni(error -> {
+                    LOG.errorv(error, "Failed to fetch JWKS from {0}", jwksUri);
+                    // Try to use stale cached keys if available
+                    var stale = cache.getIfPresent(jwksUri);
+                    if (stale != null) {
+                        LOG.warnv("Using stale cached JWKS for {0} due to: {1}", jwksUri, error.getMessage());
+                        return Uni.createFrom().item(stale.keySet());
+                    }
+                    return Uni.createFrom().failure(error);
+                });
     }
 
     private JsonWebKeySet parseResponse(HttpResponse<Buffer> response) {
@@ -152,6 +187,12 @@ public class JwksCacheService implements JwksCache {
         }
     }
 
+    /**
+     * Exception thrown when JWKS fetch fails.
+     *
+     * <p>This can occur due to network timeout, HTTP error, or malformed JWKS response.
+     * If cached keys are available, the service falls back to stale data.
+     */
     public static class JwksFetchException extends RuntimeException {
         public JwksFetchException(String message) {
             super(message);

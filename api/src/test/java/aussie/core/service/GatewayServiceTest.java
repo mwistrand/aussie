@@ -389,6 +389,24 @@ class GatewayServiceTest {
 
         @Override
         public void recordRateLimitExceeded(String serviceId, String limitType) {}
+
+        @Override
+        public void recordProxyTimeout(String serviceId, String timeoutType) {}
+
+        @Override
+        public void recordProxyConnectionFailure(String serviceId, String errorType) {}
+
+        @Override
+        public void recordJwksFetchTimeout(String jwksUriHost) {}
+
+        @Override
+        public void recordCassandraTimeout(String repository, String operation) {}
+
+        @Override
+        public void recordRedisTimeout(String repository, String operation) {}
+
+        @Override
+        public void recordRedisFailure(String repository, String operation) {}
     }
 
     /**

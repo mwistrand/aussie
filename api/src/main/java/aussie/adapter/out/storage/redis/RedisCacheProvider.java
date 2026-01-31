@@ -10,6 +10,7 @@ import io.smallrye.mutiny.Uni;
 
 import aussie.core.model.common.StorageHealth;
 import aussie.core.port.out.ConfigurationCache;
+import aussie.core.port.out.Metrics;
 import aussie.core.port.out.StorageHealthIndicator;
 import aussie.spi.ConfigurationCacheProvider;
 import aussie.spi.StorageAdapterConfig;
@@ -33,6 +34,7 @@ import aussie.spi.StorageProviderException;
 public class RedisCacheProvider implements ConfigurationCacheProvider {
 
     private static final Duration DEFAULT_TTL = Duration.ofMinutes(15);
+    private static final Duration DEFAULT_OPERATION_TIMEOUT = Duration.ofSeconds(1);
 
     private ReactiveRedisDataSource dataSource;
 
@@ -64,6 +66,8 @@ public class RedisCacheProvider implements ConfigurationCacheProvider {
     @Override
     public ConfigurationCache createCache(StorageAdapterConfig config) {
         Duration ttl = config.getDuration("aussie.storage.cache.ttl").orElse(DEFAULT_TTL);
+        Duration operationTimeout =
+                config.getDuration("aussie.resiliency.redis.operation-timeout").orElse(DEFAULT_OPERATION_TIMEOUT);
 
         // Get the Redis data source from CDI
         try {
@@ -73,7 +77,16 @@ public class RedisCacheProvider implements ConfigurationCacheProvider {
             throw new StorageProviderException("Failed to obtain Redis data source from CDI", e);
         }
 
-        return new RedisConfigurationCache(dataSource, ttl);
+        // Get metrics from CDI if available
+        Metrics metrics = null;
+        try {
+            metrics = CDI.current().select(Metrics.class).get();
+        } catch (Exception e) {
+            // Metrics not available, continue without
+        }
+
+        var timeoutHelper = new RedisTimeoutHelper(operationTimeout, metrics, "ConfigurationCache");
+        return new RedisConfigurationCache(dataSource, ttl, timeoutHelper);
     }
 
     @Override

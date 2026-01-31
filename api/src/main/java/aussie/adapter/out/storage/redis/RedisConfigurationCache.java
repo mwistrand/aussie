@@ -30,21 +30,24 @@ public class RedisConfigurationCache implements ConfigurationCache {
     private final ReactiveValueCommands<String, String> valueCommands;
     private final ReactiveKeyCommands<String> keyCommands;
     private final Duration defaultTtl;
+    private final RedisTimeoutHelper timeoutHelper;
 
-    public RedisConfigurationCache(ReactiveRedisDataSource ds, Duration defaultTtl) {
+    public RedisConfigurationCache(ReactiveRedisDataSource ds, Duration defaultTtl, RedisTimeoutHelper timeoutHelper) {
         this.valueCommands = ds.value(String.class, String.class);
         this.keyCommands = ds.key(String.class);
         this.defaultTtl = defaultTtl;
+        this.timeoutHelper = timeoutHelper;
     }
 
     @Override
     public Uni<Optional<ServiceRegistration>> get(String serviceId) {
-        return valueCommands.get(keyFor(serviceId)).map(json -> {
+        var operation = valueCommands.get(keyFor(serviceId)).map(json -> {
             if (json == null) {
-                return Optional.empty();
+                return null;
             }
-            return Optional.of(deserialize(json));
+            return deserialize(json);
         });
+        return timeoutHelper.withTimeoutGraceful(operation, "get");
     }
 
     @Override
@@ -56,12 +59,14 @@ public class RedisConfigurationCache implements ConfigurationCache {
     public Uni<Void> put(ServiceRegistration registration, Duration ttl) {
         String key = keyFor(registration.serviceId());
         String json = serialize(registration);
-        return valueCommands.setex(key, ttl.toSeconds(), json).replaceWithVoid();
+        var operation = valueCommands.setex(key, ttl.toSeconds(), json).replaceWithVoid();
+        return timeoutHelper.withTimeoutSilent(operation, "put");
     }
 
     @Override
     public Uni<Void> invalidate(String serviceId) {
-        return keyCommands.del(keyFor(serviceId)).replaceWithVoid();
+        var operation = keyCommands.del(keyFor(serviceId)).replaceWithVoid();
+        return timeoutHelper.withTimeoutSilent(operation, "invalidate");
     }
 
     @Override
@@ -69,12 +74,13 @@ public class RedisConfigurationCache implements ConfigurationCache {
         // Use SCAN to find and delete all keys with our prefix
         // For safety, we use KEYS pattern match - in production with large datasets,
         // consider using SCAN in batches
-        return keyCommands.keys(KEY_PREFIX + "*").flatMap(keys -> {
+        var operation = keyCommands.keys(KEY_PREFIX + "*").flatMap(keys -> {
             if (keys.isEmpty()) {
                 return Uni.createFrom().voidItem();
             }
             return keyCommands.del(keys.toArray(new String[0])).replaceWithVoid();
         });
+        return timeoutHelper.withTimeoutSilent(operation, "invalidateAll");
     }
 
     private String keyFor(String serviceId) {
