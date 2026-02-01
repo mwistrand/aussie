@@ -63,6 +63,22 @@ public interface ResiliencyConfig {
          */
         @WithDefault("PT5S")
         Duration connectTimeout();
+
+        /**
+         * Maximum HTTP connections per upstream host (bulkhead).
+         *
+         * @return Max connections per host (default: 50)
+         */
+        @WithDefault("50")
+        int maxConnectionsPerHost();
+
+        /**
+         * Maximum total HTTP connections across all upstream hosts (bulkhead).
+         *
+         * @return Max total connections (default: 200)
+         */
+        @WithDefault("200")
+        int maxConnections();
     }
 
     /**
@@ -100,6 +116,14 @@ public interface ResiliencyConfig {
          */
         @WithDefault("PT1H")
         Duration cacheTtl();
+
+        /**
+         * Maximum concurrent JWKS fetch connections (bulkhead).
+         *
+         * @return Max concurrent connections (default: 10)
+         */
+        @WithDefault("10")
+        int maxConnections();
     }
 
     /**
@@ -116,6 +140,22 @@ public interface ResiliencyConfig {
          */
         @WithDefault("PT5S")
         Duration queryTimeout();
+
+        /**
+         * Connections per node in local datacenter (bulkhead).
+         *
+         * @return Pool size per local node (default: 30)
+         */
+        @WithDefault("30")
+        int poolLocalSize();
+
+        /**
+         * Maximum concurrent requests per Cassandra connection.
+         *
+         * @return Max requests per connection (default: 1024)
+         */
+        @WithDefault("1024")
+        int maxRequestsPerConnection();
     }
 
     /**
@@ -138,5 +178,21 @@ public interface ResiliencyConfig {
          */
         @WithDefault("PT1S")
         Duration operationTimeout();
+
+        /**
+         * Maximum Redis connections in pool (bulkhead).
+         *
+         * @return Pool size (default: 30)
+         */
+        @WithDefault("30")
+        int poolSize();
+
+        /**
+         * Maximum requests waiting when Redis pool is exhausted.
+         *
+         * @return Max waiting requests (default: 100)
+         */
+        @WithDefault("100")
+        int poolWaiting();
     }
 }

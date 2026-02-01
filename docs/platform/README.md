@@ -895,7 +895,14 @@ See [PKCE](pkce.md) for implementation details.
 | `AUSSIE_RESILIENCY_JWKS_MAX_CACHE_ENTRIES` | `100` | Maximum number of JWKS entries to cache (LRU eviction) |
 | `AUSSIE_RESILIENCY_JWKS_CACHE_TTL` | `PT1H` | Time-to-live for cached JWKS entries |
 | `AUSSIE_RESILIENCY_CASSANDRA_QUERY_TIMEOUT` | `PT5S` | Maximum time to wait for Cassandra queries |
+| `AUSSIE_RESILIENCY_CASSANDRA_POOL_LOCAL_SIZE` | `30` | Connections per node in local datacenter |
+| `AUSSIE_RESILIENCY_CASSANDRA_MAX_REQUESTS_PER_CONNECTION` | `1024` | Maximum concurrent requests per Cassandra connection |
 | `AUSSIE_RESILIENCY_REDIS_OPERATION_TIMEOUT` | `PT1S` | Maximum time to wait for Redis operations |
+| `AUSSIE_RESILIENCY_REDIS_POOL_SIZE` | `30` | Maximum Redis connections in pool |
+| `AUSSIE_RESILIENCY_REDIS_POOL_WAITING` | `100` | Maximum requests waiting when Redis pool exhausted |
+| `AUSSIE_RESILIENCY_HTTP_MAX_CONNECTIONS_PER_HOST` | `50` | Maximum HTTP connections per upstream host |
+| `AUSSIE_RESILIENCY_HTTP_MAX_CONNECTIONS` | `200` | Maximum total HTTP connections across all hosts |
+| `AUSSIE_RESILIENCY_JWKS_MAX_CONNECTIONS` | `10` | Maximum concurrent JWKS fetch connections |
 
 **Timeout Behavior by Operation:**
 - **HTTP Proxy**: Returns 504 Gateway Timeout if upstream doesn't respond
@@ -904,6 +911,16 @@ See [PKCE](pkce.md) for implementation details.
 - **Cache Reads**: Treat timeout as cache miss
 - **Rate Limiting**: Fail-open (allow request) on timeout
 - **Token Revocation**: Fail-closed (deny request) on timeout for security
+
+**Bulkhead Health Check:**
+
+The `/q/health/ready` endpoint includes a "bulkheads" health check that reports configured pool limits:
+- `aussie.bulkhead.cassandra.pool.max` - Cassandra connections per node
+- `aussie.bulkhead.redis.pool.max` - Redis pool size
+- `aussie.bulkhead.http.pool.max.per_host` - HTTP connections per upstream host
+- `aussie.bulkhead.jwks.pool.max` - JWKS fetch connections
+
+This health check always reports UP since configuration is validated at startup. Pool exhaustion should be monitored via metrics and alerts, not health checks.
 
 ### Telemetry
 

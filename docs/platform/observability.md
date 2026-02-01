@@ -163,6 +163,23 @@ scrape_configs:
 | `aussie.connections.active` | Gauge | - | Active HTTP connections |
 | `aussie.traffic.bytes` | Counter | `service_id`, `team_id`, `direction` | Traffic volume in bytes |
 
+### Bulkhead Metrics
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `aussie.bulkhead.cassandra.pool.max` | Gauge | `type` | Configured max Cassandra connections per node |
+| `aussie.bulkhead.cassandra.requests.max` | Gauge | `type` | Configured max requests per Cassandra connection |
+| `aussie.bulkhead.redis.pool.max` | Gauge | `type` | Configured max Redis connections |
+| `aussie.bulkhead.redis.pool.waiting.max` | Gauge | `type` | Configured max waiting requests when Redis pool exhausted |
+| `aussie.bulkhead.http.pool.max.per_host` | Gauge | `type` | Configured max HTTP connections per upstream host |
+| `aussie.bulkhead.http.pool.max.total` | Gauge | `type` | Configured max total HTTP connections |
+| `aussie.bulkhead.jwks.pool.max` | Gauge | `type` | Configured max JWKS fetch connections |
+
+These metrics expose configured bulkhead limits. For actual pool usage metrics, enable driver-level metrics:
+- Cassandra: `quarkus.cassandra.metrics.enabled=true`
+- Redis: Available via Quarkus Redis extension
+- HTTP: `quarkus.micrometer.binder.vertx.enabled=true`
+
 ### Security Metrics
 
 | Metric | Type | Labels | Description |
@@ -372,6 +389,26 @@ groups:
           severity: warning
         annotations:
           summary: "High p99 latency for {{ $labels.service_id }}"
+
+      # Bulkhead alerts - monitor driver-provided pool usage against configured limits
+      # Note: These use driver metrics, not aussie.bulkhead.* (which are configured limits)
+      - alert: CassandraPoolNearCapacity
+        expr: |
+          cassandra_pool_open_connections / on() aussie_bulkhead_cassandra_pool_max > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cassandra connection pool at >85% capacity"
+
+      - alert: RedisPoolNearCapacity
+        expr: |
+          redis_pool_active / on() aussie_bulkhead_redis_pool_max > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis connection pool at >85% capacity"
 ```
 
 ## Grafana Dashboards
