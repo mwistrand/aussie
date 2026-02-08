@@ -29,7 +29,7 @@ class ServicePermissionsResourceTest {
     @BeforeEach
     void setUp() {
         // Register a test service
-        registerTestService(TEST_SERVICE_ID, "http://localhost:8080");
+        registerTestService(TEST_SERVICE_ID, "http://backend.local:8080");
     }
 
     @AfterEach

@@ -73,7 +73,7 @@ public class AuthenticationIntegrationTest {
                                 {
                                     "serviceId": "auth-test-service",
                                     "displayName": "Auth Test Service",
-                                    "baseUrl": "http://localhost:9999"
+                                    "baseUrl": "http://backend.local:9999"
                                 }
                                 """)
                 .when()

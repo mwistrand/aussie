@@ -44,7 +44,7 @@ class AdminResourceTest {
                 {
                     "serviceId": "test-service",
                     "displayName": "Test Service",
-                    "baseUrl": "http://localhost:8081",
+                    "baseUrl": "http://backend.local:8081",
                     "endpoints": [
                         {
                             "path": "/api/test",
@@ -63,7 +63,7 @@ class AdminResourceTest {
                     .statusCode(201)
                     .body("serviceId", equalTo("test-service"))
                     .body("displayName", equalTo("Test Service"))
-                    .body("baseUrl", equalTo("http://localhost:8081"))
+                    .body("baseUrl", equalTo("http://backend.local:8081"))
                     .body("endpoints", hasSize(1))
                     .body("endpoints[0].path", equalTo("/api/test"))
                     .body("endpoints[0].visibility", equalTo("PUBLIC"));
@@ -77,7 +77,7 @@ class AdminResourceTest {
                 {
                     "serviceId": "private-service",
                     "displayName": "Private Service",
-                    "baseUrl": "http://localhost:8082",
+                    "baseUrl": "http://backend.local:8082",
                     "endpoints": [
                         {
                             "path": "/api/public",
@@ -110,6 +110,26 @@ class AdminResourceTest {
         }
 
         @Test
+        @DisplayName("Should reject service with blocked baseUrl")
+        void shouldRejectServiceWithBlockedBaseUrl() {
+            var requestBody =
+                    """
+                {
+                    "serviceId": "ssrf-service",
+                    "baseUrl": "http://169.254.169.254/metadata"
+                }
+                """;
+
+            given().contentType(ContentType.JSON)
+                    .body(requestBody)
+                    .when()
+                    .post("/admin/services")
+                    .then()
+                    .statusCode(400)
+                    .body("detail", equalTo("baseUrl must not point to a loopback, link-local, or metadata address"));
+        }
+
+        @Test
         @DisplayName("Should reject service with missing required fields")
         void shouldRejectServiceWithMissingFields() {
             var requestBody =
@@ -134,7 +154,7 @@ class AdminResourceTest {
                     """
                 {
                     "serviceId": "auth-inherit-service",
-                    "baseUrl": "http://localhost:8081",
+                    "baseUrl": "http://backend.local:8081",
                     "defaultAuthRequired": true,
                     "endpoints": [
                         {
@@ -173,7 +193,7 @@ class AdminResourceTest {
                     """
                 {
                     "serviceId": "no-auth-service",
-                    "baseUrl": "http://localhost:8081",
+                    "baseUrl": "http://backend.local:8081",
                     "defaultAuthRequired": false,
                     "endpoints": [
                         {
@@ -212,7 +232,7 @@ class AdminResourceTest {
                     """
                 {
                     "serviceId": "default-auth-service",
-                    "baseUrl": "http://localhost:8081",
+                    "baseUrl": "http://backend.local:8081",
                     "endpoints": [
                         {
                             "path": "/api/test",
@@ -243,8 +263,8 @@ class AdminResourceTest {
         @DisplayName("Should list all registered services")
         void shouldListAllServices() {
             // Register two services
-            registerTestService("service-1", "http://localhost:8081");
-            registerTestService("service-2", "http://localhost:8082");
+            registerTestService("service-1", "http://backend.local:8081");
+            registerTestService("service-2", "http://backend.local:8082");
 
             given().when().get("/admin/services").then().statusCode(200).body("$", hasSize(2));
         }
@@ -252,14 +272,14 @@ class AdminResourceTest {
         @Test
         @DisplayName("Should get specific service by ID")
         void shouldGetServiceById() {
-            registerTestService("my-service", "http://localhost:8083");
+            registerTestService("my-service", "http://backend.local:8083");
 
             given().when()
                     .get("/admin/services/my-service")
                     .then()
                     .statusCode(200)
                     .body("serviceId", equalTo("my-service"))
-                    .body("baseUrl", equalTo("http://localhost:8083"));
+                    .body("baseUrl", equalTo("http://backend.local:8083"));
         }
 
         @Test
@@ -276,7 +296,7 @@ class AdminResourceTest {
         @Test
         @DisplayName("Should delete existing service")
         void shouldDeleteExistingService() {
-            registerTestService("to-delete", "http://localhost:8084");
+            registerTestService("to-delete", "http://backend.local:8084");
 
             given().when().delete("/admin/services/to-delete").then().statusCode(204);
 

@@ -620,8 +620,16 @@ Validate a service configuration file without registering it.
 This checks:
 - Required fields (`serviceId`, `displayName`, `baseUrl`)
 - Field types and formats
+- `baseUrl` SSRF protection (see below)
 - Visibility rules and endpoint configurations
 - Optional fields like `routePrefix`, `defaultVisibility`, and `accessConfig`
+
+**`baseUrl` requirements:**
+- Must use `http` or `https` scheme
+- Must not point to loopback addresses (`127.x.x.x`, `::1`, `localhost`)
+- Must not point to link-local or cloud metadata addresses (`169.254.x.x`)
+- Must not point to wildcard addresses (`0.0.0.0`, `::`)
+- Private network addresses (`10.x`, `172.16-31.x`, `192.168.x`) are allowed for internal routing
 
 #### `service list`
 List all registered services.

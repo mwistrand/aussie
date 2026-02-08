@@ -1,6 +1,5 @@
 package aussie.adapter.in.dto;
 
-import java.net.URI;
 import java.util.List;
 import java.util.Optional;
 
@@ -10,6 +9,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import aussie.adapter.in.validation.UrlValidator;
 import aussie.core.model.auth.VisibilityRule;
 import aussie.core.model.common.CorsConfig;
 import aussie.core.model.routing.EndpointVisibility;
@@ -52,6 +52,13 @@ public record ServiceRegistrationRequest(
         @Valid ServicePermissionPolicyDto permissionPolicy,
         @Valid ServiceRateLimitConfigDto rateLimitConfig,
         @Valid ServiceSamplingConfigDto samplingConfig) {
+    /**
+     * Convert this DTO to a {@link ServiceRegistration} domain model.
+     *
+     * <p>Validates {@code baseUrl} against SSRF blocklists during conversion.
+     *
+     * @throws io.quarkiverse.resteasy.problem.HttpProblem if baseUrl fails validation
+     */
     public ServiceRegistration toModel() {
         var defaultVis = defaultVisibility != null
                 ? EndpointVisibility.valueOf(defaultVisibility.toUpperCase())
@@ -88,7 +95,7 @@ public record ServiceRegistrationRequest(
         return new ServiceRegistration(
                 serviceId,
                 displayName != null ? displayName : serviceId,
-                URI.create(baseUrl),
+                UrlValidator.validateServiceUrl(baseUrl, "baseUrl"),
                 routePrefix,
                 defaultVis,
                 defaultAuth,

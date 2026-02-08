@@ -500,6 +500,20 @@ export AUSSIE_GATEWAY_SECURITY_HEADERS_CONTENT_SECURITY_POLICY="default-src 'sel
 export AUSSIE_GATEWAY_SECURITY_HEADERS_STRICT_TRANSPORT_SECURITY="max-age=31536000; includeSubDomains"
 ```
 
+### SSRF Protection
+
+Service registration validates `baseUrl` to prevent server-side request forgery. The following address categories are blocked:
+
+| Category | Examples | Reason |
+|----------|----------|--------|
+| Loopback | `127.x.x.x`, `::1`, `localhost` | Prevents access to gateway-local services |
+| Link-local | `169.254.x.x` | Blocks cloud metadata endpoints (AWS, GCP, Azure) |
+| Wildcard | `0.0.0.0`, `::` | Prevents binding to all interfaces |
+
+Private network addresses (`10.x`, `172.16-31.x`, `192.168.x`) are allowed for internal service-to-service routing.
+
+DNS-based SSRF (registering a hostname that later resolves to a blocked IP) is mitigated by restricting service registration to authenticated admin users.
+
 ## Request Forwarding
 
 By default, Aussie uses RFC 7239 `Forwarded` headers:

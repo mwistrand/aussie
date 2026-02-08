@@ -126,7 +126,7 @@ public class BootstrapIntegrationTest {
                                 {
                                     "serviceId": "bootstrap-test-service",
                                     "displayName": "Bootstrap Test Service",
-                                    "baseUrl": "http://localhost:9999"
+                                    "baseUrl": "http://backend.local:9999"
                                 }
                                 """)
                 .when()
