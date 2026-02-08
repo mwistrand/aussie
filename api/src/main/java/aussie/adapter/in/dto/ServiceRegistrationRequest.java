@@ -4,6 +4,12 @@ import java.net.URI;
 import java.util.List;
 import java.util.Optional;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
 import aussie.core.model.auth.VisibilityRule;
 import aussie.core.model.common.CorsConfig;
 import aussie.core.model.routing.EndpointVisibility;
@@ -29,20 +35,23 @@ import aussie.core.model.service.ServiceRegistration;
  * @param samplingConfig      service-level OTel sampling configuration
  */
 public record ServiceRegistrationRequest(
-        Long version,
-        String serviceId,
-        String displayName,
-        String baseUrl,
+        @Min(value = 1, message = "version must be at least 1") Long version,
+        @NotBlank(message = "serviceId is required")
+                @Size(max = 64, message = "serviceId must be 64 characters or less")
+                String serviceId,
+        @Size(max = 255, message = "displayName must be 255 characters or less") String displayName,
+        @NotBlank(message = "baseUrl is required") String baseUrl,
         String routePrefix,
-        String defaultVisibility,
+        @Pattern(regexp = "^(PUBLIC|PRIVATE)$", message = "defaultVisibility must be PUBLIC or PRIVATE")
+                String defaultVisibility,
         Boolean defaultAuthRequired,
-        List<VisibilityRuleDto> visibilityRules,
-        List<EndpointConfigDto> endpoints,
-        ServiceAccessConfigDto accessConfig,
-        CorsConfigDto cors,
-        ServicePermissionPolicyDto permissionPolicy,
-        ServiceRateLimitConfigDto rateLimitConfig,
-        ServiceSamplingConfigDto samplingConfig) {
+        List<@Valid VisibilityRuleDto> visibilityRules,
+        List<@Valid EndpointConfigDto> endpoints,
+        @Valid ServiceAccessConfigDto accessConfig,
+        @Valid CorsConfigDto cors,
+        @Valid ServicePermissionPolicyDto permissionPolicy,
+        @Valid ServiceRateLimitConfigDto rateLimitConfig,
+        @Valid ServiceSamplingConfigDto samplingConfig) {
     public ServiceRegistration toModel() {
         var defaultVis = defaultVisibility != null
                 ? EndpointVisibility.valueOf(defaultVisibility.toUpperCase())

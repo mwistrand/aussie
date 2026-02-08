@@ -2,18 +2,24 @@ package aussie.adapter.in.dto;
 
 import java.util.Map;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+
 import aussie.core.model.auth.TranslationConfigSchema;
 
 /**
  * DTO for testing translation with sample claims.
  *
  * @param config optional configuration to test (uses active config if null)
- * @param issuer the token issuer
- * @param subject the token subject
+ * @param issuer the token issuer (optional, defaults to "test-issuer")
+ * @param subject the token subject (optional, defaults to "test-subject")
  * @param claims the sample claims to translate
  */
 public record TranslationTestRequestDto(
-        TranslationConfigSchema config, String issuer, String subject, Map<String, Object> claims) {
+        @Valid TranslationConfigSchema config,
+        String issuer,
+        String subject,
+        @NotNull(message = "claims are required") Map<String, Object> claims) {
 
     /**
      * Creates a test request using the active configuration.

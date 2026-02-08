@@ -5,6 +5,7 @@ import java.util.List;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -77,11 +78,7 @@ public class TranslationConfigResource {
      */
     @POST
     @PermissionsAllowed({Permission.TRANSLATION_CONFIG_WRITE_VALUE, Permission.ADMIN_VALUE})
-    public Uni<Response> uploadConfig(TranslationConfigUploadDto request, @Context SecurityContext ctx) {
-        if (request == null || request.config() == null) {
-            throw GatewayProblem.badRequest("Configuration is required");
-        }
-
+    public Uni<Response> uploadConfig(@Valid TranslationConfigUploadDto request, @Context SecurityContext ctx) {
         final var createdBy = getUserId(ctx);
 
         return configService
@@ -133,15 +130,7 @@ public class TranslationConfigResource {
     @POST
     @Path("/test")
     @PermissionsAllowed({Permission.TRANSLATION_CONFIG_READ_VALUE, Permission.ADMIN_VALUE})
-    public Uni<TranslationTestResultDto> testTranslation(TranslationTestRequestDto request) {
-        if (request == null) {
-            throw GatewayProblem.badRequest("Test request is required");
-        }
-
-        if (request.claims() == null) {
-            throw GatewayProblem.badRequest("Claims are required");
-        }
-
+    public Uni<TranslationTestResultDto> testTranslation(@Valid TranslationTestRequestDto request) {
         final var issuer = request.issuer() != null ? request.issuer() : "test-issuer";
         final var subject = request.subject() != null ? request.subject() : "test-subject";
 

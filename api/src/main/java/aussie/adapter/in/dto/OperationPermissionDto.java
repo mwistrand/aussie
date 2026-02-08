@@ -2,6 +2,8 @@ package aussie.adapter.in.dto;
 
 import java.util.Set;
 
+import jakarta.validation.constraints.NotEmpty;
+
 import aussie.core.model.auth.OperationPermission;
 
 /**
@@ -9,7 +11,8 @@ import aussie.core.model.auth.OperationPermission;
  *
  * @param anyOfPermissions set of permissions, any one of which grants access
  */
-public record OperationPermissionDto(Set<String> anyOfPermissions) {
+public record OperationPermissionDto(
+        @NotEmpty(message = "at least one permission is required") Set<String> anyOfPermissions) {
 
     public OperationPermission toModel() {
         return new OperationPermission(anyOfPermissions != null ? anyOfPermissions : Set.of());

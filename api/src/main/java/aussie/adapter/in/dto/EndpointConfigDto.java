@@ -3,6 +3,14 @@ package aussie.adapter.in.dto;
 import java.util.Optional;
 import java.util.Set;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Pattern;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import aussie.core.model.ratelimit.EndpointRateLimitConfig;
@@ -25,23 +33,29 @@ import aussie.core.model.sampling.EndpointSamplingConfig;
  * @param samplingConfig  optional endpoint-specific OTel sampling configuration
  */
 public record EndpointConfigDto(
-        @JsonProperty("path") String path,
-        @JsonProperty("methods") Set<String> methods,
-        @JsonProperty("visibility") String visibility,
+        @JsonProperty("path") @NotBlank(message = "path is required") String path,
+        @JsonProperty("methods") @NotEmpty(message = "at least one HTTP method is required") Set<String> methods,
+        @JsonProperty("visibility")
+                @Pattern(regexp = "^(PUBLIC|PRIVATE)$", message = "visibility must be PUBLIC or PRIVATE")
+                String visibility,
         @JsonProperty("pathRewrite") String pathRewrite,
         @JsonProperty("authRequired") Boolean authRequired,
-        @JsonProperty("type") String type,
+        @JsonProperty("type") @Pattern(regexp = "^(HTTP|WEBSOCKET)$", message = "type must be HTTP or WEBSOCKET")
+                String type,
         @JsonProperty("audience") String audience,
-        @JsonProperty("rateLimitConfig") EndpointRateLimitConfigDto rateLimitConfig,
-        @JsonProperty("samplingConfig") EndpointSamplingConfigDto samplingConfig) {
+        @JsonProperty("rateLimitConfig") @Valid EndpointRateLimitConfigDto rateLimitConfig,
+        @JsonProperty("samplingConfig") @Valid EndpointSamplingConfigDto samplingConfig) {
 
     /**
      * DTO for endpoint-specific rate limit configuration.
      */
     public record EndpointRateLimitConfigDto(
-            @JsonProperty("requestsPerWindow") Long requestsPerWindow,
-            @JsonProperty("windowSeconds") Long windowSeconds,
-            @JsonProperty("burstCapacity") Long burstCapacity) {
+            @JsonProperty("requestsPerWindow") @Min(value = 1, message = "requestsPerWindow must be at least 1")
+                    Long requestsPerWindow,
+            @JsonProperty("windowSeconds") @Min(value = 1, message = "windowSeconds must be at least 1")
+                    Long windowSeconds,
+            @JsonProperty("burstCapacity") @Min(value = 1, message = "burstCapacity must be at least 1")
+                    Long burstCapacity) {
 
         public EndpointRateLimitConfig toModel() {
             return new EndpointRateLimitConfig(
@@ -63,7 +77,11 @@ public record EndpointConfigDto(
      *
      * @param samplingRate sampling rate (0.0 to 1.0), where 1.0 means no sampling
      */
-    public record EndpointSamplingConfigDto(@JsonProperty("samplingRate") Double samplingRate) {
+    public record EndpointSamplingConfigDto(
+            @JsonProperty("samplingRate")
+                    @DecimalMin(value = "0.0", message = "samplingRate must be at least 0.0")
+                    @DecimalMax(value = "1.0", message = "samplingRate must be at most 1.0")
+                    Double samplingRate) {
 
         /**
          * Convert this DTO to an EndpointSamplingConfig model.

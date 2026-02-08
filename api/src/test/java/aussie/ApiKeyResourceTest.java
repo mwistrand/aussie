@@ -73,7 +73,7 @@ public class ApiKeyResourceTest {
                 .then()
                 .statusCode(400)
                 .contentType("application/problem+json")
-                .body("detail", equalTo("name is required"));
+                .body("violations[0].message", equalTo("name is required"));
     }
 
     @Test

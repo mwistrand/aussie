@@ -106,7 +106,7 @@ class RoleResourceTest {
                     .then()
                     .statusCode(400)
                     .contentType("application/problem+json")
-                    .body("detail", equalTo("id is required"));
+                    .body("violations[0].message", equalTo("id is required"));
         }
 
         @Test
@@ -304,7 +304,9 @@ class RoleResourceTest {
                     .when()
                     .put("/admin/roles/no-body-test")
                     .then()
-                    .statusCode(400);
+                    .statusCode(400)
+                    .contentType("application/problem+json")
+                    .body("violations[0].message", equalTo("request body is required"));
         }
     }
 

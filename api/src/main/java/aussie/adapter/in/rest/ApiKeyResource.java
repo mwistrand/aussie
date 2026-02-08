@@ -6,6 +6,7 @@ import java.util.List;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
@@ -66,11 +67,7 @@ public class ApiKeyResource {
      */
     @POST
     @PermissionsAllowed({Permission.APIKEYS_WRITE_VALUE, Permission.ADMIN_VALUE})
-    public Uni<Response> createKey(CreateApiKeyRequest request) {
-        if (request == null || request.name() == null || request.name().isBlank()) {
-            throw GatewayProblem.badRequest("name is required");
-        }
-
+    public Uni<Response> createKey(@Valid CreateApiKeyRequest request) {
         Duration ttl = request.ttlDays() != null ? Duration.ofDays(request.ttlDays()) : null;
 
         // Get the creator's identity

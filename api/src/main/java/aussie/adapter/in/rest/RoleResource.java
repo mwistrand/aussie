@@ -4,6 +4,8 @@ import java.util.List;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
@@ -61,11 +63,7 @@ public class RoleResource {
      */
     @POST
     @PermissionsAllowed({Permission.AUTH_ROLES_CREATE_VALUE, Permission.ADMIN_VALUE})
-    public Uni<Response> createRole(CreateRoleRequest request) {
-        if (request == null || request.id() == null || request.id().isBlank()) {
-            throw GatewayProblem.badRequest("id is required");
-        }
-
+    public Uni<Response> createRole(@Valid CreateRoleRequest request) {
         return roleService
                 .create(request.id(), request.displayName(), request.description(), request.permissions())
                 .map(role ->
@@ -117,11 +115,9 @@ public class RoleResource {
     @PUT
     @Path("/{roleId}")
     @PermissionsAllowed({Permission.AUTH_ROLES_UPDATE_VALUE, Permission.ADMIN_VALUE})
-    public Uni<Response> updateRole(@PathParam("roleId") String roleId, UpdateRoleRequest request) {
-        if (request == null) {
-            throw GatewayProblem.badRequest("Request body is required");
-        }
-
+    public Uni<Response> updateRole(
+            @PathParam("roleId") String roleId,
+            @NotNull(message = "request body is required") @Valid UpdateRoleRequest request) {
         // Validate mutual exclusivity
         if (request.permissions() != null
                 && (request.addPermissions() != null || request.removePermissions() != null)) {

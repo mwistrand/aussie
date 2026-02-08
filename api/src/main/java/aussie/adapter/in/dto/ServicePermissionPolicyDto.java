@@ -3,6 +3,9 @@ package aussie.adapter.in.dto;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
+
 import aussie.core.model.auth.ServicePermissionPolicy;
 
 /**
@@ -10,7 +13,8 @@ import aussie.core.model.auth.ServicePermissionPolicy;
  *
  * @param permissions map of operation names to permission rules
  */
-public record ServicePermissionPolicyDto(Map<String, OperationPermissionDto> permissions) {
+public record ServicePermissionPolicyDto(
+        @NotEmpty(message = "permissions map cannot be empty") Map<String, @Valid OperationPermissionDto> permissions) {
 
     public ServicePermissionPolicy toModel() {
         if (permissions == null || permissions.isEmpty()) {

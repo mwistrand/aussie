@@ -4,6 +4,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+
 import aussie.core.model.common.CorsConfig;
 
 /**
@@ -15,7 +18,9 @@ public record CorsConfigDto(
         Set<String> allowedHeaders,
         Set<String> exposedHeaders,
         Boolean allowCredentials,
-        Long maxAge) {
+        @Min(value = 0, message = "maxAge must be non-negative")
+                @Max(value = 86400, message = "maxAge must be at most 86400 seconds (24 hours)")
+                Long maxAge) {
 
     /**
      * Convert this DTO to a CorsConfig model.

@@ -2,6 +2,9 @@ package aussie.adapter.in.dto;
 
 import java.util.Optional;
 
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+
 import aussie.core.model.sampling.ServiceSamplingConfig;
 
 /**
@@ -11,7 +14,10 @@ import aussie.core.model.sampling.ServiceSamplingConfig;
  *
  * @param samplingRate sampling rate (0.0 to 1.0), where 1.0 means no sampling
  */
-public record ServiceSamplingConfigDto(Double samplingRate) {
+public record ServiceSamplingConfigDto(
+        @DecimalMin(value = "0.0", message = "samplingRate must be at least 0.0")
+                @DecimalMax(value = "1.0", message = "samplingRate must be at most 1.0")
+                Double samplingRate) {
 
     /**
      * Convert this DTO to a ServiceSamplingConfig model.

@@ -45,6 +45,9 @@ dependencies {
     // Security (RBAC with @RolesAllowed)
     implementation 'io.quarkus:quarkus-security'
 
+    // Bean Validation (JSR-380)
+    implementation 'io.quarkus:quarkus-hibernate-validator'
+
     // JWT/JOSE library for token validation and issuance
     implementation 'org.bitbucket.b_c:jose4j:0.9.4'
 

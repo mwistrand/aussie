@@ -5,6 +5,7 @@ import java.util.Set;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
@@ -56,12 +57,7 @@ public class AdminResource {
         Permission.SERVICE_CONFIG_UPDATE_VALUE,
         Permission.ADMIN_VALUE
     })
-    public Uni<Response> registerService(ServiceRegistrationRequest request) {
-        // Minimal adapter-level validation to prevent NPE during DTO conversion
-        if (request == null || request.serviceId() == null || request.baseUrl() == null) {
-            throw GatewayProblem.badRequest("serviceId and baseUrl are required");
-        }
-
+    public Uni<Response> registerService(@Valid ServiceRegistrationRequest request) {
         try {
             var service = request.toModel();
 
