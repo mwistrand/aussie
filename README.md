@@ -19,6 +19,7 @@ Aussie is a lightweight API gateway for microservices. It provides two routing s
 |-------|----------|-------------|
 | [Platform Guide](docs/platform/README.md) | Platform teams | Deploying, configuring, and operating Aussie |
 | [Consumer Guide](docs/api/README.md) | App developers | Onboarding services to Aussie |
+| [Guidebook](guidebook/00-introduction.md) | Aussie developers | Explains implementation decisions and details |
 
 ## Quick Start
 

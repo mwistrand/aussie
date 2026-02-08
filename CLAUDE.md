@@ -48,3 +48,5 @@ Project layout:
 All documentation should be added to the top-level docs/ directory:
 - Documentation for platform teams running Aussie is at docs/platform
 - Documentation for API teams is at docs/api
+
+Changes may also require updates to the guidebook in `guidebook/`.
