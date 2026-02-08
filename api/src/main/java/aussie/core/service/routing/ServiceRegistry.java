@@ -64,6 +64,9 @@ public class ServiceRegistry {
     // TTL tracking for multi-instance cache refresh
     private final AtomicReference<Instant> lastRefreshed = new AtomicReference<>(Instant.MIN);
 
+    // Coalesces concurrent refresh requests to prevent thundering herd
+    private final AtomicReference<Uni<Void>> inFlightRefresh = new AtomicReference<>();
+
     @Inject
     public ServiceRegistry(
             ServiceRegistrationRepository repository,
@@ -126,13 +129,43 @@ public class ServiceRegistry {
      * This method provides eventual consistency for multi-instance deployments.
      * When the cache TTL expires, routes are reloaded from persistent storage.
      *
+     * <p>
+     * Uses request coalescing to prevent thundering herd: concurrent callers
+     * share a single in-flight refresh rather than triggering multiple refreshes.
+     *
      * @return Uni completing when cache is ensured fresh
      */
     private Uni<Void> ensureCacheFresh() {
-        if (isCacheStale()) {
-            return refreshRouteCache();
+        if (!isCacheStale()) {
+            return Uni.createFrom().voidItem();
         }
-        return Uni.createFrom().voidItem();
+
+        return Uni.createFrom().deferred(() -> {
+            // Re-check after entering deferred block; another thread may have refreshed
+            if (!isCacheStale()) {
+                return Uni.createFrom().voidItem();
+            }
+
+            // Join an in-flight refresh if one exists
+            var existing = inFlightRefresh.get();
+            if (existing != null) {
+                return existing;
+            }
+
+            // Create new refresh that clears itself on completion
+            var refresh = refreshRouteCache()
+                    .onTermination()
+                    .invoke(() -> inFlightRefresh.set(null))
+                    .memoize()
+                    .indefinitely();
+
+            // Try to set as the in-flight refresh; if another thread won, use theirs
+            if (inFlightRefresh.compareAndSet(null, refresh)) {
+                return refresh;
+            }
+            var winner = inFlightRefresh.get();
+            return winner != null ? winner : refresh;
+        });
     }
 
     /**
