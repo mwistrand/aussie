@@ -4,6 +4,7 @@ import io.smallrye.config.ConfigMapping;
 
 import aussie.core.model.auth.AccessControlConfig;
 import aussie.core.model.common.LimitsConfig;
+import aussie.core.model.common.TrustedProxyConfig;
 
 @ConfigMapping(prefix = "aussie.gateway")
 public interface GatewayConfig {
@@ -15,4 +16,6 @@ public interface GatewayConfig {
     AccessControlConfig accessControl();
 
     SecurityConfig security();
+
+    TrustedProxyConfig trustedProxy();
 }

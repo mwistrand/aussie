@@ -8,6 +8,7 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.MultivaluedHashMap;
@@ -19,7 +20,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.service.common.*;
+import aussie.core.model.common.TrustedProxyConfig;
+import aussie.core.service.common.SourceIdentifierExtractor;
+import aussie.core.service.common.TrustedProxyValidator;
 
 @DisplayName("SourceIdentifierExtractor")
 class SourceIdentifierExtractorTest {
@@ -28,7 +31,10 @@ class SourceIdentifierExtractorTest {
 
     @BeforeEach
     void setUp() {
-        extractor = new SourceIdentifierExtractor();
+        // Default: trusted proxy disabled (all headers trusted, backward-compatible)
+        var config = new TestTrustedProxyConfig(false, null);
+        var validator = new TrustedProxyValidator(config);
+        extractor = new SourceIdentifierExtractor(validator);
     }
 
     @Nested
@@ -256,6 +262,104 @@ class SourceIdentifierExtractorTest {
 
             var result = extractor.extract(request);
             assertEquals("192.168.1.1", result.ipAddress());
+        }
+    }
+
+    @Nested
+    @DisplayName("Trusted Proxy Validation")
+    class TrustedProxyTests {
+
+        @Test
+        @DisplayName("Should use forwarding headers when trust is disabled")
+        void shouldUseHeadersWhenTrustDisabled() {
+            var config = new TestTrustedProxyConfig(false, null);
+            var validator = new TrustedProxyValidator(config);
+            var ext = new SourceIdentifierExtractor(validator);
+
+            var request = new TestContainerRequestContext().withHeader("X-Forwarded-For", "192.168.1.100");
+
+            var result = ext.extract(request, "10.0.0.1");
+            assertEquals("192.168.1.100", result.ipAddress());
+        }
+
+        @Test
+        @DisplayName("Should use forwarding headers when socket IP is trusted")
+        void shouldUseHeadersWhenSocketIsTrusted() {
+            var config = new TestTrustedProxyConfig(true, List.of("10.0.0.0/8"));
+            var validator = new TrustedProxyValidator(config);
+            var ext = new SourceIdentifierExtractor(validator);
+
+            var request = new TestContainerRequestContext().withHeader("X-Forwarded-For", "192.168.1.100");
+
+            var result = ext.extract(request, "10.0.0.1");
+            assertEquals("192.168.1.100", result.ipAddress());
+        }
+
+        @Test
+        @DisplayName("Should use socket IP when socket IP is not trusted")
+        void shouldUseSocketIpWhenNotTrusted() {
+            var config = new TestTrustedProxyConfig(true, List.of("10.0.0.0/8"));
+            var validator = new TrustedProxyValidator(config);
+            var ext = new SourceIdentifierExtractor(validator);
+
+            var request = new TestContainerRequestContext()
+                    .withHeader("X-Forwarded-For", "192.168.1.100")
+                    .withHeader("X-Forwarded-Host", "spoofed.example.com");
+
+            // Socket IP is from outside the trusted range
+            var result = ext.extract(request, "203.0.113.50");
+            assertEquals("203.0.113.50", result.ipAddress());
+            assertFalse(result.host().isPresent(), "host should be empty when proxy is untrusted");
+            assertFalse(result.forwardedFor().isPresent(), "forwardedFor should be empty when proxy is untrusted");
+        }
+
+        @Test
+        @DisplayName("Should use socket IP when trust enabled but no proxies configured")
+        void shouldUseSocketIpWhenNoProxiesConfigured() {
+            var config = new TestTrustedProxyConfig(true, List.of());
+            var validator = new TrustedProxyValidator(config);
+            var ext = new SourceIdentifierExtractor(validator);
+
+            var request = new TestContainerRequestContext().withHeader("X-Forwarded-For", "192.168.1.100");
+
+            var result = ext.extract(request, "10.0.0.1");
+            assertEquals("10.0.0.1", result.ipAddress());
+        }
+
+        @Test
+        @DisplayName("Should fall back to 'unknown' when socket IP is null and trust enabled")
+        void shouldFallBackToUnknownWhenNoSocketIp() {
+            var config = new TestTrustedProxyConfig(true, List.of("10.0.0.0/8"));
+            var validator = new TrustedProxyValidator(config);
+            var ext = new SourceIdentifierExtractor(validator);
+
+            var request = new TestContainerRequestContext().withHeader("X-Forwarded-For", "192.168.1.100");
+
+            var result = ext.extract(request, null);
+            assertEquals("unknown", result.ipAddress());
+        }
+
+        @Test
+        @DisplayName("Should ignore forwarding headers when using 1-arg extract() with trust enabled")
+        void shouldIgnoreHeadersWithOneArgExtractWhenTrustEnabled() {
+            var config = new TestTrustedProxyConfig(true, List.of("10.0.0.0/8"));
+            var validator = new TrustedProxyValidator(config);
+            var ext = new SourceIdentifierExtractor(validator);
+
+            var request = new TestContainerRequestContext()
+                    .withHeader("X-Forwarded-For", "192.168.1.100")
+                    .withRequestUri(java.net.URI.create("http://localhost:8080/test"));
+
+            // 1-arg extract() passes null socketIp; with trust enabled, headers are ignored
+            var result = ext.extract(request);
+            assertEquals("localhost", result.ipAddress());
+        }
+    }
+
+    private record TestTrustedProxyConfig(boolean enabled, List<String> proxyList) implements TrustedProxyConfig {
+        @Override
+        public Optional<List<String>> proxies() {
+            return Optional.ofNullable(proxyList);
         }
     }
 

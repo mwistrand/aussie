@@ -3,6 +3,7 @@ package aussie.core.service.common;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.container.ContainerRequestContext;
 
 import aussie.core.model.common.SourceIdentifier;
@@ -16,27 +17,57 @@ import aussie.core.model.common.SourceIdentifier;
  *   <li>X-Forwarded-For (first IP in chain)</li>
  *   <li>RFC 7239 Forwarded header</li>
  *   <li>X-Real-IP</li>
- *   <li>Request URI host (fallback)</li>
+ *   <li>Socket remote address (fallback)</li>
  * </ol>
+ *
+ * <p>Delegates to {@link TrustedProxyValidator} to determine whether
+ * forwarding headers should be trusted for a given connection.
  */
 @ApplicationScoped
 public class SourceIdentifierExtractor {
 
+    private final TrustedProxyValidator trustedProxyValidator;
+
+    @Inject
+    public SourceIdentifierExtractor(TrustedProxyValidator trustedProxyValidator) {
+        this.trustedProxyValidator = trustedProxyValidator;
+    }
+
     /**
-     * Extract source identification from the request.
+     * Extract source identification from the request using the socket IP
+     * for trusted proxy validation.
+     *
+     * @param request  the JAX-RS request context
+     * @param socketIp the direct connection's remote IP address
+     * @return source identifier containing IP address, host, and forwarded chain
+     */
+    public SourceIdentifier extract(ContainerRequestContext request, String socketIp) {
+        final var trustHeaders = trustedProxyValidator.shouldTrustForwardingHeaders(socketIp);
+
+        var ipAddress = trustHeaders ? extractIpFromHeaders(request) : null;
+        if (ipAddress == null || ipAddress.isEmpty()) {
+            ipAddress = socketIp != null ? socketIp : extractFallbackIp(request);
+        }
+
+        var host = trustHeaders ? extractHost(request) : Optional.<String>empty();
+        var forwardedFor = trustHeaders ? extractForwardedFor(request) : Optional.<String>empty();
+
+        return new SourceIdentifier(ipAddress, host, forwardedFor);
+    }
+
+    /**
+     * Extract source identification trusting all forwarding headers.
+     * Prefer {@link #extract(ContainerRequestContext, String)} when the
+     * socket IP is available.
      *
      * @param request the JAX-RS request context
      * @return source identifier containing IP address, host, and forwarded chain
      */
     public SourceIdentifier extract(ContainerRequestContext request) {
-        var ipAddress = extractIpAddress(request);
-        var host = extractHost(request);
-        var forwardedFor = extractForwardedFor(request);
-
-        return new SourceIdentifier(ipAddress, host, forwardedFor);
+        return extract(request, null);
     }
 
-    private String extractIpAddress(ContainerRequestContext request) {
+    private String extractIpFromHeaders(ContainerRequestContext request) {
         // Check X-Forwarded-For first (first IP in chain is original client)
         var xForwardedFor = request.getHeaderString("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
@@ -58,7 +89,10 @@ public class SourceIdentifierExtractor {
             return xRealIp.trim();
         }
 
-        // Last resort: use request URI host (in production, would use socket address)
+        return null;
+    }
+
+    private String extractFallbackIp(ContainerRequestContext request) {
         var uriInfo = request.getUriInfo();
         if (uriInfo != null && uriInfo.getRequestUri() != null) {
             var host = uriInfo.getRequestUri().getHost();
@@ -66,7 +100,6 @@ public class SourceIdentifierExtractor {
                 return host;
             }
         }
-
         return "unknown";
     }
 

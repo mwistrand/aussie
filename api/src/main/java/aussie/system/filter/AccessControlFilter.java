@@ -7,6 +7,7 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Response;
 
 import io.smallrye.mutiny.Uni;
+import io.vertx.core.http.HttpServerRequest;
 import org.jboss.resteasy.reactive.server.ServerRequestFilter;
 
 import aussie.adapter.in.problem.GatewayProblem;
@@ -20,8 +21,7 @@ import aussie.core.service.routing.ServiceRegistry;
 /**
  * Reactive access control filter for gateway requests.
  *
- * <p>
- * Uses @ServerRequestFilter with Uni return type to avoid blocking
+ * <p>Uses @ServerRequestFilter with Uni return type to avoid blocking
  * the Vert.x event loop when performing async service lookups.
  */
 public class AccessControlFilter {
@@ -43,9 +43,13 @@ public class AccessControlFilter {
     }
 
     @ServerRequestFilter
-    public Uni<Response> filter(ContainerRequestContext requestContext) {
+    public Uni<Response> filter(ContainerRequestContext requestContext, HttpServerRequest vertxRequest) {
         var path = requestContext.getUriInfo().getPath();
         var method = requestContext.getMethod();
+
+        final var socketIp = vertxRequest.remoteAddress() != null
+                ? vertxRequest.remoteAddress().host()
+                : null;
 
         // Normalize path - remove leading slash if present
         if (path.startsWith("/")) {
@@ -54,14 +58,15 @@ public class AccessControlFilter {
 
         // Handle gateway requests
         if (path.startsWith("gateway/")) {
-            return handleGatewayRequest(requestContext, path, method);
+            return handleGatewayRequest(requestContext, socketIp, path, method);
         }
 
         // Handle pass-through requests (/{serviceId}/{path})
-        return handlePassThroughRequest(requestContext, path, method);
+        return handlePassThroughRequest(requestContext, socketIp, path, method);
     }
 
-    private Uni<Response> handleGatewayRequest(ContainerRequestContext requestContext, String path, String method) {
+    private Uni<Response> handleGatewayRequest(
+            ContainerRequestContext requestContext, String socketIp, String path, String method) {
         var gatewayPath = "/" + path.substring("gateway/".length());
 
         var routeResult = serviceRegistry.findRoute(gatewayPath, method);
@@ -69,10 +74,11 @@ public class AccessControlFilter {
             return Uni.createFrom().nullItem();
         }
 
-        return checkAccessControl(requestContext, routeResult.get());
+        return checkAccessControl(requestContext, socketIp, routeResult.get());
     }
 
-    private Uni<Response> handlePassThroughRequest(ContainerRequestContext requestContext, String path, String method) {
+    private Uni<Response> handlePassThroughRequest(
+            ContainerRequestContext requestContext, String socketIp, String path, String method) {
         final var servicePath = ServicePath.parse(path);
 
         if (RESERVED_PATHS.contains(servicePath.serviceId().toLowerCase())) {
@@ -91,17 +97,18 @@ public class AccessControlFilter {
             var routeResult = serviceRegistry.findRoute(servicePath.path(), method);
             if (routeResult.isPresent()
                     && routeResult.get().service().serviceId().equals(servicePath.serviceId())) {
-                return checkAccessControl(requestContext, routeResult.get());
+                return checkAccessControl(requestContext, socketIp, routeResult.get());
             }
 
             // For pass-through without a specific route, use ServiceOnlyMatch
             // which uses service defaults for visibility/authRequired/rateLimitConfig
-            return checkAccessControl(requestContext, new ServiceOnlyMatch(service));
+            return checkAccessControl(requestContext, socketIp, new ServiceOnlyMatch(service));
         });
     }
 
-    private Uni<Response> checkAccessControl(ContainerRequestContext requestContext, RouteLookupResult route) {
-        var source = sourceExtractor.extract(requestContext);
+    private Uni<Response> checkAccessControl(
+            ContainerRequestContext requestContext, String socketIp, RouteLookupResult route) {
+        var source = sourceExtractor.extract(requestContext, socketIp);
         var isAllowed = accessEvaluator.isAllowed(source, route, route.service().accessConfig());
 
         if (!isAllowed) {

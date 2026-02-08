@@ -6,6 +6,7 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 - [Setup](#setup)
 - [Authentication Configuration](#authentication-configuration)
 - [Bootstrap Mode](#bootstrap-mode-first-time-setup)
+- [Production Secrets Management](production-secrets.md)
 - [IdP Integration (RBAC)](#idp-integration-rbac)
 - [Group-Based Access Control](#group-based-access-control)
 - [Access Control](#access-control)
@@ -448,6 +449,57 @@ export AUSSIE_GATEWAY_ACCESS_CONTROL_ALLOWED_DOMAINS=internal.example.com
 export AUSSIE_GATEWAY_ACCESS_CONTROL_ALLOWED_SUBDOMAINS=*.internal.example.com
 ```
 
+### Trusted Proxy Configuration
+
+By default, Aussie trusts forwarding headers (`X-Forwarded-For`, `Forwarded`, `X-Real-IP`) from any source. In production, this allows clients to spoof their IP address and bypass IP-based access controls.
+
+Enable trusted proxy validation to only honor forwarding headers from known proxy IPs:
+
+```bash
+# Enable trusted proxy validation
+export AUSSIE_GATEWAY_TRUSTED_PROXY_ENABLED=true
+
+# List your load balancer / reverse proxy CIDR ranges
+export AUSSIE_GATEWAY_TRUSTED_PROXY_PROXIES=10.0.0.0/8,192.168.0.0/16
+```
+
+When enabled, requests from IPs outside the trusted list will have their forwarding headers ignored, and the socket-level IP address will be used instead. This is critical for IP-based access control to work correctly.
+
+**Important:** If you enable trusted proxy validation without configuring any proxy addresses, *all* forwarding headers will be rejected and the socket IP will always be used directly.
+
+**How to determine your proxy CIDRs:**
+- **Cloud load balancers:** Check your cloud provider's documentation for LB source IP ranges
+- **Kubernetes:** Use the pod CIDR and service CIDR of your cluster
+- **On-premise:** Use the CIDR of your reverse proxy / load balancer network segment
+
+### Security Response Headers
+
+Aussie adds OWASP-recommended security headers to all responses by default. These headers protect against common web vulnerabilities like clickjacking, MIME sniffing, and cross-site scripting.
+
+Default headers (always set when enabled):
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Content-Security-Policy: default-src 'none'`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `X-Permitted-Cross-Domain-Policies: none`
+
+Optional headers (set only when configured):
+- `Strict-Transport-Security` -- enable only when behind TLS termination. Incorrect HSTS can lock browsers out of your site.
+- `Permissions-Policy` -- restrict browser features (camera, microphone, etc.)
+
+To customize:
+```bash
+# Disable security headers entirely
+export AUSSIE_GATEWAY_SECURITY_HEADERS_ENABLED=false
+
+# Or customize individual headers
+export AUSSIE_GATEWAY_SECURITY_HEADERS_FRAME_OPTIONS=SAMEORIGIN
+export AUSSIE_GATEWAY_SECURITY_HEADERS_CONTENT_SECURITY_POLICY="default-src 'self'"
+
+# Enable HSTS (only when behind TLS termination)
+export AUSSIE_GATEWAY_SECURITY_HEADERS_STRICT_TRANSPORT_SECURITY="max-age=31536000; includeSubDomains"
+```
+
 ## Request Forwarding
 
 By default, Aussie uses RFC 7239 `Forwarded` headers:
@@ -844,6 +896,16 @@ With the permission policy above:
 | `AUSSIE_GATEWAY_LIMITS_MAX_HEADER_SIZE` | `8192` | Maximum single header size (bytes) |
 | `AUSSIE_GATEWAY_CORS_ENABLED` | `true` | Enable CORS support |
 | `AUSSIE_GATEWAY_CORS_ALLOWED_ORIGINS` | `*` | Allowed CORS origins |
+| `AUSSIE_GATEWAY_TRUSTED_PROXY_ENABLED` | `false` | Enable trusted proxy validation for forwarding headers |
+| `AUSSIE_GATEWAY_TRUSTED_PROXY_PROXIES` | - | Trusted proxy IPs/CIDRs (comma-separated) |
+| `AUSSIE_GATEWAY_SECURITY_HEADERS_ENABLED` | `true` | Enable security response headers |
+| `AUSSIE_GATEWAY_SECURITY_HEADERS_CONTENT_TYPE_OPTIONS` | `nosniff` | X-Content-Type-Options header value |
+| `AUSSIE_GATEWAY_SECURITY_HEADERS_FRAME_OPTIONS` | `DENY` | X-Frame-Options header value |
+| `AUSSIE_GATEWAY_SECURITY_HEADERS_CONTENT_SECURITY_POLICY` | `default-src 'none'` | CSP header value |
+| `AUSSIE_GATEWAY_SECURITY_HEADERS_REFERRER_POLICY` | `strict-origin-when-cross-origin` | Referrer-Policy header value |
+| `AUSSIE_GATEWAY_SECURITY_HEADERS_PERMITTED_CROSS_DOMAIN_POLICIES` | `none` | X-Permitted-Cross-Domain-Policies header value |
+| `AUSSIE_GATEWAY_SECURITY_HEADERS_STRICT_TRANSPORT_SECURITY` | - | HSTS header (enable when behind TLS) |
+| `AUSSIE_GATEWAY_SECURITY_HEADERS_PERMISSIONS_POLICY` | - | Permissions-Policy header value |
 
 ### Rate Limiting
 
