@@ -380,3 +380,53 @@ In case of credential compromise:
 1. Verify Redis connectivity
 2. Check bloom filter is enabled and initialized
 3. Review cache configuration
+
+## Bloom Filter Rebuild
+
+The bloom filter is rebuilt periodically to maintain consistency with the authoritative store.
+
+### Rebuild Behavior
+
+1. **Startup**: Empty filters initialize immediately; full rebuild runs asynchronously
+2. **Periodic**: Scheduled every `rebuild-interval` (default: 1 hour)
+3. **Manual**: Triggered via `POST /admin/tokens/bloom-filter/rebuild`
+
+Rebuilds stream all revoked JTIs and users from the remote store, construct new filters in memory, and atomically swap them in. The previous filter remains active during rebuild.
+
+### Resource Impact
+
+| Resource | Impact |
+|----------|--------|
+| **Memory** | 2x bloom filter memory temporarily (old + new coexist) |
+| **Network** | Full scan of revocation store |
+| **CPU** | Hashing all entries into new filter (~10μs per entry) |
+
+### Multi-Instance Behavior
+
+Each instance maintains its own independent bloom filter with independent rebuild schedules (staggered by startup time). New revocations propagate via pub/sub between rebuilds. With pub/sub enabled, `rebuild-interval` can be lengthened (e.g., 6 hours) since the periodic rebuild is primarily a consistency safeguard.
+
+### Failure Scenarios
+
+| Scenario | Behavior |
+|----------|----------|
+| Store unavailable at startup | Empty filter used; **all tokens pass as not revoked** (security risk) |
+| Store unavailable during periodic rebuild | Previous filter remains active; retried at next interval |
+| Pub/sub connection lost | New revocations not enforced until next rebuild (up to `rebuild-interval`) |
+| Out of memory during rebuild | Reduce `expected-insertions` or increase heap |
+
+### Capacity Planning
+
+Set `expected-insertions` to `daily_revocations × max_token_ttl_days × safety_factor`. See [Bloom Filter Sizing](#bloom-filter-sizing) for memory estimates.
+
+### Manual Rebuild
+
+To rebuild across all instances (Kubernetes example):
+
+```bash
+INSTANCES=$(kubectl get pods -l app=aussie -o jsonpath='{.items[*].status.podIP}')
+for IP in $INSTANCES; do
+  curl -X POST "http://${IP}:8080/admin/tokens/bloom-filter/rebuild"
+done
+```
+
+Trigger a manual rebuild after bulk revocations, backup restores, or pub/sub outages.
