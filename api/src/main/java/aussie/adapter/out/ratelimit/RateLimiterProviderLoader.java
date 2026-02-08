@@ -3,6 +3,7 @@ package aussie.adapter.out.ratelimit;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Disposes;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
@@ -10,6 +11,7 @@ import jakarta.inject.Inject;
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.out.ratelimit.memory.InMemoryRateLimiter;
 import aussie.adapter.out.ratelimit.memory.InMemoryRateLimiterProvider;
 import aussie.adapter.out.ratelimit.redis.RedisRateLimiterProvider;
 import aussie.core.config.RateLimitingConfig;
@@ -69,6 +71,15 @@ public class RateLimiterProviderLoader {
         return rateLimiter;
     }
 
+    /**
+     * Disposes the rate limiter, shutting down any cleanup executors.
+     */
+    void disposeRateLimiter(@Disposes RateLimiter rateLimiter) {
+        if (rateLimiter instanceof InMemoryRateLimiter inMemory) {
+            inMemory.shutdown();
+        }
+    }
+
     private RateLimiter createRateLimiter() {
         // Try Redis first if configured
         final var redisProvider = createRedisProvider();
@@ -104,6 +115,7 @@ public class RateLimiterProviderLoader {
     }
 
     private RateLimiterProvider createInMemoryProvider() {
-        return InMemoryRateLimiterProvider.configured(algorithmRegistry, config.algorithm(), config.enabled());
+        return InMemoryRateLimiterProvider.configured(
+                algorithmRegistry, config.algorithm(), config.enabled(), config.windowSeconds());
     }
 }

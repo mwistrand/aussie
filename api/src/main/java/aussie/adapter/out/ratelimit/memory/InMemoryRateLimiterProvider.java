@@ -17,10 +17,12 @@ public final class InMemoryRateLimiterProvider implements RateLimiterProvider {
 
     private static final int PRIORITY = 0;
     private static final String NAME = "memory";
+    private static final long DEFAULT_WINDOW_SECONDS = 60;
 
     private final AlgorithmRegistry algorithmRegistry;
     private final RateLimitAlgorithm algorithm;
     private final boolean enabled;
+    private final long windowSeconds;
 
     /**
      * Create a new in-memory provider with configuration.
@@ -28,12 +30,14 @@ public final class InMemoryRateLimiterProvider implements RateLimiterProvider {
      * @param algorithmRegistry the algorithm registry
      * @param algorithm the algorithm to use
      * @param enabled whether rate limiting is enabled
+     * @param windowSeconds the rate limit window duration in seconds
      */
     public InMemoryRateLimiterProvider(
-            AlgorithmRegistry algorithmRegistry, RateLimitAlgorithm algorithm, boolean enabled) {
+            AlgorithmRegistry algorithmRegistry, RateLimitAlgorithm algorithm, boolean enabled, long windowSeconds) {
         this.algorithmRegistry = algorithmRegistry;
         this.algorithm = algorithm;
         this.enabled = enabled;
+        this.windowSeconds = windowSeconds;
     }
 
     /**
@@ -46,6 +50,7 @@ public final class InMemoryRateLimiterProvider implements RateLimiterProvider {
         this.algorithmRegistry = null;
         this.algorithm = RateLimitAlgorithm.BUCKET;
         this.enabled = true;
+        this.windowSeconds = DEFAULT_WINDOW_SECONDS;
     }
 
     @Override
@@ -70,7 +75,7 @@ public final class InMemoryRateLimiterProvider implements RateLimiterProvider {
             throw new IllegalStateException(
                     "Provider not configured. Use RateLimiterProviderLoader for proper initialization.");
         }
-        return new InMemoryRateLimiter(algorithmRegistry, algorithm, enabled);
+        return new InMemoryRateLimiter(algorithmRegistry, algorithm, enabled, windowSeconds);
     }
 
     /**
@@ -79,10 +84,11 @@ public final class InMemoryRateLimiterProvider implements RateLimiterProvider {
      * @param algorithmRegistry the algorithm registry
      * @param algorithm the algorithm to use
      * @param enabled whether rate limiting is enabled
+     * @param windowSeconds the rate limit window duration in seconds
      * @return the configured provider
      */
     public static InMemoryRateLimiterProvider configured(
-            AlgorithmRegistry algorithmRegistry, RateLimitAlgorithm algorithm, boolean enabled) {
-        return new InMemoryRateLimiterProvider(algorithmRegistry, algorithm, enabled);
+            AlgorithmRegistry algorithmRegistry, RateLimitAlgorithm algorithm, boolean enabled, long windowSeconds) {
+        return new InMemoryRateLimiterProvider(algorithmRegistry, algorithm, enabled, windowSeconds);
     }
 }

@@ -92,6 +92,7 @@ A dedicated rate limiting dashboard is available at `monitoring/grafana/dashboar
 Suitable for single-instance deployments or development:
 - State not shared across instances
 - State lost on restart
+- Stale entries automatically cleaned up after 2x the window duration
 - No external dependencies
 
 ### Redis (Production)
