@@ -66,6 +66,8 @@ export AUSSIE_AUTH_ADMIN_PATHS_ONLY=true
 export AUSSIE_AUTH_DANGEROUS_NOOP=false
 ```
 
+> **Production safeguard:** If `AUSSIE_AUTH_DANGEROUS_NOOP=true` is set in production mode, the application will refuse to start with an `IllegalStateException`.
+
 ### Creating API Keys
 Create an API key using the CLI:
 ```bash
