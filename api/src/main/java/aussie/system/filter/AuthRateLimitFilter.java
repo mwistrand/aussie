@@ -18,6 +18,7 @@ import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.TelemetryHelper;
 import aussie.core.config.AuthRateLimitConfig;
 import aussie.core.service.auth.AuthRateLimitService;
+import aussie.core.util.SecureHash;
 import aussie.spi.FailedAttemptRepository;
 import aussie.spi.SecurityEvent;
 
@@ -237,8 +238,7 @@ public class AuthRateLimitFilter {
         if (clientId == null) {
             return "unknown";
         }
-        final var hash = Integer.toHexString(clientId.hashCode());
-        return hash.substring(0, Math.min(8, hash.length()));
+        return SecureHash.truncatedSha256(clientId, 16);
     }
 
     /**

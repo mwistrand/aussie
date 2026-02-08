@@ -24,6 +24,7 @@ import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.RateLimiter;
 import aussie.core.service.ratelimit.RateLimitResolver;
 import aussie.core.service.routing.ServiceRegistry;
+import aussie.core.util.SecureHash;
 import aussie.spi.SecurityEvent;
 
 /**
@@ -244,12 +245,11 @@ public class WebSocketRateLimitFilter {
         if (clientId == null) {
             return "unknown";
         }
-        final var hash = Integer.toHexString(clientId.hashCode());
-        return hash.substring(0, Math.min(8, hash.length()));
+        return SecureHash.truncatedSha256(clientId, 16);
     }
 
     private String hashToken(String token) {
-        return Integer.toHexString(token.hashCode());
+        return SecureHash.truncatedSha256(token, 16);
     }
 
     private record RateLimitResult(RateLimitDecision decision, Optional<ServiceRegistration> service) {}
