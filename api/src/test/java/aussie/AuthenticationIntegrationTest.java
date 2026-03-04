@@ -41,13 +41,13 @@ public class AuthenticationIntegrationTest {
         // Create API keys for testing
         // Use wildcard permission for full access (includes service-level authorization)
         var fullAccessResult = apiKeyService
-                .create("test-full", null, Set.of(Permission.ALL_VALUE), null, "test")
+                .create("test-full", null, null, Set.of(Permission.ALL_VALUE), null, "test")
                 .await()
                 .indefinitely();
         validApiKey = fullAccessResult.plaintextKey();
 
         var readOnlyResult = apiKeyService
-                .create("test-readonly", null, Set.of(Permission.SERVICE_CONFIG_READ_VALUE), null, "test")
+                .create("test-readonly", null, null, Set.of(Permission.SERVICE_CONFIG_READ_VALUE), null, "test")
                 .await()
                 .indefinitely();
         readOnlyApiKey = readOnlyResult.plaintextKey();

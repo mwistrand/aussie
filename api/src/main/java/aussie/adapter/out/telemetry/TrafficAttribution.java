@@ -21,17 +21,24 @@ public record TrafficAttribution(
     /**
      * Extract attribution dimensions from a request and service registration.
      *
+     * <p>Team ID is derived exclusively from the authenticated principal (API key or JWT)
+     * to prevent callers from spoofing team attribution via request headers.
+     *
      * @param request the gateway request
      * @param service the target service registration
+     * @param authenticatedTeamId team ID from the authenticated principal (null if unauthenticated)
      * @param config the telemetry configuration
      * @return traffic attribution dimensions
      */
     public static TrafficAttribution from(
-            GatewayRequest request, ServiceRegistration service, TelemetryConfig.AttributionConfig config) {
+            GatewayRequest request,
+            ServiceRegistration service,
+            String authenticatedTeamId,
+            TelemetryConfig.AttributionConfig config) {
 
         return new TrafficAttribution(
                 service.serviceId(),
-                getHeader(request, config.teamHeader()),
+                authenticatedTeamId,
                 getHeader(request, config.tenantHeader()),
                 getHeader(request, config.clientAppHeader()),
                 System.getenv("AUSSIE_ENV"));

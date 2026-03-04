@@ -576,11 +576,15 @@ Create a new API key.
 
 # Create with description
 ./aussie keys create --name prod-key --description "Production deployment key" --ttl 90
+
+# Create with team ID for traffic attribution
+./aussie keys create --name platform-key --team platform-team
 ```
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--name` | `-n` | (required) | Name for the API key |
 | `--description` | `-d` | | Description of the key's purpose |
+| `--team` | | | Team ID for traffic attribution |
 | `--ttl` | `-t` | 0 | TTL in days (0 = no expiration) |
 | `--permissions` | `-p` | `*` | Permissions (comma-separated) |
 

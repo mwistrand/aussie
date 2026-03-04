@@ -72,10 +72,11 @@ quarkus.micrometer.export.prometheus.path=/q/metrics
 
 ```properties
 aussie.telemetry.attribution.enabled=true
-aussie.telemetry.attribution.team-header=X-Team-ID
 aussie.telemetry.attribution.tenant-header=X-Tenant-ID
 aussie.telemetry.attribution.client-app-header=X-Client-App
 ```
+
+Team ID is derived from the authenticated principal (API key `teamId` field), not from request headers. Set the `teamId` when creating API keys to enable team-based cost attribution.
 
 ## Backend Integrations
 
@@ -320,10 +321,11 @@ Enable attribution and configure header extraction:
 
 ```properties
 aussie.telemetry.attribution.enabled=true
-aussie.telemetry.attribution.team-header=X-Team-ID
 aussie.telemetry.attribution.tenant-header=X-Tenant-ID
 aussie.telemetry.attribution.client-app-header=X-Client-App
 ```
+
+Team ID is derived from the authenticated API key's `teamId` field, not from request headers.
 
 ### Compute Units
 

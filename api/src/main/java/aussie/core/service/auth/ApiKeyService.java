@@ -49,7 +49,7 @@ public class ApiKeyService implements ApiKeyManagement {
 
     @Override
     public Uni<ApiKeyCreateResult> create(
-            String name, String description, Set<String> permissions, Duration ttl, String createdBy) {
+            String name, String description, String teamId, Set<String> permissions, Duration ttl, String createdBy) {
         // Validate TTL against configured maximum
         validateTtl(ttl);
 
@@ -62,6 +62,7 @@ public class ApiKeyService implements ApiKeyManagement {
         var apiKey = ApiKey.builder(keyId, keyHash)
                 .name(name)
                 .description(description)
+                .teamId(teamId)
                 .permissions(permissions != null ? permissions : Set.of())
                 .createdBy(createdBy)
                 .createdAt(Instant.now())
@@ -109,6 +110,7 @@ public class ApiKeyService implements ApiKeyManagement {
     public Uni<ApiKeyCreateResult> createWithKey(
             String name,
             String description,
+            String teamId,
             Set<String> permissions,
             Duration ttl,
             String plaintextKey,
@@ -132,6 +134,7 @@ public class ApiKeyService implements ApiKeyManagement {
         var apiKey = ApiKey.builder(keyId, keyHash)
                 .name(name)
                 .description(description)
+                .teamId(teamId)
                 .permissions(permissions != null ? permissions : Set.of())
                 .createdBy(createdBy)
                 .createdAt(Instant.now())

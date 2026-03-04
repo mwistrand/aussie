@@ -45,6 +45,7 @@ class ApiKeyServiceTest {
                     .create(
                             "test-key",
                             "Test description",
+                            null,
                             Set.of(
                                     Permission.SERVICE_CONFIG_READ_VALUE,
                                     Permission.SERVICE_CONFIG_CREATE_VALUE,
@@ -72,7 +73,7 @@ class ApiKeyServiceTest {
         @DisplayName("should create key with TTL")
         void shouldCreateKeyWithTtl() {
             var result = apiKeyService
-                    .create("expiring-key", null, Set.of(), Duration.ofDays(30), "test")
+                    .create("expiring-key", null, null, Set.of(), Duration.ofDays(30), "test")
                     .await()
                     .indefinitely();
 
@@ -83,7 +84,7 @@ class ApiKeyServiceTest {
         @DisplayName("should create key without expiration when TTL is null")
         void shouldCreateKeyWithoutExpirationWhenTtlIsNull() {
             var result = apiKeyService
-                    .create("permanent-key", null, Set.of(), null, "test")
+                    .create("permanent-key", null, null, Set.of(), null, "test")
                     .await()
                     .indefinitely();
 
@@ -94,11 +95,11 @@ class ApiKeyServiceTest {
         @DisplayName("should generate unique key IDs")
         void shouldGenerateUniqueKeyIds() {
             var result1 = apiKeyService
-                    .create("key1", null, Set.of(), null, "test")
+                    .create("key1", null, null, Set.of(), null, "test")
                     .await()
                     .indefinitely();
             var result2 = apiKeyService
-                    .create("key2", null, Set.of(), null, "test")
+                    .create("key2", null, null, Set.of(), null, "test")
                     .await()
                     .indefinitely();
 
@@ -109,15 +110,32 @@ class ApiKeyServiceTest {
         @DisplayName("should generate unique plaintext keys")
         void shouldGenerateUniquePlaintextKeys() {
             var result1 = apiKeyService
-                    .create("key1", null, Set.of(), null, "test")
+                    .create("key1", null, null, Set.of(), null, "test")
                     .await()
                     .indefinitely();
             var result2 = apiKeyService
-                    .create("key2", null, Set.of(), null, "test")
+                    .create("key2", null, null, Set.of(), null, "test")
                     .await()
                     .indefinitely();
 
             assertNotEquals(result1.plaintextKey(), result2.plaintextKey());
+        }
+
+        @Test
+        @DisplayName("should create key with team ID")
+        void shouldCreateKeyWithTeamId() {
+            var result = apiKeyService
+                    .create("team-key", "Team key", "platform-team", Set.of(), null, "test")
+                    .await()
+                    .indefinitely();
+
+            assertEquals("platform-team", result.metadata().teamId());
+
+            // Validate the key and ensure teamId is preserved
+            var validated =
+                    apiKeyService.validate(result.plaintextKey()).await().indefinitely();
+            assertTrue(validated.isPresent());
+            assertEquals("platform-team", validated.get().teamId());
         }
     }
 
@@ -129,7 +147,7 @@ class ApiKeyServiceTest {
         @DisplayName("should validate existing key")
         void shouldValidateExistingKey() {
             var createResult = apiKeyService
-                    .create("valid-key", null, Set.of(Permission.SERVICE_CONFIG_READ_VALUE), null, "test")
+                    .create("valid-key", null, null, Set.of(Permission.SERVICE_CONFIG_READ_VALUE), null, "test")
                     .await()
                     .indefinitely();
 
@@ -168,7 +186,7 @@ class ApiKeyServiceTest {
         @DisplayName("should return empty for revoked key")
         void shouldReturnEmptyForRevokedKey() {
             var createResult = apiKeyService
-                    .create("to-revoke", null, Set.of(), null, "test")
+                    .create("to-revoke", null, null, Set.of(), null, "test")
                     .await()
                     .indefinitely();
             apiKeyService.revoke(createResult.keyId()).await().indefinitely();
@@ -195,8 +213,14 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return all keys with redacted hashes")
         void shouldReturnAllKeysWithRedactedHashes() {
-            apiKeyService.create("key1", null, Set.of(), null, "test").await().indefinitely();
-            apiKeyService.create("key2", null, Set.of(), null, "test").await().indefinitely();
+            apiKeyService
+                    .create("key1", null, null, Set.of(), null, "test")
+                    .await()
+                    .indefinitely();
+            apiKeyService
+                    .create("key2", null, null, Set.of(), null, "test")
+                    .await()
+                    .indefinitely();
 
             var result = apiKeyService.list().await().indefinitely();
 
@@ -213,7 +237,7 @@ class ApiKeyServiceTest {
         @DisplayName("should revoke existing key")
         void shouldRevokeExistingKey() {
             var createResult = apiKeyService
-                    .create("to-revoke", null, Set.of(), null, "test")
+                    .create("to-revoke", null, null, Set.of(), null, "test")
                     .await()
                     .indefinitely();
 
@@ -234,7 +258,7 @@ class ApiKeyServiceTest {
         @DisplayName("revoked key should appear in list as revoked")
         void revokedKeyShouldAppearInListAsRevoked() {
             var createResult = apiKeyService
-                    .create("to-revoke", null, Set.of(), null, "test")
+                    .create("to-revoke", null, null, Set.of(), null, "test")
                     .await()
                     .indefinitely();
             apiKeyService.revoke(createResult.keyId()).await().indefinitely();
@@ -257,7 +281,7 @@ class ApiKeyServiceTest {
         @DisplayName("should return key with redacted hash")
         void shouldReturnKeyWithRedactedHash() {
             var createResult = apiKeyService
-                    .create("get-test", null, Set.of(), null, "test")
+                    .create("get-test", null, null, Set.of(), null, "test")
                     .await()
                     .indefinitely();
 
@@ -289,6 +313,7 @@ class ApiKeyServiceTest {
                     .createWithKey(
                             "bootstrap-key",
                             "Bootstrap key for testing",
+                            null,
                             Set.of(
                                     Permission.SERVICE_CONFIG_READ_VALUE,
                                     Permission.SERVICE_CONFIG_CREATE_VALUE,
@@ -317,6 +342,7 @@ class ApiKeyServiceTest {
                     .createWithKey(
                             "validate-test",
                             null,
+                            null,
                             Set.of(Permission.SERVICE_CONFIG_READ_VALUE),
                             null,
                             specifiedKey,
@@ -337,7 +363,8 @@ class ApiKeyServiceTest {
 
             var exception = org.junit.jupiter.api.Assertions.assertThrows(
                     IllegalArgumentException.class,
-                    () -> apiKeyService.createWithKey("short-key-test", null, Set.of(), null, shortKey, "bootstrap"));
+                    () -> apiKeyService.createWithKey(
+                            "short-key-test", null, null, Set.of(), null, shortKey, "bootstrap"));
 
             assertTrue(exception.getMessage().contains("32"));
         }
@@ -347,7 +374,7 @@ class ApiKeyServiceTest {
         void shouldRejectNullKey() {
             org.junit.jupiter.api.Assertions.assertThrows(
                     IllegalArgumentException.class,
-                    () -> apiKeyService.createWithKey("null-key-test", null, Set.of(), null, null, "bootstrap"));
+                    () -> apiKeyService.createWithKey("null-key-test", null, null, Set.of(), null, null, "bootstrap"));
         }
 
         @Test
@@ -355,7 +382,8 @@ class ApiKeyServiceTest {
         void shouldRejectBlankKey() {
             org.junit.jupiter.api.Assertions.assertThrows(
                     IllegalArgumentException.class,
-                    () -> apiKeyService.createWithKey("blank-key-test", null, Set.of(), null, "   ", "bootstrap"));
+                    () -> apiKeyService.createWithKey(
+                            "blank-key-test", null, null, Set.of(), null, "   ", "bootstrap"));
         }
 
         @Test
@@ -364,7 +392,7 @@ class ApiKeyServiceTest {
             String specifiedKey = "my-ttl-key-that-is-at-least-32-characters";
 
             var result = apiKeyService
-                    .createWithKey("ttl-bootstrap", null, Set.of(), Duration.ofDays(7), specifiedKey, "bootstrap")
+                    .createWithKey("ttl-bootstrap", null, null, Set.of(), Duration.ofDays(7), specifiedKey, "bootstrap")
                     .await()
                     .indefinitely();
 
@@ -386,7 +414,7 @@ class ApiKeyServiceTest {
             // Request TTL longer than max should fail
             var exception = org.junit.jupiter.api.Assertions.assertThrows(
                     IllegalArgumentException.class,
-                    () -> restrictedService.create("long-ttl-key", null, Set.of(), Duration.ofDays(60), "test"));
+                    () -> restrictedService.create("long-ttl-key", null, null, Set.of(), Duration.ofDays(60), "test"));
 
             assertTrue(exception.getMessage().contains("exceeds maximum"));
         }
@@ -399,7 +427,7 @@ class ApiKeyServiceTest {
 
             // Request TTL shorter than max should succeed
             var result = restrictedService
-                    .create("valid-ttl-key", null, Set.of(), Duration.ofDays(7), "test")
+                    .create("valid-ttl-key", null, null, Set.of(), Duration.ofDays(7), "test")
                     .await()
                     .indefinitely();
 
@@ -415,7 +443,7 @@ class ApiKeyServiceTest {
             // Null TTL should fail when max is configured
             var exception = org.junit.jupiter.api.Assertions.assertThrows(
                     IllegalArgumentException.class,
-                    () -> restrictedService.create("no-ttl-key", null, Set.of(), null, "test"));
+                    () -> restrictedService.create("no-ttl-key", null, null, Set.of(), null, "test"));
 
             assertTrue(exception.getMessage().contains("TTL is required"));
         }

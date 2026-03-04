@@ -42,6 +42,7 @@ export interface TokenClaims {
   email?: string;
   groups?: string[];
   permissions?: string[];
+  teamId?: string;
 }
 
 // Simulated group mappings (in production, this comes from IdP claims)
@@ -92,6 +93,7 @@ export async function generateToken(
     email: claims.email || `${claims.sub}@demo.local`,
     groups: claims.groups || [],
     permissions: claims.permissions || [],
+    ...(claims.teamId && { teamId: claims.teamId }),
   })
     .setProtectedHeader({ alg: 'RS256', kid: 'demo-key-1' })
     .setIssuedAt(now)

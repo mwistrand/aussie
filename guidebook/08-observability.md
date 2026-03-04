@@ -507,7 +507,7 @@ A senior engineer might argue for an enum-based error catalog with error codes. 
 
 Traffic attribution tracks which teams and tenants are consuming gateway capacity. It consists of three classes: the `TrafficAttribution` record (which captures attribution dimensions), the `TrafficAttributionService` (which records metrics), and the `TrafficAttributing` port interface (which defines the contract).
 
-The attribution record extracts dimensions from request headers and service registration:
+The attribution record extracts dimensions from the authenticated principal, request headers, and service registration:
 
 ```java
 // api/src/main/java/aussie/adapter/out/telemetry/TrafficAttribution.java (lines 18-83)
@@ -518,11 +518,12 @@ public record TrafficAttribution(
 
     public static TrafficAttribution from(
             GatewayRequest request, ServiceRegistration service,
+            String authenticatedTeamId,
             TelemetryConfig.AttributionConfig config) {
 
         return new TrafficAttribution(
                 service.serviceId(),
-                getHeader(request, config.teamHeader()),
+                authenticatedTeamId,
                 getHeader(request, config.tenantHeader()),
                 getHeader(request, config.clientAppHeader()),
                 System.getenv("AUSSIE_ENV"));
@@ -530,7 +531,7 @@ public record TrafficAttribution(
 }
 ```
 
-The header names are configurable, defaulting to `X-Team-ID`, `X-Tenant-ID`, and `X-Client-Application`. The environment comes from an environment variable because it is a deployment-time constant, not a per-request value.
+Team ID is derived from the authenticated principal (bound to the API key at creation time or extracted from JWT claims), not from request headers. This prevents callers from spoofing team attribution. Tenant and client application headers remain configurable, defaulting to `X-Tenant-ID` and `X-Client-Application`. The environment comes from an environment variable because it is a deployment-time constant, not a per-request value.
 
 The service records five metric families, all tagged with the same attribution dimensions:
 
@@ -620,7 +621,7 @@ These queries work because the tag dimensions are consistent across all five met
 
 Traffic attribution adds five metric recordings per request. For a gateway handling 10,000 requests per second, that is 50,000 counter increments per second. Micrometer counters are thread-safe atomic operations, so this is fast, but it is not free. The `enabled` flag (checked at the top of every `record` call) ensures zero overhead when attribution is disabled.
 
-The header-based attribution model assumes that clients are trustworthy about their identity. A malicious client could set `X-Team-ID: someone-else` and shift costs to another team. In environments where this is a concern, attribution should be derived from authenticated identity (API key or JWT claims) rather than request headers. The current design temporarily trades security for simplicity and configurability.
+Team ID is bound to the API key at creation time, so it cannot be spoofed by callers. Unauthenticated requests are attributed as "unknown".
 
 ## 8.6 Rate Limit Span Semantics
 

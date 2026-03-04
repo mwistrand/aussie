@@ -17,6 +17,7 @@ import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.in.PassThroughUseCase;
+import aussie.core.port.out.AuthenticatedContext;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.ProxyClient;
 import aussie.core.port.out.SecurityMonitoring;
@@ -58,6 +59,7 @@ public class PassThroughService implements PassThroughUseCase {
     private final Metrics metrics;
     private final SecurityMonitoring securityMonitor;
     private final TrafficAttributing attributionService;
+    private final AuthenticatedContext authenticatedContext;
 
     @Inject
     public PassThroughService(
@@ -69,7 +71,8 @@ public class PassThroughService implements PassThroughUseCase {
             RouteAuthenticationService routeAuthService,
             Metrics metrics,
             SecurityMonitoring securityMonitor,
-            TrafficAttributing attributionService) {
+            TrafficAttributing attributionService,
+            AuthenticatedContext authenticatedContext) {
         this.serviceRegistry = serviceRegistry;
         this.requestPreparer = requestPreparer;
         this.proxyClient = proxyClient;
@@ -79,6 +82,7 @@ public class PassThroughService implements PassThroughUseCase {
         this.metrics = metrics;
         this.securityMonitor = securityMonitor;
         this.attributionService = attributionService;
+        this.authenticatedContext = authenticatedContext;
     }
 
     @Override
@@ -171,11 +175,12 @@ public class PassThroughService implements PassThroughUseCase {
             metrics.recordRequest(serviceId, request.method(), success.statusCode());
             metrics.recordProxyLatency(serviceId, request.method(), success.statusCode(), durationMs);
 
-            // Record traffic attribution
+            // Record traffic attribution using authenticated team ID
             if (attributionService.isEnabled()) {
                 long requestBytes = request.body() != null ? request.body().length : 0;
                 long responseBytes = success.body() != null ? success.body().length : 0;
-                attributionService.record(request, service, requestBytes, responseBytes, durationMs);
+                attributionService.record(
+                        request, service, authenticatedContext.getTeamId(), requestBytes, responseBytes, durationMs);
             }
         }
 

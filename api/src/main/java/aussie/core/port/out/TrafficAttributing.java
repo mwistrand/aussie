@@ -23,6 +23,7 @@ public interface TrafficAttributing {
      *
      * @param request the gateway request
      * @param service the target service
+     * @param authenticatedTeamId team ID from authenticated identity (null if unauthenticated)
      * @param requestBodySize request body size in bytes
      * @param responseBodySize response body size in bytes
      * @param durationMs request duration in milliseconds
@@ -30,6 +31,7 @@ public interface TrafficAttributing {
     void record(
             GatewayRequest request,
             ServiceRegistration service,
+            String authenticatedTeamId,
             long requestBodySize,
             long responseBodySize,
             long durationMs);

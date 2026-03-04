@@ -188,14 +188,19 @@ public class ApiKeyEncryptionService {
                 apiKey.createdBy() != null ? apiKey.createdBy() : "",
                 apiKey.createdAt().toString(),
                 apiKey.expiresAt() != null ? apiKey.expiresAt().toString() : "",
-                String.valueOf(apiKey.revoked()));
+                String.valueOf(apiKey.revoked()),
+                apiKey.teamId() != null ? apiKey.teamId() : "");
     }
 
     /**
      * Deserialize a string to an ApiKey.
      *
-     * <p>Supports backward compatibility with older format (8 fields) and
-     * new format (9 fields with createdBy).
+     * <p>Supports backward compatibility:
+     * <ul>
+     *   <li>8 fields: original format (no createdBy, no teamId)</li>
+     *   <li>9 fields: added createdBy</li>
+     *   <li>10 fields: added teamId</li>
+     * </ul>
      */
     private ApiKey deserialize(String data) {
         String[] parts = data.split(FIELD_SEPARATOR, -1);
@@ -203,21 +208,25 @@ public class ApiKeyEncryptionService {
             throw new IllegalArgumentException("Invalid serialized ApiKey format");
         }
 
-        // Handle backward compatibility: old format has 8 fields, new has 9
+        // Handle backward compatibility: 8 fields (v1), 9 fields (v2 +createdBy), 10 fields (v3 +teamId)
         boolean hasCreatedBy = parts.length >= 9;
+        boolean hasTeamId = parts.length >= 10;
         int permissionsIdx = 4;
         int createdByIdx = hasCreatedBy ? 5 : -1;
         int createdAtIdx = hasCreatedBy ? 6 : 5;
         int expiresAtIdx = hasCreatedBy ? 7 : 6;
         int revokedIdx = hasCreatedBy ? 8 : 7;
+        int teamIdIdx = hasTeamId ? 9 : -1;
 
         Set<String> permissions = parts[permissionsIdx].isEmpty() ? Set.of() : Set.of(parts[permissionsIdx].split(","));
         String createdBy = hasCreatedBy && !parts[createdByIdx].isEmpty() ? parts[createdByIdx] : null;
         Instant expiresAt = parts[expiresAtIdx].isEmpty() ? null : Instant.parse(parts[expiresAtIdx]);
+        String teamId = hasTeamId && !parts[teamIdIdx].isEmpty() ? parts[teamIdIdx] : null;
 
         return ApiKey.builder(parts[0], parts[1])
                 .name(parts[2])
                 .description(parts[3])
+                .teamId(teamId)
                 .permissions(permissions)
                 .createdBy(createdBy)
                 .createdAt(Instant.parse(parts[createdAtIdx]))

@@ -157,13 +157,6 @@ public interface TelemetryConfig {
         boolean enabled();
 
         /**
-         * Header name for team identification.
-         */
-        @WithName("team-header")
-        @WithDefault("X-Team-ID")
-        String teamHeader();
-
-        /**
          * Header name for tenant identification.
          */
         @WithName("tenant-header")

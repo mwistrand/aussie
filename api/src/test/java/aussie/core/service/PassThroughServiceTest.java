@@ -30,6 +30,7 @@ import aussie.core.model.gateway.ProxyResponse;
 import aussie.core.model.gateway.RouteAuthResult;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.service.ServiceRegistration;
+import aussie.core.port.out.AuthenticatedContext;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.ProxyClient;
 import aussie.core.port.out.SecurityMonitoring;
@@ -104,6 +105,7 @@ class PassThroughServiceTest {
         metrics = new NoOpMetrics();
         securityMonitor = new NoOpSecurityMonitoring();
         attributionService = new NoOpTrafficAttributing();
+        AuthenticatedContext anonymousContext = () -> null;
         passThroughService = new PassThroughService(
                 serviceRegistry,
                 requestPreparer,
@@ -113,7 +115,8 @@ class PassThroughServiceTest {
                 routeAuthService,
                 metrics,
                 securityMonitor,
-                attributionService);
+                attributionService,
+                anonymousContext);
     }
 
     private GatewayRequest createRequest(String method, String path) {
@@ -608,6 +611,7 @@ class PassThroughServiceTest {
         public void record(
                 GatewayRequest request,
                 ServiceRegistration service,
+                String authenticatedTeamId,
                 long requestBodySize,
                 long responseBodySize,
                 long durationMs) {}

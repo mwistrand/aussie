@@ -26,13 +26,14 @@ public interface ApiKeyManagement {
      *
      * @param name        display name for the key (e.g., "user-service-prod")
      * @param description optional description of the key's purpose
+     * @param teamId      team identifier for traffic attribution (null = unaffiliated)
      * @param permissions set of permissions to grant (e.g., "service.config:read", "demo-service.admin")
      * @param ttl         time-to-live for the key (null = never expires)
      * @param createdBy   identifier of the principal creating this key (e.g., key ID or "bootstrap")
      * @return Uni with result containing the key ID, plaintext key, and metadata
      */
     Uni<ApiKeyCreateResult> create(
-            String name, String description, Set<String> permissions, Duration ttl, String createdBy);
+            String name, String description, String teamId, Set<String> permissions, Duration ttl, String createdBy);
 
     /**
      * Validate a plaintext API key and returns the associated metadata if valid.
@@ -83,6 +84,7 @@ public interface ApiKeyManagement {
      *
      * @param name         display name for the key
      * @param description  optional description of the key's purpose
+     * @param teamId       team identifier for traffic attribution (null = unaffiliated)
      * @param permissions  set of permissions to grant
      * @param ttl          time-to-live for the key (null = never expires)
      * @param plaintextKey the specific key value to use (min 32 chars)
@@ -93,6 +95,7 @@ public interface ApiKeyManagement {
     Uni<ApiKeyCreateResult> createWithKey(
             String name,
             String description,
+            String teamId,
             Set<String> permissions,
             Duration ttl,
             String plaintextKey,

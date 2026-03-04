@@ -77,14 +77,14 @@ class BootstrapServiceTest {
 
     private void createAdminKey() {
         apiKeyService
-                .create("existing-admin", "Existing admin key", Set.of(Permission.ALL_VALUE), null, "test")
+                .create("existing-admin", "Existing admin key", null, Set.of(Permission.ALL_VALUE), null, "test")
                 .await()
                 .indefinitely();
     }
 
     private void createReadOnlyKey() {
         apiKeyService
-                .create("read-only", "Read-only key", Set.of(Permission.SERVICE_CONFIG_READ_VALUE), null, "test")
+                .create("read-only", "Read-only key", null, Set.of(Permission.SERVICE_CONFIG_READ_VALUE), null, "test")
                 .await()
                 .indefinitely();
     }
@@ -149,7 +149,7 @@ class BootstrapServiceTest {
         @DisplayName("should return true for key with wildcard permission")
         void shouldReturnTrueForWildcardPermission() {
             apiKeyService
-                    .create("admin", null, Set.of(Permission.ALL_VALUE), null, "test")
+                    .create("admin", null, null, Set.of(Permission.ALL_VALUE), null, "test")
                     .await()
                     .indefinitely();
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
@@ -164,6 +164,7 @@ class BootstrapServiceTest {
             apiKeyService
                     .create(
                             "admin",
+                            null,
                             null,
                             Set.of(
                                     Permission.SERVICE_CONFIG_CREATE_VALUE,
@@ -193,7 +194,7 @@ class BootstrapServiceTest {
         @DisplayName("should ignore revoked admin keys")
         void shouldIgnoreRevokedAdminKeys() {
             var result = apiKeyService
-                    .create("admin", null, Set.of(Permission.ALL_VALUE), null, "test")
+                    .create("admin", null, null, Set.of(Permission.ALL_VALUE), null, "test")
                     .await()
                     .indefinitely();
             apiKeyService.revoke(result.keyId()).await().indefinitely();

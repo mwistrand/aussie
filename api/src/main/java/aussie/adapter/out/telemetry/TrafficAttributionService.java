@@ -77,6 +77,7 @@ public class TrafficAttributionService implements TrafficAttributing {
      *
      * @param request the gateway request
      * @param service the target service
+     * @param authenticatedTeamId team ID from authenticated identity (null if unauthenticated)
      * @param requestBodySize request body size in bytes
      * @param responseBodySize response body size in bytes
      * @param durationMs request duration in milliseconds
@@ -85,6 +86,7 @@ public class TrafficAttributionService implements TrafficAttributing {
     public void record(
             GatewayRequest request,
             ServiceRegistration service,
+            String authenticatedTeamId,
             long requestBodySize,
             long responseBodySize,
             long durationMs) {
@@ -92,7 +94,7 @@ public class TrafficAttributionService implements TrafficAttributing {
             return;
         }
 
-        var attribution = TrafficAttribution.from(request, service, config.attribution());
+        var attribution = TrafficAttribution.from(request, service, authenticatedTeamId, config.attribution());
         var metrics = new RequestMetrics(requestBodySize, responseBodySize, durationMs);
         recordAttributedRequest(attribution, metrics);
     }

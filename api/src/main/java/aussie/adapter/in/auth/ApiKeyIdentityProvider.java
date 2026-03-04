@@ -90,6 +90,10 @@ public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthentica
             builder.addPermission(new StringPermission(permission));
         }
 
+        if (apiKey.teamId() != null) {
+            builder.addAttribute("teamId", apiKey.teamId());
+        }
+
         if (apiKey.expiresAt() != null) {
             builder.addAttribute("expiresAt", apiKey.expiresAt());
         }

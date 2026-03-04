@@ -13,6 +13,7 @@ import java.util.Set;
  * @param keyHash     SHA-256 hash of the actual key (never store plaintext)
  * @param name        display name (e.g., "user-service-prod")
  * @param description optional description of this key's purpose
+ * @param teamId      team identifier for traffic attribution (null = unaffiliated)
  * @param permissions set of permission strings granted to this key (e.g., "service.config:read", "demo-service.admin")
  * @param createdBy   identifier of the principal who created this key (e.g., key ID or "bootstrap")
  * @param createdAt   when the key was created
@@ -24,6 +25,7 @@ public record ApiKey(
         String keyHash,
         String name,
         String description,
+        String teamId,
         Set<String> permissions,
         String createdBy,
         Instant createdAt,
@@ -69,7 +71,8 @@ public record ApiKey(
      * @return a new ApiKey with "[REDACTED]" as the keyHash
      */
     public ApiKey redacted() {
-        return new ApiKey(id, "[REDACTED]", name, description, permissions, createdBy, createdAt, expiresAt, revoked);
+        return new ApiKey(
+                id, "[REDACTED]", name, description, teamId, permissions, createdBy, createdAt, expiresAt, revoked);
     }
 
     /**
@@ -78,7 +81,7 @@ public record ApiKey(
      * @return a new ApiKey with revoked=true
      */
     public ApiKey revoke() {
-        return new ApiKey(id, keyHash, name, description, permissions, createdBy, createdAt, expiresAt, true);
+        return new ApiKey(id, keyHash, name, description, teamId, permissions, createdBy, createdAt, expiresAt, true);
     }
 
     public static Builder builder(String id, String keyHash) {
@@ -90,6 +93,7 @@ public record ApiKey(
         private final String keyHash;
         private String name;
         private String description;
+        private String teamId;
         private Set<String> permissions = Set.of();
         private String createdBy;
         private Instant createdAt = Instant.now();
@@ -108,6 +112,11 @@ public record ApiKey(
 
         public Builder description(String description) {
             this.description = description;
+            return this;
+        }
+
+        public Builder teamId(String teamId) {
+            this.teamId = teamId;
             return this;
         }
 
@@ -137,7 +146,8 @@ public record ApiKey(
         }
 
         public ApiKey build() {
-            return new ApiKey(id, keyHash, name, description, permissions, createdBy, createdAt, expiresAt, revoked);
+            return new ApiKey(
+                    id, keyHash, name, description, teamId, permissions, createdBy, createdAt, expiresAt, revoked);
         }
     }
 }

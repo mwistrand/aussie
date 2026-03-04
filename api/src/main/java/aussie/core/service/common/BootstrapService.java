@@ -75,6 +75,7 @@ public class BootstrapService implements BootstrapManagement {
                     .createWithKey(
                             BOOTSTRAP_KEY_NAME,
                             BOOTSTRAP_KEY_DESCRIPTION,
+                            null, // Bootstrap keys are admin keys, not team-scoped
                             Set.of(Permission.ALL.value()), // Wildcard permission for full access
                             ttl,
                             plaintextKey,

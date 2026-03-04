@@ -104,6 +104,7 @@ class ApiKeyAuthProviderTest {
                     .create(
                             "test-key",
                             null,
+                            null,
                             Set.of(
                                     Permission.SERVICE_CONFIG_READ_VALUE,
                                     Permission.SERVICE_CONFIG_CREATE_VALUE,
@@ -133,7 +134,7 @@ class ApiKeyAuthProviderTest {
         @DisplayName("should fail with revoked API key")
         void shouldFailWithRevokedApiKey() {
             var createResult = apiKeyService
-                    .create("revoked-key", null, Set.of(), null, "test")
+                    .create("revoked-key", null, null, Set.of(), null, "test")
                     .await()
                     .indefinitely();
             apiKeyService.revoke(createResult.keyId()).await().indefinitely();

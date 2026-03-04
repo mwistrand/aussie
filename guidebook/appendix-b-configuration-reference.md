@@ -849,9 +849,10 @@ These fail-open and fail-closed semantics are security decisions. Rate limiting 
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
 | `aussie.telemetry.attribution.enabled` | `boolean` | `false` | `AUSSIE_TELEMETRY_ATTRIBUTION_ENABLED` | Enable traffic attribution metrics for cost allocation. |
-| `aussie.telemetry.attribution.team-header` | `String` | `X-Team-ID` | `AUSSIE_TELEMETRY_ATTRIBUTION_TEAM_HEADER` | Header name for team identification. |
 | `aussie.telemetry.attribution.tenant-header` | `String` | `X-Tenant-ID` | `AUSSIE_TELEMETRY_ATTRIBUTION_TENANT_HEADER` | Header name for tenant identification. |
 | `aussie.telemetry.attribution.client-app-header` | `String` | `X-Client-Application` | `AUSSIE_TELEMETRY_ATTRIBUTION_CLIENT_APP_HEADER` | Header name for client application identification. |
+
+Team ID is derived from the authenticated API key's `teamId` field, not from request headers.
 
 ### 19.7 Span Attributes
 

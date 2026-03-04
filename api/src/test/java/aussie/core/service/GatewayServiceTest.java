@@ -30,6 +30,7 @@ import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.service.ServiceRegistration;
+import aussie.core.port.out.AuthenticatedContext;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.ProxyClient;
 import aussie.core.port.out.SecurityMonitoring;
@@ -99,6 +100,7 @@ class GatewayServiceTest {
         metrics = new NoOpMetrics();
         securityMonitor = new NoOpSecurityMonitoring();
         attributionService = new NoOpTrafficAttributing();
+        AuthenticatedContext anonymousContext = () -> null;
         gatewayService = new GatewayService(
                 serviceRegistry,
                 requestPreparer,
@@ -106,7 +108,8 @@ class GatewayServiceTest {
                 routeAuthService,
                 metrics,
                 securityMonitor,
-                attributionService);
+                attributionService,
+                anonymousContext);
     }
 
     private GatewayRequest createRequest(String method, String path) {
@@ -441,6 +444,7 @@ class GatewayServiceTest {
         public void record(
                 GatewayRequest request,
                 ServiceRegistration service,
+                String authenticatedTeamId,
                 long requestBodySize,
                 long responseBodySize,
                 long durationMs) {}

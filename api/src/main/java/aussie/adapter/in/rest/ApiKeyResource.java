@@ -74,7 +74,7 @@ public class ApiKeyResource {
         String createdBy = getCreatorId();
 
         return apiKeyService
-                .create(request.name(), request.description(), request.permissions(), ttl, createdBy)
+                .create(request.name(), request.description(), request.teamId(), request.permissions(), ttl, createdBy)
                 .map(result -> {
                     // Return the plaintext key only this one time
                     var responseBody = new HashMap<String, Object>();
@@ -83,6 +83,9 @@ public class ApiKeyResource {
                     responseBody.put("name", result.metadata().name());
                     responseBody.put("permissions", result.metadata().permissions());
                     responseBody.put("createdBy", result.metadata().createdBy());
+                    if (result.metadata().teamId() != null) {
+                        responseBody.put("teamId", result.metadata().teamId());
+                    }
                     if (result.metadata().expiresAt() != null) {
                         responseBody.put(
                                 "expiresAt", result.metadata().expiresAt().toString());

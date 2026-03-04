@@ -87,12 +87,18 @@ export async function POST(request: NextRequest) {
     // No permissions are added directly - they come from group expansion
     const permissions: string[] = body.group === 'admin' ? ['*'] : [];
 
+    // Derive teamId from group prefix (e.g., "demo-service.admin" -> "demo-service")
+    const teamId = groups
+      .map((g) => g.split('.')[0])
+      .find((prefix) => prefix !== 'platform-team') || undefined;
+
     // Generate signed JWT token
     const token = await generateToken({
       sub: body.username.trim(),
       name: body.username.trim(),
       groups,
       permissions,
+      teamId,
     });
 
     // Parse and validate redirect URL
