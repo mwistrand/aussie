@@ -13,6 +13,7 @@ import io.quarkus.runtime.Startup;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
+import io.smallrye.mutiny.operators.multi.processors.BroadcastProcessor;
 import org.jboss.logging.Logger;
 
 import aussie.core.config.TokenRevocationConfig;
@@ -22,18 +23,28 @@ import aussie.core.port.out.RevocationEventPublisher;
 /**
  * Redis pub/sub implementation of RevocationEventPublisher.
  *
- * <p>Uses Redis pub/sub to notify other Aussie instances of revocation events,
- * allowing them to update their bloom filters without waiting for scheduled rebuilds.
+ * <p>
+ * Uses Redis pub/sub to notify other Aussie instances of revocation events,
+ * allowing them to update their bloom filters without waiting for scheduled
+ * rebuilds.
  *
- * <p>Message format:
+ * <p>
+ * Message format:
  * <ul>
- *   <li>JTI revocation: {@code jti:{jti}:{expiresAtMillis}}</li>
- *   <li>User revocation: {@code user:{userId}:{issuedBeforeMillis}:{expiresAtMillis}}</li>
+ * <li>JTI revocation: {@code jti:{jti}:{expiresAtMillis}}</li>
+ * <li>User revocation:
+ * {@code user:{userId}:{issuedBeforeMillis}:{expiresAtMillis}}</li>
  * </ul>
+ *
+ * <p>
+ * Identifiers (JTI, userId) may contain the separator character ({@code :}).
+ * Parsing splits from the right since trailing fields are always numeric epoch
+ * millis.
  */
 @ApplicationScoped
 @DefaultBean
-@Startup // Ensure eager initialization to avoid blocking on event loop during lazy creation
+@Startup // Ensure eager initialization to avoid blocking on event loop during lazy
+// creation
 public class RedisRevocationEventPublisher implements RevocationEventPublisher {
 
     private static final Logger LOG = Logger.getLogger(RedisRevocationEventPublisher.class);
@@ -126,10 +137,11 @@ public class RedisRevocationEventPublisher implements RevocationEventPublisher {
     /**
      * Message handler that converts Redis messages to RevocationEvents.
      */
-    private static class MessageHandler implements java.util.function.Consumer<String> {
+    static class MessageHandler implements java.util.function.Consumer<String> {
 
-        private final io.smallrye.mutiny.operators.multi.processors.BroadcastProcessor<RevocationEvent> processor =
-                io.smallrye.mutiny.operators.multi.processors.BroadcastProcessor.create();
+        private static final Logger LOG = Logger.getLogger(MessageHandler.class);
+
+        private final BroadcastProcessor<RevocationEvent> processor = BroadcastProcessor.create();
 
         @Override
         public void accept(String message) {
@@ -148,29 +160,42 @@ public class RedisRevocationEventPublisher implements RevocationEventPublisher {
         }
 
         private RevocationEvent parseMessage(String message) {
-            var parts = message.split(MESSAGE_SEPARATOR);
-
-            if (parts.length < 3) {
+            // Type is everything before the first separator
+            final var firstSep = message.indexOf(MESSAGE_SEPARATOR);
+            if (firstSep < 0) {
                 LOG.warnf("Invalid revocation event format: %s", message);
                 return null;
             }
 
-            var type = parts[0];
+            final var type = message.substring(0, firstSep);
 
+            // Parse fields from the right so that identifiers (JTI, userId)
+            // can safely contain colons (e.g. "urn:uuid:..." or "auth0|ns:id").
+            // The trailing fields are always numeric epoch millis.
             return switch (type) {
                 case "jti" -> {
-                    var jti = parts[1];
-                    var expiresAt = Instant.ofEpochMilli(Long.parseLong(parts[2]));
+                    // Format: jti:<jti>:<expiresAtMillis>
+                    final var lastSep = message.lastIndexOf(MESSAGE_SEPARATOR);
+                    if (lastSep <= firstSep) {
+                        LOG.warnf("Invalid JTI revocation event format: %s", message);
+                        yield null;
+                    }
+                    final var jti = message.substring(firstSep + 1, lastSep);
+                    final var expiresAt = Instant.ofEpochMilli(Long.parseLong(message.substring(lastSep + 1)));
                     yield new RevocationEvent.JtiRevoked(jti, expiresAt);
                 }
                 case "user" -> {
-                    if (parts.length < 4) {
+                    // Format: user:<userId>:<issuedBeforeMillis>:<expiresAtMillis>
+                    final var lastSep = message.lastIndexOf(MESSAGE_SEPARATOR);
+                    final var secondLastSep = message.lastIndexOf(MESSAGE_SEPARATOR, lastSep - 1);
+                    if (secondLastSep <= firstSep) {
                         LOG.warnf("Invalid user revocation event format: %s", message);
                         yield null;
                     }
-                    var userId = parts[1];
-                    var issuedBefore = Instant.ofEpochMilli(Long.parseLong(parts[2]));
-                    var expiresAt = Instant.ofEpochMilli(Long.parseLong(parts[3]));
+                    final var userId = message.substring(firstSep + 1, secondLastSep);
+                    final var issuedBefore =
+                            Instant.ofEpochMilli(Long.parseLong(message.substring(secondLastSep + 1, lastSep)));
+                    final var expiresAt = Instant.ofEpochMilli(Long.parseLong(message.substring(lastSep + 1)));
                     yield new RevocationEvent.UserRevoked(userId, issuedBefore, expiresAt);
                 }
                 default -> {
@@ -179,7 +204,5 @@ public class RedisRevocationEventPublisher implements RevocationEventPublisher {
                 }
             };
         }
-
-        private static final Logger LOG = Logger.getLogger(MessageHandler.class);
     }
 }

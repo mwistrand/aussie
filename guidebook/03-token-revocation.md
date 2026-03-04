@@ -539,7 +539,7 @@ public Uni<Void> publishJtiRevoked(String jti, Instant expiresAt) {
 }
 ```
 
-The message format is deliberately simple: `jti:abc123:1705312200000` or `user:user-123:1705312200000:1705398600000`. No JSON. No schema registry. The tradeoff is that the format is fragile (what if a JTI contains a colon?), but the simplicity means zero serialization overhead and trivial parsing.
+The message format is deliberately simple: `jti:abc123:1705312200000` or `user:user-123:1705312200000:1705398600000`. No JSON. No schema registry. The parser handles identifiers that contain colons (e.g., `urn:uuid:...` or namespaced JTIs) by parsing fields from the right: the trailing fields are always numeric epoch millis, so the identifier is everything between the type prefix and the last numeric segment(s). This means zero serialization overhead and trivial parsing without fragility.
 
 The `MessageHandler` inner class (lines 129-184) uses a `BroadcastProcessor` to convert Redis pub/sub messages into a Mutiny `Multi<RevocationEvent>`:
 
