@@ -75,6 +75,7 @@ class RateLimitResolverTest {
         when(config.windowSeconds()).thenReturn(60L);
         when(config.burstCapacity()).thenReturn(150L);
         when(config.platformMaxRequestsPerWindow()).thenReturn(1000L);
+        when(config.platformMaxWindowSeconds()).thenReturn(Long.MAX_VALUE);
         when(config.enabled()).thenReturn(true);
 
         // WebSocket config
@@ -188,6 +189,21 @@ class RateLimitResolverTest {
             assertEquals(60, limit.windowSeconds());
             assertEquals(1000, limit.burstCapacity());
         }
+
+        @Test
+        @DisplayName("should cap windowSeconds at platform maximum")
+        void shouldCapWindowSecondsAtPlatformMaximum() {
+            when(config.platformMaxWindowSeconds()).thenReturn(120L);
+            var serviceConfig = ServiceRateLimitConfig.of(100, 600);
+            var service = createService("test-service", serviceConfig);
+            var endpoint = new EndpointConfig("/api/test", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var route = new RouteMatch(service, endpoint, "/api/test", java.util.Map.of());
+
+            var limit = resolver.resolveLimit(route);
+
+            assertEquals(100, limit.requestsPerWindow());
+            assertEquals(120, limit.windowSeconds());
+        }
     }
 
     @Nested
@@ -278,6 +294,23 @@ class RateLimitResolverTest {
             assertEquals(60, limit.windowSeconds()); // Platform default
             assertEquals(15, limit.burstCapacity()); // Platform default
         }
+
+        @Test
+        @DisplayName("should cap windowSeconds at platform maximum")
+        void shouldCapWindowSecondsAtPlatformMaximum() {
+            when(config.platformMaxWindowSeconds()).thenReturn(30L);
+            var wsConfig =
+                    new ServiceWebSocketRateLimitConfig(Optional.of(RateLimitValues.of(10, 120, 15)), Optional.empty());
+            var serviceConfig = new ServiceRateLimitConfig(
+                    Optional.empty(), Optional.empty(), Optional.empty(), Optional.of(wsConfig));
+            var service = createService("test-service", serviceConfig);
+
+            var limit = resolver.resolveWebSocketConnectionLimit(Optional.of(service));
+
+            assertEquals(10, limit.requestsPerWindow());
+            assertEquals(30, limit.windowSeconds());
+            assertEquals(15, limit.burstCapacity());
+        }
     }
 
     @Nested
@@ -337,6 +370,23 @@ class RateLimitResolverTest {
             assertEquals(100, limit.requestsPerWindow()); // Platform default
             assertEquals(1, limit.windowSeconds()); // Platform default
             assertEquals(75, limit.burstCapacity()); // From service config
+        }
+
+        @Test
+        @DisplayName("should cap windowSeconds at platform maximum")
+        void shouldCapWindowSecondsAtPlatformMaximum() {
+            when(config.platformMaxWindowSeconds()).thenReturn(5L);
+            var wsConfig = new ServiceWebSocketRateLimitConfig(
+                    Optional.empty(), Optional.of(RateLimitValues.of(200, 30, 150)));
+            var serviceConfig = new ServiceRateLimitConfig(
+                    Optional.empty(), Optional.empty(), Optional.empty(), Optional.of(wsConfig));
+            var service = createService("test-service", serviceConfig);
+
+            var limit = resolver.resolveWebSocketMessageLimit(Optional.of(service));
+
+            assertEquals(200, limit.requestsPerWindow());
+            assertEquals(5, limit.windowSeconds());
+            assertEquals(150, limit.burstCapacity());
         }
     }
 

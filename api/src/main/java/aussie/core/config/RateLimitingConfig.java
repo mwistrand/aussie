@@ -18,6 +18,7 @@ import aussie.core.model.ratelimit.RateLimitAlgorithm;
  *   <li>{@code AUSSIE_RATE_LIMITING_ENABLED} - Enable/disable rate limiting</li>
  *   <li>{@code AUSSIE_RATE_LIMITING_ALGORITHM} - Algorithm: BUCKET, FIXED_WINDOW, SLIDING_WINDOW</li>
  *   <li>{@code AUSSIE_RATE_LIMITING_PLATFORM_MAX_REQUESTS_PER_WINDOW} - Maximum ceiling</li>
+ *   <li>{@code AUSSIE_RATE_LIMITING_PLATFORM_MAX_WINDOW_SECONDS} - Maximum window duration</li>
  * </ul>
  */
 @ConfigMapping(prefix = "aussie.rate-limiting")
@@ -52,6 +53,17 @@ public interface RateLimitingConfig {
      */
     @WithDefault("9223372036854775807")
     long platformMaxRequestsPerWindow();
+
+    /**
+     * Platform-wide maximum window duration in seconds.
+     *
+     * <p><b>Platform teams only.</b> Service and endpoint window durations cannot exceed
+     * this value. Set to a generous value; defaults to effectively unlimited.
+     *
+     * @return maximum window seconds (default: Long.MAX_VALUE)
+     */
+    @WithDefault("9223372036854775807")
+    long platformMaxWindowSeconds();
 
     /**
      * Default requests per window for services without explicit configuration.

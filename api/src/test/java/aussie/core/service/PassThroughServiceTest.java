@@ -21,6 +21,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import aussie.adapter.out.storage.NoOpConfigurationCache;
 import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
 import aussie.core.cache.LocalCacheConfig;
+import aussie.core.config.RateLimitingConfig;
 import aussie.core.model.auth.AussieToken;
 import aussie.core.model.auth.GatewaySecurityConfig;
 import aussie.core.model.gateway.GatewayRequest;
@@ -56,6 +57,7 @@ class PassThroughServiceTest {
 
     // Permissive security config for testing
     private static final GatewaySecurityConfig PERMISSIVE_CONFIG = () -> true;
+    private static final RateLimitingConfig PERMISSIVE_RATE_LIMIT_CONFIG = TestRateLimitingConfig.permissive();
 
     // Test cache config
     private static final LocalCacheConfig TEST_CACHE_CONFIG = new LocalCacheConfig() {
@@ -87,7 +89,7 @@ class PassThroughServiceTest {
 
     @BeforeEach
     void setUp() {
-        var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG);
+        var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG);
         var defaultPolicy = new DefaultPermissionPolicy();
         var authService = new ServiceAuthorizationService(defaultPolicy);
         serviceRegistry = new ServiceRegistry(

@@ -48,17 +48,22 @@ public record EffectiveRateLimit(long requestsPerWindow, long windowSeconds, lon
     }
 
     /**
-     * Return a new rate limit capped by the platform maximum.
+     * Return a new rate limit capped by the platform maximums.
      *
-     * @param platformMax the platform maximum requests per window
-     * @return a new rate limit with values capped at the platform maximum
+     * @param platformMaxRequests the platform maximum requests per window
+     * @param platformMaxWindowSeconds the platform maximum window duration in seconds
+     * @return a new rate limit with values capped at the platform maximums
      */
-    public EffectiveRateLimit capAtPlatformMax(long platformMax) {
-        if (requestsPerWindow <= platformMax && burstCapacity <= platformMax) {
+    public EffectiveRateLimit capAtPlatformMax(long platformMaxRequests, long platformMaxWindowSeconds) {
+        if (requestsPerWindow <= platformMaxRequests
+                && burstCapacity <= platformMaxRequests
+                && windowSeconds <= platformMaxWindowSeconds) {
             return this;
         }
         return new EffectiveRateLimit(
-                Math.min(requestsPerWindow, platformMax), windowSeconds, Math.min(burstCapacity, platformMax));
+                Math.min(requestsPerWindow, platformMaxRequests),
+                Math.min(windowSeconds, platformMaxWindowSeconds),
+                Math.min(burstCapacity, platformMaxRequests));
     }
 
     /**

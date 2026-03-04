@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import aussie.adapter.out.storage.NoOpConfigurationCache;
 import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
 import aussie.core.cache.LocalCacheConfig;
+import aussie.core.config.RateLimitingConfig;
 import aussie.core.model.auth.GatewaySecurityConfig;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
@@ -42,6 +43,7 @@ class ServiceRegistryMultiInstanceTest {
 
     // Permissive security config for testing
     private static final GatewaySecurityConfig PERMISSIVE_CONFIG = () -> true;
+    private static final RateLimitingConfig PERMISSIVE_RATE_LIMIT_CONFIG = TestRateLimitingConfig.permissive();
 
     private ServiceRegistrationRepository sharedRepository;
     private ServiceRegistry instanceA;
@@ -52,7 +54,7 @@ class ServiceRegistryMultiInstanceTest {
         // Shared repository simulates persistent storage
         sharedRepository = new InMemoryServiceRegistrationRepository();
 
-        var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG);
+        var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG);
         var defaultPolicy = new DefaultPermissionPolicy();
         var authService = new ServiceAuthorizationService(defaultPolicy);
 
@@ -273,7 +275,7 @@ class ServiceRegistryMultiInstanceTest {
             final var findAllCount = new AtomicInteger(0);
             var countingRepo = new CountingRepository(sharedRepository, findAllCount);
 
-            var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG);
+            var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG);
             var authService = new ServiceAuthorizationService(new DefaultPermissionPolicy());
             var shortTtlConfig = shortTtlCacheConfig(Duration.ofMillis(50));
 
@@ -340,7 +342,7 @@ class ServiceRegistryMultiInstanceTest {
             // Repository that fails on the first findAll, then succeeds
             var failOnceRepo = new FailOnceRepository(sharedRepository, callCount);
 
-            var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG);
+            var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG);
             var authService = new ServiceAuthorizationService(new DefaultPermissionPolicy());
             var shortTtlConfig = shortTtlCacheConfig(Duration.ofMillis(50));
 

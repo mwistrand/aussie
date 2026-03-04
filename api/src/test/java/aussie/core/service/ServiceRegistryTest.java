@@ -41,6 +41,8 @@ class ServiceRegistryTest {
 
     // Permissive security config for testing
     private static final GatewaySecurityConfig PERMISSIVE_CONFIG = () -> true;
+    private static final aussie.core.config.RateLimitingConfig PERMISSIVE_RATE_LIMIT_CONFIG =
+            TestRateLimitingConfig.permissive();
 
     // Test cache config with short TTL for fast tests
     private static final LocalCacheConfig TEST_CACHE_CONFIG = new LocalCacheConfig() {
@@ -72,7 +74,7 @@ class ServiceRegistryTest {
 
     @BeforeEach
     void setUp() {
-        var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG);
+        var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG);
         var defaultPolicy = new DefaultPermissionPolicy();
         authService = new ServiceAuthorizationService(defaultPolicy);
         registry = new ServiceRegistry(

@@ -178,7 +178,7 @@ public class RateLimitResolver {
         }
 
         return new EffectiveRateLimit(requestsPerWindow, windowSeconds, burstCapacity)
-                .capAtPlatformMax(config.platformMaxRequestsPerWindow());
+                .capAtPlatformMax(config.platformMaxRequestsPerWindow(), config.platformMaxWindowSeconds());
     }
 
     /**
@@ -207,7 +207,7 @@ public class RateLimitResolver {
         }
 
         return new EffectiveRateLimit(requestsPerWindow, windowSeconds, burstCapacity)
-                .capAtPlatformMax(config.platformMaxRequestsPerWindow());
+                .capAtPlatformMax(config.platformMaxRequestsPerWindow(), config.platformMaxWindowSeconds());
     }
 
     /**
@@ -217,7 +217,7 @@ public class RateLimitResolver {
      */
     public EffectiveRateLimit resolvePlatformDefaults() {
         return new EffectiveRateLimit(config.defaultRequestsPerWindow(), config.windowSeconds(), config.burstCapacity())
-                .capAtPlatformMax(config.platformMaxRequestsPerWindow());
+                .capAtPlatformMax(config.platformMaxRequestsPerWindow(), config.platformMaxWindowSeconds());
     }
 
     /**
@@ -268,6 +268,6 @@ public class RateLimitResolver {
 
         // Create and cap at platform maximum
         return new EffectiveRateLimit(requestsPerWindow, windowSeconds, burstCapacity)
-                .capAtPlatformMax(config.platformMaxRequestsPerWindow());
+                .capAtPlatformMax(config.platformMaxRequestsPerWindow(), config.platformMaxWindowSeconds());
     }
 }

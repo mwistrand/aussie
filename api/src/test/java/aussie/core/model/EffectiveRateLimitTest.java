@@ -106,7 +106,7 @@ class EffectiveRateLimitTest {
         void shouldReturnSameInstanceWhenUnderMax() {
             var limit = new EffectiveRateLimit(100, 60, 150);
 
-            var capped = limit.capAtPlatformMax(200);
+            var capped = limit.capAtPlatformMax(200, Long.MAX_VALUE);
 
             assertSame(limit, capped);
         }
@@ -116,7 +116,7 @@ class EffectiveRateLimitTest {
         void shouldCapRequestsWhenAboveMax() {
             var limit = new EffectiveRateLimit(200, 60, 150);
 
-            var capped = limit.capAtPlatformMax(100);
+            var capped = limit.capAtPlatformMax(100, Long.MAX_VALUE);
 
             assertEquals(100, capped.requestsPerWindow());
             assertEquals(60, capped.windowSeconds());
@@ -128,7 +128,7 @@ class EffectiveRateLimitTest {
         void shouldCapBurstWhenAboveMax() {
             var limit = new EffectiveRateLimit(100, 60, 200);
 
-            var capped = limit.capAtPlatformMax(150);
+            var capped = limit.capAtPlatformMax(150, Long.MAX_VALUE);
 
             assertEquals(100, capped.requestsPerWindow());
             assertEquals(60, capped.windowSeconds());
@@ -140,10 +140,44 @@ class EffectiveRateLimitTest {
         void shouldCapBothWhenBothAboveMax() {
             var limit = new EffectiveRateLimit(200, 60, 300);
 
-            var capped = limit.capAtPlatformMax(100);
+            var capped = limit.capAtPlatformMax(100, Long.MAX_VALUE);
 
             assertEquals(100, capped.requestsPerWindow());
             assertEquals(60, capped.windowSeconds());
+            assertEquals(100, capped.burstCapacity());
+        }
+
+        @Test
+        @DisplayName("should return same instance when windowSeconds equals platform max")
+        void shouldReturnSameInstanceWhenWindowSecondsEqualsMax() {
+            var limit = new EffectiveRateLimit(100, 300, 150);
+
+            var capped = limit.capAtPlatformMax(200, 300);
+
+            assertSame(limit, capped);
+        }
+
+        @Test
+        @DisplayName("should cap windowSeconds when above platform max")
+        void shouldCapWindowSecondsWhenAboveMax() {
+            var limit = new EffectiveRateLimit(100, 3600, 100);
+
+            var capped = limit.capAtPlatformMax(Long.MAX_VALUE, 300);
+
+            assertEquals(100, capped.requestsPerWindow());
+            assertEquals(300, capped.windowSeconds());
+            assertEquals(100, capped.burstCapacity());
+        }
+
+        @Test
+        @DisplayName("should cap all values when all above platform max")
+        void shouldCapAllWhenAllAboveMax() {
+            var limit = new EffectiveRateLimit(200, 3600, 300);
+
+            var capped = limit.capAtPlatformMax(100, 300);
+
+            assertEquals(100, capped.requestsPerWindow());
+            assertEquals(300, capped.windowSeconds());
             assertEquals(100, capped.burstCapacity());
         }
     }

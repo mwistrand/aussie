@@ -2,9 +2,7 @@
 
 ## Overview
 
-Rate limiting protects the Aussie API Gateway from abuse and ensures fair resource
-allocation across all services. Platform teams control the rate limiting algorithm
-and can set a maximum ceiling that service teams cannot exceed.
+Rate limiting protects the Aussie API Gateway from abuse and ensures fair resource allocation across all services. Platform teams control the rate limiting algorithm and can set a maximum ceiling that service teams cannot exceed.
 
 ## Configuration
 
@@ -15,6 +13,7 @@ and can set a maximum ceiling that service teams cannot exceed.
 | `AUSSIE_RATE_LIMITING_ENABLED` | Enable/disable rate limiting | `true` |
 | `AUSSIE_RATE_LIMITING_ALGORITHM` | Algorithm: `BUCKET`, `FIXED_WINDOW`, `SLIDING_WINDOW` | `BUCKET` |
 | `AUSSIE_RATE_LIMITING_PLATFORM_MAX_REQUESTS_PER_WINDOW` | Maximum rate limit ceiling | `Long.MAX_VALUE` |
+| `AUSSIE_RATE_LIMITING_PLATFORM_MAX_WINDOW_SECONDS` | Maximum window duration in seconds | `Long.MAX_VALUE` |
 | `AUSSIE_RATE_LIMITING_DEFAULT_REQUESTS_PER_WINDOW` | Default for unconfigured services | `100` |
 | `AUSSIE_RATE_LIMITING_WINDOW_SECONDS` | Time window duration | `60` |
 | `AUSSIE_RATE_LIMITING_BURST_CAPACITY` | Burst capacity (bucket algorithm) | `100` |
@@ -32,14 +31,23 @@ and can set a maximum ceiling that service teams cannot exceed.
 The platform maximum prevents service teams from accidentally configuring
 overly permissive rate limits that could enable DoS attacks.
 
+Two maximums are available:
+- **Requests per window** caps how many requests a service can allow per window.
+  Registrations with `requestsPerWindow` or `burstCapacity` exceeding this value are
+  rejected with a 400 error. As a safety net, values are also capped at runtime.
+- **Window duration** caps how long a service's rate limit window can be.
+  Registrations with a `windowSeconds` exceeding this value are rejected with a 400 error.
+
 **Recommendations:**
-- Set a generous ceiling (e.g., 10,000 requests/minute)
+- Set generous ceilings (e.g., 10,000 requests/minute, 3,600-second window)
 - Monitor actual usage before lowering
 - Consider peak traffic patterns
 
 ```bash
 # Example: Set platform max to 10,000 requests per minute
 export AUSSIE_RATE_LIMITING_PLATFORM_MAX_REQUESTS_PER_WINDOW=10000
+# Example: Set platform max window duration to 1 hour
+export AUSSIE_RATE_LIMITING_PLATFORM_MAX_WINDOW_SECONDS=3600
 ```
 
 ### WebSocket Rate Limiting
@@ -104,7 +112,7 @@ For multi-instance deployments:
 
 Configure via:
 ```properties
-aussie.rate-limiting.provider=redis
+aussie.rate-limiting.redis.enabled=true
 ```
 
 ## Troubleshooting
