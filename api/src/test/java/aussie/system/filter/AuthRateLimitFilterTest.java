@@ -16,6 +16,8 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.UriInfo;
 
 import io.smallrye.mutiny.Uni;
+import io.vertx.core.http.HttpServerRequest;
+import io.vertx.core.net.SocketAddress;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -26,6 +28,7 @@ import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.TelemetryHelper;
 import aussie.core.config.AuthRateLimitConfig;
 import aussie.core.service.auth.AuthRateLimitService;
+import aussie.core.service.common.TrustedProxyValidator;
 import aussie.spi.FailedAttemptRepository;
 
 @DisplayName("AuthRateLimitFilter")
@@ -37,8 +40,11 @@ class AuthRateLimitFilterTest {
     private SecurityEventDispatcher securityEventDispatcher;
     private TelemetryHelper telemetryHelper;
     private FailedAttemptRepository failedAttemptRepository;
+    private TrustedProxyValidator trustedProxyValidator;
     private ContainerRequestContext requestContext;
     private UriInfo uriInfo;
+    private HttpServerRequest vertxRequest;
+    private SocketAddress socketAddress;
 
     @BeforeEach
     void setUp() {
@@ -47,15 +53,28 @@ class AuthRateLimitFilterTest {
         securityEventDispatcher = mock(SecurityEventDispatcher.class);
         telemetryHelper = mock(TelemetryHelper.class);
         failedAttemptRepository = mock(FailedAttemptRepository.class);
+        trustedProxyValidator = mock(TrustedProxyValidator.class);
         requestContext = mock(ContainerRequestContext.class);
         uriInfo = mock(UriInfo.class);
+        vertxRequest = mock(HttpServerRequest.class);
+        socketAddress = mock(SocketAddress.class);
 
         when(config.enabled()).thenReturn(true);
         when(config.includeHeaders()).thenReturn(true);
         when(requestContext.getUriInfo()).thenReturn(uriInfo);
 
+        // Default: requests arrive from a trusted proxy at 127.0.0.1
+        when(socketAddress.host()).thenReturn("127.0.0.1");
+        when(vertxRequest.remoteAddress()).thenReturn(socketAddress);
+        when(trustedProxyValidator.shouldTrustForwardingHeaders(anyString())).thenReturn(true);
+
         filter = new AuthRateLimitFilter(
-                rateLimitService, config, securityEventDispatcher, telemetryHelper, failedAttemptRepository);
+                rateLimitService,
+                config,
+                securityEventDispatcher,
+                telemetryHelper,
+                failedAttemptRepository,
+                trustedProxyValidator);
     }
 
     private void setupRequestContext(String path, String forwarded, String xForwardedFor) {
@@ -76,7 +95,7 @@ class AuthRateLimitFilterTest {
             when(config.enabled()).thenReturn(false);
             when(uriInfo.getPath()).thenReturn("/auth/login");
 
-            var result = filter.filter(requestContext);
+            var result = filter.filter(requestContext, vertxRequest);
 
             assertNull(result.await().indefinitely());
             verify(rateLimitService, never()).checkAuthLimit(anyString(), any());
@@ -96,7 +115,7 @@ class AuthRateLimitFilterTest {
             when(rateLimitService.checkAuthLimit(anyString(), any()))
                     .thenReturn(Uni.createFrom().item(rateLimitResult));
 
-            var response = filter.filter(requestContext).await().indefinitely();
+            var response = filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             assertNull(response);
             verify(rateLimitService).checkAuthLimit(anyString(), any());
@@ -111,7 +130,7 @@ class AuthRateLimitFilterTest {
             when(rateLimitService.checkAuthLimit(anyString(), any()))
                     .thenReturn(Uni.createFrom().item(rateLimitResult));
 
-            var response = filter.filter(requestContext).await().indefinitely();
+            var response = filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             assertNull(response);
             verify(rateLimitService).checkAuthLimit(anyString(), any());
@@ -122,7 +141,7 @@ class AuthRateLimitFilterTest {
         void shouldSkipNonAuthEndpoints() {
             setupRequestContext("/api/users", null, "192.168.1.1");
 
-            var response = filter.filter(requestContext).await().indefinitely();
+            var response = filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             assertNull(response);
             verify(rateLimitService, never()).checkAuthLimit(anyString(), any());
@@ -142,7 +161,7 @@ class AuthRateLimitFilterTest {
             when(rateLimitService.checkAuthLimit(anyString(), any()))
                     .thenReturn(Uni.createFrom().item(rateLimitResult));
 
-            filter.filter(requestContext).await().indefinitely();
+            filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             ArgumentCaptor<String> ipCaptor = ArgumentCaptor.forClass(String.class);
             verify(rateLimitService).checkAuthLimit(ipCaptor.capture(), any());
@@ -158,7 +177,7 @@ class AuthRateLimitFilterTest {
             when(rateLimitService.checkAuthLimit(anyString(), any()))
                     .thenReturn(Uni.createFrom().item(rateLimitResult));
 
-            filter.filter(requestContext).await().indefinitely();
+            filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             ArgumentCaptor<String> ipCaptor = ArgumentCaptor.forClass(String.class);
             verify(rateLimitService).checkAuthLimit(ipCaptor.capture(), any());
@@ -174,7 +193,7 @@ class AuthRateLimitFilterTest {
             when(rateLimitService.checkAuthLimit(anyString(), any()))
                     .thenReturn(Uni.createFrom().item(rateLimitResult));
 
-            filter.filter(requestContext).await().indefinitely();
+            filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             ArgumentCaptor<String> ipCaptor = ArgumentCaptor.forClass(String.class);
             verify(rateLimitService).checkAuthLimit(ipCaptor.capture(), any());
@@ -190,7 +209,7 @@ class AuthRateLimitFilterTest {
             when(rateLimitService.checkAuthLimit(anyString(), any()))
                     .thenReturn(Uni.createFrom().item(rateLimitResult));
 
-            filter.filter(requestContext).await().indefinitely();
+            filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             ArgumentCaptor<String> ipCaptor = ArgumentCaptor.forClass(String.class);
             verify(rateLimitService).checkAuthLimit(ipCaptor.capture(), any());
@@ -206,7 +225,7 @@ class AuthRateLimitFilterTest {
             when(rateLimitService.checkAuthLimit(anyString(), any()))
                     .thenReturn(Uni.createFrom().item(rateLimitResult));
 
-            filter.filter(requestContext).await().indefinitely();
+            filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             ArgumentCaptor<String> ipCaptor = ArgumentCaptor.forClass(String.class);
             verify(rateLimitService).checkAuthLimit(ipCaptor.capture(), any());
@@ -222,7 +241,7 @@ class AuthRateLimitFilterTest {
             when(rateLimitService.checkAuthLimit(anyString(), any()))
                     .thenReturn(Uni.createFrom().item(rateLimitResult));
 
-            filter.filter(requestContext).await().indefinitely();
+            filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             ArgumentCaptor<String> ipCaptor = ArgumentCaptor.forClass(String.class);
             verify(rateLimitService).checkAuthLimit(ipCaptor.capture(), any());
@@ -238,7 +257,7 @@ class AuthRateLimitFilterTest {
             when(rateLimitService.checkAuthLimit(anyString(), any()))
                     .thenReturn(Uni.createFrom().item(rateLimitResult));
 
-            filter.filter(requestContext).await().indefinitely();
+            filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             ArgumentCaptor<String> ipCaptor = ArgumentCaptor.forClass(String.class);
             verify(rateLimitService).checkAuthLimit(ipCaptor.capture(), any());
@@ -254,7 +273,7 @@ class AuthRateLimitFilterTest {
             when(rateLimitService.checkAuthLimit(anyString(), any()))
                     .thenReturn(Uni.createFrom().item(rateLimitResult));
 
-            filter.filter(requestContext).await().indefinitely();
+            filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             ArgumentCaptor<String> ipCaptor = ArgumentCaptor.forClass(String.class);
             verify(rateLimitService).checkAuthLimit(ipCaptor.capture(), any());
@@ -262,19 +281,99 @@ class AuthRateLimitFilterTest {
         }
 
         @Test
-        @DisplayName("should return 'unknown' when no IP headers present")
+        @DisplayName("should return 'unknown' when no IP headers present and no remote address")
         void shouldReturnUnknownWhenNoIpHeaders() {
             setupRequestContext("/auth/login", null, null);
+            when(vertxRequest.remoteAddress()).thenReturn(null);
+            when(trustedProxyValidator.shouldTrustForwardingHeaders(null)).thenReturn(false);
 
             var rateLimitResult = AuthRateLimitService.RateLimitResult.allow();
             when(rateLimitService.checkAuthLimit(anyString(), any()))
                     .thenReturn(Uni.createFrom().item(rateLimitResult));
 
-            filter.filter(requestContext).await().indefinitely();
+            filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             ArgumentCaptor<String> ipCaptor = ArgumentCaptor.forClass(String.class);
             verify(rateLimitService).checkAuthLimit(ipCaptor.capture(), any());
             assertEquals("unknown", ipCaptor.getValue());
+        }
+
+        @Test
+        @DisplayName("should use socket IP as fallback when trusted proxy sends no forwarding headers")
+        void shouldUseSocketIpWhenTrustedProxyAndNoForwardingHeaders() {
+            setupRequestContext("/auth/login", null, null);
+            when(socketAddress.host()).thenReturn("10.0.0.5");
+
+            var rateLimitResult = AuthRateLimitService.RateLimitResult.allow();
+            when(rateLimitService.checkAuthLimit(anyString(), any()))
+                    .thenReturn(Uni.createFrom().item(rateLimitResult));
+
+            filter.filter(requestContext, vertxRequest).await().indefinitely();
+
+            ArgumentCaptor<String> ipCaptor = ArgumentCaptor.forClass(String.class);
+            verify(rateLimitService).checkAuthLimit(ipCaptor.capture(), any());
+            assertEquals("10.0.0.5", ipCaptor.getValue());
+        }
+    }
+
+    @Nested
+    @DisplayName("Trusted proxy validation")
+    class TrustedProxyValidationTests {
+
+        @Test
+        @DisplayName("should ignore forwarding headers and use socket IP when proxy is not trusted")
+        void shouldUseSocketIpWhenProxyNotTrusted() {
+            setupRequestContext("/auth/login", "for=1.2.3.4", "1.2.3.4");
+            when(socketAddress.host()).thenReturn("203.0.113.99");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("203.0.113.99"))
+                    .thenReturn(false);
+
+            var rateLimitResult = AuthRateLimitService.RateLimitResult.allow();
+            when(rateLimitService.checkAuthLimit(anyString(), any()))
+                    .thenReturn(Uni.createFrom().item(rateLimitResult));
+
+            filter.filter(requestContext, vertxRequest).await().indefinitely();
+
+            ArgumentCaptor<String> ipCaptor = ArgumentCaptor.forClass(String.class);
+            verify(rateLimitService).checkAuthLimit(ipCaptor.capture(), any());
+            assertEquals("203.0.113.99", ipCaptor.getValue());
+        }
+
+        @Test
+        @DisplayName("should honor forwarding headers when proxy is trusted")
+        void shouldHonorForwardingHeadersWhenProxyIsTrusted() {
+            setupRequestContext("/auth/login", "for=198.51.100.42", null);
+            when(socketAddress.host()).thenReturn("10.10.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.10.0.1"))
+                    .thenReturn(true);
+
+            var rateLimitResult = AuthRateLimitService.RateLimitResult.allow();
+            when(rateLimitService.checkAuthLimit(anyString(), any()))
+                    .thenReturn(Uni.createFrom().item(rateLimitResult));
+
+            filter.filter(requestContext, vertxRequest).await().indefinitely();
+
+            ArgumentCaptor<String> ipCaptor = ArgumentCaptor.forClass(String.class);
+            verify(rateLimitService).checkAuthLimit(ipCaptor.capture(), any());
+            assertEquals("198.51.100.42", ipCaptor.getValue());
+        }
+
+        @Test
+        @DisplayName("should consult validator with the socket IP, not the header IP")
+        void shouldConsultValidatorWithSocketIp() {
+            final var proxySocketIp = "10.0.0.2";
+            setupRequestContext("/auth/login", "for=198.51.100.55", null);
+            when(socketAddress.host()).thenReturn(proxySocketIp);
+            when(trustedProxyValidator.shouldTrustForwardingHeaders(proxySocketIp))
+                    .thenReturn(true);
+
+            var rateLimitResult = AuthRateLimitService.RateLimitResult.allow();
+            when(rateLimitService.checkAuthLimit(anyString(), any()))
+                    .thenReturn(Uni.createFrom().item(rateLimitResult));
+
+            filter.filter(requestContext, vertxRequest).await().indefinitely();
+
+            verify(trustedProxyValidator).shouldTrustForwardingHeaders(proxySocketIp);
         }
     }
 
@@ -291,7 +390,7 @@ class AuthRateLimitFilterTest {
             when(rateLimitService.checkAuthLimit(anyString(), any()))
                     .thenReturn(Uni.createFrom().item(rateLimitResult));
 
-            var response = filter.filter(requestContext).await().indefinitely();
+            var response = filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             assertNull(response);
         }
@@ -308,7 +407,7 @@ class AuthRateLimitFilterTest {
             when(failedAttemptRepository.getLockoutCount(anyString()))
                     .thenReturn(Uni.createFrom().item(1));
 
-            var response = filter.filter(requestContext).await().indefinitely();
+            var response = filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             assertNotNull(response);
             assertEquals(429, response.getStatus());
@@ -328,7 +427,7 @@ class AuthRateLimitFilterTest {
             when(failedAttemptRepository.getLockoutCount(anyString()))
                     .thenReturn(Uni.createFrom().item(1));
 
-            var response = filter.filter(requestContext).await().indefinitely();
+            var response = filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             assertNotNull(response);
             assertEquals("test-key", response.getHeaderString("X-Auth-Lockout-Key"));
@@ -348,7 +447,7 @@ class AuthRateLimitFilterTest {
             when(failedAttemptRepository.getLockoutCount(anyString()))
                     .thenReturn(Uni.createFrom().item(1));
 
-            var response = filter.filter(requestContext).await().indefinitely();
+            var response = filter.filter(requestContext, vertxRequest).await().indefinitely();
 
             assertNotNull(response);
             assertNull(response.getHeaderString("X-Auth-Lockout-Key"));

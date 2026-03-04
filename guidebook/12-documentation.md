@@ -245,7 +245,7 @@ Note the contrast between rate limiting (fail-open) and token revocation (fail-c
 
 ### What a Mid-Level Engineer Might Do Instead
 
-Document the five most important configuration variables and say "see application.properties for the rest." This forces operators to read Java `@ConfigMapping` interfaces to discover available knobs, which requires them to have the source code, understand Quarkus configuration mapping, and know which interface to look at. This is not a senior failure — it is a mid-level one. A senior who has supported a platform used by multiple teams knows that incomplete configuration docs generate a steady stream of questions. The exhaustive reference table, with defaults, descriptions, and timeout behavior notes, reflects experience with the support cost of underdocumented configuration.
+Document the five most important configuration variables and say "see application.properties for the rest." This forces operators to read Java `@ConfigMapping` interfaces to discover available knobs, which requires them to have the source code, understand Quarkus configuration mapping, and know which interface to look at. This is not a senior failure; it is a mid-level one. A senior who has supported a platform used by multiple teams knows that incomplete configuration docs generate a steady stream of questions. The exhaustive reference table, with defaults, descriptions, and timeout behavior notes, reflects experience with the support cost of underdocumented configuration.
 
 ### Trade-offs
 
@@ -353,7 +353,7 @@ This comment explains why a 429 response is recorded as `StatusCode.OK` instead 
 
 ### What a Junior Engineer Might Do Instead
 
-Write Javadoc that restates the method name: "Rate limits incoming requests" on a method called `filterRequest`. Or worse, no Javadoc at all, with the reasoning living in a Confluence page that was last updated eight months ago. Embedding architectural rationale in Javadoc is a senior practice — it is something you learn from reviewing code where the reasoning was missing and you had to reconstruct it. The staff-level contribution is the systematic application of this practice: every design decision that is not visible from the code has a comment, and the Javadoc serves as a first-class design artifact, not an afterthought.
+Write Javadoc that restates the method name: "Rate limits incoming requests" on a method called `filterRequest`. Or worse, no Javadoc at all, with the reasoning living in a Confluence page that was last updated eight months ago. Embedding architectural rationale in Javadoc is a senior practice. It is something you learn from reviewing code where the reasoning was missing and you had to reconstruct it. The staff-level contribution is the systematic application of this practice: every design decision that is not visible from the code has a comment, and the Javadoc serves as a first-class design artifact, not an afterthought.
 
 ### Trade-offs
 
@@ -478,7 +478,7 @@ The metrics reference tables list every metric with its type, labels, and descri
 
 ### What a Mid-Level Engineer Might Do Instead
 
-Document the metric names and leave PromQL as an exercise for the reader. This saves perhaps 20 minutes of documentation time and costs every platform team deploying Aussie the time to write (and debug) their own queries. A senior who has built or adopted observability platforms knows that metric names alone are insufficient — the value is in the queries. The staff contribution is providing working PromQL and Prometheus alert rules, which requires understanding both what the metrics measure and how operators will consume them in practice.
+Document the metric names and leave PromQL as an exercise for the reader. This saves perhaps 20 minutes of documentation time and costs every platform team deploying Aussie the time to write (and debug) their own queries. A senior who has built or adopted observability platforms knows that metric names alone are insufficient; the value is in the queries. The staff contribution is providing working PromQL and Prometheus alert rules, which requires understanding both what the metrics measure and how operators will consume them in practice.
 
 ### Trade-offs
 

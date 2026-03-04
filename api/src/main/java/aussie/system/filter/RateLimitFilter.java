@@ -30,6 +30,7 @@ import aussie.core.model.service.ServicePath;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
+import aussie.core.service.common.TrustedProxyValidator;
 import aussie.core.service.ratelimit.RateLimitResolver;
 import aussie.core.service.routing.ServiceRegistry;
 import aussie.core.util.SecureHash;
@@ -70,6 +71,7 @@ public class RateLimitFilter {
     private final RateLimitResolver rateLimitResolver;
     private final ServiceRegistry serviceRegistry;
     private final TelemetryHelper telemetryHelper;
+    private final TrustedProxyValidator trustedProxyValidator;
 
     @Inject
     public RateLimitFilter(
@@ -79,7 +81,8 @@ public class RateLimitFilter {
             SecurityEventDispatcher securityEventDispatcher,
             RateLimitResolver rateLimitResolver,
             ServiceRegistry serviceRegistry,
-            TelemetryHelper telemetryHelper) {
+            TelemetryHelper telemetryHelper,
+            TrustedProxyValidator trustedProxyValidator) {
         this.rateLimiter = rateLimiter;
         this.configInstance = configInstance;
         this.metrics = metrics;
@@ -87,6 +90,7 @@ public class RateLimitFilter {
         this.rateLimitResolver = rateLimitResolver;
         this.serviceRegistry = serviceRegistry;
         this.telemetryHelper = telemetryHelper;
+        this.trustedProxyValidator = trustedProxyValidator;
     }
 
     private RateLimitingConfig config() {
@@ -228,7 +232,18 @@ public class RateLimitFilter {
         return Optional.ofNullable(request.getHeader("X-API-Key-ID")).map(id -> "apikey:" + id);
     }
 
+    /**
+     * Extracts the client IP, only trusting forwarding headers when the direct
+     * connection comes from a known proxy.
+     */
     private String extractClientIp(HttpServerRequest request) {
+        final var remoteAddress = request.remoteAddress();
+        final var socketIp = remoteAddress != null ? remoteAddress.host() : null;
+
+        if (!trustedProxyValidator.shouldTrustForwardingHeaders(socketIp)) {
+            return "ip:" + (socketIp != null ? socketIp : "unknown");
+        }
+
         // RFC 7239 Forwarded header (preferred)
         final var forwarded = request.getHeader("Forwarded");
         if (forwarded != null) {
@@ -244,13 +259,7 @@ public class RateLimitFilter {
             return "ip:" + xForwardedFor.split(",")[0].trim();
         }
 
-        // Remote address fallback
-        final var remoteAddress = request.remoteAddress();
-        if (remoteAddress != null) {
-            return "ip:" + remoteAddress.host();
-        }
-
-        return "ip:unknown";
+        return "ip:" + (socketIp != null ? socketIp : "unknown");
     }
 
     /**

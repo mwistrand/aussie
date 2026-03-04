@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.Response;
 import io.opentelemetry.api.trace.Span;
 import io.quarkus.arc.properties.IfBuildProperty;
 import io.smallrye.mutiny.Uni;
+import io.vertx.core.http.HttpServerRequest;
 import org.jboss.resteasy.reactive.server.ServerRequestFilter;
 
 import aussie.adapter.in.problem.GatewayProblem;
@@ -18,6 +19,7 @@ import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.TelemetryHelper;
 import aussie.core.config.AuthRateLimitConfig;
 import aussie.core.service.auth.AuthRateLimitService;
+import aussie.core.service.common.TrustedProxyValidator;
 import aussie.core.util.SecureHash;
 import aussie.spi.FailedAttemptRepository;
 import aussie.spi.SecurityEvent;
@@ -44,6 +46,7 @@ public class AuthRateLimitFilter {
     private final SecurityEventDispatcher securityEventDispatcher;
     private final TelemetryHelper telemetryHelper;
     private final FailedAttemptRepository failedAttemptRepository;
+    private final TrustedProxyValidator trustedProxyValidator;
 
     @Inject
     public AuthRateLimitFilter(
@@ -51,22 +54,25 @@ public class AuthRateLimitFilter {
             AuthRateLimitConfig config,
             SecurityEventDispatcher securityEventDispatcher,
             TelemetryHelper telemetryHelper,
-            FailedAttemptRepository failedAttemptRepository) {
+            FailedAttemptRepository failedAttemptRepository,
+            TrustedProxyValidator trustedProxyValidator) {
         this.rateLimitService = rateLimitService;
         this.config = config;
         this.securityEventDispatcher = securityEventDispatcher;
         this.telemetryHelper = telemetryHelper;
         this.failedAttemptRepository = failedAttemptRepository;
+        this.trustedProxyValidator = trustedProxyValidator;
     }
 
     /**
      * Reactive filter method for authentication rate limiting.
      *
      * @param requestContext the request context
+     * @param vertxRequest the Vert.x request, used to obtain the socket-level remote address
      * @return Uni with null to continue, or Response to abort
      */
     @ServerRequestFilter(priority = Priorities.AUTHENTICATION - 100)
-    public Uni<Response> filter(ContainerRequestContext requestContext) {
+    public Uni<Response> filter(ContainerRequestContext requestContext, HttpServerRequest vertxRequest) {
         if (!config.enabled()) {
             return Uni.createFrom().nullItem();
         }
@@ -78,7 +84,7 @@ public class AuthRateLimitFilter {
             return Uni.createFrom().nullItem();
         }
 
-        final var ip = extractClientIp(requestContext);
+        final var ip = extractClientIp(requestContext, vertxRequest);
         final var identifier = extractIdentifier(requestContext);
 
         return rateLimitService.checkAuthLimit(ip, identifier).map(result -> {
@@ -151,7 +157,18 @@ public class AuthRateLimitFilter {
         telemetryHelper.setAuthLockoutRetryAfter(span, result.retryAfterSeconds());
     }
 
-    private String extractClientIp(ContainerRequestContext ctx) {
+    /**
+     * Extracts the client IP, only trusting forwarding headers when the direct
+     * connection comes from a known proxy.
+     */
+    private String extractClientIp(ContainerRequestContext ctx, HttpServerRequest vertxRequest) {
+        final var remoteAddress = vertxRequest.remoteAddress();
+        final var socketIp = remoteAddress != null ? remoteAddress.host() : null;
+
+        if (!trustedProxyValidator.shouldTrustForwardingHeaders(socketIp)) {
+            return socketIp != null ? socketIp : "unknown";
+        }
+
         // RFC 7239 Forwarded header (preferred)
         final var forwarded = ctx.getHeaderString("Forwarded");
         if (forwarded != null) {
@@ -167,7 +184,7 @@ public class AuthRateLimitFilter {
             return xForwardedFor.split(",")[0].trim();
         }
 
-        return "unknown";
+        return socketIp != null ? socketIp : "unknown";
     }
 
     /**

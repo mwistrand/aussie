@@ -274,7 +274,7 @@ public static String truncatedSha256(String input, int hexChars) {
 The `RateLimitFilter` uses this to hash bearer tokens before building rate limit keys:
 
 ```java
-// RateLimitFilter.java, lines 219-225
+// RateLimitFilter.java, lines 223-229
 private Optional<String> extractAuthHeaderHash(HttpServerRequest request) {
     final var auth = request.getHeader("Authorization");
     if (auth != null && auth.startsWith("Bearer ")) {
@@ -287,7 +287,7 @@ private Optional<String> extractAuthHeaderHash(HttpServerRequest request) {
 And the hash function truncates to 16 hex characters (64 bits):
 
 ```java
-// RateLimitFilter.java, lines 308-310
+// RateLimitFilter.java, lines 313-315
 private String hashToken(String token) {
     return SecureHash.truncatedSha256(token, 16);
 }
@@ -296,7 +296,7 @@ private String hashToken(String token) {
 The same pattern appears in the `AuthRateLimitFilter` for hashing client IDs in security events:
 
 ```java
-// AuthRateLimitFilter.java, lines 237-242
+// AuthRateLimitFilter.java, lines 254-259
 private String hashClientId(String clientId) {
     if (clientId == null) {
         return "unknown";
@@ -307,9 +307,9 @@ private String hashClientId(String clientId) {
 
 ### What a Senior Might Skip
 
-A senior engineer with security experience would hash sensitive identifiers — bearer tokens, API keys — before storing them in a rate limit key. Not hashing tokens is a junior oversight; any engineer who has been through a security review or a Redis misconfiguration post-mortem will know to hash sensitive data at rest. Skipping hashing because "the store is internal infrastructure" is the reasoning of someone who has not yet seen what happens when that assumption breaks.
+A senior engineer with security experience would hash sensitive identifiers (bearer tokens, API keys) before storing them in a rate limit key. Not hashing tokens is a junior oversight; any engineer who has been through a security review or a Redis misconfiguration post-mortem will know to hash sensitive data at rest. Skipping hashing because "the store is internal infrastructure" is the reasoning of someone who has not yet seen what happens when that assumption breaks.
 
-What a senior is less likely to think through is the right hash size. The staff-level contribution here is the truncation to 16 hex characters (64 bits) and the explicit entropy justification. The Javadoc on line 26 of `SecureHash.java` notes: "16 hex characters = 64 bits of entropy, sufficient for rate limit keying while keeping cache keys compact." Full SHA-256 (64 hex characters) would be more collision-resistant but would waste storage in Redis for no practical benefit — 64 bits gives a collision probability of approximately 1 in 2^32 at the scale of a rate limiter. A senior would hash; they might not reason about whether 32, 64, or 128 bits of output is appropriate for this specific use case.
+What a senior is less likely to think through is the right hash size. The staff-level contribution here is the truncation to 16 hex characters (64 bits) and the explicit entropy justification. The Javadoc on line 26 of `SecureHash.java` notes: "16 hex characters = 64 bits of entropy, sufficient for rate limit keying while keeping cache keys compact." Full SHA-256 (64 hex characters) would be more collision-resistant but would waste storage in Redis for no practical benefit; 64 bits gives a collision probability of approximately 1 in 2^32 at the scale of a rate limiter. A senior would hash; they might not reason about whether 32, 64, or 128 bits of output is appropriate for this specific use case.
 
 ### Trade-offs
 
@@ -402,7 +402,7 @@ public void dispatch(SecurityEvent event) {
 }
 ```
 
-The `clientIdentifier` field on every event is a hashed IP address, not a raw IP. This is consistent throughout. The `RateLimitFilter` hashes client IDs before dispatching events (line 301-306), and the `AuthRateLimitFilter` does the same (lines 237-242). Security events that contain raw client data would themselves become a data protection liability.
+The `clientIdentifier` field on every event is a hashed IP address, not a raw IP. This is consistent throughout. The `RateLimitFilter` hashes client IDs before dispatching events (lines 306-311), and the `AuthRateLimitFilter` does the same (lines 254-259). Security events that contain raw client data would themselves become a data protection liability.
 
 Two built-in handlers ship with the gateway. The `LoggingSecurityEventHandler` maps severity to log level (INFO events go to DEBUG, WARNING to WARN, CRITICAL to ERROR). The `MetricsSecurityEventHandler` records Micrometer counters tagged by event type, allowing Prometheus/Grafana dashboards to track security events in real time.
 
@@ -436,7 +436,7 @@ The `AuthRateLimitFilter` runs at priority `AUTHENTICATION - 100`, which is befo
 This ensures locked-out clients are rejected before they consume HTTP rate limit tokens. The filter only applies to authentication endpoints:
 
 ```java
-// AuthRateLimitFilter.java, lines 98-103
+// AuthRateLimitFilter.java, lines 104-109
 private boolean isAuthEndpoint(String path) {
     return path.startsWith(AUTH_PATH_PREFIX)
             || path.startsWith(ADMIN_PATH_PREFIX + "/sessions")
@@ -486,9 +486,36 @@ A senior would implement a fixed lockout duration without progressive escalation
 
 The separation of auth rate limiting from HTTP rate limiting is the more fundamental thing a senior would skip. It requires two separate filter registrations at two different priorities, two different configuration interfaces, and two different storage strategies. But without it, you cannot answer the question "how many failed logins has this account had?" separately from "how many requests has this IP sent?"
 
+### Consistent Trusted Proxy Validation
+
+The filter accepts `HttpServerRequest` as a second parameter (RESTEasy Reactive injects it automatically) to get the socket-level IP of the direct connection. Before reading any forwarding headers, it consults `TrustedProxyValidator`:
+
+```java
+// AuthRateLimitFilter.java, lines 74-87
+@ServerRequestFilter(priority = Priorities.AUTHENTICATION - 100)
+public Uni<Response> filter(ContainerRequestContext requestContext, HttpServerRequest vertxRequest) {
+    ...
+    final var ip = extractClientIp(requestContext, vertxRequest);
+    ...
+}
+
+// AuthRateLimitFilter.java, lines 164-170
+private String extractClientIp(ContainerRequestContext ctx, HttpServerRequest vertxRequest) {
+    final var remoteAddress = vertxRequest.remoteAddress();
+    final var socketIp = remoteAddress != null ? remoteAddress.host() : null;
+
+    if (!trustedProxyValidator.shouldTrustForwardingHeaders(socketIp)) {
+        return socketIp != null ? socketIp : "unknown";
+    }
+    // ... read Forwarded / X-Forwarded-For headers ...
+}
+```
+
+This is the same pattern used by the access control layer (`SourceIdentifierExtractor`) and the general rate limit filter (`RateLimitFilter`). Without this check, an attacker connecting directly (not through the real ingress proxy) could set an arbitrary `X-Forwarded-For` header to rotate their apparent IP and evade IP-based lockout tracking. The identifier-based tracking provides a second line of defense, but consistent proxy validation is the correct primary control.
+
 ### Trade-offs
 
-The `extractClientIp` method in `AuthRateLimitFilter` (lines 154-171) reads `X-Forwarded-For` directly without consulting the `TrustedProxyValidator`. This means the auth rate limiter trusts forwarding headers unconditionally, while the access control layer uses the trusted proxy check. This is a consistency gap: an attacker behind an untrusted proxy could spoof their IP to evade IP-based auth rate limiting. The identifier-based tracking provides a second line of defense, but the inconsistency is worth noting.
+The `parseForwardedFor` logic is duplicated across `AuthRateLimitFilter`, `RateLimitFilter`, and (with slight differences) `SourceIdentifierExtractor`. Extracting it to a shared utility would reduce the risk of behavioral divergence, but the current duplication is contained to three call sites and each caller applies the result differently (prefixed vs. unprefixed, different fallback behavior). The duplication is acknowledged as a maintenance cost worth revisiting if the parsing logic needs to change.
 
 ## 2.8 CORS at the Vert.x Layer
 

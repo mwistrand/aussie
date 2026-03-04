@@ -50,6 +50,7 @@ import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
+import aussie.core.service.common.TrustedProxyValidator;
 import aussie.core.service.ratelimit.RateLimitResolver;
 import aussie.core.service.routing.ServiceRegistry;
 
@@ -67,10 +68,12 @@ class RateLimitFilterTest {
     private RateLimitResolver rateLimitResolver;
     private ServiceRegistry serviceRegistry;
     private TelemetryHelper telemetryHelper;
+    private TrustedProxyValidator trustedProxyValidator;
     private HttpServerRequest request;
     private HttpServerResponse response;
     private MultiMap responseHeaders;
     private ContainerRequestContext requestContext;
+    private SocketAddress socketAddress;
 
     @BeforeEach
     @SuppressWarnings("unchecked")
@@ -83,10 +86,12 @@ class RateLimitFilterTest {
         rateLimitResolver = mock(RateLimitResolver.class);
         serviceRegistry = mock(ServiceRegistry.class);
         telemetryHelper = mock(TelemetryHelper.class);
+        trustedProxyValidator = mock(TrustedProxyValidator.class);
         request = mock(HttpServerRequest.class);
         response = mock(HttpServerResponse.class);
         responseHeaders = MultiMap.caseInsensitiveMultiMap();
         requestContext = mock(ContainerRequestContext.class);
+        socketAddress = mock(SocketAddress.class);
 
         when(configInstance.get()).thenReturn(config);
         when(config.enabled()).thenReturn(true);
@@ -104,6 +109,10 @@ class RateLimitFilterTest {
         // Default: no route found
         when(serviceRegistry.findRoute(anyString(), anyString())).thenReturn(Optional.empty());
 
+        // Default: requests arrive from a trusted proxy at 127.0.0.1
+        when(socketAddress.host()).thenReturn("127.0.0.1");
+        when(trustedProxyValidator.shouldTrustForwardingHeaders(anyString())).thenReturn(true);
+
         filter = new RateLimitFilter(
                 rateLimiter,
                 configInstance,
@@ -111,7 +120,8 @@ class RateLimitFilterTest {
                 securityEventDispatcher,
                 rateLimitResolver,
                 serviceRegistry,
-                telemetryHelper);
+                telemetryHelper,
+                trustedProxyValidator);
     }
 
     private ServiceRegistration createTestService(String serviceId) {
@@ -137,7 +147,7 @@ class RateLimitFilterTest {
         when(request.getHeader("X-API-Key-ID")).thenReturn(null);
         when(request.getHeader("X-Session-ID")).thenReturn(null);
         when(request.getCookie(anyString())).thenReturn(null);
-        when(request.remoteAddress()).thenReturn(null);
+        when(request.remoteAddress()).thenReturn(socketAddress);
     }
 
     @Nested
@@ -518,6 +528,71 @@ class RateLimitFilterTest {
             verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
 
             assertEquals("ip:127.0.0.1", keyCaptor.getValue().clientId());
+        }
+    }
+
+    @Nested
+    @DisplayName("Trusted proxy validation")
+    class TrustedProxyValidationTests {
+
+        @Test
+        @DisplayName("should ignore forwarding headers and use socket IP when proxy is not trusted")
+        void shouldUseSocketIpWhenProxyNotTrusted() {
+            setupRequest("/service-1/api/test", null);
+            when(socketAddress.host()).thenReturn("203.0.113.99");
+            when(request.getHeader("Forwarded")).thenReturn("for=1.2.3.4");
+            when(request.getHeader("X-Forwarded-For")).thenReturn("1.2.3.4");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("203.0.113.99"))
+                    .thenReturn(false);
+
+            var decision = RateLimitDecision.allow();
+            when(rateLimiter.checkAndConsume(any(), any()))
+                    .thenReturn(Uni.createFrom().item(decision));
+
+            filter.filterRequest(requestContext, request).await().atMost(TIMEOUT);
+
+            ArgumentCaptor<RateLimitKey> keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
+            verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
+            assertEquals("ip:203.0.113.99", keyCaptor.getValue().clientId());
+        }
+
+        @Test
+        @DisplayName("should honor forwarding headers when proxy is trusted")
+        void shouldHonorForwardingHeadersWhenProxyIsTrusted() {
+            setupRequest("/service-1/api/test", null);
+            when(socketAddress.host()).thenReturn("10.10.0.1");
+            when(request.getHeader("Forwarded")).thenReturn("for=198.51.100.42");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.10.0.1"))
+                    .thenReturn(true);
+
+            var decision = RateLimitDecision.allow();
+            when(rateLimiter.checkAndConsume(any(), any()))
+                    .thenReturn(Uni.createFrom().item(decision));
+
+            filter.filterRequest(requestContext, request).await().atMost(TIMEOUT);
+
+            ArgumentCaptor<RateLimitKey> keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
+            verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
+            assertEquals("ip:198.51.100.42", keyCaptor.getValue().clientId());
+        }
+
+        @Test
+        @DisplayName("should consult validator with the socket IP, not the header IP")
+        void shouldConsultValidatorWithSocketIp() {
+            final var proxySocketIp = "10.0.0.2";
+            setupRequest("/service-1/api/test", null);
+            when(socketAddress.host()).thenReturn(proxySocketIp);
+            when(request.getHeader("Forwarded")).thenReturn("for=198.51.100.55");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders(proxySocketIp))
+                    .thenReturn(true);
+
+            var decision = RateLimitDecision.allow();
+            when(rateLimiter.checkAndConsume(any(), any()))
+                    .thenReturn(Uni.createFrom().item(decision));
+
+            filter.filterRequest(requestContext, request).await().atMost(TIMEOUT);
+
+            verify(trustedProxyValidator).shouldTrustForwardingHeaders(proxySocketIp);
         }
     }
 
