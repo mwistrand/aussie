@@ -97,8 +97,7 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should parse WEBSOCKET type")
         void shouldParseWebSocketType() {
-            var dto = new EndpointConfigDto(
-                    "/ws/echo", Set.of("GET"), "PUBLIC", null, false, "WEBSOCKET", null, null, null);
+            var dto = new EndpointConfigDto("/ws/echo", null, "PUBLIC", null, false, "WEBSOCKET", null, null, null);
 
             var model = dto.toModel();
 
@@ -106,10 +105,19 @@ class EndpointConfigDtoTest {
         }
 
         @Test
+        @DisplayName("Should default methods to GET for WEBSOCKET endpoints when not specified")
+        void shouldDefaultMethodsToGetForWebSocket() {
+            var dto = new EndpointConfigDto("/ws/echo", null, "PUBLIC", null, false, "WEBSOCKET", null, null, null);
+
+            var model = dto.toModel();
+
+            assertEquals(Set.of("GET"), model.methods());
+        }
+
+        @Test
         @DisplayName("Should parse type case-insensitively")
         void shouldParseTypeCaseInsensitively() {
-            var dto = new EndpointConfigDto(
-                    "/ws/echo", Set.of("GET"), "PUBLIC", null, false, "websocket", null, null, null);
+            var dto = new EndpointConfigDto("/ws/echo", null, "PUBLIC", null, false, "websocket", null, null, null);
 
             var model = dto.toModel();
 
@@ -284,8 +292,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should preserve WEBSOCKET type through round-trip conversion")
         void shouldPreserveWebSocketTypeThroughRoundTrip() {
-            var original = new EndpointConfigDto(
-                    "/ws/chat", Set.of("GET"), "PRIVATE", null, true, "WEBSOCKET", null, null, null);
+            var original =
+                    new EndpointConfigDto("/ws/chat", null, "PRIVATE", null, true, "WEBSOCKET", null, null, null);
 
             var model = original.toModel();
             var roundTripped = EndpointConfigDto.fromModel(model);

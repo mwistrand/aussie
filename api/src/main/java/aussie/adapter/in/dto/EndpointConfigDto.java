@@ -1,5 +1,6 @@
 package aussie.adapter.in.dto;
 
+import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
 
@@ -8,11 +9,11 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Pattern;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import aussie.adapter.in.validation.ValidEndpointMethods;
 import aussie.core.model.ratelimit.EndpointRateLimitConfig;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointType;
@@ -32,9 +33,10 @@ import aussie.core.model.sampling.EndpointSamplingConfig;
  * @param rateLimitConfig optional endpoint-specific rate limiting
  * @param samplingConfig  optional endpoint-specific OTel sampling configuration
  */
+@ValidEndpointMethods
 public record EndpointConfigDto(
         @JsonProperty("path") @NotBlank(message = "path is required") String path,
-        @JsonProperty("methods") @NotEmpty(message = "at least one HTTP method is required") Set<String> methods,
+        @JsonProperty("methods") Set<String> methods,
         @JsonProperty("visibility")
                 @Pattern(regexp = "^(PUBLIC|PRIVATE)$", message = "visibility must be PUBLIC or PRIVATE")
                 String visibility,
@@ -111,6 +113,7 @@ public record EndpointConfigDto(
         var vis = visibility != null ? EndpointVisibility.valueOf(visibility.toUpperCase()) : EndpointVisibility.PUBLIC;
         var auth = authRequired != null ? authRequired : defaultAuthRequired;
         var endpointType = type != null ? EndpointType.valueOf(type.toUpperCase()) : EndpointType.HTTP;
+        var resolvedMethods = methods != null ? methods : Collections.<String>emptySet();
         var rateLimit = rateLimitConfig != null
                 ? Optional.of(rateLimitConfig.toModel())
                 : Optional.<EndpointRateLimitConfig>empty();
@@ -120,7 +123,7 @@ public record EndpointConfigDto(
 
         return new EndpointConfig(
                 path,
-                methods,
+                resolvedMethods,
                 vis,
                 Optional.ofNullable(pathRewrite),
                 auth,
