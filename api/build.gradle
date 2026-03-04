@@ -65,6 +65,7 @@ dependencies {
     testImplementation 'org.mockito:mockito-junit-jupiter:5.11.0'
     testImplementation 'org.testcontainers:testcontainers:1.19.8'
     testImplementation 'org.testcontainers:junit-jupiter:1.19.8'
+    testImplementation 'org.awaitility:awaitility:4.2.0'
 }
 
 group = 'aussie'

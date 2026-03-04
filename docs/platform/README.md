@@ -20,6 +20,7 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 - [Admin API](#admin-api)
 - [Benchmarking](#benchmarking)
 - [Service Permission Policies](#service-permission-policies)
+- [Service Configuration Pub/Sub](#service-configuration-pubsub)
 - [Environment Variables Reference](#environment-variables-reference)
 
 ## Setup
@@ -875,6 +876,32 @@ With the permission policy above:
 - `team-lead` can read and update my-service config, but not delete it
 - `developer` can only read my-service config
 
+## Service Configuration Pub/Sub
+
+In multi-instance deployments, service configuration changes (register, update, delete) are propagated to all instances via Redis pub/sub. This allows receiving instances to immediately refresh their local caches instead of waiting for TTL-based expiration.
+
+### How It Works
+
+When a service is registered, updated, or deleted on any instance, an event is published to a shared Redis channel. All other instances subscribed to that channel receive the event and update their local route caches accordingly. This provides near-instant cross-instance consistency.
+
+TTL-based cache refresh (`aussie.cache.local.service-routes-ttl`) serves as a fallback: if Redis is temporarily unavailable or an event is missed, each instance will still refresh from persistent storage when its local cache expires. The two mechanisms are complementary.
+
+### Configuration
+
+Pub/sub is enabled by default. To disable it (e.g., for single-instance deployments):
+```bash
+export AUSSIE_SERVICE_PUBSUB_ENABLED=false
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_SERVICE_PUBSUB_ENABLED` | `true` | Enable pub/sub for service config events |
+| `AUSSIE_SERVICE_PUBSUB_TOPIC` | `aussie:service:config:events` | Redis channel name for events |
+
+### Behavior During Redis Outages
+
+If the Redis connection is lost, event delivery stops but the gateway continues operating normally. The subscription retries with exponential backoff (1s to 30s). During the outage, instances rely on TTL-based cache refresh for eventual consistency. When Redis reconnects, pub/sub resumes automatically.
+
 ## Environment Variables Reference
 
 ### Authentication & Authorization
@@ -963,6 +990,13 @@ With the permission policy above:
 | `AUSSIE_AUTH_REVOCATION_PUBSUB_CHANNEL` | `aussie:revocation:events` | Redis pub/sub channel name |
 
 See [Token Revocation](token-revocation.md) for implementation details.
+
+### Service Configuration Pub/Sub
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_SERVICE_PUBSUB_ENABLED` | `true` | Enable pub/sub for service configuration events |
+| `AUSSIE_SERVICE_PUBSUB_TOPIC` | `aussie:service:config:events` | Topic name for events, mapped to transport-specific destination |
 
 ### PKCE Configuration
 

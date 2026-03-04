@@ -19,7 +19,7 @@ adapter/out/            - Reference implementations (what ships by default)
 META-INF/services/      - ServiceLoader registration files
 ```
 
-The `core/port/out/` directory in Aussie contains 22 outbound port interfaces. Here is the full inventory:
+The `core/port/out/` directory in Aussie contains 23 outbound port interfaces. Here is the full inventory:
 
 ```
 api/src/main/java/aussie/core/port/out/
@@ -38,6 +38,7 @@ api/src/main/java/aussie/core/port/out/
     RoleRepository.java
     SamplingConfigRepository.java
     SecurityMonitoring.java
+    ServiceConfigEventPublisher.java
     ServiceRegistrationRepository.java
     SessionRepository.java
     StorageHealthIndicator.java
@@ -270,7 +271,56 @@ The "best-effort" specification is critical. It tells implementors that the syst
 
 **Trade-offs:** The interface adds a layer of indirection that makes debugging harder (you need to know which implementation is active). In exchange, swapping Redis pub/sub for Kafka is a single CDI alternative bean, not a rewrite of the revocation service.
 
-## 10.4 ForwardedHeaderBuilderProvider
+## 10.4 ServiceConfigEventPublisher SPI
+
+The same multi-instance propagation problem exists for service configuration. When instance A registers a new service or updates a route, instances B through N are still serving stale cached routes until their local cache TTL expires. The `ServiceConfigEventPublisher` closes that gap.
+
+The interface at `api/src/main/java/aussie/core/port/out/ServiceConfigEventPublisher.java` follows the same pattern as `RevocationEventPublisher`:
+
+```java
+public interface ServiceConfigEventPublisher {
+
+    Uni<Void> publishServiceChanged(String serviceId);
+
+    Uni<Void> publishServiceRemoved(String serviceId);
+
+    Multi<ServiceConfigEvent> subscribe();
+}
+```
+
+Two publish methods (one for registration/update, one for removal) and one subscription stream. The event types are modeled as a sealed interface at `api/src/main/java/aussie/core/model/service/ServiceConfigEvent.java`:
+
+```java
+public sealed interface ServiceConfigEvent {
+
+    String serviceId();
+
+    record ServiceChanged(String serviceId) implements ServiceConfigEvent {}
+
+    record ServiceRemoved(String serviceId) implements ServiceConfigEvent {}
+}
+```
+
+Events carry only the service ID. Receiving instances re-fetch the full registration from persistent storage, which avoids serializing entire service configurations through the pub/sub channel and ensures consistency with the source of truth.
+
+Like revocation pub/sub, delivery is best-effort. If an instance misses an event, TTL-based cache expiration will eventually catch up. The system is correct without pub/sub; pub/sub just makes convergence faster.
+
+### Providing a Custom Implementation
+
+The default implementation uses Redis pub/sub (`RedisServiceConfigEventPublisher`). To swap in a different transport, provide a CDI alternative:
+
+```java
+@Alternative
+@Priority(1)
+@ApplicationScoped
+public class KafkaServiceConfigEventPublisher implements ServiceConfigEventPublisher {
+    // Kafka-based implementation
+}
+```
+
+Configuration lives in `ServiceConfigPubSubConfig` under the `aussie.service.pubsub` prefix. The `topic` property is deliberately transport-agnostic: Redis maps it to a channel name, Kafka would map it to a topic, and SNS would map it to a topic ARN.
+
+## 10.5 ForwardedHeaderBuilderProvider
 
 This is one of the smaller extension points, but it illustrates an important principle: even seemingly trivial format decisions should be behind interfaces when they affect interoperability.
 
@@ -344,7 +394,7 @@ Both handle edge cases like appending to existing forwarding headers and quoting
 
 **What a senior might do instead:** An if/else in the proxy code, or a `String headerFormat` config that selects between two code paths inline. This works until the third format appears, at which point you are adding a third branch to a method that should not know about header formatting at all.
 
-## 10.5 RateLimiter Port
+## 10.6 RateLimiter Port
 
 The rate limiter port at `api/src/main/java/aussie/core/port/out/RateLimiter.java` (lines 17-74) is clean and minimal:
 
@@ -465,7 +515,7 @@ No core code changes. No pull requests to the gateway team.
 
 **Trade-offs:** The provider layer adds ceremony. Each new rate limiter implementation requires three files: the implementation class, the provider class, and the `META-INF/services` entry. In exchange, you get clean separation, automatic fallback, and zero coupling between implementations.
 
-## 10.6 Metrics Port
+## 10.7 Metrics Port
 
 The `Metrics` port at `api/src/main/java/aussie/core/port/out/Metrics.java` (lines 10-194) is the largest port interface in the codebase, with 22 methods. This is a deliberate choice.
 
@@ -571,7 +621,7 @@ Core code does not call Micrometer directly. It does not know Micrometer exists.
 
 **Trade-offs:** The port interface creates a bottleneck: every new metric type requires adding a method to the interface, updating the Micrometer adapter, and potentially updating alternative adapters. This friction is intentional, since it forces you to think about whether a metric is truly needed by the core, or whether it belongs in an adapter-specific extension.
 
-## 10.7 Contract Tests
+## 10.8 Contract Tests
 
 Defining an interface is the easy part. Ensuring that every implementation of that interface behaves correctly is the hard part. Contract tests solve this.
 
@@ -708,7 +758,7 @@ With contract tests, the implementor runs a single test class and gets immediate
 
 **Trade-offs:** Abstract contract tests require careful design. You cannot use framework-specific test annotations (like `@QuarkusTest`) in the abstract class because implementors might not use the same framework. You cannot assume specific timing (like TTL expiration) because different backends expire entries on different schedules. The `atMost(Duration.ofSeconds(5))` timeouts in the tests are generous to accommodate slow backends, which means the contract test suite runs slower than it theoretically could.
 
-## 10.8 Bootstrap Mode
+## 10.9 Bootstrap Mode
 
 Every extension point we have discussed so far solves a technical problem: swapping storage, messaging, metrics. Bootstrap mode solves an operational problem that emerges from the security architecture itself.
 
@@ -887,7 +937,7 @@ The compact constructor enforces that bootstrap keys always have an expiration. 
 
 **Trade-offs:** The bootstrap design requires the operator to provide a key via environment variable, which means they need access to the deployment configuration (Kubernetes secrets, environment files, etc.). This is a deliberate security-for-convenience trade-off. It is more work than auto-generation, but it ensures the operator always knows the initial credential and that it never appears in application logs.
 
-## 10.9 ServiceLoader Discovery
+## 10.10 ServiceLoader Discovery
 
 Java's `ServiceLoader` is the standard mechanism for SPI discovery. Aussie uses it extensively, with a consistent pattern for discovery, priority-based selection, and availability checking.
 

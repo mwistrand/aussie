@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.adapter.out.storage.NoOpConfigurationCache;
+import aussie.adapter.out.storage.memory.InMemoryServiceConfigEventPublisher;
 import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
 import aussie.core.cache.LocalCacheConfig;
 import aussie.core.model.auth.GatewaySecurityConfig;
@@ -82,6 +83,7 @@ class ServiceRegistryTest {
                 NoOpConfigurationCache.INSTANCE,
                 validator,
                 authService,
+                new InMemoryServiceConfigEventPublisher(),
                 TEST_CACHE_CONFIG);
     }
 

@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.adapter.out.storage.NoOpConfigurationCache;
+import aussie.adapter.out.storage.memory.InMemoryServiceConfigEventPublisher;
 import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
 import aussie.core.cache.LocalCacheConfig;
 import aussie.core.config.RateLimitingConfig;
@@ -88,10 +89,20 @@ class ServiceRegistryMultiInstanceTest {
 
         // Create two instances sharing the same repository
         instanceA = new ServiceRegistry(
-                sharedRepository, NoOpConfigurationCache.INSTANCE, validator, authService, shortTtlConfig);
+                sharedRepository,
+                NoOpConfigurationCache.INSTANCE,
+                validator,
+                authService,
+                new InMemoryServiceConfigEventPublisher(),
+                shortTtlConfig);
 
         instanceB = new ServiceRegistry(
-                sharedRepository, NoOpConfigurationCache.INSTANCE, validator, authService, shortTtlConfig);
+                sharedRepository,
+                NoOpConfigurationCache.INSTANCE,
+                validator,
+                authService,
+                new InMemoryServiceConfigEventPublisher(),
+                shortTtlConfig);
     }
 
     @Nested
@@ -280,7 +291,12 @@ class ServiceRegistryMultiInstanceTest {
             var shortTtlConfig = shortTtlCacheConfig(Duration.ofMillis(50));
 
             var registry = new ServiceRegistry(
-                    countingRepo, NoOpConfigurationCache.INSTANCE, validator, authService, shortTtlConfig);
+                    countingRepo,
+                    NoOpConfigurationCache.INSTANCE,
+                    validator,
+                    authService,
+                    new InMemoryServiceConfigEventPublisher(),
+                    shortTtlConfig);
             registry.initialize().await().atMost(TIMEOUT);
 
             // Register a service directly in the shared repo
@@ -347,7 +363,12 @@ class ServiceRegistryMultiInstanceTest {
             var shortTtlConfig = shortTtlCacheConfig(Duration.ofMillis(50));
 
             var registry = new ServiceRegistry(
-                    failOnceRepo, NoOpConfigurationCache.INSTANCE, validator, authService, shortTtlConfig);
+                    failOnceRepo,
+                    NoOpConfigurationCache.INSTANCE,
+                    validator,
+                    authService,
+                    new InMemoryServiceConfigEventPublisher(),
+                    shortTtlConfig);
 
             // Register a service in the shared repo
             var endpoint = new EndpointConfig("/api/retry", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());

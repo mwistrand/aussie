@@ -19,6 +19,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import aussie.adapter.out.storage.NoOpConfigurationCache;
+import aussie.adapter.out.storage.memory.InMemoryServiceConfigEventPublisher;
 import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
 import aussie.core.cache.LocalCacheConfig;
 import aussie.core.config.RateLimitingConfig;
@@ -97,6 +98,7 @@ class PassThroughServiceTest {
                 NoOpConfigurationCache.INSTANCE,
                 validator,
                 authService,
+                new InMemoryServiceConfigEventPublisher(),
                 TEST_CACHE_CONFIG);
         requestPreparer = new ProxyRequestPreparer(() -> (req, uri) -> Map.of());
         proxyClient = new TestProxyClient();

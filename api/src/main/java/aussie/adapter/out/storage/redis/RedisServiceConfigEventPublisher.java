@@ -1,0 +1,196 @@
+package aussie.adapter.out.storage.redis;
+
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+import jakarta.enterprise.context.ApplicationScoped;
+
+import io.quarkus.redis.datasource.RedisDataSource;
+import io.quarkus.redis.datasource.pubsub.PubSubCommands;
+import io.quarkus.runtime.Startup;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
+import io.smallrye.mutiny.operators.multi.processors.BroadcastProcessor;
+import org.jboss.logging.Logger;
+
+import aussie.core.config.ServiceConfigPubSubConfig;
+import aussie.core.model.service.ServiceConfigEvent;
+import aussie.core.port.out.ServiceConfigEventPublisher;
+
+/**
+ * Redis pub/sub implementation of ServiceConfigEventPublisher.
+ *
+ * <p>Uses Redis pub/sub to notify other Aussie instances of service
+ * configuration changes, allowing them to immediately refresh their
+ * local caches instead of waiting for TTL expiration.
+ *
+ * <p>Message format:
+ * <ul>
+ *   <li>Service changed: {@code changed:{serviceId}}</li>
+ *   <li>Service removed: {@code removed:{serviceId}}</li>
+ * </ul>
+ *
+ * <p>Service IDs may contain the separator character ({@code :});
+ * parsing splits on the first separator only, so identifiers with
+ * colons are handled correctly.
+ */
+@ApplicationScoped
+@Startup
+public class RedisServiceConfigEventPublisher implements ServiceConfigEventPublisher {
+
+    private static final Logger LOG = Logger.getLogger(RedisServiceConfigEventPublisher.class);
+    static final String MESSAGE_SEPARATOR = ":";
+
+    private final ServiceConfigPubSubConfig config;
+    private final PubSubCommands<String> pubsub;
+    private final String channel;
+
+    private volatile PubSubCommands.RedisSubscriber subscriber;
+    private volatile MessageHandler messageHandler;
+
+    public RedisServiceConfigEventPublisher(RedisDataSource redisDataSource, ServiceConfigPubSubConfig config) {
+        this.config = config;
+        this.pubsub = redisDataSource.pubsub(String.class);
+        this.channel = config.topic();
+        LOG.infof("Initialized Redis service config event publisher (topic: %s)", channel);
+    }
+
+    @PostConstruct
+    void init() {
+        if (!config.enabled()) {
+            LOG.info("Service config pub/sub disabled");
+            return;
+        }
+
+        this.messageHandler = new MessageHandler();
+        this.subscriber = pubsub.subscribe(channel, messageHandler);
+        LOG.infof("Subscribed to service config events on topic: %s", channel);
+    }
+
+    @PreDestroy
+    void cleanup() {
+        if (messageHandler != null) {
+            messageHandler.complete();
+        }
+        if (subscriber != null) {
+            try {
+                subscriber.unsubscribe();
+                LOG.info("Unsubscribed from service config events");
+            } catch (Exception e) {
+                LOG.warnf(e, "Error unsubscribing from service config events");
+            }
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public Uni<Void> publishServiceChanged(String serviceId) {
+        if (!config.enabled()) {
+            return Uni.createFrom().voidItem();
+        }
+
+        var message = "changed" + MESSAGE_SEPARATOR + serviceId;
+
+        return Uni.createFrom()
+                .voidItem()
+                .emitOn(Infrastructure.getDefaultWorkerPool())
+                .invoke(() -> {
+                    pubsub.publish(channel, message);
+                    LOG.debugf("Published service changed event: %s", serviceId);
+                });
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public Uni<Void> publishServiceRemoved(String serviceId) {
+        if (!config.enabled()) {
+            return Uni.createFrom().voidItem();
+        }
+
+        var message = "removed" + MESSAGE_SEPARATOR + serviceId;
+
+        return Uni.createFrom()
+                .voidItem()
+                .emitOn(Infrastructure.getDefaultWorkerPool())
+                .invoke(() -> {
+                    pubsub.publish(channel, message);
+                    LOG.debugf("Published service removed event: %s", serviceId);
+                });
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public Multi<ServiceConfigEvent> subscribe() {
+        if (messageHandler == null) {
+            return Multi.createFrom().empty();
+        }
+        return messageHandler.events();
+    }
+
+    /**
+     * Message handler that converts Redis messages to ServiceConfigEvents.
+     */
+    static class MessageHandler implements java.util.function.Consumer<String> {
+
+        private static final Logger LOG = Logger.getLogger(MessageHandler.class);
+
+        private final BroadcastProcessor<ServiceConfigEvent> processor = BroadcastProcessor.create();
+
+        @Override
+        public void accept(String message) {
+            try {
+                var event = parseMessage(message);
+                if (event != null) {
+                    processor.onNext(event);
+                }
+            } catch (Exception e) {
+                LOG.warnf(e, "Failed to parse service config event: %s", message);
+            }
+        }
+
+        Multi<ServiceConfigEvent> events() {
+            return processor;
+        }
+
+        void complete() {
+            processor.onComplete();
+        }
+
+        /**
+         * Parse a pub/sub message into a ServiceConfigEvent.
+         *
+         * <p>Format: {@code type:serviceId} where type is "changed" or "removed".
+         * Splits on the first separator only, so service IDs containing colons
+         * are handled correctly.
+         */
+        ServiceConfigEvent parseMessage(String message) {
+            if (message == null || message.isBlank()) {
+                LOG.warnf("Received null or blank service config event message");
+                return null;
+            }
+
+            final var firstSep = message.indexOf(MESSAGE_SEPARATOR);
+            if (firstSep < 0) {
+                LOG.warnf("Invalid service config event format: %s", message);
+                return null;
+            }
+
+            final var type = message.substring(0, firstSep);
+            final var serviceId = message.substring(firstSep + 1);
+
+            if (serviceId.isEmpty()) {
+                LOG.warnf("Empty service ID in config event: %s", message);
+                return null;
+            }
+
+            return switch (type) {
+                case "changed" -> new ServiceConfigEvent.ServiceChanged(serviceId);
+                case "removed" -> new ServiceConfigEvent.ServiceRemoved(serviceId);
+                default -> {
+                    LOG.warnf("Unknown service config event type: %s", type);
+                    yield null;
+                }
+            };
+        }
+    }
+}

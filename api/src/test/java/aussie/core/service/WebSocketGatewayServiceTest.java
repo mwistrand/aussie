@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.adapter.out.storage.NoOpConfigurationCache;
+import aussie.adapter.out.storage.memory.InMemoryServiceConfigEventPublisher;
 import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
 import aussie.core.cache.LocalCacheConfig;
 import aussie.core.config.RateLimitingConfig;
@@ -86,6 +87,7 @@ class WebSocketGatewayServiceTest {
                 NoOpConfigurationCache.INSTANCE,
                 validator,
                 authService,
+                new InMemoryServiceConfigEventPublisher(),
                 TEST_CACHE_CONFIG);
         routeAuthService = new NoOpRouteAuthService();
         endpointMatcher = new EndpointMatcher(new GlobPatternMatcher());

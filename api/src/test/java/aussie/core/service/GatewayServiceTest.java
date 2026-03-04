@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.adapter.out.storage.NoOpConfigurationCache;
+import aussie.adapter.out.storage.memory.InMemoryServiceConfigEventPublisher;
 import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
 import aussie.core.cache.LocalCacheConfig;
 import aussie.core.config.RateLimitingConfig;
@@ -97,6 +98,7 @@ class GatewayServiceTest {
                 NoOpConfigurationCache.INSTANCE,
                 validator,
                 authService,
+                new InMemoryServiceConfigEventPublisher(),
                 TEST_CACHE_CONFIG);
         requestPreparer = new ProxyRequestPreparer(() -> (req, uri) -> Map.of());
         proxyClient = new TestProxyClient();

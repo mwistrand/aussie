@@ -10,10 +10,13 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.subscription.Cancellable;
+import org.jboss.logging.Logger;
 
 import aussie.core.cache.LocalCacheConfig;
 import aussie.core.model.auth.Permission;
@@ -23,9 +26,11 @@ import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.RegistrationResult;
+import aussie.core.model.service.ServiceConfigEvent;
 import aussie.core.model.service.ServicePath;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.ConfigurationCache;
+import aussie.core.port.out.ServiceConfigEventPublisher;
 import aussie.core.port.out.ServiceRegistrationRepository;
 import aussie.core.service.auth.ServiceAuthorizationService;
 
@@ -46,16 +51,20 @@ import aussie.core.service.auth.ServiceAuthorizationService;
  *
  * <p>
  * <b>Multi-instance safety:</b> The compiled route cache uses TTL-based refresh
- * to ensure eventual consistency across instances. When the cache TTL expires,
- * routes are reloaded from persistent storage.
+ * to ensure eventual consistency across instances. Additionally, service
+ * configuration events are published via pub/sub for immediate cross-instance
+ * cache invalidation.
  */
 @ApplicationScoped
 public class ServiceRegistry {
+
+    private static final Logger LOG = Logger.getLogger(ServiceRegistry.class);
 
     private final ServiceRegistrationRepository repository;
     private final ConfigurationCache cache;
     private final ServiceRegistrationValidator validator;
     private final ServiceAuthorizationService authService;
+    private final ServiceConfigEventPublisher eventPublisher;
     private final Duration routeCacheTtl;
 
     // Local cache for compiled route patterns (always in-memory for fast matching)
@@ -67,27 +76,108 @@ public class ServiceRegistry {
     // Coalesces concurrent refresh requests to prevent thundering herd
     private final AtomicReference<Uni<Void>> inFlightRefresh = new AtomicReference<>();
 
+    // Subscription handle for config event stream (for cleanup on shutdown)
+    private volatile Cancellable configEventSubscription;
+
     @Inject
     public ServiceRegistry(
             ServiceRegistrationRepository repository,
             ConfigurationCache cache,
             ServiceRegistrationValidator validator,
             ServiceAuthorizationService authService,
+            ServiceConfigEventPublisher eventPublisher,
             LocalCacheConfig cacheConfig) {
         this.repository = repository;
         this.cache = cache;
         this.validator = validator;
         this.authService = authService;
+        this.eventPublisher = eventPublisher;
         this.routeCacheTtl = cacheConfig.serviceRoutesTtl();
     }
 
     /**
-     * Initialize route cache from persistent storage on startup.
+     * Initialize route cache from persistent storage on startup and
+     * subscribe to service configuration events for cross-instance
+     * cache invalidation.
      *
      * @return Uni completing when initialization is done
      */
     public Uni<Void> initialize() {
+        subscribeToConfigEvents();
         return refreshRouteCache();
+    }
+
+    /**
+     * Subscribe to service config events for cross-instance cache invalidation.
+     *
+     * <p>On receiving an event, the local cache is updated:
+     * <ul>
+     *   <li>{@code ServiceChanged}: re-fetches from repository, updates compiled routes and distributed cache</li>
+     *   <li>{@code ServiceRemoved}: removes compiled routes and invalidates distributed cache</li>
+     * </ul>
+     *
+     * <p>Note: the originating instance also receives its own events (self-echo).
+     * The redundant re-fetch is harmless since the data is already current.
+     *
+     * <p>If the subscription terminates due to an error (e.g., lost Redis
+     * connection), retry with exponential backoff is attempted. The TTL-based
+     * refresh in {@link #ensureCacheFresh()} provides a fallback for eventual
+     * consistency during reconnection.
+     */
+    private void subscribeToConfigEvents() {
+        configEventSubscription = eventPublisher
+                .subscribe()
+                .onFailure()
+                .invoke(err -> LOG.warnf(err, "Error in service config event subscription, retrying"))
+                .onFailure()
+                .retry()
+                .withBackOff(Duration.ofSeconds(1), Duration.ofSeconds(30))
+                .indefinitely()
+                .subscribe()
+                .with(
+                        this::handleConfigEvent,
+                        error -> LOG.errorf(error, "Service config event subscription terminated unexpectedly"));
+    }
+
+    @PreDestroy
+    void shutdown() {
+        if (configEventSubscription != null) {
+            configEventSubscription.cancel();
+        }
+    }
+
+    /** Dispatch a received config event to the appropriate handler. */
+    private void handleConfigEvent(ServiceConfigEvent event) {
+        switch (event) {
+            case ServiceConfigEvent.ServiceChanged changed -> handleServiceChanged(changed.serviceId());
+            case ServiceConfigEvent.ServiceRemoved removed -> handleServiceRemoved(removed.serviceId());
+        }
+    }
+
+    /** Re-fetch a changed service from the repository and update local and distributed caches. */
+    private void handleServiceChanged(String serviceId) {
+        LOG.debugf("Received service changed event: %s", serviceId);
+        repository
+                .findById(serviceId)
+                .invoke(opt -> opt.ifPresentOrElse(
+                        this::compileAndCacheRoutes,
+                        () -> LOG.debugf("Service not found in repository after changed event: %s", serviceId)))
+                .chain(opt -> opt.map(cache::put).orElse(Uni.createFrom().voidItem()))
+                .subscribe()
+                .with(
+                        v -> LOG.debugf("Refreshed cache for service: %s", serviceId),
+                        err -> LOG.warnf(err, "Failed to handle service changed event: %s", serviceId));
+    }
+
+    /** Remove compiled routes and invalidate the distributed cache for a deleted service. */
+    private void handleServiceRemoved(String serviceId) {
+        LOG.debugf("Received service removed event: %s", serviceId);
+        compiledRoutes.entrySet().removeIf(entry -> entry.getKey().startsWith(serviceId + ":"));
+        cache.invalidate(serviceId)
+                .subscribe()
+                .with(
+                        v -> LOG.debugf("Invalidated cache for removed service: %s", serviceId),
+                        err -> LOG.warnf(err, "Failed to invalidate cache for removed service: %s", serviceId));
     }
 
     /**
@@ -269,7 +359,13 @@ public class ServiceRegistry {
             return repository
                     .save(service)
                     .invoke(() -> compileAndCacheRoutes(service))
-                    .call(() -> cache.put(service))
+                    .call(() -> eventPublisher.publishServiceChanged(service.serviceId()))
+                    .call(() -> cache.put(service)
+                            .onFailure()
+                            .invoke(err ->
+                                    LOG.warnf(err, "Failed to update cache for service: %s", service.serviceId()))
+                            .onFailure()
+                            .recoverWithNull())
                     .map(v -> RegistrationResult.success(service));
         });
     }
@@ -312,7 +408,19 @@ public class ServiceRegistry {
     public Uni<Boolean> unregister(String serviceId) {
         return repository.findById(serviceId).flatMap(opt -> {
             opt.ifPresent(this::removeCompiledRoutes);
-            return cache.invalidate(serviceId).chain(() -> repository.delete(serviceId));
+            return repository
+                    .delete(serviceId)
+                    .call(deleted -> {
+                        if (deleted) {
+                            return eventPublisher.publishServiceRemoved(serviceId);
+                        }
+                        return Uni.createFrom().voidItem();
+                    })
+                    .call(() -> cache.invalidate(serviceId)
+                            .onFailure()
+                            .invoke(err -> LOG.warnf(err, "Failed to invalidate cache for service: %s", serviceId))
+                            .onFailure()
+                            .recoverWithNull());
         });
     }
 
@@ -339,8 +447,14 @@ public class ServiceRegistry {
             }
 
             removeCompiledRoutes(existing);
-            return cache.invalidate(serviceId)
-                    .chain(() -> repository.delete(serviceId))
+            return repository
+                    .delete(serviceId)
+                    .call(() -> eventPublisher.publishServiceRemoved(serviceId))
+                    .call(() -> cache.invalidate(serviceId)
+                            .onFailure()
+                            .invoke(err -> LOG.warnf(err, "Failed to invalidate cache for service: %s", serviceId))
+                            .onFailure()
+                            .recoverWithNull())
                     .map(deleted -> RegistrationResult.success(existing));
         });
     }
@@ -415,7 +529,12 @@ public class ServiceRegistry {
         return repository
                 .save(service)
                 .invoke(() -> compileAndCacheRoutes(service))
-                .call(() -> cache.put(service));
+                .call(() -> eventPublisher.publishServiceChanged(service.serviceId()))
+                .call(() -> cache.put(service)
+                        .onFailure()
+                        .invoke(err -> LOG.warnf(err, "Failed to update cache for service: %s", service.serviceId()))
+                        .onFailure()
+                        .recoverWithNull());
     }
 
     /**

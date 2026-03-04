@@ -572,7 +572,22 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 
 **Security considerations:** The `algorithm` and `platform-max-requests-per-window` are platform-team-only settings. Service teams can configure per-service and per-endpoint limits through the admin API, but those limits are always capped at `platform-max-requests-per-window`. Disabling rate limiting (`enabled=false`) removes all traffic protection. The Redis backend is required for distributed rate limiting across multiple Aussie instances; in-memory rate limiting is per-instance only.
 
-## 15. WebSocket Connections
+## 15. Service Configuration Pub/Sub
+
+**Prefix:** `aussie.service.pubsub`
+**Interface:** `aussie.core.config.ServiceConfigPubSubConfig`
+**Source:** `api/src/main/java/aussie/core/config/ServiceConfigPubSubConfig.java`
+
+| Property | Type | Default | Env Variable | Description |
+|----------|------|---------|--------------|-------------|
+| `aussie.service.pubsub.enabled` | `boolean` | `true` | `AUSSIE_SERVICE_PUBSUB_ENABLED` | Enable pub/sub for service configuration events. When enabled, registration, update, and deletion events are published to all Aussie instances for immediate cache invalidation. |
+| `aussie.service.pubsub.topic` | `String` | `aussie:service:config:events` | `AUSSIE_SERVICE_PUBSUB_TOPIC` | Topic name for service configuration events. Mapped to a transport-specific destination by the active `ServiceConfigEventPublisher` implementation (e.g., a Redis pub/sub channel). |
+
+**Profile overrides:** None.
+
+**Note:** Like token revocation pub/sub, delivery is best-effort. If an instance misses an event, TTL-based cache expiration provides eventual consistency. Disabling pub/sub does not affect correctness, only the speed at which configuration changes propagate across instances.
+
+## 16. WebSocket Connections
 
 **Prefix:** `aussie.websocket`
 **Interface:** `aussie.core.config.WebSocketConfig`
@@ -591,9 +606,9 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 
 **Note:** `max-connections` is per Aussie instance. In a 3-instance cluster with `max-connections=10000`, the cluster can handle up to 30,000 concurrent WebSocket connections.
 
-## 16. Caching
+## 17. Caching
 
-### 16.1 Local In-Memory Cache
+### 17.1 Local In-Memory Cache
 
 **Prefix:** `aussie.cache.local`
 **Interface:** `aussie.core.cache.LocalCacheConfig`
@@ -615,7 +630,7 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | `%dev` | `aussie.cache.local.rate-limit-config-ttl` | `PT5S` |
 | `%dev` | `aussie.cache.local.sampling-config-ttl` | `PT5S` |
 
-### 16.2 Service Route Cache (Distributed)
+### 17.2 Service Route Cache (Distributed)
 
 **Prefix:** `aussie.storage.cache`
 **Interface:** None (read via `@ConfigProperty` and SPI)
@@ -634,7 +649,7 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | `%prod` | `aussie.storage.cache.provider` | `redis` |
 | `%prod` | `aussie.storage.cache.ttl` | `PT15M` |
 
-### 16.3 Translation Config Cache
+### 17.3 Translation Config Cache
 
 **Prefix:** `aussie.translation-config.cache`
 **Interface:** None (read via `@ConfigProperty`)
@@ -653,13 +668,13 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 |---------|----------|-------|
 | `%dev` | `aussie.translation-config.cache.enabled` | `false` |
 
-## 17. Resilience
+## 18. Resilience
 
 **Prefix:** `aussie.resiliency`
 **Interface:** `aussie.core.config.ResiliencyConfig`
 **Source:** `api/src/main/java/aussie/core/config/ResiliencyConfig.java`
 
-### 17.1 HTTP Proxy
+### 18.1 HTTP Proxy
 
 **Prefix:** `aussie.resiliency.http`
 
@@ -670,7 +685,7 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | `aussie.resiliency.http.max-connections-per-host` | `int` | `50` | `AUSSIE_RESILIENCY_HTTP_MAX_CONNECTIONS_PER_HOST` | Max connections per upstream host (bulkhead). |
 | `aussie.resiliency.http.max-connections` | `int` | `200` | `AUSSIE_RESILIENCY_HTTP_MAX_CONNECTIONS` | Max total connections across all upstream hosts (bulkhead). |
 
-### 17.2 JWKS
+### 18.2 JWKS
 
 **Prefix:** `aussie.resiliency.jwks`
 
@@ -681,7 +696,7 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | `aussie.resiliency.jwks.cache-ttl` | `Duration` | `PT1H` | `AUSSIE_RESILIENCY_JWKS_CACHE_TTL` | JWKS cache entry TTL. Entries refreshed on access after expiry. |
 | `aussie.resiliency.jwks.max-connections` | `int` | `10` | `AUSSIE_RESILIENCY_JWKS_MAX_CONNECTIONS` | Max concurrent JWKS fetch connections (bulkhead). |
 
-### 17.3 Cassandra
+### 18.3 Cassandra
 
 **Prefix:** `aussie.resiliency.cassandra`
 
@@ -691,7 +706,7 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | `aussie.resiliency.cassandra.pool-local-size` | `int` | `30` | `AUSSIE_RESILIENCY_CASSANDRA_POOL_LOCAL_SIZE` | Connections per node in local datacenter. |
 | `aussie.resiliency.cassandra.max-requests-per-connection` | `int` | `1024` | `AUSSIE_RESILIENCY_CASSANDRA_MAX_REQUESTS_PER_CONNECTION` | Max concurrent requests per Cassandra connection. |
 
-### 17.4 Redis
+### 18.4 Redis
 
 **Prefix:** `aussie.resiliency.redis`
 
@@ -725,9 +740,9 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 
 These fail-open and fail-closed semantics are security decisions. Rate limiting fails open to avoid blocking legitimate traffic during transient Redis outages. Token revocation fails closed because accepting a revoked token is a security breach; a brief service disruption is preferable.
 
-## 18. Storage
+## 19. Storage
 
-### 18.1 Repository Provider
+### 19.1 Repository Provider
 
 **Prefix:** `aussie.storage.repository`
 **Interface:** None (SPI-based selection)
@@ -742,7 +757,7 @@ These fail-open and fail-closed semantics are security decisions. Rate limiting 
 |---------|----------|-------|
 | `%prod` | `aussie.storage.repository.provider` | `cassandra` |
 
-### 18.2 Cassandra
+### 19.2 Cassandra
 
 **Prefix:** `aussie.storage.cassandra`
 **Interface:** None (read via SPI `ConfigAccess` in `CassandraStorageProvider`)
@@ -769,7 +784,7 @@ These fail-open and fail-closed semantics are security decisions. Rate limiting 
 
 **Security considerations:** `username` and `password` **must never appear in version control**. Inject via environment variables from a secrets manager. The production profile uses `${CASSANDRA_USERNAME:}` (empty default) so the application can start without credentials when Cassandra does not require authentication.
 
-### 18.3 Translation Config Storage
+### 19.3 Translation Config Storage
 
 **Prefix:** `aussie.translation-config.storage`
 **Interface:** None (SPI-based selection)
@@ -784,9 +799,9 @@ These fail-open and fail-closed semantics are security decisions. Rate limiting 
 |---------|----------|-------|
 | `%dev` | `aussie.translation-config.storage.provider` | `memory` |
 
-## 19. Observability
+## 20. Observability
 
-### 19.1 Telemetry Master Config
+### 20.1 Telemetry Master Config
 
 **Prefix:** `aussie.telemetry`
 **Interface:** `aussie.adapter.out.telemetry.TelemetryConfig`
@@ -796,7 +811,7 @@ These fail-open and fail-closed semantics are security decisions. Rate limiting 
 |----------|------|---------|--------------|-------------|
 | `aussie.telemetry.enabled` | `boolean` | `false` | `AUSSIE_TELEMETRY_ENABLED` | Master toggle. When disabled, all sub-features are disabled regardless of their individual settings. |
 
-### 19.2 Tracing
+### 20.2 Tracing
 
 **Prefix:** `aussie.telemetry.tracing`
 
@@ -805,7 +820,7 @@ These fail-open and fail-closed semantics are security decisions. Rate limiting 
 | `aussie.telemetry.tracing.enabled` | `boolean` | `false` | `AUSSIE_TELEMETRY_TRACING_ENABLED` | Enable distributed tracing with OpenTelemetry. Requires `telemetry.enabled=true`. |
 | `aussie.telemetry.tracing.sampling-rate` | `double` | `1.0` | `AUSSIE_TELEMETRY_TRACING_SAMPLING_RATE` | Sampling rate (0.0 to 1.0). Only used when parent-based sampling is not in effect. |
 
-### 19.3 Hierarchical Sampling
+### 20.3 Hierarchical Sampling
 
 **Prefix:** `aussie.telemetry.sampling`
 **Interface:** `aussie.core.config.SamplingConfig`
@@ -821,7 +836,7 @@ These fail-open and fail-closed semantics are security decisions. Rate limiting 
 | `aussie.telemetry.sampling.cache.redis-ttl` | `Duration` | `PT5M` | `AUSSIE_TELEMETRY_SAMPLING_CACHE_REDIS_TTL` | Redis cache TTL for sampling configs. |
 | `aussie.telemetry.sampling.lookup.timeout` | `Duration` | `PT5S` | `AUSSIE_TELEMETRY_SAMPLING_LOOKUP_TIMEOUT` | Timeout for synchronous sampling config lookups. |
 
-### 19.4 Metrics
+### 20.4 Metrics
 
 **Prefix:** `aussie.telemetry.metrics`
 
@@ -829,7 +844,7 @@ These fail-open and fail-closed semantics are security decisions. Rate limiting 
 |----------|------|---------|--------------|-------------|
 | `aussie.telemetry.metrics.enabled` | `boolean` | `false` | `AUSSIE_TELEMETRY_METRICS_ENABLED` | Enable Micrometer metrics collection. Requires `telemetry.enabled=true`. |
 
-### 19.5 Security Monitoring
+### 20.5 Security Monitoring
 
 **Prefix:** `aussie.telemetry.security`
 
@@ -842,7 +857,7 @@ These fail-open and fail-closed semantics are security decisions. Rate limiting 
 | `aussie.telemetry.security.dos-detection.spike-threshold` | `double` | `5.0` | `AUSSIE_TELEMETRY_SECURITY_DOS_DETECTION_SPIKE_THRESHOLD` | Spike multiplier. Alert when count exceeds `rate-limit-threshold * spike-threshold`. |
 | `aussie.telemetry.security.dos-detection.error-rate-threshold` | `double` | `0.5` | `AUSSIE_TELEMETRY_SECURITY_DOS_DETECTION_ERROR_RATE_THRESHOLD` | Error rate (0.0 to 1.0) that triggers suspicious activity alerts. |
 
-### 19.6 Traffic Attribution
+### 20.6 Traffic Attribution
 
 **Prefix:** `aussie.telemetry.attribution`
 
@@ -854,7 +869,7 @@ These fail-open and fail-closed semantics are security decisions. Rate limiting 
 
 Team ID is derived from the authenticated API key's `teamId` field, not from request headers.
 
-### 19.7 Span Attributes
+### 20.7 Span Attributes
 
 **Prefix:** `aussie.telemetry.attributes`
 
@@ -889,11 +904,11 @@ Team ID is derived from the authenticated API key's `teamId` field, not from req
 
 The dev profile enables all telemetry features including the high-cardinality `upstream-uri` attribute, which is useful for debugging but would produce excessive data volumes in production.
 
-## 20. Quarkus and Third-Party Configuration
+## 21. Quarkus and Third-Party Configuration
 
 These properties configure Quarkus framework features and third-party integrations. They are not backed by Aussie `@ConfigMapping` interfaces but are critical to gateway operation.
 
-### 20.1 Vert.x Event Loop
+### 21.1 Vert.x Event Loop
 
 | Property | Default | `%dev` | Env Variable | Description |
 |----------|---------|--------|--------------|-------------|
@@ -902,7 +917,7 @@ These properties configure Quarkus framework features and third-party integratio
 
 Dev profile uses tighter thresholds to catch blocking operations early. Production uses more lenient thresholds to avoid false alarms from transient GC pauses.
 
-### 20.2 Redis
+### 21.2 Redis
 
 | Property | Default | `%prod` | Env Variable | Description |
 |----------|---------|---------|--------------|-------------|
@@ -914,7 +929,7 @@ Dev profile uses tighter thresholds to catch blocking operations early. Producti
 
 **Security considerations:** `REDIS_PASSWORD` **must never appear in version control**.
 
-### 20.3 OpenTelemetry
+### 21.3 OpenTelemetry
 
 | Property | Default | Env Variable | Description |
 |----------|---------|--------------|-------------|
@@ -930,7 +945,7 @@ Dev profile uses tighter thresholds to catch blocking operations early. Producti
 | `quarkus.otel.span.attribute.count.limit` | `128` | `QUARKUS_OTEL_SPAN_ATTRIBUTE_COUNT_LIMIT` | Max span attributes. |
 | `quarkus.otel.span.event.count.limit` | `128` | `QUARKUS_OTEL_SPAN_EVENT_COUNT_LIMIT` | Max span events. |
 
-### 20.4 Micrometer
+### 21.4 Micrometer
 
 | Property | Default | Env Variable | Description |
 |----------|---------|--------------|-------------|
@@ -943,7 +958,7 @@ Dev profile uses tighter thresholds to catch blocking operations early. Producti
 | `quarkus.micrometer.binder.system` | `true` | `QUARKUS_MICROMETER_BINDER_SYSTEM` | System metrics. |
 | `quarkus.micrometer.binder.vertx.enabled` | `true` | `QUARKUS_MICROMETER_BINDER_VERTX_ENABLED` | Vert.x metrics. |
 
-### 20.5 HTTP Auth Permissions
+### 21.5 HTTP Auth Permissions
 
 | Property | Value | Description |
 |----------|-------|-------------|
@@ -956,13 +971,13 @@ Dev profile uses tighter thresholds to catch blocking operations early. Producti
 | `quarkus.http.auth.permission.passthrough.paths` | `/*` | Service pass-through (catch-all) is open. |
 | `quarkus.http.auth.permission.passthrough.policy` | `permit` | |
 
-### 20.6 Health
+### 21.6 Health
 
 | Property | Default | Env Variable | Description |
 |----------|---------|--------------|-------------|
 | `quarkus.smallrye-health.root-path` | `/q/health` | `QUARKUS_SMALLRYE_HEALTH_ROOT_PATH` | Health endpoint path. |
 
-## 21. Secrets Inventory
+## 22. Secrets Inventory
 
 The following values must be injected at runtime from a secrets manager or secure environment variable source. None of these should ever appear in `application.properties`, `application-prod.properties`, or any file committed to version control.
 
@@ -989,7 +1004,7 @@ openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048
 openssl rand -base64 36
 ```
 
-## 22. Environment Variable Naming Convention
+## 23. Environment Variable Naming Convention
 
 Quarkus maps property names to environment variables deterministically:
 
@@ -1001,7 +1016,7 @@ The property `aussie.rate-limiting.platform-max-requests-per-window` becomes `AU
 
 Some properties use explicit environment variable references that do not follow this convention. These are called out in the tables above (e.g., `CASSANDRA_CONTACT_POINTS` instead of `AUSSIE_STORAGE_CASSANDRA_CONTACT_POINTS`, and `AUTH_ENCRYPTION_KEY` instead of `AUSSIE_AUTH_ENCRYPTION_KEY`). In these cases, the `application.properties` file uses `${ENV_VAR:default}` syntax to bind the non-standard name. Both the standard Quarkus-derived name and the explicit binding will work, but the explicit binding takes precedence.
 
-## 23. Profile Summary
+## 24. Profile Summary
 
 Quarkus profiles control which configuration values are active. Aussie uses three profiles:
 
