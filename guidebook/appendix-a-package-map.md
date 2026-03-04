@@ -322,7 +322,7 @@ Domain services implementing inbound ports and composing outbound ports. All are
 | `ApiKeyEncryptionService` | Handles API key hashing (SHA-256) for storage and comparison. |
 | `ApiKeyService` | Implements `ApiKeyManagement`. Key CRUD with cache integration. |
 | `AuthRateLimitService` | Brute-force protection: tracks failed attempts, applies progressive lockout. |
-| `DefaultPermissionPolicy` | Default implementation of service-level permission evaluation. |
+| `DefaultPermissionPolicy` | Default permission policy for services without an explicit policy. Config operations accept `aussie:admin` or the corresponding `service.config.*` permission; policy management requires `aussie:admin`. |
 | `JwksCacheService` | Implements `JwksCache`. Fetches and caches JWKS with request coalescing to prevent thundering herd. |
 | `KeyRotationService` | Automated signing key rotation lifecycle (generate, activate, deprecate, retire). |
 | `OidcTokenExchangeProviderRegistry` | Selects the active `OidcTokenExchangeProvider` by configuration or priority. |

@@ -128,5 +128,56 @@ class DefaultPermissionPolicyTest {
             Set<String> mixedPermissions = Set.of("user", Permission.ADMIN_CLAIM_VALUE, "reader");
             assertTrue(defaultPolicy.getPolicy().isAllowed(Permission.SERVICE_CONFIG_UPDATE_VALUE, mixedPermissions));
         }
+
+        @Test
+        @DisplayName("Should allow un-scoped service.config.create for config create")
+        void shouldAllowUnscopedConfigCreate() {
+            assertTrue(defaultPolicy
+                    .getPolicy()
+                    .isAllowed(Permission.SERVICE_CONFIG_CREATE_VALUE, Set.of(Permission.SERVICE_CONFIG_CREATE_VALUE)));
+        }
+
+        @Test
+        @DisplayName("Should allow un-scoped service.config.read for config read")
+        void shouldAllowUnscopedConfigRead() {
+            assertTrue(defaultPolicy
+                    .getPolicy()
+                    .isAllowed(Permission.SERVICE_CONFIG_READ_VALUE, Set.of(Permission.SERVICE_CONFIG_READ_VALUE)));
+        }
+
+        @Test
+        @DisplayName("Should allow un-scoped service.config.update for config update")
+        void shouldAllowUnscopedConfigUpdate() {
+            assertTrue(defaultPolicy
+                    .getPolicy()
+                    .isAllowed(Permission.SERVICE_CONFIG_UPDATE_VALUE, Set.of(Permission.SERVICE_CONFIG_UPDATE_VALUE)));
+        }
+
+        @Test
+        @DisplayName("Should allow un-scoped service.config.delete for config delete")
+        void shouldAllowUnscopedConfigDelete() {
+            assertTrue(defaultPolicy
+                    .getPolicy()
+                    .isAllowed(Permission.SERVICE_CONFIG_DELETE_VALUE, Set.of(Permission.SERVICE_CONFIG_DELETE_VALUE)));
+        }
+
+        @Test
+        @DisplayName("Should not allow un-scoped config permissions for permissions.read")
+        void shouldNotAllowConfigPermissionsForPermissionsRead() {
+            assertFalse(defaultPolicy
+                    .getPolicy()
+                    .isAllowed(
+                            Permission.SERVICE_PERMISSIONS_READ_VALUE, Set.of(Permission.SERVICE_CONFIG_READ_VALUE)));
+        }
+
+        @Test
+        @DisplayName("Should not allow un-scoped config permissions for permissions.write")
+        void shouldNotAllowConfigPermissionsForPermissionsWrite() {
+            assertFalse(defaultPolicy
+                    .getPolicy()
+                    .isAllowed(
+                            Permission.SERVICE_PERMISSIONS_WRITE_VALUE,
+                            Set.of(Permission.SERVICE_CONFIG_UPDATE_VALUE)));
+        }
     }
 }

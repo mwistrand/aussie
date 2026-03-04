@@ -1,5 +1,6 @@
 package aussie.adapter.in.rest;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -19,6 +20,7 @@ import jakarta.ws.rs.core.Response;
 import io.quarkiverse.resteasy.problem.HttpProblem;
 import io.quarkus.security.PermissionsAllowed;
 import io.quarkus.security.identity.CurrentIdentityAssociation;
+import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
 
 import aussie.adapter.in.dto.ServiceRegistrationRequest;
@@ -62,10 +64,10 @@ public class AdminResource {
             var service = request.toModel();
 
             return identityAssociation.getDeferredIdentity().flatMap(identity -> {
-                var permissions = extractPermissions(identity);
+                var claims = extractClaims(identity);
 
                 // Delegate to service for validation, authorization, and persistence
-                return serviceRegistry.register(service, permissions).map(result -> switch (result) {
+                return serviceRegistry.register(service, claims).map(result -> switch (result) {
                     case RegistrationResult.Success s -> Response.status(Response.Status.CREATED)
                             .entity(ServiceRegistrationResponse.fromModel(s.registration()))
                             .build();
@@ -82,9 +84,9 @@ public class AdminResource {
     @PermissionsAllowed({Permission.SERVICE_CONFIG_DELETE_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> unregisterService(@PathParam("serviceId") String serviceId) {
         return identityAssociation.getDeferredIdentity().flatMap(identity -> {
-            var permissions = extractPermissions(identity);
+            var claims = extractClaims(identity);
 
-            return serviceRegistry.unregisterAuthorized(serviceId, permissions).map(result -> switch (result) {
+            return serviceRegistry.unregisterAuthorized(serviceId, claims).map(result -> switch (result) {
                 case RegistrationResult.Success s -> Response.noContent().build();
                 case RegistrationResult.Failure f -> throw toGatewayProblem(f);
             });
@@ -105,9 +107,9 @@ public class AdminResource {
     @PermissionsAllowed({Permission.SERVICE_CONFIG_READ_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> getService(@PathParam("serviceId") String serviceId) {
         return identityAssociation.getDeferredIdentity().flatMap(identity -> {
-            var permissions = extractPermissions(identity);
+            var claims = extractClaims(identity);
 
-            return serviceRegistry.getServiceAuthorized(serviceId, permissions).map(result -> switch (result) {
+            return serviceRegistry.getServiceAuthorized(serviceId, claims).map(result -> switch (result) {
                 case RegistrationResult.Success s -> Response.ok(
                                 ServiceRegistrationResponse.fromModel(s.registration()))
                         .build();
@@ -117,21 +119,33 @@ public class AdminResource {
     }
 
     /**
-     * Extract effective permissions from the identity for service-level
-     * authorization.
+     * Extract effective claims from the identity for service-level authorization.
+     * Includes both the translated permissions and the original role names, since
+     * service permission policies may reference either.
      */
     @SuppressWarnings("unchecked")
-    private Set<String> extractPermissions(io.quarkus.security.identity.SecurityIdentity identity) {
+    private Set<String> extractClaims(SecurityIdentity identity) {
         if (identity == null || identity.isAnonymous()) {
             return Set.of();
         }
 
+        var result = new HashSet<String>();
+
         var permissions = identity.getAttribute("permissions");
         if (permissions instanceof Set) {
-            return (Set<String>) permissions;
+            result.addAll((Set<String>) permissions);
         }
 
-        return Set.of();
+        var roles = identity.getAttribute("roles");
+        if (roles instanceof Set) {
+            result.addAll((Set<String>) roles);
+        } else if (roles instanceof List) {
+            for (var role : (List<?>) roles) {
+                result.add(role.toString());
+            }
+        }
+
+        return result;
     }
 
     /**

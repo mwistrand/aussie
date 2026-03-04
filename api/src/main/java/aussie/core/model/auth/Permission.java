@@ -2,6 +2,7 @@ package aussie.core.model.auth;
 
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -191,12 +192,30 @@ public enum Permission {
     /** Unmodifiable set of all permission string values. */
     private static final Set<String> ALL_PERMISSION_VALUES;
 
+    /**
+     * Known service-scoped permission suffixes mapped to their un-scoped equivalents.
+     * Used to grant endpoint-level access to users with service-scoped permissions.
+     * For example, a user with "demo-service.config.update" also gets "service.config.update"
+     * for {@code @PermissionsAllowed} checks, while service-level authorization still
+     * controls per-service access.
+     */
+    private static final Map<String, String> SCOPED_PERMISSION_SUFFIXES;
+
     static {
         Set<String> values = new TreeSet<>();
         for (Permission p : Permission.values()) {
             values.add(p.value);
         }
         ALL_PERMISSION_VALUES = Collections.unmodifiableSet(values);
+
+        // Build suffix map for service-scoped permission resolution
+        SCOPED_PERMISSION_SUFFIXES = Map.of(
+                ".config.read", SERVICE_CONFIG_READ_VALUE,
+                ".config.create", SERVICE_CONFIG_CREATE_VALUE,
+                ".config.update", SERVICE_CONFIG_UPDATE_VALUE,
+                ".config.delete", SERVICE_CONFIG_DELETE_VALUE,
+                ".permissions.read", SERVICE_PERMISSIONS_READ_VALUE,
+                ".permissions.write", SERVICE_PERMISSIONS_WRITE_VALUE);
     }
 
     // ========================================================================
@@ -230,6 +249,12 @@ public enum Permission {
     /**
      * Convert a set of Aussie permissions to Quarkus Security roles.
      *
+     * <p>For service-scoped permissions (e.g., "demo-service.config.update"),
+     * also adds the corresponding un-scoped endpoint permission (e.g.,
+     * "service.config.update"). This allows users with service-scoped
+     * permissions to pass {@code @PermissionsAllowed} endpoint checks, while
+     * service-level authorization still controls per-service access.
+     *
      * @param permissions the set of permissions (as strings)
      * @return the corresponding set of roles
      */
@@ -246,10 +271,34 @@ public enum Permission {
                 roles.addAll(ALL_PERMISSION_VALUES);
             } else {
                 roles.add(permission);
+
+                // For service-scoped permissions, also add the un-scoped equivalent
+                var unscoped = toUnscopedPermission(permission);
+                if (unscoped != null) {
+                    roles.add(unscoped);
+                }
             }
         }
 
         return roles;
+    }
+
+    /**
+     * Map a service-scoped permission to its un-scoped equivalent.
+     *
+     * <p>For example, "demo-service.config.update" maps to "service.config.update"
+     * because it ends with ".config.update" which is a known service permission suffix.
+     *
+     * @param permission the permission string to check
+     * @return the un-scoped equivalent, or null if not a recognized scoped permission
+     */
+    private static String toUnscopedPermission(String permission) {
+        for (var entry : SCOPED_PERMISSION_SUFFIXES.entrySet()) {
+            if (permission.endsWith(entry.getKey()) && !permission.equals(entry.getValue())) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     /**

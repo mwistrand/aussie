@@ -114,7 +114,18 @@ Permissions control what operations an API key can perform. They work at two lev
 | `benchmark.run` | Run latency benchmarks through the gateway |
 
 **Service-level access** (per-service operations):
-Service-level permissions are defined by your organization and mapped to operations via each service's permission policy. For example:
+Service-scoped permissions use a `<service-id>.<operation>` format. Aussie recognizes the following suffixes and automatically grants the corresponding un-scoped endpoint permission:
+
+| Scoped Permission | Grants Endpoint Access |
+|-------------------|----------------------|
+| `<service-id>.config.read` | `service.config.read` |
+| `<service-id>.config.create` | `service.config.create` |
+| `<service-id>.config.update` | `service.config.update` |
+| `<service-id>.config.delete` | `service.config.delete` |
+| `<service-id>.permissions.read` | `service.permissions.read` |
+| `<service-id>.permissions.write` | `service.permissions.write` |
+
+Organizations can also define custom permissions mapped to operations via each service's permission policy. For example:
 | Permission | Typical Usage |
 |------------|---------------|
 | `my-service.admin` | Full access to my-service configuration |
@@ -384,6 +395,8 @@ Effective permissions:
 ```
 
 Direct permissions in the token are merged with expanded group permissions.
+
+Service-scoped permissions (e.g., `demo-service.config.update`) are also automatically expanded to include their un-scoped equivalents (e.g., `service.config.update`) for endpoint-level access checks. Service-level authorization still controls per-service access.
 
 ### Group Management CLI Commands
 
@@ -846,7 +859,7 @@ Include a `permissionPolicy` in your service configuration:
 
 ### Default Policy
 
-Services without an explicit permission policy use the default policy, which requires the `aussie:admin` permission (granted by `*`) for all operations. This ensures new services are secure by default.
+Services without an explicit permission policy use the default policy. Config operations (`service.config.*`) accept either the `aussie:admin` permission or the corresponding un-scoped permission (e.g., `service.config.read`). Permission policy operations (`service.permissions.*`) require `aussie:admin`. This ensures new services are secure by default while allowing teams with config-level permissions to manage services.
 
 ### Example: Team-Based Access
 

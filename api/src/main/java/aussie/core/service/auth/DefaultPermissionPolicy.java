@@ -14,8 +14,10 @@ import aussie.core.model.auth.ServicePermissionPolicy;
  * policies.
  *
  * <p>
- * The default policy requires the "aussie:admin" claim for all operations.
- * This ensures that new services are secure by default.
+ * Config operations ({@code service.config.*}) accept either the
+ * {@code aussie:admin} claim or the corresponding un-scoped permission
+ * (e.g., {@code service.config.read}). Permission policy operations
+ * ({@code service.permissions.*}) require {@code aussie:admin}.
  *
  * <p>
  * Organizations can customize this by:
@@ -31,14 +33,23 @@ public class DefaultPermissionPolicy {
     private final ServicePermissionPolicy defaultPolicy;
 
     public DefaultPermissionPolicy() {
-        // Default: Only "aussie:admin" claim can perform any operation
+        // Default: "aussie:admin" claim or un-scoped permission can perform operations
         var adminOnly = new OperationPermission(Set.of(Permission.ADMIN_CLAIM.value()));
 
+        var adminOrCreate = new OperationPermission(
+                Set.of(Permission.ADMIN_CLAIM.value(), Permission.SERVICE_CONFIG_CREATE.value()));
+        var adminOrRead =
+                new OperationPermission(Set.of(Permission.ADMIN_CLAIM.value(), Permission.SERVICE_CONFIG_READ.value()));
+        var adminOrUpdate = new OperationPermission(
+                Set.of(Permission.ADMIN_CLAIM.value(), Permission.SERVICE_CONFIG_UPDATE.value()));
+        var adminOrDelete = new OperationPermission(
+                Set.of(Permission.ADMIN_CLAIM.value(), Permission.SERVICE_CONFIG_DELETE.value()));
+
         this.defaultPolicy = new ServicePermissionPolicy(Map.of(
-                Permission.CONFIG_CREATE.value(), adminOnly,
-                Permission.CONFIG_READ.value(), adminOnly,
-                Permission.CONFIG_UPDATE.value(), adminOnly,
-                Permission.CONFIG_DELETE.value(), adminOnly,
+                Permission.CONFIG_CREATE.value(), adminOrCreate,
+                Permission.CONFIG_READ.value(), adminOrRead,
+                Permission.CONFIG_UPDATE.value(), adminOrUpdate,
+                Permission.CONFIG_DELETE.value(), adminOrDelete,
                 Permission.PERMISSIONS_READ.value(), adminOnly,
                 Permission.PERMISSIONS_WRITE.value(), adminOnly));
     }
