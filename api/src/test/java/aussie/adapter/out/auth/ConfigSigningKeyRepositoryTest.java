@@ -1,6 +1,7 @@
 package aussie.adapter.out.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -10,6 +11,7 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeAll;
@@ -54,6 +56,44 @@ class ConfigSigningKeyRepositoryTest {
         when(jwsProps.keyId()).thenReturn("v1");
 
         repository = new ConfigSigningKeyRepository(routeAuthConfig, keyRotationConfig);
+    }
+
+    @Nested
+    @DisplayName("constructor")
+    class Constructor {
+
+        @Test
+        @DisplayName("should load configured key on creation")
+        void shouldLoadConfiguredKey() {
+            var jwsProps = mock(RouteAuthConfig.JwsProperties.class);
+            var config = mock(RouteAuthConfig.class);
+            when(config.enabled()).thenReturn(true);
+            when(config.jws()).thenReturn(jwsProps);
+            when(jwsProps.signingKey())
+                    .thenReturn(Optional.of(Base64.getEncoder().encodeToString(privateKey.getEncoded())));
+            when(jwsProps.keyId()).thenReturn("static-v1");
+
+            var repo = new ConfigSigningKeyRepository(config, keyRotationConfig);
+            assertEquals(1, repo.getKeyCount());
+
+            var key = repo.findById("static-v1").await().atMost(Duration.ofSeconds(1));
+            assertTrue(key.isPresent());
+            assertEquals(KeyStatus.ACTIVE, key.get().status());
+        }
+
+        @Test
+        @DisplayName("should handle invalid signing key gracefully")
+        void shouldHandleInvalidKey() {
+            var jwsProps = mock(RouteAuthConfig.JwsProperties.class);
+            var config = mock(RouteAuthConfig.class);
+            when(config.enabled()).thenReturn(true);
+            when(config.jws()).thenReturn(jwsProps);
+            when(jwsProps.signingKey()).thenReturn(Optional.of("not-a-valid-key"));
+            when(jwsProps.keyId()).thenReturn("bad-v1");
+
+            var repo = new ConfigSigningKeyRepository(config, keyRotationConfig);
+            assertEquals(0, repo.getKeyCount());
+        }
     }
 
     @Nested
@@ -190,8 +230,8 @@ class ConfigSigningKeyRepositoryTest {
     class UpdateStatus {
 
         @Test
-        @DisplayName("should update key status")
-        void shouldUpdateKeyStatus() {
+        @DisplayName("should update key status to ACTIVE")
+        void shouldUpdateKeyStatusToActive() {
             final var key = SigningKeyRecord.pending("k-test", privateKey, publicKey);
             repository.store(key).await().atMost(Duration.ofSeconds(1));
 
@@ -201,9 +241,66 @@ class ConfigSigningKeyRepositoryTest {
                     .atMost(Duration.ofSeconds(1));
 
             final var result = repository.findById("k-test").await().atMost(Duration.ofSeconds(1));
-
             assertTrue(result.isPresent());
             assertEquals(KeyStatus.ACTIVE, result.get().status());
+        }
+
+        @Test
+        @DisplayName("should update key status to DEPRECATED")
+        void shouldUpdateKeyStatusToDeprecated() {
+            final var key = SigningKeyRecord.active("k-test", privateKey, publicKey);
+            repository.store(key).await().atMost(Duration.ofSeconds(1));
+
+            repository
+                    .updateStatus("k-test", KeyStatus.DEPRECATED, Instant.now())
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            final var result = repository.findById("k-test").await().atMost(Duration.ofSeconds(1));
+            assertTrue(result.isPresent());
+            assertEquals(KeyStatus.DEPRECATED, result.get().status());
+        }
+
+        @Test
+        @DisplayName("should update key status to RETIRED")
+        void shouldUpdateKeyStatusToRetired() {
+            final var key =
+                    SigningKeyRecord.active("k-test", privateKey, publicKey).deprecate(Instant.now());
+            repository.store(key).await().atMost(Duration.ofSeconds(1));
+
+            repository
+                    .updateStatus("k-test", KeyStatus.RETIRED, Instant.now())
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            final var result = repository.findById("k-test").await().atMost(Duration.ofSeconds(1));
+            assertTrue(result.isPresent());
+            assertEquals(KeyStatus.RETIRED, result.get().status());
+        }
+
+        @Test
+        @DisplayName("should handle PENDING to PENDING (no-op)")
+        void shouldHandlePendingToPending() {
+            final var key = SigningKeyRecord.pending("k-test", privateKey, publicKey);
+            repository.store(key).await().atMost(Duration.ofSeconds(1));
+
+            repository
+                    .updateStatus("k-test", KeyStatus.PENDING, Instant.now())
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            final var result = repository.findById("k-test").await().atMost(Duration.ofSeconds(1));
+            assertTrue(result.isPresent());
+            assertEquals(KeyStatus.PENDING, result.get().status());
+        }
+
+        @Test
+        @DisplayName("should throw for unknown key ID")
+        void shouldThrowForUnknownKeyId() {
+            assertThrows(IllegalArgumentException.class, () -> repository
+                    .updateStatus("missing", KeyStatus.ACTIVE, Instant.now())
+                    .await()
+                    .atMost(Duration.ofSeconds(1)));
         }
     }
 
@@ -247,6 +344,45 @@ class ConfigSigningKeyRepositoryTest {
             final var result = repository.findAll().await().atMost(Duration.ofSeconds(1));
 
             assertEquals(2, result.size());
+        }
+    }
+
+    @Nested
+    @DisplayName("getKeyCount()")
+    class GetKeyCount {
+
+        @Test
+        @DisplayName("should return count of stored keys")
+        void shouldReturnKeyCount() {
+            assertEquals(0, repository.getKeyCount());
+
+            repository
+                    .store(SigningKeyRecord.active("k-1", privateKey, publicKey))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+            assertEquals(1, repository.getKeyCount());
+        }
+    }
+
+    @Nested
+    @DisplayName("clear()")
+    class Clear {
+
+        @Test
+        @DisplayName("should remove all keys")
+        void shouldRemoveAllKeys() {
+            repository
+                    .store(SigningKeyRecord.active("k-1", privateKey, publicKey))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+            repository
+                    .store(SigningKeyRecord.active("k-2", privateKey, publicKey))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+            assertEquals(2, repository.getKeyCount());
+
+            repository.clear();
+            assertEquals(0, repository.getKeyCount());
         }
     }
 }

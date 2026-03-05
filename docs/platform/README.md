@@ -43,6 +43,12 @@ cd api
 ./gradlew test
 ```
 
+### Coverage reports
+JaCoCo runs automatically with every `./gradlew test`. Reports are generated at `api/build/reports/jacoco/test/html/index.html`. To generate both API and CLI coverage:
+```shell
+make coverage
+```
+
 ### Native executable
 ```shell
 cd api

@@ -415,6 +415,176 @@ class AuthRateLimitServiceTest {
     }
 
     @Nested
+    @DisplayName("recordFailedApiKeyAttempt()")
+    class RecordFailedApiKeyAttemptTests {
+
+        @Test
+        @DisplayName("should not record when disabled")
+        void shouldNotRecordWhenDisabled() {
+            when(config.enabled()).thenReturn(false);
+            service = new AuthRateLimitService(config, repository);
+
+            final var result = service.recordFailedApiKeyAttempt("192.168.1.1", "sk_live_", "invalid_key")
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            assertFalse(result.lockedOut());
+            verify(repository, never()).recordFailedAttempt(anyString(), any());
+        }
+
+        @Test
+        @DisplayName("should record using apikey prefix")
+        void shouldRecordUsingApiKeyPrefix() {
+            when(repository.recordFailedAttempt("ip:192.168.1.1", Duration.ofHours(1)))
+                    .thenReturn(Uni.createFrom().item(2L));
+            when(repository.recordFailedAttempt("apikey:sk_live_", Duration.ofHours(1)))
+                    .thenReturn(Uni.createFrom().item(1L));
+
+            final var result = service.recordFailedApiKeyAttempt("192.168.1.1", "sk_live_", "invalid_key")
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            assertFalse(result.lockedOut());
+            verify(repository).recordFailedAttempt("apikey:sk_live_", Duration.ofHours(1));
+        }
+
+        @Test
+        @DisplayName("should trigger lockout on API key prefix")
+        void shouldTriggerLockoutOnApiKeyPrefix() {
+            when(repository.recordFailedAttempt("ip:192.168.1.1", Duration.ofHours(1)))
+                    .thenReturn(Uni.createFrom().item(2L));
+            when(repository.recordFailedAttempt("apikey:sk_live_", Duration.ofHours(1)))
+                    .thenReturn(Uni.createFrom().item(5L)); // Reaches threshold
+            when(repository.getLockoutCount("apikey:sk_live_"))
+                    .thenReturn(Uni.createFrom().item(0));
+            when(repository.recordLockout("apikey:sk_live_", Duration.ofMinutes(15), "invalid_key"))
+                    .thenReturn(Uni.createFrom().voidItem());
+
+            final var result = service.recordFailedApiKeyAttempt("192.168.1.1", "sk_live_", "invalid_key")
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            assertTrue(result.lockedOut());
+            assertEquals("apikey:sk_live_", result.key());
+        }
+
+        @Test
+        @DisplayName("should handle null IP")
+        void shouldHandleNullIp() {
+            when(repository.recordFailedAttempt("apikey:sk_live_", Duration.ofHours(1)))
+                    .thenReturn(Uni.createFrom().item(1L));
+
+            final var result = service.recordFailedApiKeyAttempt(null, "sk_live_", "invalid_key")
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            assertFalse(result.lockedOut());
+            verify(repository, never()).recordFailedAttempt("ip:null", Duration.ofHours(1));
+        }
+
+        @Test
+        @DisplayName("should handle null key prefix")
+        void shouldHandleNullKeyPrefix() {
+            when(repository.recordFailedAttempt("ip:192.168.1.1", Duration.ofHours(1)))
+                    .thenReturn(Uni.createFrom().item(1L));
+
+            final var result = service.recordFailedApiKeyAttempt("192.168.1.1", null, "invalid_key")
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            assertFalse(result.lockedOut());
+        }
+    }
+
+    @Nested
+    @DisplayName("streamAllLockouts()")
+    class StreamAllLockoutsTests {
+
+        @Test
+        @DisplayName("should delegate to repository")
+        void shouldDelegateToRepository() {
+            final var lockout1 = new FailedAttemptRepository.LockoutInfo(
+                    "ip:192.168.1.1",
+                    Instant.now(),
+                    Instant.now().plus(Duration.ofMinutes(10)),
+                    "max_failed_attempts",
+                    5,
+                    1);
+            final var lockout2 = new FailedAttemptRepository.LockoutInfo(
+                    "user:user@test.com",
+                    Instant.now(),
+                    Instant.now().plus(Duration.ofMinutes(15)),
+                    "max_failed_attempts",
+                    5,
+                    2);
+
+            when(repository.streamAllLockouts()).thenReturn(Multi.createFrom().items(lockout1, lockout2));
+
+            final var lockouts =
+                    service.streamAllLockouts().collect().asList().await().atMost(Duration.ofSeconds(1));
+
+            assertEquals(2, lockouts.size());
+            assertEquals("ip:192.168.1.1", lockouts.get(0).key());
+            assertEquals("user:user@test.com", lockouts.get(1).key());
+        }
+
+        @Test
+        @DisplayName("should return empty when no lockouts")
+        void shouldReturnEmptyWhenNoLockouts() {
+            when(repository.streamAllLockouts()).thenReturn(Multi.createFrom().empty());
+
+            final var lockouts =
+                    service.streamAllLockouts().collect().asList().await().atMost(Duration.ofSeconds(1));
+
+            assertTrue(lockouts.isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("getFailedAttemptCount()")
+    class GetFailedAttemptCountTests {
+
+        @Test
+        @DisplayName("should return count from repository")
+        void shouldReturnCountFromRepository() {
+            when(repository.getFailedAttemptCount("ip:192.168.1.1"))
+                    .thenReturn(Uni.createFrom().item(3L));
+
+            final var count =
+                    service.getFailedAttemptCount("ip:192.168.1.1").await().atMost(Duration.ofSeconds(1));
+
+            assertEquals(3L, count);
+        }
+    }
+
+    @Nested
+    @DisplayName("progressive lockout")
+    class ProgressiveLockoutTests {
+
+        @Test
+        @DisplayName("should use base duration when multiplier is 1.0")
+        void shouldUseBaseDurationWhenMultiplierIsOne() {
+            lenient().when(config.progressiveLockoutMultiplier()).thenReturn(1.0);
+            lenient().when(config.trackByIdentifier()).thenReturn(false);
+            service = new AuthRateLimitService(config, repository);
+
+            when(repository.recordFailedAttempt("ip:192.168.1.1", Duration.ofHours(1)))
+                    .thenReturn(Uni.createFrom().item(5L));
+            when(repository.getLockoutCount("ip:192.168.1.1"))
+                    .thenReturn(Uni.createFrom().item(3));
+            when(repository.recordLockout("ip:192.168.1.1", Duration.ofMinutes(15), "test"))
+                    .thenReturn(Uni.createFrom().voidItem());
+
+            final var result = service.recordFailedAttempt("192.168.1.1", null, "test")
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            assertTrue(result.lockedOut());
+            verify(repository).recordLockout("ip:192.168.1.1", Duration.ofMinutes(15), "test");
+        }
+    }
+
+    @Nested
     @DisplayName("isEnabled()")
     class IsEnabledTests {
 

@@ -11,6 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Single test method:** `./gradlew test --tests "aussie.AdminResourceTest.testMethodName"`
 - **Native build:** `./gradlew build -Dquarkus.native.enabled=true`
 - **Uber-jar:** `./gradlew build -Dquarkus.package.jar.type=uber-jar`
+- **Coverage report:** `make coverage` (generates JaCoCo HTML + CLI coverage)
 
 ## Architecture
 

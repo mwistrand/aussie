@@ -2,7 +2,10 @@ package aussie.core.service.auth;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -186,6 +189,126 @@ class RevocationBloomFilterTest {
             assertFalse(bloomFilter.userDefinitelyNotRevoked("user-1"));
             assertTrue(bloomFilter.definitelyNotRevoked("jti-3"));
             assertTrue(bloomFilter.userDefinitelyNotRevoked("user-2"));
+        }
+    }
+
+    @Nested
+    @DisplayName("init()")
+    class InitTests {
+
+        @Test
+        @DisplayName("should skip initialization when revocation disabled")
+        void shouldSkipWhenRevocationDisabled() {
+            when(config.enabled()).thenReturn(false);
+
+            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter.init();
+
+            assertFalse(bloomFilter.isEnabled());
+        }
+
+        @Test
+        @DisplayName("should skip initialization when bloom filter disabled")
+        void shouldSkipWhenBloomFilterDisabled() {
+            when(bloomFilterConfig.enabled()).thenReturn(false);
+
+            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter.init();
+
+            assertFalse(bloomFilter.isEnabled());
+        }
+
+        @Test
+        @DisplayName("should schedule periodic rebuild on init")
+        void shouldSchedulePeriodicRebuild() {
+            when(vertx.setPeriodic(anyLong(), any(java.util.function.Consumer.class)))
+                    .thenReturn(1L);
+
+            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter.init();
+
+            verify(vertx).setPeriodic(anyLong(), any(java.util.function.Consumer.class));
+        }
+
+        @Test
+        @DisplayName("should subscribe to revocation events when pubsub enabled")
+        void shouldSubscribeWhenPubSubEnabled() {
+            when(pubSubConfig.enabled()).thenReturn(true);
+            when(eventPublisher.subscribe()).thenReturn(Multi.createFrom().empty());
+            when(vertx.setPeriodic(anyLong(), any(java.util.function.Consumer.class)))
+                    .thenReturn(1L);
+
+            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter.init();
+
+            verify(eventPublisher).subscribe();
+        }
+    }
+
+    @Nested
+    @DisplayName("handleRevocationEvent()")
+    class HandleRevocationEventTests {
+
+        @Test
+        @DisplayName("should add JTI from JtiRevoked event")
+        void shouldAddJtiFromEvent() {
+            initializeBloomFilter();
+            var jti = "event-revoked-jti";
+
+            assertTrue(bloomFilter.definitelyNotRevoked(jti));
+
+            bloomFilter.addRevokedJti(jti);
+
+            assertFalse(bloomFilter.definitelyNotRevoked(jti));
+        }
+
+        @Test
+        @DisplayName("should add user from UserRevoked event")
+        void shouldAddUserFromEvent() {
+            initializeBloomFilter();
+            var userId = "event-revoked-user";
+
+            assertTrue(bloomFilter.userDefinitelyNotRevoked(userId));
+
+            bloomFilter.addRevokedUser(userId);
+
+            assertFalse(bloomFilter.userDefinitelyNotRevoked(userId));
+        }
+    }
+
+    @Nested
+    @DisplayName("rebuildFilters() with data")
+    class RebuildFiltersWithDataTests {
+
+        @Test
+        @DisplayName("should replace filters with data from repository")
+        void shouldReplaceFiltersWithRepositoryData() {
+            initializeBloomFilter();
+            bloomFilter.addRevokedJti("old-jti");
+            assertFalse(bloomFilter.definitelyNotRevoked("old-jti"));
+
+            when(repository.streamAllRevokedJtis())
+                    .thenReturn(Multi.createFrom().items("new-jti-1", "new-jti-2"));
+            when(repository.streamAllRevokedUsers())
+                    .thenReturn(Multi.createFrom().items("new-user-1"));
+
+            bloomFilter.rebuildFilters().await().indefinitely();
+
+            assertFalse(bloomFilter.definitelyNotRevoked("new-jti-1"));
+            assertFalse(bloomFilter.definitelyNotRevoked("new-jti-2"));
+            assertFalse(bloomFilter.userDefinitelyNotRevoked("new-user-1"));
+            assertTrue(bloomFilter.definitelyNotRevoked("other-jti"));
+        }
+
+        @Test
+        @DisplayName("should skip rebuild when disabled")
+        void shouldSkipRebuildWhenDisabled() {
+            when(config.enabled()).thenReturn(false);
+            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+
+            bloomFilter.rebuildFilters().await().indefinitely();
+
+            assertFalse(bloomFilter.isEnabled());
         }
     }
 

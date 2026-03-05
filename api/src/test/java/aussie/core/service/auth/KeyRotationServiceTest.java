@@ -244,6 +244,164 @@ class KeyRotationServiceTest {
     }
 
     @Nested
+    @DisplayName("processKeyLifecycle()")
+    class ProcessKeyLifecycle {
+
+        @Test
+        @DisplayName("should do nothing when disabled")
+        void shouldDoNothingWhenDisabled() {
+            when(config.enabled()).thenReturn(false);
+            service = new KeyRotationService(registry, repository, config);
+
+            service.processKeyLifecycle().await().atMost(Duration.ofSeconds(1));
+
+            verify(repository, never()).findByStatus(any());
+        }
+
+        @Test
+        @DisplayName("should activate pending keys past grace period")
+        void shouldActivatePendingKeysPastGracePeriod() {
+            // Key created 25 hours ago (past 24-hour grace period)
+            final var pendingKey = new SigningKeyRecord(
+                    "k-pending",
+                    privateKey,
+                    publicKey,
+                    KeyStatus.PENDING,
+                    Instant.now().minus(Duration.ofHours(25)),
+                    null,
+                    null,
+                    null);
+
+            when(repository.findByStatus(KeyStatus.PENDING))
+                    .thenReturn(Uni.createFrom().item(List.of(pendingKey)));
+            when(registry.activateKey("k-pending")).thenReturn(Uni.createFrom().voidItem());
+            when(repository.findByStatus(KeyStatus.DEPRECATED))
+                    .thenReturn(Uni.createFrom().item(List.of()));
+            when(repository.findByStatus(KeyStatus.RETIRED))
+                    .thenReturn(Uni.createFrom().item(List.of()));
+
+            service.processKeyLifecycle().await().atMost(Duration.ofSeconds(1));
+
+            verify(registry).activateKey("k-pending");
+        }
+
+        @Test
+        @DisplayName("should not activate pending keys within grace period")
+        void shouldNotActivateRecentPendingKeys() {
+            // Key created 1 hour ago (within 24-hour grace period)
+            final var pendingKey = new SigningKeyRecord(
+                    "k-pending",
+                    privateKey,
+                    publicKey,
+                    KeyStatus.PENDING,
+                    Instant.now().minus(Duration.ofHours(1)),
+                    null,
+                    null,
+                    null);
+
+            when(repository.findByStatus(KeyStatus.PENDING))
+                    .thenReturn(Uni.createFrom().item(List.of(pendingKey)));
+            when(repository.findByStatus(KeyStatus.DEPRECATED))
+                    .thenReturn(Uni.createFrom().item(List.of()));
+            when(repository.findByStatus(KeyStatus.RETIRED))
+                    .thenReturn(Uni.createFrom().item(List.of()));
+
+            service.processKeyLifecycle().await().atMost(Duration.ofSeconds(1));
+
+            verify(registry, never()).activateKey(anyString());
+        }
+
+        @Test
+        @DisplayName("should activate most recent pending key when multiple qualify")
+        void shouldActivateMostRecentPendingKey() {
+            final var olderKey = new SigningKeyRecord(
+                    "k-old",
+                    privateKey,
+                    publicKey,
+                    KeyStatus.PENDING,
+                    Instant.now().minus(Duration.ofHours(48)),
+                    null,
+                    null,
+                    null);
+            final var newerKey = new SigningKeyRecord(
+                    "k-new",
+                    privateKey,
+                    publicKey,
+                    KeyStatus.PENDING,
+                    Instant.now().minus(Duration.ofHours(25)),
+                    null,
+                    null,
+                    null);
+
+            when(repository.findByStatus(KeyStatus.PENDING))
+                    .thenReturn(Uni.createFrom().item(List.of(olderKey, newerKey)));
+            when(registry.activateKey("k-new")).thenReturn(Uni.createFrom().voidItem());
+            when(repository.findByStatus(KeyStatus.DEPRECATED))
+                    .thenReturn(Uni.createFrom().item(List.of()));
+            when(repository.findByStatus(KeyStatus.RETIRED))
+                    .thenReturn(Uni.createFrom().item(List.of()));
+
+            service.processKeyLifecycle().await().atMost(Duration.ofSeconds(1));
+
+            verify(registry).activateKey("k-new");
+            verify(registry, never()).activateKey("k-old");
+        }
+
+        @Test
+        @DisplayName("should retire deprecated keys past deprecation period")
+        void shouldRetireDeprecatedKeysPastDeprecationPeriod() {
+            // Key deprecated 8 days ago (past 7-day deprecation period)
+            final var deprecatedKey = new SigningKeyRecord(
+                    "k-deprecated",
+                    privateKey,
+                    publicKey,
+                    KeyStatus.DEPRECATED,
+                    Instant.now().minus(Duration.ofDays(30)),
+                    Instant.now().minus(Duration.ofDays(20)),
+                    Instant.now().minus(Duration.ofDays(8)),
+                    null);
+
+            when(repository.findByStatus(KeyStatus.PENDING))
+                    .thenReturn(Uni.createFrom().item(List.of()));
+            when(repository.findByStatus(KeyStatus.DEPRECATED))
+                    .thenReturn(Uni.createFrom().item(List.of(deprecatedKey)));
+            when(registry.retireKey("k-deprecated")).thenReturn(Uni.createFrom().voidItem());
+            when(repository.findByStatus(KeyStatus.RETIRED))
+                    .thenReturn(Uni.createFrom().item(List.of()));
+
+            service.processKeyLifecycle().await().atMost(Duration.ofSeconds(1));
+
+            verify(registry).retireKey("k-deprecated");
+        }
+
+        @Test
+        @DisplayName("should not retire recently deprecated keys")
+        void shouldNotRetireRecentlyDeprecatedKeys() {
+            // Key deprecated 2 days ago (within 7-day deprecation period)
+            final var deprecatedKey = new SigningKeyRecord(
+                    "k-deprecated",
+                    privateKey,
+                    publicKey,
+                    KeyStatus.DEPRECATED,
+                    Instant.now().minus(Duration.ofDays(30)),
+                    Instant.now().minus(Duration.ofDays(20)),
+                    Instant.now().minus(Duration.ofDays(2)),
+                    null);
+
+            when(repository.findByStatus(KeyStatus.PENDING))
+                    .thenReturn(Uni.createFrom().item(List.of()));
+            when(repository.findByStatus(KeyStatus.DEPRECATED))
+                    .thenReturn(Uni.createFrom().item(List.of(deprecatedKey)));
+            when(repository.findByStatus(KeyStatus.RETIRED))
+                    .thenReturn(Uni.createFrom().item(List.of()));
+
+            service.processKeyLifecycle().await().atMost(Duration.ofSeconds(1));
+
+            verify(registry, never()).retireKey(anyString());
+        }
+    }
+
+    @Nested
     @DisplayName("forceDeprecate()")
     class ForceDeprecate {
 

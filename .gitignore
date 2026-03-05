@@ -48,3 +48,7 @@ cli/aussie
 
 # Graft Review Cache
 .graft/
+
+# Coverage artifacts
+cli/coverage.out
+cli/coverage.html

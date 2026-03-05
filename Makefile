@@ -1,6 +1,6 @@
 COMPOSE=docker compose
 
-.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test reset
+.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage reset
 
 up:
 	$(COMPOSE) up -d --build
@@ -46,6 +46,17 @@ test:
 	cd api && ./gradlew test
 	@echo "Running CLI tests..."
 	cd cli && go test ./...
+
+# Generate coverage reports for API (JaCoCo) and CLI (Go)
+coverage:
+	@echo "Running API tests with coverage..."
+	cd api && ./gradlew test jacocoTestReport
+	@echo "Running CLI tests with coverage..."
+	cd cli && go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
+	@echo ""
+	@echo "Coverage reports:"
+	@echo "  API: api/build/reports/jacoco/test/html/index.html"
+	@echo "  CLI: cli/coverage.html"
 
 migrate:
 	@echo "Running Cassandra migrations..."

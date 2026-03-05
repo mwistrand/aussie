@@ -1,5 +1,6 @@
 plugins {
     id 'java'
+    id 'jacoco'
     id 'io.quarkus'
     id 'com.diffplug.spotless' version '6.25.0'
 }
@@ -79,6 +80,15 @@ java {
 test {
     systemProperty "java.util.logging.manager", "org.jboss.logmanager.LogManager"
     jvmArgs "--add-opens", "java.base/java.lang=ALL-UNNAMED"
+    finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        html.required = true
+        xml.required = true
+    }
 }
 compileJava {
     options.encoding = 'UTF-8'
