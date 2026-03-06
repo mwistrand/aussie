@@ -22,6 +22,7 @@ import aussie.core.model.auth.ServiceAccessConfig;
 import aussie.core.model.auth.ServicePermissionPolicy;
 import aussie.core.model.auth.VisibilityRule;
 import aussie.core.model.common.CorsConfig;
+import aussie.core.model.common.ServiceSecurityHeadersConfig;
 import aussie.core.model.ratelimit.ServiceRateLimitConfig;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
@@ -64,8 +65,9 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                         INSERT INTO service_registrations
                         (service_id, display_name, base_url, route_prefix,
                          default_visibility, default_auth_required, visibility_rules, endpoints, access_config,
-                         cors_config, permission_policy, rate_limit_config, sampling_config, version, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
+                         cors_config, permission_policy, rate_limit_config, sampling_config, security_headers_config,
+                         version, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
                         """);
     }
 
@@ -108,6 +110,10 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                             registration.permissionPolicy().map(this::toJson).orElse(null),
                             registration.rateLimitConfig().map(this::toJson).orElse(null),
                             registration.samplingConfig().map(this::toJson).orElse(null),
+                            registration
+                                    .securityHeadersConfig()
+                                    .map(this::toJson)
+                                    .orElse(null),
                             registration.version());
                     return session.executeAsync(bound).toCompletableFuture();
                 })
@@ -210,6 +216,9 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                         .map(json -> fromJson(json, ServiceRateLimitConfig.class)),
                 Optional.ofNullable(row.isNull("sampling_config") ? null : row.getString("sampling_config"))
                         .map(json -> fromJson(json, ServiceSamplingConfig.class)),
+                Optional.ofNullable(
+                                row.isNull("security_headers_config") ? null : row.getString("security_headers_config"))
+                        .map(json -> fromJson(json, ServiceSecurityHeadersConfig.class)),
                 version);
     }
 

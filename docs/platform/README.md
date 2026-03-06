@@ -509,7 +509,7 @@ Optional headers (set only when configured):
 - `Strict-Transport-Security` -- enable only when behind TLS termination. Incorrect HSTS can lock browsers out of your site.
 - `Permissions-Policy` -- restrict browser features (camera, microphone, etc.)
 
-To customize:
+To customize global defaults:
 ```bash
 # Disable security headers entirely
 export AUSSIE_GATEWAY_SECURITY_HEADERS_ENABLED=false
@@ -520,6 +520,24 @@ export AUSSIE_GATEWAY_SECURITY_HEADERS_CONTENT_SECURITY_POLICY="default-src 'sel
 
 # Enable HSTS (only when behind TLS termination)
 export AUSSIE_GATEWAY_SECURITY_HEADERS_STRICT_TRANSPORT_SECURITY="max-age=31536000; includeSubDomains"
+```
+
+#### Per-Service Overrides
+
+Services can override individual security headers via `securityHeadersConfig` in their registration. Fields that are not specified fall through to the global defaults. Setting a field to an empty string (`""`) suppresses that header entirely for the service.
+
+Services can also declare arbitrary additional response headers via `customHeaders`:
+
+```json
+{
+  "securityHeadersConfig": {
+    "contentSecurityPolicy": "default-src 'self'; script-src 'self' 'unsafe-inline'",
+    "frameOptions": "SAMEORIGIN",
+    "customHeaders": {
+      "X-Custom-Header": "value"
+    }
+  }
+}
 ```
 
 ### SSRF Protection

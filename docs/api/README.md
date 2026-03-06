@@ -476,6 +476,28 @@ public Response getBilling(@PathParam("id") String id) {
 
 See [Token Audience Validation](token-audience.md) for detailed implementation guidance.
 
+### Security Header Overrides
+
+Services can override the gateway's default security response headers by including `securityHeadersConfig` in their registration. Only the headers you specify are overridden; all others use the global defaults.
+
+```json
+{
+  "serviceId": "dashboard-service",
+  "baseUrl": "http://localhost:3005",
+  "securityHeadersConfig": {
+    "contentSecurityPolicy": "default-src 'self'; script-src 'self' 'unsafe-inline'",
+    "frameOptions": "SAMEORIGIN",
+    "customHeaders": {
+      "X-Dashboard-Version": "2.0"
+    }
+  }
+}
+```
+
+Available override fields: `contentTypeOptions`, `frameOptions`, `contentSecurityPolicy`, `referrerPolicy`, `permittedCrossDomainPolicies`, `strictTransportSecurity`, `permissionsPolicy`.
+
+Setting a field to an empty string (`""`) suppresses that header entirely for the service. The `customHeaders` map adds arbitrary additional response headers.
+
 ## CLI Reference
 
 ### Authentication Commands

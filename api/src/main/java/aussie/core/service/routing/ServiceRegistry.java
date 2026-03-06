@@ -678,6 +678,27 @@ public class ServiceRegistry {
     private record CompiledRoute(ServiceRegistration service, EndpointConfig endpoint) {}
 
     /**
+     * Get a service by ID from the local in-memory cache (non-blocking).
+     *
+     * <p>This method is intended for use in contexts where blocking is not
+     * allowed, such as Vert.x RouteFilters. It returns data from the local
+     * compiled route cache without any I/O. The cache is kept fresh by TTL
+     * refresh and pub/sub event invalidation.
+     *
+     * @param serviceId The service ID to look up
+     * @return Optional containing the service if found in local cache
+     */
+    public Optional<ServiceRegistration> getServiceFromLocalCache(String serviceId) {
+        if (serviceId == null || ServicePath.UNKNOWN_SERVICE.equals(serviceId)) {
+            return Optional.empty();
+        }
+        return compiledRoutes.values().stream()
+                .filter(route -> route.service().serviceId().equals(serviceId))
+                .findFirst()
+                .map(CompiledRoute::service);
+    }
+
+    /**
      * Get a service by ID for WebSocket rate limiting.
      *
      * <p>This is a convenience method that returns the service registration

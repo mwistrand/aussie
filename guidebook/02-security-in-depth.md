@@ -638,10 +638,6 @@ HSTS tells browsers to refuse non-HTTPS connections for a configurable duration 
 
 A senior would set `X-Content-Type-Options` and maybe `X-Frame-Options`. The `Content-Security-Policy` default of `default-src 'none'` is aggressive and will break any upstream service that returns HTML with inline scripts or external resources. For an API gateway that primarily serves JSON, this is correct. For a gateway that also serves a developer portal or admin UI, it would need to be relaxed. The `Permissions-Policy` header (controlling browser features like geolocation and camera) is the one most frequently omitted because its absence has no visible effect until an XSS payload leverages those features.
 
-### Trade-offs
-
-All security headers are applied uniformly to all responses. There is no per-service override mechanism. An upstream service that needs a different CSP (e.g., a service that returns HTML dashboards) would need the platform team to either relax the global policy or disable security headers entirely. This is a trade-off between uniformity (easy to audit, hard to misconfigure) and flexibility (each service controls its own headers).
-
 ## 2.10 Hop-by-Hop Header Stripping
 
 **File:** `api/src/main/java/aussie/core/service/gateway/ProxyRequestPreparer.java`

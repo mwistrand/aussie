@@ -800,6 +800,59 @@ class ServiceRegistryTest {
         }
     }
 
+    @Nested
+    @DisplayName("Local cache lookup")
+    class LocalCacheLookupTests {
+
+        @Test
+        @DisplayName("Should return empty for null serviceId")
+        void shouldReturnEmptyForNull() {
+            assertTrue(registry.getServiceFromLocalCache(null).isEmpty());
+        }
+
+        @Test
+        @DisplayName("Should return empty for unknown service sentinel")
+        void shouldReturnEmptyForUnknownSentinel() {
+            assertTrue(registry.getServiceFromLocalCache("unknown").isEmpty());
+        }
+
+        @Test
+        @DisplayName("Should return empty when service not registered")
+        void shouldReturnEmptyWhenNotRegistered() {
+            assertTrue(registry.getServiceFromLocalCache("no-such-service").isEmpty());
+        }
+
+        @Test
+        @DisplayName("Should return service after registration")
+        void shouldReturnServiceAfterRegistration() {
+            var endpoint = new EndpointConfig("/api/data", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var service = ServiceRegistration.builder("lookup-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
+            registry.register(service).await().atMost(TIMEOUT);
+
+            var result = registry.getServiceFromLocalCache("lookup-service");
+
+            assertTrue(result.isPresent());
+            assertEquals("lookup-service", result.get().serviceId());
+        }
+
+        @Test
+        @DisplayName("Should return empty after service is unregistered")
+        void shouldReturnEmptyAfterUnregister() {
+            var endpoint = new EndpointConfig("/api/data", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var service = ServiceRegistration.builder("lookup-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
+            registry.register(service).await().atMost(TIMEOUT);
+            registry.unregister("lookup-service").await().atMost(TIMEOUT);
+
+            assertTrue(registry.getServiceFromLocalCache("lookup-service").isEmpty());
+        }
+    }
+
     private ServiceRegistration createService(String serviceId, String baseUrl) {
         return ServiceRegistration.builder(serviceId)
                 .baseUrl(baseUrl)

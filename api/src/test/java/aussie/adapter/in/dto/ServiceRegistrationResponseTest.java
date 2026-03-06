@@ -36,6 +36,7 @@ class ServiceRegistrationResponseTest {
                 Optional.empty(),
                 Optional.of(rateLimitConfig),
                 Optional.empty(),
+                Optional.empty(),
                 1L);
 
         var response = ServiceRegistrationResponse.fromModel(registration);
@@ -58,6 +59,7 @@ class ServiceRegistrationResponseTest {
                 true,
                 List.of(),
                 List.of(),
+                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
@@ -87,6 +89,7 @@ class ServiceRegistrationResponseTest {
                 Optional.empty(),
                 Optional.empty(),
                 Optional.of(rateLimitConfig),
+                Optional.empty(),
                 Optional.empty(),
                 5L);
 

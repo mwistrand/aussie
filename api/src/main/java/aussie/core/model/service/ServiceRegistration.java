@@ -12,6 +12,7 @@ import aussie.core.model.auth.ServiceAccessConfig;
 import aussie.core.model.auth.ServicePermissionPolicy;
 import aussie.core.model.auth.VisibilityRule;
 import aussie.core.model.common.CorsConfig;
+import aussie.core.model.common.ServiceSecurityHeadersConfig;
 import aussie.core.model.ratelimit.ServiceRateLimitConfig;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
@@ -48,6 +49,7 @@ import aussie.core.model.sampling.ServiceSamplingConfig;
  * @param permissionPolicy permission policy for authorization
  * @param rateLimitConfig service-level rate limit configuration
  * @param samplingConfig service-level OTel sampling configuration
+ * @param securityHeadersConfig per-service security header overrides
  * @param version optimistic locking version for concurrent updates
  */
 public record ServiceRegistration(
@@ -64,6 +66,7 @@ public record ServiceRegistration(
         Optional<ServicePermissionPolicy> permissionPolicy,
         Optional<ServiceRateLimitConfig> rateLimitConfig,
         Optional<ServiceSamplingConfig> samplingConfig,
+        Optional<ServiceSecurityHeadersConfig> securityHeadersConfig,
         long version) {
     public ServiceRegistration {
         if (serviceId == null || serviceId.isBlank()) {
@@ -102,6 +105,9 @@ public record ServiceRegistration(
         if (samplingConfig == null) {
             samplingConfig = Optional.empty();
         }
+        if (securityHeadersConfig == null) {
+            securityHeadersConfig = Optional.empty();
+        }
         if (version < 0) {
             version = 1;
         }
@@ -125,6 +131,7 @@ public record ServiceRegistration(
                 permissionPolicy,
                 rateLimitConfig,
                 samplingConfig,
+                securityHeadersConfig,
                 version + 1);
     }
 
@@ -146,6 +153,7 @@ public record ServiceRegistration(
                 Optional.ofNullable(policy),
                 rateLimitConfig,
                 samplingConfig,
+                securityHeadersConfig,
                 version);
     }
 
@@ -167,6 +175,7 @@ public record ServiceRegistration(
                 permissionPolicy,
                 Optional.ofNullable(config),
                 samplingConfig,
+                securityHeadersConfig,
                 version);
     }
 
@@ -187,6 +196,29 @@ public record ServiceRegistration(
                 corsConfig,
                 permissionPolicy,
                 rateLimitConfig,
+                Optional.ofNullable(config),
+                securityHeadersConfig,
+                version);
+    }
+
+    /**
+     * Create a new ServiceRegistration with the given security headers config.
+     */
+    public ServiceRegistration withSecurityHeadersConfig(ServiceSecurityHeadersConfig config) {
+        return new ServiceRegistration(
+                serviceId,
+                displayName,
+                baseUrl,
+                routePrefix,
+                defaultVisibility,
+                defaultAuthRequired,
+                visibilityRules,
+                endpoints,
+                accessConfig,
+                corsConfig,
+                permissionPolicy,
+                rateLimitConfig,
+                samplingConfig,
                 Optional.ofNullable(config),
                 version);
     }
@@ -289,6 +321,7 @@ public record ServiceRegistration(
         private ServicePermissionPolicy permissionPolicy;
         private ServiceRateLimitConfig rateLimitConfig;
         private ServiceSamplingConfig samplingConfig;
+        private ServiceSecurityHeadersConfig securityHeadersConfig;
         private long version = 1;
 
         private Builder(String serviceId) {
@@ -360,6 +393,11 @@ public record ServiceRegistration(
             return this;
         }
 
+        public Builder securityHeadersConfig(ServiceSecurityHeadersConfig securityHeadersConfig) {
+            this.securityHeadersConfig = securityHeadersConfig;
+            return this;
+        }
+
         public Builder version(long version) {
             this.version = version;
             return this;
@@ -380,6 +418,7 @@ public record ServiceRegistration(
                     Optional.ofNullable(permissionPolicy),
                     Optional.ofNullable(rateLimitConfig),
                     Optional.ofNullable(samplingConfig),
+                    Optional.ofNullable(securityHeadersConfig),
                     version);
         }
     }

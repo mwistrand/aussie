@@ -125,6 +125,26 @@ All durations use ISO-8601 format (e.g., `PT30S` for 30 seconds, `PT1H` for 1 ho
 
 **Security considerations:** HSTS (`strict-transport-security`) must only be enabled when TLS termination is confirmed. Incorrect HSTS configuration can lock browsers out of your site for the duration of `max-age`. The defaults follow OWASP recommendations.
 
+### 3.1 Per-Service Security Header Overrides
+
+**Model:** `aussie.core.model.common.ServiceSecurityHeadersConfig`
+**Source:** `api/src/main/java/aussie/core/model/common/ServiceSecurityHeadersConfig.java`
+
+Services can override individual security headers by including a `securityHeadersConfig` object in their registration JSON. All fields are optional; absent fields fall through to the global defaults above.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `contentTypeOptions` | `String` | Override for `X-Content-Type-Options`. |
+| `frameOptions` | `String` | Override for `X-Frame-Options`. |
+| `contentSecurityPolicy` | `String` | Override for `Content-Security-Policy`. |
+| `referrerPolicy` | `String` | Override for `Referrer-Policy`. |
+| `permittedCrossDomainPolicies` | `String` | Override for `X-Permitted-Cross-Domain-Policies`. |
+| `strictTransportSecurity` | `String` | Override for `Strict-Transport-Security`. |
+| `permissionsPolicy` | `String` | Override for `Permissions-Policy`. |
+| `customHeaders` | `Map<String, String>` | Arbitrary additional response headers. |
+
+**Suppression:** Setting any field to an empty string (`""`) suppresses that header entirely for the service.
+
 ## 4. Authentication
 
 ### 4.1 Core Auth Properties

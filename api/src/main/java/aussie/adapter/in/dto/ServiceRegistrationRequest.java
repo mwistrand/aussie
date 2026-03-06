@@ -107,6 +107,7 @@ public record ServiceRegistrationRequest(
                 permissionPolicyModel,
                 rateLimitConfigModel,
                 samplingConfigModel,
+                Optional.empty(), // securityHeadersConfig - not set via registration request
                 version == null ? 1L : version); // New registrations start at version 1
     }
 }

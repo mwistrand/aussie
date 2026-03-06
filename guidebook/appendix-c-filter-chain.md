@@ -142,7 +142,7 @@ For non-preflight requests, the filter always calls `next()`, even if the origin
 
 **File:** `api/src/main/java/aussie/adapter/in/http/SecurityHeadersFilter.java`
 
-This filter adds OWASP-recommended security response headers to every response. It runs after CORS (priority 90 < 100) so that CORS headers set by `CorsFilter` are not overwritten. The filter reads a `SecurityHeadersConfig` from CDI and sets five headers unconditionally and two optionally:
+This filter adds OWASP-recommended security response headers to every response. It runs after CORS (priority 90 < 100) so that CORS headers set by `CorsFilter` are not overwritten. The filter reads global defaults from `SecurityHeadersConfig` and resolves per-service overrides from the local route cache via `ServiceRegistry.getServiceFromLocalCache()`. When a service declares header overrides, those values replace the global defaults; an empty string override suppresses the header. The filter sets five headers unconditionally and two optionally:
 
 | Header | Default | Purpose |
 |--------|---------|---------|

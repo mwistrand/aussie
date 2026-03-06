@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.core.model.auth.*;
-import aussie.core.model.ratelimit.*;
+import aussie.core.model.common.ServiceSecurityHeadersConfig;
 import aussie.core.model.routing.*;
 import aussie.core.model.service.*;
 
@@ -115,6 +115,7 @@ class ServiceRegistrationTest {
                     Optional.empty(), // permissionPolicy
                     Optional.empty(), // rateLimitConfig
                     Optional.empty(), // samplingConfig
+                    Optional.empty(), // securityHeadersConfig
                     1L); // version
 
             assertNotNull(service);
@@ -138,6 +139,42 @@ class ServiceRegistrationTest {
 
             assertEquals(service1, service2);
             assertEquals(service1.hashCode(), service2.hashCode());
+        }
+    }
+
+    @Nested
+    @DisplayName("With methods")
+    class WithMethodTests {
+
+        @Test
+        @DisplayName("Should return new instance with security headers config")
+        void shouldSetSecurityHeadersConfig() {
+            var base = ServiceRegistration.builder("svc")
+                    .baseUrl("http://localhost:8080")
+                    .build();
+            var config =
+                    ServiceSecurityHeadersConfig.builder().frameOptions("DENY").build();
+
+            var updated = base.withSecurityHeadersConfig(config);
+
+            assertTrue(updated.securityHeadersConfig().isPresent());
+            assertEquals(
+                    "DENY", updated.securityHeadersConfig().get().frameOptions().orElseThrow());
+            assertTrue(base.securityHeadersConfig().isEmpty());
+        }
+
+        @Test
+        @DisplayName("Should clear security headers config when null is passed")
+        void shouldClearSecurityHeadersConfig() {
+            var base = ServiceRegistration.builder("svc")
+                    .baseUrl("http://localhost:8080")
+                    .securityHeadersConfig(
+                            ServiceSecurityHeadersConfig.builder().build())
+                    .build();
+
+            var updated = base.withSecurityHeadersConfig(null);
+
+            assertTrue(updated.securityHeadersConfig().isEmpty());
         }
     }
 
