@@ -55,7 +55,7 @@ class ApiKeyServiceTest {
                             null,
                             "test-creator")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNotNull(result.keyId());
             assertNotNull(result.plaintextKey());
@@ -75,7 +75,7 @@ class ApiKeyServiceTest {
             var result = apiKeyService
                     .create("expiring-key", null, null, Set.of(), Duration.ofDays(30), "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNotNull(result.metadata().expiresAt());
         }
@@ -86,7 +86,7 @@ class ApiKeyServiceTest {
             var result = apiKeyService
                     .create("permanent-key", null, null, Set.of(), null, "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertTrue(result.metadata().expiresAt() == null);
         }
@@ -97,11 +97,11 @@ class ApiKeyServiceTest {
             var result1 = apiKeyService
                     .create("key1", null, null, Set.of(), null, "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
             var result2 = apiKeyService
                     .create("key2", null, null, Set.of(), null, "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNotEquals(result1.keyId(), result2.keyId());
         }
@@ -112,11 +112,11 @@ class ApiKeyServiceTest {
             var result1 = apiKeyService
                     .create("key1", null, null, Set.of(), null, "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
             var result2 = apiKeyService
                     .create("key2", null, null, Set.of(), null, "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNotEquals(result1.plaintextKey(), result2.plaintextKey());
         }
@@ -127,13 +127,13 @@ class ApiKeyServiceTest {
             var result = apiKeyService
                     .create("team-key", "Team key", "platform-team", Set.of(), null, "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertEquals("platform-team", result.metadata().teamId());
 
             // Validate the key and ensure teamId is preserved
             var validated =
-                    apiKeyService.validate(result.plaintextKey()).await().indefinitely();
+                    apiKeyService.validate(result.plaintextKey()).await().atMost(Duration.ofSeconds(5));
             assertTrue(validated.isPresent());
             assertEquals("platform-team", validated.get().teamId());
         }
@@ -149,10 +149,10 @@ class ApiKeyServiceTest {
             var createResult = apiKeyService
                     .create("valid-key", null, null, Set.of(Permission.SERVICE_CONFIG_READ_VALUE), null, "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             var validateResult =
-                    apiKeyService.validate(createResult.plaintextKey()).await().indefinitely();
+                    apiKeyService.validate(createResult.plaintextKey()).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(validateResult.isPresent());
             assertEquals(createResult.keyId(), validateResult.get().id());
@@ -161,7 +161,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return empty for non-existent key")
         void shouldReturnEmptyForNonExistentKey() {
-            var result = apiKeyService.validate("non-existent-key").await().indefinitely();
+            var result = apiKeyService.validate("non-existent-key").await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isEmpty());
         }
@@ -169,7 +169,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return empty for null key")
         void shouldReturnEmptyForNullKey() {
-            var result = apiKeyService.validate(null).await().indefinitely();
+            var result = apiKeyService.validate(null).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isEmpty());
         }
@@ -177,7 +177,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return empty for blank key")
         void shouldReturnEmptyForBlankKey() {
-            var result = apiKeyService.validate("   ").await().indefinitely();
+            var result = apiKeyService.validate("   ").await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isEmpty());
         }
@@ -188,11 +188,11 @@ class ApiKeyServiceTest {
             var createResult = apiKeyService
                     .create("to-revoke", null, null, Set.of(), null, "test")
                     .await()
-                    .indefinitely();
-            apiKeyService.revoke(createResult.keyId()).await().indefinitely();
+                    .atMost(Duration.ofSeconds(5));
+            apiKeyService.revoke(createResult.keyId()).await().atMost(Duration.ofSeconds(5));
 
             var validateResult =
-                    apiKeyService.validate(createResult.plaintextKey()).await().indefinitely();
+                    apiKeyService.validate(createResult.plaintextKey()).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(validateResult.isEmpty());
         }
@@ -205,7 +205,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return empty list when no keys exist")
         void shouldReturnEmptyListWhenNoKeysExist() {
-            var result = apiKeyService.list().await().indefinitely();
+            var result = apiKeyService.list().await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isEmpty());
         }
@@ -216,13 +216,13 @@ class ApiKeyServiceTest {
             apiKeyService
                     .create("key1", null, null, Set.of(), null, "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
             apiKeyService
                     .create("key2", null, null, Set.of(), null, "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
-            var result = apiKeyService.list().await().indefinitely();
+            var result = apiKeyService.list().await().atMost(Duration.ofSeconds(5));
 
             assertEquals(2, result.size());
             assertTrue(result.stream().allMatch(k -> k.keyHash().equals("[REDACTED]")));
@@ -239,9 +239,9 @@ class ApiKeyServiceTest {
             var createResult = apiKeyService
                     .create("to-revoke", null, null, Set.of(), null, "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
-            boolean result = apiKeyService.revoke(createResult.keyId()).await().indefinitely();
+            boolean result = apiKeyService.revoke(createResult.keyId()).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result);
         }
@@ -249,7 +249,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return false when key does not exist")
         void shouldReturnFalseWhenKeyDoesNotExist() {
-            boolean result = apiKeyService.revoke("non-existent").await().indefinitely();
+            boolean result = apiKeyService.revoke("non-existent").await().atMost(Duration.ofSeconds(5));
 
             assertFalse(result);
         }
@@ -260,10 +260,10 @@ class ApiKeyServiceTest {
             var createResult = apiKeyService
                     .create("to-revoke", null, null, Set.of(), null, "test")
                     .await()
-                    .indefinitely();
-            apiKeyService.revoke(createResult.keyId()).await().indefinitely();
+                    .atMost(Duration.ofSeconds(5));
+            apiKeyService.revoke(createResult.keyId()).await().atMost(Duration.ofSeconds(5));
 
-            var list = apiKeyService.list().await().indefinitely();
+            var list = apiKeyService.list().await().atMost(Duration.ofSeconds(5));
             var revokedKey = list.stream()
                     .filter(k -> k.id().equals(createResult.keyId()))
                     .findFirst();
@@ -283,9 +283,9 @@ class ApiKeyServiceTest {
             var createResult = apiKeyService
                     .create("get-test", null, null, Set.of(), null, "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
-            var result = apiKeyService.get(createResult.keyId()).await().indefinitely();
+            var result = apiKeyService.get(createResult.keyId()).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isPresent());
             assertEquals("[REDACTED]", result.get().keyHash());
@@ -294,7 +294,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should return empty for non-existent key")
         void shouldReturnEmptyForNonExistentKey() {
-            var result = apiKeyService.get("non-existent").await().indefinitely();
+            var result = apiKeyService.get("non-existent").await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isEmpty());
         }
@@ -324,7 +324,7 @@ class ApiKeyServiceTest {
                             specifiedKey,
                             "bootstrap")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNotNull(result.keyId());
             assertEquals(specifiedKey, result.plaintextKey());
@@ -348,9 +348,9 @@ class ApiKeyServiceTest {
                             specifiedKey,
                             "bootstrap")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
-            var validateResult = apiKeyService.validate(specifiedKey).await().indefinitely();
+            var validateResult = apiKeyService.validate(specifiedKey).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(validateResult.isPresent());
             assertEquals("validate-test", validateResult.get().name());
@@ -394,7 +394,7 @@ class ApiKeyServiceTest {
             var result = apiKeyService
                     .createWithKey("ttl-bootstrap", null, null, Set.of(), Duration.ofDays(7), specifiedKey, "bootstrap")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNotNull(result.metadata().expiresAt());
         }
@@ -429,7 +429,7 @@ class ApiKeyServiceTest {
             var result = restrictedService
                     .create("valid-ttl-key", null, null, Set.of(), Duration.ofDays(7), "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNotNull(result.keyId());
         }

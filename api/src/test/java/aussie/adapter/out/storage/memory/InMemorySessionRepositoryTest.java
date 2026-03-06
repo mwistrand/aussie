@@ -49,7 +49,7 @@ class InMemorySessionRepositoryTest {
         void shouldReturnTrueWhenSessionIsNew() {
             var session = createTestSession("session-1", "user-1");
 
-            var result = repository.saveIfAbsent(session).await().indefinitely();
+            var result = repository.saveIfAbsent(session).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result);
         }
@@ -60,8 +60,8 @@ class InMemorySessionRepositoryTest {
             var session1 = createTestSession("session-1", "user-1");
             var session2 = createTestSession("session-1", "user-2");
 
-            repository.saveIfAbsent(session1).await().indefinitely();
-            var result = repository.saveIfAbsent(session2).await().indefinitely();
+            repository.saveIfAbsent(session1).await().atMost(Duration.ofSeconds(5));
+            var result = repository.saveIfAbsent(session2).await().atMost(Duration.ofSeconds(5));
 
             assertFalse(result);
         }
@@ -72,10 +72,10 @@ class InMemorySessionRepositoryTest {
             var session1 = createTestSession("session-1", "user-1");
             var session2 = createTestSession("session-1", "user-2");
 
-            repository.saveIfAbsent(session1).await().indefinitely();
-            repository.saveIfAbsent(session2).await().indefinitely();
+            repository.saveIfAbsent(session1).await().atMost(Duration.ofSeconds(5));
+            repository.saveIfAbsent(session2).await().atMost(Duration.ofSeconds(5));
 
-            var found = repository.findById("session-1").await().indefinitely();
+            var found = repository.findById("session-1").await().atMost(Duration.ofSeconds(5));
             assertTrue(found.isPresent());
             assertEquals("user-1", found.get().userId());
         }
@@ -90,7 +90,7 @@ class InMemorySessionRepositoryTest {
         void shouldSaveNewSession() {
             var session = createTestSession("session-1", "user-1");
 
-            var result = repository.save(session).await().indefinitely();
+            var result = repository.save(session).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(session.id(), result.id());
         }
@@ -101,10 +101,10 @@ class InMemorySessionRepositoryTest {
             var session1 = createTestSession("session-1", "user-1");
             var session2 = createTestSession("session-1", "user-2");
 
-            repository.save(session1).await().indefinitely();
-            repository.save(session2).await().indefinitely();
+            repository.save(session1).await().atMost(Duration.ofSeconds(5));
+            repository.save(session2).await().atMost(Duration.ofSeconds(5));
 
-            var found = repository.findById("session-1").await().indefinitely();
+            var found = repository.findById("session-1").await().atMost(Duration.ofSeconds(5));
             assertTrue(found.isPresent());
             assertEquals("user-2", found.get().userId());
         }
@@ -118,9 +118,9 @@ class InMemorySessionRepositoryTest {
         @DisplayName("should return session when found")
         void shouldReturnSessionWhenFound() {
             var session = createTestSession("session-1", "user-1");
-            repository.save(session).await().indefinitely();
+            repository.save(session).await().atMost(Duration.ofSeconds(5));
 
-            var result = repository.findById("session-1").await().indefinitely();
+            var result = repository.findById("session-1").await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isPresent());
             assertEquals("session-1", result.get().id());
@@ -129,7 +129,7 @@ class InMemorySessionRepositoryTest {
         @Test
         @DisplayName("should return empty when not found")
         void shouldReturnEmptyWhenNotFound() {
-            var result = repository.findById("non-existent").await().indefinitely();
+            var result = repository.findById("non-existent").await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isEmpty());
         }
@@ -148,9 +148,9 @@ class InMemorySessionRepositoryTest {
                     Instant.now().minus(Duration.ofHours(10)),
                     null,
                     null);
-            repository.save(expiredSession).await().indefinitely();
+            repository.save(expiredSession).await().atMost(Duration.ofSeconds(5));
 
-            var result = repository.findById("expired-session").await().indefinitely();
+            var result = repository.findById("expired-session").await().atMost(Duration.ofSeconds(5));
 
             // Repository should return the session regardless of expiration
             // Expiration checking is the service layer's responsibility
@@ -166,12 +166,12 @@ class InMemorySessionRepositoryTest {
         @DisplayName("should update session")
         void shouldUpdateSession() {
             var session = createTestSession("session-1", "user-1");
-            repository.save(session).await().indefinitely();
+            repository.save(session).await().atMost(Duration.ofSeconds(5));
 
             var updated = session.withLastAccessedAt(Instant.now());
-            repository.update(updated).await().indefinitely();
+            repository.update(updated).await().atMost(Duration.ofSeconds(5));
 
-            var found = repository.findById("session-1").await().indefinitely();
+            var found = repository.findById("session-1").await().atMost(Duration.ofSeconds(5));
             assertTrue(found.isPresent());
             assertEquals(updated.lastAccessedAt(), found.get().lastAccessedAt());
         }
@@ -185,11 +185,11 @@ class InMemorySessionRepositoryTest {
         @DisplayName("should delete session")
         void shouldDeleteSession() {
             var session = createTestSession("session-1", "user-1");
-            repository.save(session).await().indefinitely();
+            repository.save(session).await().atMost(Duration.ofSeconds(5));
 
-            repository.delete("session-1").await().indefinitely();
+            repository.delete("session-1").await().atMost(Duration.ofSeconds(5));
 
-            var found = repository.findById("session-1").await().indefinitely();
+            var found = repository.findById("session-1").await().atMost(Duration.ofSeconds(5));
             assertTrue(found.isEmpty());
         }
 
@@ -197,7 +197,7 @@ class InMemorySessionRepositoryTest {
         @DisplayName("should handle deleting non-existent session")
         void shouldHandleDeletingNonExistentSession() {
             // Should not throw
-            repository.delete("non-existent").await().indefinitely();
+            repository.delete("non-existent").await().atMost(Duration.ofSeconds(5));
         }
     }
 
@@ -212,15 +212,27 @@ class InMemorySessionRepositoryTest {
             var session2 = createTestSession("session-2", "user-1");
             var session3 = createTestSession("session-3", "user-2");
 
-            repository.save(session1).await().indefinitely();
-            repository.save(session2).await().indefinitely();
-            repository.save(session3).await().indefinitely();
+            repository.save(session1).await().atMost(Duration.ofSeconds(5));
+            repository.save(session2).await().atMost(Duration.ofSeconds(5));
+            repository.save(session3).await().atMost(Duration.ofSeconds(5));
 
-            repository.deleteByUserId("user-1").await().indefinitely();
+            repository.deleteByUserId("user-1").await().atMost(Duration.ofSeconds(5));
 
-            assertTrue(repository.findById("session-1").await().indefinitely().isEmpty());
-            assertTrue(repository.findById("session-2").await().indefinitely().isEmpty());
-            assertTrue(repository.findById("session-3").await().indefinitely().isPresent());
+            assertTrue(repository
+                    .findById("session-1")
+                    .await()
+                    .atMost(Duration.ofSeconds(5))
+                    .isEmpty());
+            assertTrue(repository
+                    .findById("session-2")
+                    .await()
+                    .atMost(Duration.ofSeconds(5))
+                    .isEmpty());
+            assertTrue(repository
+                    .findById("session-3")
+                    .await()
+                    .atMost(Duration.ofSeconds(5))
+                    .isPresent());
         }
     }
 
@@ -232,9 +244,9 @@ class InMemorySessionRepositoryTest {
         @DisplayName("should return true when session exists")
         void shouldReturnTrueWhenSessionExists() {
             var session = createTestSession("session-1", "user-1");
-            repository.save(session).await().indefinitely();
+            repository.save(session).await().atMost(Duration.ofSeconds(5));
 
-            var result = repository.exists("session-1").await().indefinitely();
+            var result = repository.exists("session-1").await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result);
         }
@@ -242,7 +254,7 @@ class InMemorySessionRepositoryTest {
         @Test
         @DisplayName("should return false when session does not exist")
         void shouldReturnFalseWhenSessionDoesNotExist() {
-            var result = repository.exists("non-existent").await().indefinitely();
+            var result = repository.exists("non-existent").await().atMost(Duration.ofSeconds(5));
 
             assertFalse(result);
         }

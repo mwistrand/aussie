@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Duration;
 import java.util.Set;
 
 import io.quarkus.security.identity.IdentityProviderManager;
@@ -60,7 +61,7 @@ class JwtAuthenticationMechanismTest {
             SecurityIdentity result = mechanism
                     .authenticate(routingContext, identityProviderManager)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNull(result);
             verify(identityProviderManager, never()).authenticate(any());
@@ -75,7 +76,7 @@ class JwtAuthenticationMechanismTest {
             SecurityIdentity result = mechanism
                     .authenticate(routingContext, identityProviderManager)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNull(result);
             verify(identityProviderManager, never()).authenticate(any());
@@ -90,7 +91,7 @@ class JwtAuthenticationMechanismTest {
             SecurityIdentity result = mechanism
                     .authenticate(routingContext, identityProviderManager)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNull(result);
             verify(identityProviderManager, never()).authenticate(any());
@@ -105,7 +106,7 @@ class JwtAuthenticationMechanismTest {
             SecurityIdentity result = mechanism
                     .authenticate(routingContext, identityProviderManager)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNull(result);
             verify(identityProviderManager, never()).authenticate(any());
@@ -120,7 +121,7 @@ class JwtAuthenticationMechanismTest {
             SecurityIdentity result = mechanism
                     .authenticate(routingContext, identityProviderManager)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNull(result);
             verify(identityProviderManager, never()).authenticate(any());
@@ -135,7 +136,7 @@ class JwtAuthenticationMechanismTest {
             SecurityIdentity result = mechanism
                     .authenticate(routingContext, identityProviderManager)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNull(result);
             verify(identityProviderManager, never()).authenticate(any());
@@ -156,7 +157,7 @@ class JwtAuthenticationMechanismTest {
             SecurityIdentity result = mechanism
                     .authenticate(routingContext, identityProviderManager)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNotNull(result);
             assertEquals(mockIdentity, result);
@@ -177,7 +178,7 @@ class JwtAuthenticationMechanismTest {
         @Test
         @DisplayName("should return 401 with WWW-Authenticate header")
         void shouldReturn401Challenge() {
-            var challenge = mechanism.getChallenge(routingContext).await().indefinitely();
+            var challenge = mechanism.getChallenge(routingContext).await().atMost(Duration.ofSeconds(5));
 
             assertNotNull(challenge);
             assertEquals(401, challenge.status);
@@ -208,7 +209,7 @@ class JwtAuthenticationMechanismTest {
         @DisplayName("should return non-null credential transport")
         void shouldReturnCredentialTransport() {
             var transport =
-                    mechanism.getCredentialTransport(routingContext).await().indefinitely();
+                    mechanism.getCredentialTransport(routingContext).await().atMost(Duration.ofSeconds(5));
 
             assertNotNull(transport);
         }

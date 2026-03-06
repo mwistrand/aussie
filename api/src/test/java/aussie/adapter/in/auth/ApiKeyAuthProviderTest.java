@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.util.Optional;
 import java.util.Set;
 
@@ -114,7 +115,7 @@ class ApiKeyAuthProviderTest {
                             null,
                             "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             var headers = new MultivaluedHashMap<String, String>();
             headers.putSingle("Authorization", "Bearer " + createResult.plaintextKey());
@@ -136,8 +137,8 @@ class ApiKeyAuthProviderTest {
             var createResult = apiKeyService
                     .create("revoked-key", null, null, Set.of(), null, "test")
                     .await()
-                    .indefinitely();
-            apiKeyService.revoke(createResult.keyId()).await().indefinitely();
+                    .atMost(Duration.ofSeconds(5));
+            apiKeyService.revoke(createResult.keyId()).await().atMost(Duration.ofSeconds(5));
 
             var headers = new MultivaluedHashMap<String, String>();
             headers.putSingle("Authorization", "Bearer " + createResult.plaintextKey());

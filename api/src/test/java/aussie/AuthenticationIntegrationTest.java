@@ -2,6 +2,7 @@ package aussie;
 
 import static io.restassured.RestAssured.given;
 
+import java.time.Duration;
 import java.util.Set;
 
 import jakarta.inject.Inject;
@@ -43,13 +44,13 @@ public class AuthenticationIntegrationTest {
         var fullAccessResult = apiKeyService
                 .create("test-full", null, null, Set.of(Permission.ALL_VALUE), null, "test")
                 .await()
-                .indefinitely();
+                .atMost(Duration.ofSeconds(5));
         validApiKey = fullAccessResult.plaintextKey();
 
         var readOnlyResult = apiKeyService
                 .create("test-readonly", null, null, Set.of(Permission.SERVICE_CONFIG_READ_VALUE), null, "test")
                 .await()
-                .indefinitely();
+                .atMost(Duration.ofSeconds(5));
         readOnlyApiKey = readOnlyResult.plaintextKey();
     }
 

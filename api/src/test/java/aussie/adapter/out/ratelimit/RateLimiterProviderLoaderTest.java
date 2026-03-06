@@ -17,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.adapter.out.ratelimit.memory.InMemoryRateLimiter;
+import aussie.adapter.out.ratelimit.redis.RedisRateLimiter;
 import aussie.core.config.RateLimitingConfig;
 import aussie.core.model.ratelimit.AlgorithmRegistry;
 import aussie.core.model.ratelimit.RateLimitAlgorithm;
@@ -89,6 +90,42 @@ class RateLimiterProviderLoaderTest {
             when(config.redis()).thenReturn(redisConfig);
             when(redisConfig.enabled()).thenReturn(true);
             when(redisDataSource.isResolvable()).thenReturn(false);
+            when(config.algorithm()).thenReturn(RateLimitAlgorithm.BUCKET);
+            when(config.defaultRequestsPerWindow()).thenReturn(100L);
+            when(config.windowSeconds()).thenReturn(60L);
+
+            final var loader = createLoader();
+            producedLimiter = loader.produceRateLimiter();
+
+            assertInstanceOf(InMemoryRateLimiter.class, producedLimiter);
+        }
+
+        @Test
+        @DisplayName("should use Redis limiter when Redis is enabled, resolvable, and available")
+        void shouldUseRedisWhenAvailable() {
+            when(config.enabled()).thenReturn(true);
+            when(config.redis()).thenReturn(redisConfig);
+            when(redisConfig.enabled()).thenReturn(true);
+            when(redisDataSource.isResolvable()).thenReturn(true);
+            when(redisDataSource.get()).thenReturn(mock(ReactiveRedisDataSource.class));
+            when(config.algorithm()).thenReturn(RateLimitAlgorithm.BUCKET);
+            when(config.defaultRequestsPerWindow()).thenReturn(100L);
+            when(config.windowSeconds()).thenReturn(60L);
+
+            final var loader = createLoader();
+            producedLimiter = loader.produceRateLimiter();
+
+            assertInstanceOf(RedisRateLimiter.class, producedLimiter);
+        }
+
+        @Test
+        @DisplayName("should fall back to in-memory when Redis get() throws")
+        void shouldFallbackWhenRedisGetThrows() {
+            when(config.enabled()).thenReturn(true);
+            when(config.redis()).thenReturn(redisConfig);
+            when(redisConfig.enabled()).thenReturn(true);
+            when(redisDataSource.isResolvable()).thenReturn(true);
+            when(redisDataSource.get()).thenThrow(new RuntimeException("Redis unavailable"));
             when(config.algorithm()).thenReturn(RateLimitAlgorithm.BUCKET);
             when(config.defaultRequestsPerWindow()).thenReturn(100L);
             when(config.windowSeconds()).thenReturn(60L);

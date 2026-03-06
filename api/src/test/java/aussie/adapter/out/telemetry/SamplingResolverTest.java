@@ -503,7 +503,7 @@ class SamplingResolverTest {
         @Test
         @DisplayName("should return platform default for null service ID")
         void shouldReturnPlatformDefaultForNullServiceId() {
-            var rate = resolver.resolveByServiceIdAsync(null).await().indefinitely();
+            var rate = resolver.resolveByServiceIdAsync(null).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(1.0, rate.rate());
             assertEquals(SamplingSource.PLATFORM, rate.source());
@@ -512,7 +512,7 @@ class SamplingResolverTest {
         @Test
         @DisplayName("should return platform default for 'unknown' service ID")
         void shouldReturnPlatformDefaultForUnknownServiceId() {
-            var rate = resolver.resolveByServiceIdAsync("unknown").await().indefinitely();
+            var rate = resolver.resolveByServiceIdAsync("unknown").await().atMost(Duration.ofSeconds(5));
 
             assertEquals(1.0, rate.rate());
             assertEquals(SamplingSource.PLATFORM, rate.source());
@@ -525,7 +525,7 @@ class SamplingResolverTest {
             when(repository.findByServiceId("async-service"))
                     .thenReturn(Uni.createFrom().item(Optional.of(serviceConfig)));
 
-            var rate = resolver.resolveByServiceIdAsync("async-service").await().indefinitely();
+            var rate = resolver.resolveByServiceIdAsync("async-service").await().atMost(Duration.ofSeconds(5));
 
             assertEquals(0.6, rate.rate());
             assertEquals(SamplingSource.SERVICE, rate.source());
@@ -537,7 +537,7 @@ class SamplingResolverTest {
             when(repository.findByServiceId("error-service"))
                     .thenReturn(Uni.createFrom().failure(new RuntimeException("Timeout")));
 
-            var rate = resolver.resolveByServiceIdAsync("error-service").await().indefinitely();
+            var rate = resolver.resolveByServiceIdAsync("error-service").await().atMost(Duration.ofSeconds(5));
 
             assertEquals(1.0, rate.rate());
             assertEquals(SamplingSource.PLATFORM, rate.source());
@@ -561,7 +561,7 @@ class SamplingResolverTest {
                     .thenReturn(Uni.createFrom().item(Optional.of(serviceConfig)));
 
             // Async lookup
-            resolver.resolveByServiceIdAsync("async-cached").await().indefinitely();
+            resolver.resolveByServiceIdAsync("async-cached").await().atMost(Duration.ofSeconds(5));
             // Sync lookup should use cache
             var rate = resolver.resolveByServiceId("async-cached");
 

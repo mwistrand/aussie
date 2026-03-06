@@ -598,4 +598,188 @@ class AuthRateLimitServiceTest {
             assertFalse(service.isEnabled());
         }
     }
+
+    @Nested
+    @DisplayName("isLockedOut()")
+    class IsLockedOutTests {
+
+        @Test
+        @DisplayName("should delegate to repository")
+        void shouldDelegateToRepository() {
+            when(repository.isLockedOut("ip:192.168.1.1"))
+                    .thenReturn(Uni.createFrom().item(true));
+
+            final var result = service.isLockedOut("ip:192.168.1.1").await().atMost(Duration.ofSeconds(1));
+
+            assertTrue(result);
+            verify(repository).isLockedOut("ip:192.168.1.1");
+        }
+
+        @Test
+        @DisplayName("should return false when not locked out")
+        void shouldReturnFalseWhenNotLockedOut() {
+            when(repository.isLockedOut("ip:10.0.0.1"))
+                    .thenReturn(Uni.createFrom().item(false));
+
+            final var result = service.isLockedOut("ip:10.0.0.1").await().atMost(Duration.ofSeconds(1));
+
+            assertFalse(result);
+        }
+    }
+
+    @Nested
+    @DisplayName("checkApiKeyLimit() edge cases")
+    class CheckApiKeyLimitEdgeCaseTests {
+
+        @Test
+        @DisplayName("should allow when disabled")
+        void shouldAllowWhenDisabled() {
+            when(config.enabled()).thenReturn(false);
+            service = new AuthRateLimitService(config, repository);
+
+            final var result =
+                    service.checkApiKeyLimit("192.168.1.1", "sk_live_").await().atMost(Duration.ofSeconds(1));
+
+            assertTrue(result.isAllowed());
+        }
+
+        @Test
+        @DisplayName("should block when IP is locked out for API key check")
+        void shouldBlockWhenIpLockedOutForApiKeyCheck() {
+            final var expiry = Instant.now().plus(Duration.ofMinutes(10));
+            when(repository.isLockedOut("ip:192.168.1.1"))
+                    .thenReturn(Uni.createFrom().item(true));
+            when(repository.getLockoutExpiry("ip:192.168.1.1"))
+                    .thenReturn(Uni.createFrom().item(expiry));
+
+            final var result =
+                    service.checkApiKeyLimit("192.168.1.1", "sk_live_").await().atMost(Duration.ofSeconds(1));
+
+            assertFalse(result.allowed());
+            assertEquals("ip:192.168.1.1", result.key());
+        }
+
+        @Test
+        @DisplayName("should handle null IP for API key limit check")
+        void shouldHandleNullIpForApiKeyLimitCheck() {
+            when(repository.isLockedOut("apikey:sk_live_"))
+                    .thenReturn(Uni.createFrom().item(false));
+
+            final var result =
+                    service.checkApiKeyLimit(null, "sk_live_").await().atMost(Duration.ofSeconds(1));
+
+            assertTrue(result.isAllowed());
+            verify(repository, never()).isLockedOut("ip:null");
+        }
+
+        @Test
+        @DisplayName("should handle null key prefix for API key limit check")
+        void shouldHandleNullKeyPrefixForApiKeyLimitCheck() {
+            when(repository.isLockedOut("ip:192.168.1.1"))
+                    .thenReturn(Uni.createFrom().item(false));
+
+            final var result =
+                    service.checkApiKeyLimit("192.168.1.1", null).await().atMost(Duration.ofSeconds(1));
+
+            assertTrue(result.isAllowed());
+        }
+    }
+
+    @Nested
+    @DisplayName("checkLockout() with null expiry")
+    class CheckLockoutNullExpiryTests {
+
+        @Test
+        @DisplayName("should use config lockout duration when expiry is null")
+        void shouldUseConfigDurationWhenExpiryNull() {
+            when(repository.isLockedOut("ip:192.168.1.1"))
+                    .thenReturn(Uni.createFrom().item(true));
+            when(repository.getLockoutExpiry("ip:192.168.1.1"))
+                    .thenReturn(Uni.createFrom().nullItem());
+
+            final var result =
+                    service.checkAuthLimit("192.168.1.1", null).await().atMost(Duration.ofSeconds(1));
+
+            assertFalse(result.allowed());
+            // Should use config lockout duration (15 minutes = 900 seconds)
+            assertEquals(config.lockoutDuration().toSeconds(), result.retryAfterSeconds());
+        }
+    }
+
+    @Nested
+    @DisplayName("recordFailedAttempt() edge cases")
+    class RecordFailedAttemptEdgeCaseTests {
+
+        @Test
+        @DisplayName("should return identifier lockout when identifier locked but not IP")
+        void shouldReturnIdentifierLockoutWhenIdentifierLockedNotIp() {
+            when(repository.recordFailedAttempt("ip:192.168.1.1", Duration.ofHours(1)))
+                    .thenReturn(Uni.createFrom().item(2L));
+            when(repository.recordFailedAttempt("user:user@example.com", Duration.ofHours(1)))
+                    .thenReturn(Uni.createFrom().item(5L)); // Reaches threshold
+            when(repository.getLockoutCount("user:user@example.com"))
+                    .thenReturn(Uni.createFrom().item(0));
+            when(repository.recordLockout("user:user@example.com", Duration.ofMinutes(15), "invalid_password"))
+                    .thenReturn(Uni.createFrom().voidItem());
+
+            final var result = service.recordFailedAttempt("192.168.1.1", "user@example.com", "invalid_password")
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            assertTrue(result.lockedOut());
+            assertEquals("user:user@example.com", result.key());
+        }
+
+        @Test
+        @DisplayName("should return higher attempt count when neither locked out")
+        void shouldReturnHigherAttemptCount() {
+            when(repository.recordFailedAttempt("ip:192.168.1.1", Duration.ofHours(1)))
+                    .thenReturn(Uni.createFrom().item(1L));
+            when(repository.recordFailedAttempt("user:user@example.com", Duration.ofHours(1)))
+                    .thenReturn(Uni.createFrom().item(3L));
+
+            final var result = service.recordFailedAttempt("192.168.1.1", "user@example.com", "invalid_password")
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            assertFalse(result.lockedOut());
+            assertEquals(3, result.attempts());
+        }
+    }
+
+    @Nested
+    @DisplayName("clearFailedAttempts() edge cases")
+    class ClearFailedAttemptsEdgeCaseTests {
+
+        @Test
+        @DisplayName("should handle null IP when clearing")
+        void shouldHandleNullIpWhenClearing() {
+            lenient().when(config.trackByIp()).thenReturn(false);
+            lenient().when(config.trackByIdentifier()).thenReturn(true);
+            service = new AuthRateLimitService(config, repository);
+
+            when(repository.clearFailedAttempts("user:user@example.com"))
+                    .thenReturn(Uni.createFrom().voidItem());
+
+            service.clearFailedAttempts(null, "user@example.com").await().atMost(Duration.ofSeconds(1));
+
+            verify(repository).clearFailedAttempts("user:user@example.com");
+            verify(repository, never()).clearFailedAttempts("ip:null");
+        }
+
+        @Test
+        @DisplayName("should handle null identifier when clearing")
+        void shouldHandleNullIdentifierWhenClearing() {
+            lenient().when(config.trackByIp()).thenReturn(true);
+            lenient().when(config.trackByIdentifier()).thenReturn(false);
+            service = new AuthRateLimitService(config, repository);
+
+            when(repository.clearFailedAttempts("ip:192.168.1.1"))
+                    .thenReturn(Uni.createFrom().voidItem());
+
+            service.clearFailedAttempts("192.168.1.1", null).await().atMost(Duration.ofSeconds(1));
+
+            verify(repository).clearFailedAttempts("ip:192.168.1.1");
+        }
+    }
 }

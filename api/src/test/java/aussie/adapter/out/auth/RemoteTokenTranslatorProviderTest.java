@@ -76,7 +76,7 @@ class RemoteTokenTranslatorProviderTest {
             wireMockServer.stop();
         }
         if (vertx != null) {
-            vertx.close().await().indefinitely();
+            vertx.close().await().atMost(Duration.ofSeconds(5));
         }
     }
 
@@ -172,7 +172,7 @@ class RemoteTokenTranslatorProviderTest {
                                     """)));
 
             var claims = Map.<String, Object>of("groups", "admins");
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("admin", "user"), result.roles());
             assertEquals(Set.of("read", "write", "delete"), result.permissions());
@@ -191,7 +191,7 @@ class RemoteTokenTranslatorProviderTest {
                             .withBody("{\"roles\": [], \"permissions\": []}")));
 
             var claims = Map.<String, Object>of("scope", "openid profile");
-            provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             wireMockServer.verify(
                     postRequestedFor(urlEqualTo("/translate"))
@@ -218,7 +218,7 @@ class RemoteTokenTranslatorProviderTest {
                             .withHeader("Content-Type", "application/json")
                             .withBody("{\"permissions\": [\"read\"]}")));
 
-            var result = provider.translate(ISSUER, SUBJECT, Map.of()).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, Map.of()).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.roles().isEmpty());
             assertEquals(Set.of("read"), result.permissions());
@@ -236,7 +236,7 @@ class RemoteTokenTranslatorProviderTest {
                             .withHeader("Content-Type", "application/json")
                             .withBody("{\"roles\": [\"admin\"]}")));
 
-            var result = provider.translate(ISSUER, SUBJECT, Map.of()).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, Map.of()).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("admin"), result.roles());
             assertTrue(result.permissions().isEmpty());
@@ -259,7 +259,7 @@ class RemoteTokenTranslatorProviderTest {
             var claims = Map.<String, Object>of();
             assertThrows(
                     RuntimeException.class,
-                    () -> provider.translate(ISSUER, SUBJECT, claims).await().indefinitely());
+                    () -> provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -272,7 +272,7 @@ class RemoteTokenTranslatorProviderTest {
             wireMockServer.stubFor(post(urlEqualTo("/translate"))
                     .willReturn(aResponse().withStatus(503).withBody("Service Unavailable")));
 
-            var result = provider.translate(ISSUER, SUBJECT, Map.of()).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, Map.of()).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.roles().isEmpty());
             assertTrue(result.permissions().isEmpty());
@@ -293,7 +293,7 @@ class RemoteTokenTranslatorProviderTest {
 
             assertThrows(
                     RuntimeException.class,
-                    () -> provider.translate(ISSUER, SUBJECT, Map.of()).await().indefinitely());
+                    () -> provider.translate(ISSUER, SUBJECT, Map.of()).await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -310,7 +310,7 @@ class RemoteTokenTranslatorProviderTest {
                             .withFixedDelay(500)
                             .withBody("{\"roles\": [], \"permissions\": []}")));
 
-            var result = provider.translate(ISSUER, SUBJECT, Map.of()).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, Map.of()).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.roles().isEmpty());
             assertTrue(result.permissions().isEmpty());
@@ -326,7 +326,7 @@ class RemoteTokenTranslatorProviderTest {
             wireMockServer.stubFor(post(urlEqualTo("/translate"))
                     .willReturn(aResponse().withStatus(400).withBody("{\"error\": \"Invalid request\"}")));
 
-            var result = provider.translate(ISSUER, SUBJECT, Map.of()).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, Map.of()).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isEmpty());
         }
@@ -337,7 +337,7 @@ class RemoteTokenTranslatorProviderTest {
             when(remoteConfig.failMode()).thenReturn(FailMode.allow_empty);
             initProvider("http://localhost:9999/translate");
 
-            var result = provider.translate(ISSUER, SUBJECT, Map.of()).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, Map.of()).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isEmpty());
         }

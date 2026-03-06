@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -60,7 +61,7 @@ class JwtIdentityProviderTest {
 
             var request = new JwtAuthenticationRequest("some-token");
             SecurityIdentity result =
-                    provider.authenticate(request, context).await().indefinitely();
+                    provider.authenticate(request, context).await().atMost(Duration.ofSeconds(5));
 
             assertNull(result);
         }
@@ -76,7 +77,7 @@ class JwtIdentityProviderTest {
 
             assertThrows(
                     AuthenticationFailedException.class,
-                    () -> provider.authenticate(request, context).await().indefinitely());
+                    () -> provider.authenticate(request, context).await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -88,7 +89,7 @@ class JwtIdentityProviderTest {
 
             var request = new JwtAuthenticationRequest("");
             SecurityIdentity result =
-                    provider.authenticate(request, context).await().indefinitely();
+                    provider.authenticate(request, context).await().atMost(Duration.ofSeconds(5));
 
             assertNull(result);
         }
@@ -120,7 +121,7 @@ class JwtIdentityProviderTest {
 
             var request = new JwtAuthenticationRequest("valid-token");
             SecurityIdentity result =
-                    provider.authenticate(request, context).await().indefinitely();
+                    provider.authenticate(request, context).await().atMost(Duration.ofSeconds(5));
 
             assertNotNull(result);
             assertEquals("Test User", result.getPrincipal().getName());
@@ -149,7 +150,7 @@ class JwtIdentityProviderTest {
 
             var request = new JwtAuthenticationRequest("valid-token");
             SecurityIdentity result =
-                    provider.authenticate(request, context).await().indefinitely();
+                    provider.authenticate(request, context).await().atMost(Duration.ofSeconds(5));
 
             assertNotNull(result);
             @SuppressWarnings("unchecked")
@@ -182,7 +183,7 @@ class JwtIdentityProviderTest {
 
             var request = new JwtAuthenticationRequest("valid-token");
             SecurityIdentity result =
-                    provider.authenticate(request, context).await().indefinitely();
+                    provider.authenticate(request, context).await().atMost(Duration.ofSeconds(5));
 
             assertNotNull(result);
             @SuppressWarnings("unchecked")
@@ -212,7 +213,7 @@ class JwtIdentityProviderTest {
 
             assertThrows(
                     RuntimeException.class,
-                    () -> provider.authenticate(request, context).await().indefinitely());
+                    () -> provider.authenticate(request, context).await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -233,7 +234,7 @@ class JwtIdentityProviderTest {
 
             assertThrows(
                     RuntimeException.class,
-                    () -> provider.authenticate(request, context).await().indefinitely());
+                    () -> provider.authenticate(request, context).await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -253,7 +254,7 @@ class JwtIdentityProviderTest {
 
             var request = new JwtAuthenticationRequest("valid-token");
             SecurityIdentity result =
-                    provider.authenticate(request, context).await().indefinitely();
+                    provider.authenticate(request, context).await().atMost(Duration.ofSeconds(5));
 
             assertNotNull(result);
             @SuppressWarnings("unchecked")
@@ -277,7 +278,7 @@ class JwtIdentityProviderTest {
 
             var request = new JwtAuthenticationRequest("valid-token");
             SecurityIdentity result =
-                    provider.authenticate(request, context).await().indefinitely();
+                    provider.authenticate(request, context).await().atMost(Duration.ofSeconds(5));
 
             assertNotNull(result);
             @SuppressWarnings("unchecked")

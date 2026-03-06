@@ -79,14 +79,14 @@ class BootstrapServiceTest {
         apiKeyService
                 .create("existing-admin", "Existing admin key", null, Set.of(Permission.ALL_VALUE), null, "test")
                 .await()
-                .indefinitely();
+                .atMost(Duration.ofSeconds(5));
     }
 
     private void createReadOnlyKey() {
         apiKeyService
                 .create("read-only", "Read-only key", null, Set.of(Permission.SERVICE_CONFIG_READ_VALUE), null, "test")
                 .await()
-                .indefinitely();
+                .atMost(Duration.ofSeconds(5));
     }
 
     @Nested
@@ -99,7 +99,7 @@ class BootstrapServiceTest {
             var config = createConfig(false, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertFalse(service.shouldBootstrap().await().indefinitely());
+            assertFalse(service.shouldBootstrap().await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -108,7 +108,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertTrue(service.shouldBootstrap().await().indefinitely());
+            assertTrue(service.shouldBootstrap().await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -118,7 +118,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertFalse(service.shouldBootstrap().await().indefinitely());
+            assertFalse(service.shouldBootstrap().await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -128,7 +128,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, true, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertTrue(service.shouldBootstrap().await().indefinitely());
+            assertTrue(service.shouldBootstrap().await().atMost(Duration.ofSeconds(5)));
         }
     }
 
@@ -142,7 +142,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertFalse(service.hasAdminKeys().await().indefinitely());
+            assertFalse(service.hasAdminKeys().await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -151,11 +151,11 @@ class BootstrapServiceTest {
             apiKeyService
                     .create("admin", null, null, Set.of(Permission.ALL_VALUE), null, "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertTrue(service.hasAdminKeys().await().indefinitely());
+            assertTrue(service.hasAdminKeys().await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -173,11 +173,11 @@ class BootstrapServiceTest {
                             null,
                             "test")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertTrue(service.hasAdminKeys().await().indefinitely());
+            assertTrue(service.hasAdminKeys().await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -187,7 +187,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertFalse(service.hasAdminKeys().await().indefinitely());
+            assertFalse(service.hasAdminKeys().await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -196,13 +196,13 @@ class BootstrapServiceTest {
             var result = apiKeyService
                     .create("admin", null, null, Set.of(Permission.ALL_VALUE), null, "test")
                     .await()
-                    .indefinitely();
-            apiKeyService.revoke(result.keyId()).await().indefinitely();
+                    .atMost(Duration.ofSeconds(5));
+            apiKeyService.revoke(result.keyId()).await().atMost(Duration.ofSeconds(5));
 
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertFalse(service.hasAdminKeys().await().indefinitely());
+            assertFalse(service.hasAdminKeys().await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -216,12 +216,12 @@ class BootstrapServiceTest {
                     .expiresAt(Instant.now().minusSeconds(1800)) // Expired 30 minutes ago
                     .revoked(false)
                     .build();
-            repository.save(expiredKey).await().indefinitely();
+            repository.save(expiredKey).await().atMost(Duration.ofSeconds(5));
 
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            assertFalse(service.hasAdminKeys().await().indefinitely());
+            assertFalse(service.hasAdminKeys().await().atMost(Duration.ofSeconds(5)));
         }
     }
 
@@ -235,7 +235,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            var result = service.bootstrap().await().indefinitely();
+            var result = service.bootstrap().await().atMost(Duration.ofSeconds(5));
 
             assertNotNull(result.keyId());
             assertNotNull(result.expiresAt());
@@ -248,9 +248,9 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            service.bootstrap().await().indefinitely();
+            service.bootstrap().await().atMost(Duration.ofSeconds(5));
 
-            var validated = apiKeyService.validate(VALID_BOOTSTRAP_KEY).await().indefinitely();
+            var validated = apiKeyService.validate(VALID_BOOTSTRAP_KEY).await().atMost(Duration.ofSeconds(5));
             assertTrue(validated.isPresent());
             assertEquals("bootstrap-admin", validated.get().name());
             assertTrue(validated.get().permissions().contains(Permission.ALL_VALUE));
@@ -263,7 +263,7 @@ class BootstrapServiceTest {
             var service = createService(config);
 
             assertThrows(
-                    BootstrapException.class, () -> service.bootstrap().await().indefinitely());
+                    BootstrapException.class, () -> service.bootstrap().await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -273,7 +273,7 @@ class BootstrapServiceTest {
             var service = createService(config);
 
             assertThrows(
-                    BootstrapException.class, () -> service.bootstrap().await().indefinitely());
+                    BootstrapException.class, () -> service.bootstrap().await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -283,7 +283,7 @@ class BootstrapServiceTest {
             var service = createService(config);
 
             assertThrows(
-                    BootstrapException.class, () -> service.bootstrap().await().indefinitely());
+                    BootstrapException.class, () -> service.bootstrap().await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -292,7 +292,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY), Duration.ofDays(30));
             var service = createService(config);
 
-            var result = service.bootstrap().await().indefinitely();
+            var result = service.bootstrap().await().atMost(Duration.ofSeconds(5));
 
             // Expiration should be within 24 hours (plus a small buffer for test execution)
             assertTrue(result.expiresAt().isBefore(Instant.now().plus(Duration.ofHours(25))));
@@ -304,7 +304,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY), Duration.ofHours(12));
             var service = createService(config);
 
-            var result = service.bootstrap().await().indefinitely();
+            var result = service.bootstrap().await().atMost(Duration.ofSeconds(5));
 
             // Expiration should be approximately 12 hours (with buffer)
             assertTrue(result.expiresAt().isAfter(Instant.now().plus(Duration.ofHours(11))));
@@ -318,7 +318,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, true, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            var result = service.bootstrap().await().indefinitely();
+            var result = service.bootstrap().await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.wasRecovery());
         }
@@ -329,7 +329,7 @@ class BootstrapServiceTest {
             var config = createConfig(true, false, Optional.of(VALID_BOOTSTRAP_KEY));
             var service = createService(config);
 
-            var result = service.bootstrap().await().indefinitely();
+            var result = service.bootstrap().await().atMost(Duration.ofSeconds(5));
 
             assertFalse(result.wasRecovery());
         }
@@ -341,7 +341,7 @@ class BootstrapServiceTest {
             var service = createService(config);
 
             assertThrows(
-                    BootstrapException.class, () -> service.bootstrap().await().indefinitely());
+                    BootstrapException.class, () -> service.bootstrap().await().atMost(Duration.ofSeconds(5)));
         }
 
         @Test
@@ -351,7 +351,7 @@ class BootstrapServiceTest {
             var service = createService(config);
 
             assertThrows(
-                    BootstrapException.class, () -> service.bootstrap().await().indefinitely());
+                    BootstrapException.class, () -> service.bootstrap().await().atMost(Duration.ofSeconds(5)));
         }
     }
 }

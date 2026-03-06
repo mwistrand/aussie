@@ -3,6 +3,7 @@ package aussie.adapter.out.auth;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -66,7 +67,7 @@ class DefaultTokenTranslatorProviderTest {
         void shouldExtractRolesFromClaim() {
             var claims = Map.<String, Object>of("roles", List.of("admin", "user"));
 
-            var result = provider.translate("issuer", "subject", claims).await().indefinitely();
+            var result = provider.translate("issuer", "subject", claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("admin", "user"), result.roles());
         }
@@ -76,7 +77,7 @@ class DefaultTokenTranslatorProviderTest {
         void shouldReturnEmptyRolesWhenMissing() {
             var claims = Map.<String, Object>of();
 
-            var result = provider.translate("issuer", "subject", claims).await().indefinitely();
+            var result = provider.translate("issuer", "subject", claims).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.roles().isEmpty());
         }
@@ -86,7 +87,7 @@ class DefaultTokenTranslatorProviderTest {
         void shouldReturnEmptyRolesWhenNotList() {
             var claims = Map.<String, Object>of("roles", "admin");
 
-            var result = provider.translate("issuer", "subject", claims).await().indefinitely();
+            var result = provider.translate("issuer", "subject", claims).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.roles().isEmpty());
         }
@@ -96,7 +97,7 @@ class DefaultTokenTranslatorProviderTest {
         void shouldConvertNonStringElements() {
             var claims = Map.<String, Object>of("roles", List.of("admin", 123, true));
 
-            var result = provider.translate("issuer", "subject", claims).await().indefinitely();
+            var result = provider.translate("issuer", "subject", claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("admin", "123", "true"), result.roles());
         }
@@ -111,7 +112,7 @@ class DefaultTokenTranslatorProviderTest {
         void shouldExtractPermissionsFromClaim() {
             var claims = Map.<String, Object>of("permissions", List.of("read", "write"));
 
-            var result = provider.translate("issuer", "subject", claims).await().indefinitely();
+            var result = provider.translate("issuer", "subject", claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("read", "write"), result.permissions());
         }
@@ -121,7 +122,7 @@ class DefaultTokenTranslatorProviderTest {
         void shouldReturnEmptyPermissionsWhenMissing() {
             var claims = Map.<String, Object>of();
 
-            var result = provider.translate("issuer", "subject", claims).await().indefinitely();
+            var result = provider.translate("issuer", "subject", claims).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.permissions().isEmpty());
         }
@@ -131,7 +132,7 @@ class DefaultTokenTranslatorProviderTest {
         void shouldReturnEmptyPermissionsWhenNotList() {
             var claims = Map.<String, Object>of("permissions", "read");
 
-            var result = provider.translate("issuer", "subject", claims).await().indefinitely();
+            var result = provider.translate("issuer", "subject", claims).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.permissions().isEmpty());
         }
@@ -148,7 +149,7 @@ class DefaultTokenTranslatorProviderTest {
                     "roles", List.of("admin"),
                     "permissions", List.of("read", "write"));
 
-            var result = provider.translate("issuer", "subject", claims).await().indefinitely();
+            var result = provider.translate("issuer", "subject", claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("admin"), result.roles());
             assertEquals(Set.of("read", "write"), result.permissions());
@@ -159,7 +160,7 @@ class DefaultTokenTranslatorProviderTest {
         void shouldReturnEmptyAttributes() {
             var claims = Map.<String, Object>of("roles", List.of("admin"), "customClaim", "value");
 
-            var result = provider.translate("issuer", "subject", claims).await().indefinitely();
+            var result = provider.translate("issuer", "subject", claims).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.attributes().isEmpty());
         }

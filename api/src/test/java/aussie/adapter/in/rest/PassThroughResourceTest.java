@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -88,7 +89,7 @@ class PassThroughResourceTest {
             when(passThroughUseCase.forward(eq("my-service"), any()))
                     .thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyGet("my-service", "", requestContext).await().indefinitely();
+            resource.proxyGet("my-service", "", requestContext).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(passThroughUseCase).forward(eq("my-service"), captor.capture());
@@ -102,7 +103,7 @@ class PassThroughResourceTest {
             when(passThroughUseCase.forward(eq("my-service"), any()))
                     .thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyGet("my-service", "api/users", requestContext).await().indefinitely();
+            resource.proxyGet("my-service", "api/users", requestContext).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(passThroughUseCase).forward(eq("my-service"), captor.capture());
@@ -122,7 +123,7 @@ class PassThroughResourceTest {
                     .thenReturn(Uni.createFrom().item(success));
 
             var result =
-                    resource.proxyGet("svc", "path", requestContext).await().indefinitely();
+                    resource.proxyGet("svc", "path", requestContext).await().atMost(Duration.ofSeconds(5));
 
             verify(passThroughUseCase).forward(eq("svc"), any());
             assertEquals(200, result.getStatus());
@@ -137,7 +138,7 @@ class PassThroughResourceTest {
             when(passThroughUseCase.forward(eq("svc"), any()))
                     .thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyPost("svc", "api/items", requestContext, body).await().indefinitely();
+            resource.proxyPost("svc", "api/items", requestContext, body).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(passThroughUseCase).forward(eq("svc"), captor.capture());
@@ -156,7 +157,7 @@ class PassThroughResourceTest {
 
             resource.proxyPut("svc", "api/items/1", requestContext, body)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(passThroughUseCase).forward(eq("svc"), captor.capture());
@@ -171,7 +172,7 @@ class PassThroughResourceTest {
             when(passThroughUseCase.forward(eq("svc"), any()))
                     .thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyDelete("svc", "api/items/1", requestContext).await().indefinitely();
+            resource.proxyDelete("svc", "api/items/1", requestContext).await().atMost(Duration.ofSeconds(5));
 
             verify(passThroughUseCase).forward(eq("svc"), any());
         }
@@ -187,7 +188,7 @@ class PassThroughResourceTest {
 
             resource.proxyPatch("svc", "api/items/1", requestContext, body)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(passThroughUseCase).forward(eq("svc"), captor.capture());
@@ -202,7 +203,7 @@ class PassThroughResourceTest {
             when(passThroughUseCase.forward(eq("svc"), any()))
                     .thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyHead("svc", "status", requestContext).await().indefinitely();
+            resource.proxyHead("svc", "status", requestContext).await().atMost(Duration.ofSeconds(5));
 
             verify(passThroughUseCase).forward(eq("svc"), any());
         }
@@ -215,7 +216,7 @@ class PassThroughResourceTest {
             when(passThroughUseCase.forward(eq("svc"), any()))
                     .thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyOptions("svc", "api/users", requestContext).await().indefinitely();
+            resource.proxyOptions("svc", "api/users", requestContext).await().atMost(Duration.ofSeconds(5));
 
             verify(passThroughUseCase).forward(eq("svc"), any());
         }
@@ -232,7 +233,7 @@ class PassThroughResourceTest {
             when(passThroughUseCase.forward(eq("svc"), any()))
                     .thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyGet("svc", "test", requestContext).await().indefinitely();
+            resource.proxyGet("svc", "test", requestContext).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(passThroughUseCase).forward(eq("svc"), captor.capture());
@@ -255,7 +256,7 @@ class PassThroughResourceTest {
             when(passThroughUseCase.forward(eq("svc"), any()))
                     .thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyGet("svc", "test", requestContext).await().indefinitely();
+            resource.proxyGet("svc", "test", requestContext).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(passThroughUseCase).forward(eq("svc"), captor.capture());
@@ -270,7 +271,7 @@ class PassThroughResourceTest {
             when(passThroughUseCase.forward(eq("svc"), any()))
                     .thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyGet("svc", "test", requestContext).await().indefinitely();
+            resource.proxyGet("svc", "test", requestContext).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(passThroughUseCase).forward(eq("svc"), captor.capture());
@@ -292,7 +293,7 @@ class PassThroughResourceTest {
                     .thenReturn(Uni.createFrom().item(success));
 
             var response =
-                    resource.proxyGet("svc", "test", requestContext).await().indefinitely();
+                    resource.proxyGet("svc", "test", requestContext).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(200, response.getStatus());
             assertArrayEquals(body, (byte[]) response.getEntity());
@@ -306,7 +307,7 @@ class PassThroughResourceTest {
                     .thenReturn(Uni.createFrom().item(success));
 
             var response =
-                    resource.proxyGet("svc", "test", requestContext).await().indefinitely();
+                    resource.proxyGet("svc", "test", requestContext).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(204, response.getStatus());
             assertNull(response.getEntity());
@@ -321,7 +322,7 @@ class PassThroughResourceTest {
 
             var ex = assertThrows(HttpProblem.class, () -> resource.proxyGet("svc", "test", requestContext)
                     .await()
-                    .indefinitely());
+                    .atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -335,7 +336,7 @@ class PassThroughResourceTest {
 
             var ex = assertThrows(HttpProblem.class, () -> resource.proxyGet("svc", "admin", requestContext)
                     .await()
-                    .indefinitely());
+                    .atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -349,7 +350,7 @@ class PassThroughResourceTest {
 
             var ex = assertThrows(HttpProblem.class, () -> resource.proxyGet("svc", "no-match", requestContext)
                     .await()
-                    .indefinitely());
+                    .atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -363,7 +364,7 @@ class PassThroughResourceTest {
 
             var ex = assertThrows(HttpProblem.class, () -> resource.proxyGet("svc", "test", requestContext)
                     .await()
-                    .indefinitely());
+                    .atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.BAD_GATEWAY.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -377,7 +378,7 @@ class PassThroughResourceTest {
 
             var ex = assertThrows(HttpProblem.class, () -> resource.proxyGet("svc", "test", requestContext)
                     .await()
-                    .indefinitely());
+                    .atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -391,7 +392,7 @@ class PassThroughResourceTest {
 
             var ex = assertThrows(HttpProblem.class, () -> resource.proxyGet("svc", "test", requestContext)
                     .await()
-                    .indefinitely());
+                    .atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.FORBIDDEN.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -405,7 +406,7 @@ class PassThroughResourceTest {
 
             var ex = assertThrows(HttpProblem.class, () -> resource.proxyGet("svc", "test", requestContext)
                     .await()
-                    .indefinitely());
+                    .atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
         }

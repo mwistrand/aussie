@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigInteger;
 import java.security.interfaces.RSAPublicKey;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -97,7 +98,7 @@ class SigningKeyResourceTest {
             var key2 = createKeyRecord("key-2", KeyStatus.DEPRECATED);
             when(keyRotationService.listAllKeys()).thenReturn(Uni.createFrom().item(List.of(key1, key2)));
 
-            var result = resource.listKeys().await().indefinitely();
+            var result = resource.listKeys().await().atMost(Duration.ofSeconds(5));
 
             assertEquals(2, result.size());
             assertEquals("key-1", result.get(0).keyId());
@@ -112,7 +113,7 @@ class SigningKeyResourceTest {
             when(keyRotationConfig.enabled()).thenReturn(true);
             when(keyRotationService.listAllKeys()).thenReturn(Uni.createFrom().item(List.of()));
 
-            var result = resource.listKeys().await().indefinitely();
+            var result = resource.listKeys().await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isEmpty());
         }
@@ -129,7 +130,7 @@ class SigningKeyResourceTest {
             var key = createKeyRecord("key-1", KeyStatus.ACTIVE);
             when(keyRotationService.getKey("key-1")).thenReturn(Uni.createFrom().item(key));
 
-            var result = resource.getKey("key-1", false).await().indefinitely();
+            var result = resource.getKey("key-1", false).await().atMost(Duration.ofSeconds(5));
 
             assertEquals("key-1", result.keyId());
             assertEquals(KeyStatus.ACTIVE, result.status());
@@ -150,7 +151,7 @@ class SigningKeyResourceTest {
                     "key-1", null, publicKey, KeyStatus.ACTIVE, Instant.now(), Instant.now(), null, null);
             when(keyRotationService.getKey("key-1")).thenReturn(Uni.createFrom().item(key));
 
-            var result = resource.getKey("key-1", true).await().indefinitely();
+            var result = resource.getKey("key-1", true).await().atMost(Duration.ofSeconds(5));
 
             assertNotNull(result.publicKey());
             assertEquals("RSA", result.publicKey().get("algorithm"));
@@ -167,7 +168,7 @@ class SigningKeyResourceTest {
 
             var ex = assertThrows(
                     HttpProblem.class,
-                    () -> resource.getKey("nonexistent", false).await().indefinitely());
+                    () -> resource.getKey("nonexistent", false).await().atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -186,7 +187,7 @@ class SigningKeyResourceTest {
                     .thenReturn(Uni.createFrom().item(newKey));
 
             var request = new SigningKeyResource.RotateKeyRequest("security update");
-            var response = resource.rotateKeys(request).await().indefinitely();
+            var response = resource.rotateKeys(request).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Response.Status.CREATED.getStatusCode(), response.getStatus());
             verify(keyRotationService).triggerRotation("security update");
@@ -201,7 +202,7 @@ class SigningKeyResourceTest {
                     .thenReturn(Uni.createFrom().item(newKey));
 
             var request = new SigningKeyResource.RotateKeyRequest(null);
-            resource.rotateKeys(request).await().indefinitely();
+            resource.rotateKeys(request).await().atMost(Duration.ofSeconds(5));
 
             verify(keyRotationService).triggerRotation("Manual rotation via admin API");
         }
@@ -214,7 +215,7 @@ class SigningKeyResourceTest {
             when(keyRotationService.triggerRotation("Manual rotation via admin API"))
                     .thenReturn(Uni.createFrom().item(newKey));
 
-            resource.rotateKeys(null).await().indefinitely();
+            resource.rotateKeys(null).await().atMost(Duration.ofSeconds(5));
 
             verify(keyRotationService).triggerRotation("Manual rotation via admin API");
         }
@@ -231,7 +232,7 @@ class SigningKeyResourceTest {
             when(keyRotationService.forceDeprecate("key-1"))
                     .thenReturn(Uni.createFrom().voidItem());
 
-            var response = resource.deprecateKey("key-1").await().indefinitely();
+            var response = resource.deprecateKey("key-1").await().atMost(Duration.ofSeconds(5));
 
             assertEquals(204, response.getStatus());
             verify(keyRotationService).forceDeprecate("key-1");
@@ -247,7 +248,7 @@ class SigningKeyResourceTest {
 
             var ex = assertThrows(
                     HttpProblem.class,
-                    () -> resource.deprecateKey("nonexistent").await().indefinitely());
+                    () -> resource.deprecateKey("nonexistent").await().atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -264,7 +265,7 @@ class SigningKeyResourceTest {
             when(keyRotationService.forceRetire("key-1"))
                     .thenReturn(Uni.createFrom().voidItem());
 
-            var response = resource.retireKey("key-1", true).await().indefinitely();
+            var response = resource.retireKey("key-1", true).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(204, response.getStatus());
             verify(keyRotationService).forceRetire("key-1");
@@ -290,7 +291,7 @@ class SigningKeyResourceTest {
 
             var ex = assertThrows(
                     HttpProblem.class,
-                    () -> resource.retireKey("nonexistent", true).await().indefinitely());
+                    () -> resource.retireKey("nonexistent", true).await().atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -305,7 +306,7 @@ class SigningKeyResourceTest {
         void returnsDisabledWhenRotationDisabled() {
             when(keyRotationConfig.enabled()).thenReturn(false);
 
-            var result = resource.getHealth().await().indefinitely();
+            var result = resource.getHealth().await().atMost(Duration.ofSeconds(5));
 
             assertFalse(result.enabled());
             assertEquals("disabled", result.status());
@@ -328,7 +329,7 @@ class SigningKeyResourceTest {
             when(keyRegistry.getLastRefreshTime()).thenReturn(Optional.of(lastRefresh));
             when(keyRegistry.isReady()).thenReturn(true);
 
-            var result = resource.getHealth().await().indefinitely();
+            var result = resource.getHealth().await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.enabled());
             assertEquals("healthy", result.status());
@@ -346,7 +347,7 @@ class SigningKeyResourceTest {
             when(keyRegistry.getLastRefreshTime()).thenReturn(Optional.empty());
             when(keyRegistry.isReady()).thenReturn(false);
 
-            var result = resource.getHealth().await().indefinitely();
+            var result = resource.getHealth().await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.enabled());
             assertEquals("initializing", result.status());

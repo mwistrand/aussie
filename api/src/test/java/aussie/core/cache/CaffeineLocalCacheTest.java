@@ -2,6 +2,7 @@ package aussie.core.cache;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
@@ -82,6 +83,27 @@ class CaffeineLocalCacheTest {
     }
 
     @Nested
+    @DisplayName("Jitter Factor Validation")
+    class JitterFactorValidation {
+
+        @Test
+        @DisplayName("should throw when jitter factor is negative")
+        void shouldThrowWhenJitterFactorNegative() {
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> new CaffeineLocalCache<String, String>(Duration.ofMinutes(5), 100, -0.1));
+        }
+
+        @Test
+        @DisplayName("should throw when jitter factor exceeds 0.5")
+        void shouldThrowWhenJitterFactorTooHigh() {
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> new CaffeineLocalCache<String, String>(Duration.ofMinutes(5), 100, 0.6));
+        }
+    }
+
+    @Nested
     @DisplayName("TTL Expiration")
     class TtlExpiration {
 
@@ -95,8 +117,9 @@ class CaffeineLocalCacheTest {
             // Entry should exist immediately
             assertTrue(cache.get("key1").isPresent());
 
-            // Wait for TTL to expire
+            // Wait for TTL to expire, then force maintenance
             Thread.sleep(100);
+            cache.cleanUp();
 
             // Entry should be expired now
             assertFalse(cache.get("key1").isPresent());
@@ -104,12 +127,12 @@ class CaffeineLocalCacheTest {
 
         @Test
         @DisplayName("should keep entry within TTL")
-        void shouldKeepEntryWithinTtl() throws InterruptedException {
+        void shouldKeepEntryWithinTtl() {
             var cache = new CaffeineLocalCache<String, String>(Duration.ofSeconds(2), 100);
             cache.put("key1", "value1");
 
-            // Wait a bit, but not past TTL
-            Thread.sleep(100);
+            // Force any pending maintenance
+            cache.cleanUp();
 
             // Entry should still exist
             assertTrue(cache.get("key1").isPresent());
@@ -123,7 +146,7 @@ class CaffeineLocalCacheTest {
 
         @Test
         @DisplayName("should evict entries when max size exceeded")
-        void shouldEvictEntriesWhenMaxSizeExceeded() throws InterruptedException {
+        void shouldEvictEntriesWhenMaxSizeExceeded() {
             var cache = new CaffeineLocalCache<String, String>(Duration.ofMinutes(5), 3);
 
             // Add more entries than max size
@@ -133,13 +156,13 @@ class CaffeineLocalCacheTest {
             cache.put("key4", "value4");
             cache.put("key5", "value5");
 
-            // Force cleanup and wait for async eviction
-            Thread.sleep(100);
+            // Force pending eviction maintenance
+            cache.cleanUp();
 
             // Caffeine evicts asynchronously, so check that size is bounded
             // Some entries should be evicted
             long size = cache.estimatedSize();
-            assertTrue(size <= 5, "Cache size should be bounded: " + size);
+            assertTrue(size <= 3, "Cache size should be bounded by max size of 3: " + size);
         }
     }
 

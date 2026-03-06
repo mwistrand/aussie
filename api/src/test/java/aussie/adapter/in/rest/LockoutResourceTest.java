@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 
@@ -154,7 +155,7 @@ class LockoutResourceTest {
             when(rateLimitService.streamAllLockouts())
                     .thenReturn(Multi.createFrom().item(lockout));
 
-            var response = resource.listLockouts(null).await().indefinitely();
+            var response = resource.listLockouts(null).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(200, response.getStatus());
             var entity = (Map<String, Object>) response.getEntity();
@@ -171,7 +172,7 @@ class LockoutResourceTest {
             when(rateLimitService.streamAllLockouts())
                     .thenReturn(Multi.createFrom().item(lockout));
 
-            var response = resource.listLockouts(10).await().indefinitely();
+            var response = resource.listLockouts(10).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(200, response.getStatus());
             var entity = (Map<String, Object>) response.getEntity();
@@ -186,7 +187,7 @@ class LockoutResourceTest {
             when(rateLimitService.streamAllLockouts())
                     .thenReturn(Multi.createFrom().empty());
 
-            var response = resource.listLockouts(-1).await().indefinitely();
+            var response = resource.listLockouts(-1).await().atMost(Duration.ofSeconds(5));
 
             var entity = (Map<String, Object>) response.getEntity();
             assertEquals(100, entity.get("limit"));
@@ -200,7 +201,7 @@ class LockoutResourceTest {
             when(rateLimitService.streamAllLockouts())
                     .thenReturn(Multi.createFrom().empty());
 
-            var response = resource.listLockouts(0).await().indefinitely();
+            var response = resource.listLockouts(0).await().atMost(Duration.ofSeconds(5));
 
             var entity = (Map<String, Object>) response.getEntity();
             assertEquals(100, entity.get("limit"));
@@ -226,7 +227,7 @@ class LockoutResourceTest {
             when(rateLimitService.getLockoutInfo("ip:1.2.3.4"))
                     .thenReturn(Uni.createFrom().item(lockoutInfo));
 
-            var response = resource.getIpLockoutStatus("1.2.3.4").await().indefinitely();
+            var response = resource.getIpLockoutStatus("1.2.3.4").await().atMost(Duration.ofSeconds(5));
 
             assertEquals(200, response.getStatus());
             var entity = (Map<String, Object>) response.getEntity();
@@ -256,7 +257,7 @@ class LockoutResourceTest {
                     .thenReturn(Uni.createFrom().nullItem());
 
             var response =
-                    resource.getUserLockoutStatus("john@example.com").await().indefinitely();
+                    resource.getUserLockoutStatus("john@example.com").await().atMost(Duration.ofSeconds(5));
 
             assertEquals(200, response.getStatus());
             var entity = (Map<String, Object>) response.getEntity();
@@ -281,7 +282,7 @@ class LockoutResourceTest {
             when(rateLimitService.getLockoutInfo("apikey:abc12345"))
                     .thenReturn(Uni.createFrom().nullItem());
 
-            var response = resource.getApiKeyLockoutStatus("abc12345").await().indefinitely();
+            var response = resource.getApiKeyLockoutStatus("abc12345").await().atMost(Duration.ofSeconds(5));
 
             assertEquals(200, response.getStatus());
             var entity = (Map<String, Object>) response.getEntity();
@@ -302,7 +303,7 @@ class LockoutResourceTest {
             when(rateLimitService.clearIpLockout("1.2.3.4"))
                     .thenReturn(Uni.createFrom().voidItem());
 
-            var response = resource.clearIpLockout("1.2.3.4", null).await().indefinitely();
+            var response = resource.clearIpLockout("1.2.3.4", null).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(204, response.getStatus());
             verify(rateLimitService).clearIpLockout("1.2.3.4");
@@ -316,7 +317,7 @@ class LockoutResourceTest {
                     .thenReturn(Uni.createFrom().voidItem());
 
             var request = new LockoutResource.ClearLockoutRequest("admin override");
-            var response = resource.clearIpLockout("1.2.3.4", request).await().indefinitely();
+            var response = resource.clearIpLockout("1.2.3.4", request).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(204, response.getStatus());
         }
@@ -329,7 +330,7 @@ class LockoutResourceTest {
                     .thenReturn(Uni.createFrom().voidItem());
 
             var response =
-                    resource.clearUserLockout("user@example.com", null).await().indefinitely();
+                    resource.clearUserLockout("user@example.com", null).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(204, response.getStatus());
             verify(rateLimitService).clearUserLockout("user@example.com");
@@ -342,7 +343,7 @@ class LockoutResourceTest {
             when(rateLimitService.clearLockout("apikey:abc12345"))
                     .thenReturn(Uni.createFrom().voidItem());
 
-            var response = resource.clearApiKeyLockout("abc12345", null).await().indefinitely();
+            var response = resource.clearApiKeyLockout("abc12345", null).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(204, response.getStatus());
             verify(rateLimitService).clearLockout("apikey:abc12345");
@@ -387,7 +388,7 @@ class LockoutResourceTest {
                     .thenReturn(Uni.createFrom().voidItem());
 
             var request = new LockoutResource.ClearAllLockoutsRequest(true, "emergency");
-            var response = resource.clearAllLockouts(request).await().indefinitely();
+            var response = resource.clearAllLockouts(request).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(200, response.getStatus());
             var entity = (Map<String, Object>) response.getEntity();
@@ -417,7 +418,7 @@ class LockoutResourceTest {
             when(rateLimitService.streamAllLockouts())
                     .thenReturn(Multi.createFrom().item(lockout));
 
-            var response = resource.listLockouts(10).await().indefinitely();
+            var response = resource.listLockouts(10).await().atMost(Duration.ofSeconds(5));
 
             var entity = (Map<String, Object>) response.getEntity();
             var lockouts = (java.util.List<Map<String, Object>>) entity.get("lockouts");
@@ -447,7 +448,7 @@ class LockoutResourceTest {
             when(rateLimitService.streamAllLockouts())
                     .thenReturn(Multi.createFrom().item(lockout));
 
-            var response = resource.listLockouts(10).await().indefinitely();
+            var response = resource.listLockouts(10).await().atMost(Duration.ofSeconds(5));
 
             var entity = (Map<String, Object>) response.getEntity();
             var lockouts = (java.util.List<Map<String, Object>>) entity.get("lockouts");

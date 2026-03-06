@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Duration;
 import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
@@ -81,7 +82,7 @@ class WebSocketRateLimitServiceTest {
 
             var result = service.checkMessageLimit("test-service", "client-123", "conn-456")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertTrue(result.allowed());
 
@@ -103,7 +104,7 @@ class WebSocketRateLimitServiceTest {
 
             var result = service.checkMessageLimit("test-service", "client-123", "conn-456")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertTrue(result.allowed());
             verify(rateLimiter, never()).checkAndConsume(any(), any());
@@ -119,7 +120,7 @@ class WebSocketRateLimitServiceTest {
 
             var result = service.checkMessageLimit("test-service", "client-123", "conn-456")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertFalse(result.allowed());
         }
@@ -133,7 +134,7 @@ class WebSocketRateLimitServiceTest {
 
             service.checkMessageLimit("my-service", "client-123", "conn-456")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             verify(serviceRegistry).getServiceForRateLimiting("my-service");
         }
@@ -151,7 +152,7 @@ class WebSocketRateLimitServiceTest {
 
             service.cleanupConnection("test-service", "client-123", "conn-456")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             verify(rateLimiter).removeKeysMatching(eq("ws_message:client-123:test-service:conn-456"));
         }

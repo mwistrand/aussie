@@ -130,4 +130,12 @@ public class CaffeineLocalCache<K, V> implements LocalCache<K, V> {
     public long estimatedSize() {
         return cache.estimatedSize();
     }
+
+    /**
+     * Performs any pending maintenance operations, such as eviction of expired entries.
+     * This is primarily useful in testing to avoid relying on {@code Thread.sleep}.
+     */
+    public void cleanUp() {
+        cache.cleanUp();
+    }
 }

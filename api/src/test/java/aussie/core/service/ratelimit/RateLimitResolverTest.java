@@ -318,5 +318,27 @@ class RateLimitResolverTest {
 
             assertEquals(500L, result.requestsPerWindow());
         }
+
+        @Test
+        @DisplayName("should use cached entry on cache hit")
+        void shouldUseCachedEntryOnHit() {
+            var rateLimitConfig = ServiceRateLimitConfig.of(200, 120, 200);
+            var service = testService(rateLimitConfig);
+            when(serviceRegistry.getServiceForRateLimiting("cached-service"))
+                    .thenReturn(Uni.createFrom().item(Optional.of(service)));
+
+            // First call primes the cache
+            resolver.resolveByServiceId("cached-service").await().atMost(Duration.ofSeconds(1));
+
+            // Second call should use cache (change mock to verify it's not called again)
+            when(serviceRegistry.getServiceForRateLimiting("cached-service"))
+                    .thenReturn(Uni.createFrom().item(Optional.empty()));
+
+            var result = resolver.resolveByServiceId("cached-service").await().atMost(Duration.ofSeconds(1));
+
+            // Should still return 200 from cache, not 100 (platform defaults)
+            assertEquals(200L, result.requestsPerWindow());
+            assertEquals(120L, result.windowSeconds());
+        }
     }
 }

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
+import java.time.Instant;
 
 import io.smallrye.mutiny.Multi;
 import io.vertx.mutiny.core.Vertx;
@@ -21,6 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.core.config.TokenRevocationConfig;
+import aussie.core.model.auth.RevocationEvent;
 import aussie.core.port.out.RevocationEventPublisher;
 import aussie.spi.TokenRevocationRepository;
 
@@ -68,7 +70,7 @@ class RevocationBloomFilterTest {
 
     private void initializeBloomFilter() {
         bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
-        bloomFilter.rebuildFilters().await().indefinitely();
+        bloomFilter.rebuildFilters().await().atMost(Duration.ofSeconds(5));
     }
 
     @Nested
@@ -292,7 +294,7 @@ class RevocationBloomFilterTest {
             when(repository.streamAllRevokedUsers())
                     .thenReturn(Multi.createFrom().items("new-user-1"));
 
-            bloomFilter.rebuildFilters().await().indefinitely();
+            bloomFilter.rebuildFilters().await().atMost(Duration.ofSeconds(5));
 
             assertFalse(bloomFilter.definitelyNotRevoked("new-jti-1"));
             assertFalse(bloomFilter.definitelyNotRevoked("new-jti-2"));
@@ -306,7 +308,7 @@ class RevocationBloomFilterTest {
             when(config.enabled()).thenReturn(false);
             bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
 
-            bloomFilter.rebuildFilters().await().indefinitely();
+            bloomFilter.rebuildFilters().await().atMost(Duration.ofSeconds(5));
 
             assertFalse(bloomFilter.isEnabled());
         }
@@ -340,6 +342,65 @@ class RevocationBloomFilterTest {
             bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
 
             assertFalse(bloomFilter.isEnabled());
+        }
+    }
+
+    @Nested
+    @DisplayName("userDefinitelyNotRevoked() when not initialized")
+    class UserDefinitelyNotRevokedNotInitializedTests {
+
+        @Test
+        @DisplayName("should return false when not initialized")
+        void shouldReturnFalseWhenNotInitialized() {
+            lenient().when(config.enabled()).thenReturn(false);
+            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+
+            final var result = bloomFilter.userDefinitelyNotRevoked("any-user");
+
+            assertFalse(result);
+        }
+    }
+
+    @Nested
+    @DisplayName("handleRevocationEvent() via event publisher")
+    class HandleRevocationEventViaPublisherTests {
+
+        @Test
+        @DisplayName("should handle JtiRevoked event")
+        void shouldHandleJtiRevokedEvent() {
+            initializeBloomFilter();
+
+            var jti = "event-jti";
+            assertTrue(bloomFilter.definitelyNotRevoked(jti));
+
+            // Simulate the event handling by calling the public methods that
+            // handleRevocationEvent delegates to
+            RevocationEvent event =
+                    new RevocationEvent.JtiRevoked(jti, Instant.now().plus(Duration.ofHours(1)));
+            switch (event) {
+                case RevocationEvent.JtiRevoked jtiRevoked -> bloomFilter.addRevokedJti(jtiRevoked.jti());
+                case RevocationEvent.UserRevoked userRevoked -> bloomFilter.addRevokedUser(userRevoked.userId());
+            }
+
+            assertFalse(bloomFilter.definitelyNotRevoked(jti));
+        }
+
+        @Test
+        @DisplayName("should handle UserRevoked event")
+        void shouldHandleUserRevokedEvent() {
+            initializeBloomFilter();
+
+            var userId = "event-user";
+            assertTrue(bloomFilter.userDefinitelyNotRevoked(userId));
+
+            RevocationEvent event = new RevocationEvent.UserRevoked(
+                    userId, Instant.now(), Instant.now().plus(Duration.ofHours(1)));
+            switch (event) {
+                case RevocationEvent.JtiRevoked jtiRevoked -> bloomFilter.addRevokedJti(jtiRevoked.jti());
+                case RevocationEvent.UserRevoked userRevoked -> bloomFilter.addRevokedUser(userRevoked.userId());
+            }
+
+            assertFalse(bloomFilter.userDefinitelyNotRevoked(userId));
         }
     }
 }

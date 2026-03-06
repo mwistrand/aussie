@@ -265,6 +265,80 @@ class AccessControlEvaluatorTest {
     }
 
     @Nested
+    @DisplayName("Service-Specific Domain/Subdomain Access")
+    class ServiceSpecificDomainTests {
+
+        @Test
+        @DisplayName("Should allow service-specific domain match")
+        void shouldAllowServiceDomainMatch() {
+            var serviceConfig = new ServiceAccessConfig(
+                    Optional.empty(), Optional.of(List.of("service.internal.com")), Optional.empty());
+            var source = SourceIdentifier.of("192.168.1.1", "service.internal.com");
+            var route = createPrivateRoute("/api/private");
+
+            assertTrue(evaluator.isAllowed(source, route, Optional.of(serviceConfig)));
+        }
+
+        @Test
+        @DisplayName("Should deny non-matching service-specific domain")
+        void shouldDenyNonMatchingServiceDomain() {
+            var serviceConfig = new ServiceAccessConfig(
+                    Optional.empty(), Optional.of(List.of("service.internal.com")), Optional.empty());
+            var source = SourceIdentifier.of("192.168.1.1", "other.internal.com");
+            var route = createPrivateRoute("/api/private");
+
+            assertFalse(evaluator.isAllowed(source, route, Optional.of(serviceConfig)));
+        }
+
+        @Test
+        @DisplayName("Should allow service-specific subdomain match")
+        void shouldAllowServiceSubdomainMatch() {
+            var serviceConfig = new ServiceAccessConfig(
+                    Optional.empty(), Optional.empty(), Optional.of(List.of("*.service.internal.com")));
+            var source = SourceIdentifier.of("192.168.1.1", "api.service.internal.com");
+            var route = createPrivateRoute("/api/private");
+
+            assertTrue(evaluator.isAllowed(source, route, Optional.of(serviceConfig)));
+        }
+
+        @Test
+        @DisplayName("Should deny non-matching service-specific subdomain")
+        void shouldDenyNonMatchingServiceSubdomain() {
+            var serviceConfig = new ServiceAccessConfig(
+                    Optional.empty(), Optional.empty(), Optional.of(List.of("*.service.internal.com")));
+            var source = SourceIdentifier.of("192.168.1.1", "api.other.internal.com");
+            var route = createPrivateRoute("/api/private");
+
+            assertFalse(evaluator.isAllowed(source, route, Optional.of(serviceConfig)));
+        }
+    }
+
+    @Nested
+    @DisplayName("Subdomain Matching Edge Cases")
+    class SubdomainEdgeCaseTests {
+
+        @Test
+        @DisplayName("Should match non-wildcard subdomain pattern exactly")
+        void shouldMatchNonWildcardSubdomainExactly() {
+            config.setAllowedSubdomains(List.of("exact.internal.com"));
+            var source = SourceIdentifier.of("192.168.1.1", "exact.internal.com");
+            var route = createPrivateRoute("/api/private");
+
+            assertTrue(evaluator.isAllowed(source, route, Optional.empty()));
+        }
+
+        @Test
+        @DisplayName("Should not match different host for non-wildcard subdomain")
+        void shouldNotMatchDifferentHostForNonWildcardSubdomain() {
+            config.setAllowedSubdomains(List.of("exact.internal.com"));
+            var source = SourceIdentifier.of("192.168.1.1", "other.internal.com");
+            var route = createPrivateRoute("/api/private");
+
+            assertFalse(evaluator.isAllowed(source, route, Optional.empty()));
+        }
+    }
+
+    @Nested
     @DisplayName("Edge Cases")
     class EdgeCaseTests {
 
@@ -286,6 +360,18 @@ class AccessControlEvaluatorTest {
 
             // Should still match valid pattern
             assertTrue(evaluator.isAllowed(SourceIdentifier.of("10.0.0.1"), route, Optional.empty()));
+        }
+
+        @Test
+        @DisplayName("Should handle CIDR with non-matching remaining bits")
+        void shouldHandleCidrWithNonMatchingRemainingBits() {
+            // /20 has 4 remaining bits in the third byte
+            config.setAllowedIps(List.of("192.168.16.0/20"));
+            var route = createPrivateRoute("/api/private");
+
+            assertTrue(evaluator.isAllowed(SourceIdentifier.of("192.168.16.1"), route, Optional.empty()));
+            assertTrue(evaluator.isAllowed(SourceIdentifier.of("192.168.31.255"), route, Optional.empty()));
+            assertFalse(evaluator.isAllowed(SourceIdentifier.of("192.168.32.1"), route, Optional.empty()));
         }
     }
 

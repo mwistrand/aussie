@@ -141,7 +141,7 @@ class GatewayServiceTest {
         void shouldReturnRouteNotFoundWhenNoMatchingRoute() {
             var request = createRequest("GET", "/api/unknown");
 
-            var result = gatewayService.forward(request).await().indefinitely();
+            var result = gatewayService.forward(request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.RouteNotFound.class, result);
             var routeNotFound = (GatewayResult.RouteNotFound) result;
@@ -154,7 +154,7 @@ class GatewayServiceTest {
             registerService("test-service", "http://backend:9090", "/api/test", Set.of("GET"));
             var request = createRequest("POST", "/api/test");
 
-            var result = gatewayService.forward(request).await().indefinitely();
+            var result = gatewayService.forward(request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.RouteNotFound.class, result);
         }
@@ -168,7 +168,7 @@ class GatewayServiceTest {
 
             var request = createRequest("GET", "/api/test");
 
-            var result = gatewayService.forward(request).await().indefinitely();
+            var result = gatewayService.forward(request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.Success.class, result);
             var success = (GatewayResult.Success) result;
@@ -185,7 +185,7 @@ class GatewayServiceTest {
 
             var request = createRequest("GET", "/api/test");
 
-            var result = gatewayService.forward(request).await().indefinitely();
+            var result = gatewayService.forward(request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.Error.class, result);
             var error = (GatewayResult.Error) result;
@@ -200,7 +200,7 @@ class GatewayServiceTest {
 
             var request = createRequest("GET", "/api/items");
 
-            gatewayService.forward(request).await().indefinitely();
+            gatewayService.forward(request).await().atMost(Duration.ofSeconds(5));
 
             var forwardedRequest = proxyClient.getLastRequest();
             assertEquals(URI.create("http://backend:9090/api/items"), forwardedRequest.targetUri());
@@ -214,7 +214,7 @@ class GatewayServiceTest {
 
             var request = createRequest("POST", "/api/items");
 
-            gatewayService.forward(request).await().indefinitely();
+            gatewayService.forward(request).await().atMost(Duration.ofSeconds(5));
 
             var forwardedRequest = proxyClient.getLastRequest();
             assertEquals("POST", forwardedRequest.method());
@@ -234,15 +234,15 @@ class GatewayServiceTest {
             var getResult = gatewayService
                     .forward(createRequest("GET", "/api/all"))
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
             var postResult = gatewayService
                     .forward(createRequest("POST", "/api/all"))
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
             var deleteResult = gatewayService
                     .forward(createRequest("DELETE", "/api/all"))
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.Success.class, getResult);
             assertInstanceOf(GatewayResult.Success.class, postResult);
@@ -268,7 +268,7 @@ class GatewayServiceTest {
 
             var request = createRequest("GET", "/api/users/123");
 
-            var result = gatewayService.forward(request).await().indefinitely();
+            var result = gatewayService.forward(request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.Success.class, result);
         }
@@ -287,7 +287,7 @@ class GatewayServiceTest {
 
             var request = createRequest("GET", "/api/users/123/orders/456");
 
-            var result = gatewayService.forward(request).await().indefinitely();
+            var result = gatewayService.forward(request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.Success.class, result);
             var forwardedRequest = proxyClient.getLastRequest();

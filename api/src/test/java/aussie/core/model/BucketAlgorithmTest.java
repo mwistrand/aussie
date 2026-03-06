@@ -314,6 +314,44 @@ class BucketAlgorithmTest {
         }
 
         @Test
+        @DisplayName("should use window seconds as retry-after when refill rate is zero")
+        void shouldUseWindowSecondsWhenRefillRateZero() {
+            // 0 requests per window → refill rate = 0
+            var limit = new EffectiveRateLimit(0, 30, 0);
+            var nowMillis = System.currentTimeMillis();
+
+            var decision = algorithm.checkAndConsume(null, limit, nowMillis);
+
+            assertFalse(decision.allowed());
+            assertEquals(30, decision.retryAfterSeconds());
+        }
+
+        @Test
+        @DisplayName("should return initial state status via getStatus when current state is null")
+        void shouldReturnInitialStateStatusWhenNull() {
+            var limit = new EffectiveRateLimit(100, 60, 10);
+            var nowMillis = System.currentTimeMillis();
+
+            var status = algorithm.getStatus(null, limit, nowMillis);
+
+            assertTrue(status.allowed());
+            assertEquals(10, status.remaining());
+        }
+
+        @Test
+        @DisplayName("should return existing state status via getStatus when state exists")
+        void shouldReturnExistingStateStatusViaGetStatus() {
+            var limit = new EffectiveRateLimit(100, 60, 10);
+            var nowMillis = System.currentTimeMillis();
+            var state = new BucketState(7, nowMillis);
+
+            var status = algorithm.getStatus(state, limit, nowMillis);
+
+            assertTrue(status.allowed());
+            assertEquals(7, status.remaining());
+        }
+
+        @Test
         @DisplayName("should exhaust all tokens in burst")
         void shouldExhaustAllTokensInBurst() {
             var limit = new EffectiveRateLimit(100, 60, 5);

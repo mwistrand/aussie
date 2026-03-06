@@ -193,4 +193,130 @@ class RevocationCacheTest {
             assertFalse(disabledCache.isEnabled());
         }
     }
+
+    @Nested
+    @DisplayName("invalidateUser()")
+    class InvalidateUserTests {
+
+        @Test
+        @DisplayName("should remove cached user revocation")
+        void shouldRemoveCachedUserRevocation() {
+            final var userId = "user-to-invalidate";
+            final var issuedBefore = Instant.now();
+            final var expiresAt = Instant.now().plus(Duration.ofHours(1));
+
+            cache.cacheUserRevocation(userId, issuedBefore, expiresAt);
+
+            // Verify it's cached
+            assertTrue(cache.isUserRevoked(userId, issuedBefore.minus(Duration.ofMinutes(5)))
+                    .isPresent());
+
+            // Invalidate
+            cache.invalidateUser(userId);
+
+            // Should be gone
+            assertTrue(cache.isUserRevoked(userId, issuedBefore.minus(Duration.ofMinutes(5)))
+                    .isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("cacheNotRevoked()")
+    class CacheNotRevokedTests {
+
+        @Test
+        @DisplayName("should be a no-op")
+        void shouldBeNoOp() {
+            // cacheNotRevoked is intentionally a no-op
+            cache.cacheNotRevoked("some-jti");
+
+            // Should not affect JTI revocation lookups
+            assertTrue(cache.isJtiRevoked("some-jti").isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("disabled cache operations")
+    class DisabledCacheTests {
+
+        private RevocationCache disabledCache;
+
+        @BeforeEach
+        void setUp() {
+            when(config.enabled()).thenReturn(false);
+            disabledCache = new RevocationCache(config);
+            disabledCache.init();
+        }
+
+        @Test
+        @DisplayName("should return empty for isJtiRevoked when disabled")
+        void shouldReturnEmptyForIsJtiRevokedWhenDisabled() {
+            assertTrue(disabledCache.isJtiRevoked("any-jti").isEmpty());
+        }
+
+        @Test
+        @DisplayName("should return empty for isUserRevoked when disabled")
+        void shouldReturnEmptyForIsUserRevokedWhenDisabled() {
+            assertTrue(disabledCache.isUserRevoked("any-user", Instant.now()).isEmpty());
+        }
+
+        @Test
+        @DisplayName("should handle cacheJtiRevocation when disabled")
+        void shouldHandleCacheJtiRevocationWhenDisabled() {
+            // Should not throw
+            disabledCache.cacheJtiRevocation("jti", Instant.now().plus(Duration.ofHours(1)));
+            assertTrue(disabledCache.isJtiRevoked("jti").isEmpty());
+        }
+
+        @Test
+        @DisplayName("should handle cacheUserRevocation when disabled")
+        void shouldHandleCacheUserRevocationWhenDisabled() {
+            // Should not throw
+            disabledCache.cacheUserRevocation(
+                    "user", Instant.now(), Instant.now().plus(Duration.ofHours(1)));
+            assertTrue(disabledCache
+                    .isUserRevoked("user", Instant.now().minus(Duration.ofMinutes(5)))
+                    .isEmpty());
+        }
+
+        @Test
+        @DisplayName("should handle invalidateJti when disabled")
+        void shouldHandleInvalidateJtiWhenDisabled() {
+            // Should not throw
+            disabledCache.invalidateJti("jti");
+        }
+
+        @Test
+        @DisplayName("should handle invalidateUser when disabled")
+        void shouldHandleInvalidateUserWhenDisabled() {
+            // Should not throw
+            disabledCache.invalidateUser("user");
+        }
+
+        @Test
+        @DisplayName("should handle invalidateAll when disabled")
+        void shouldHandleInvalidateAllWhenDisabled() {
+            // Should not throw
+            disabledCache.invalidateAll();
+        }
+    }
+
+    @Nested
+    @DisplayName("isUserRevoked() edge cases")
+    class IsUserRevokedEdgeCaseTests {
+
+        @Test
+        @DisplayName("should return empty when entry is expired")
+        void shouldReturnEmptyWhenEntryExpired() {
+            final var userId = "expired-user";
+            final var issuedBefore = Instant.now();
+            final var expiresAt = Instant.now().minus(Duration.ofSeconds(1)); // Already expired
+
+            cache.cacheUserRevocation(userId, issuedBefore, expiresAt);
+
+            final var result = cache.isUserRevoked(userId, issuedBefore.minus(Duration.ofMinutes(5)));
+
+            assertTrue(result.isEmpty());
+        }
+    }
 }

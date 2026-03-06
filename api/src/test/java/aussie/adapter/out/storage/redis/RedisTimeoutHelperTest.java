@@ -50,7 +50,7 @@ class RedisTimeoutHelperTest {
             final var operation = Uni.createFrom().item(expected);
 
             final var result =
-                    helper.withTimeout(operation, OPERATION_NAME).await().indefinitely();
+                    helper.withTimeout(operation, OPERATION_NAME).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(expected, result);
             verifyNoInteractions(metrics);
@@ -63,7 +63,7 @@ class RedisTimeoutHelperTest {
 
             final var exception = assertThrows(
                     RedisTimeoutException.class,
-                    () -> helper.withTimeout(operation, OPERATION_NAME).await().indefinitely());
+                    () -> helper.withTimeout(operation, OPERATION_NAME).await().atMost(Duration.ofSeconds(5)));
 
             assertEquals(OPERATION_NAME, exception.getOperation());
             assertEquals(REPOSITORY_NAME, exception.getRepository());
@@ -85,7 +85,7 @@ class RedisTimeoutHelperTest {
 
             final var result = helper.withTimeoutGraceful(operation, OPERATION_NAME)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isPresent());
             assertEquals(expected, result.get());
@@ -99,7 +99,7 @@ class RedisTimeoutHelperTest {
 
             final var result = helper.withTimeoutGraceful(operation, OPERATION_NAME)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isEmpty());
             verifyNoInteractions(metrics);
@@ -112,7 +112,7 @@ class RedisTimeoutHelperTest {
 
             final var result = helper.withTimeoutGraceful(operation, OPERATION_NAME)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isEmpty());
             verify(metrics).recordRedisTimeout(eq(REPOSITORY_NAME), eq(OPERATION_NAME));
@@ -125,7 +125,7 @@ class RedisTimeoutHelperTest {
 
             final var result = helper.withTimeoutGraceful(operation, OPERATION_NAME)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isEmpty());
             verify(metrics).recordRedisFailure(eq(REPOSITORY_NAME), eq(OPERATION_NAME));
@@ -144,7 +144,7 @@ class RedisTimeoutHelperTest {
 
             final var result = helper.withTimeoutFallback(operation, OPERATION_NAME, () -> 0L)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertEquals(expected, result);
             verifyNoInteractions(metrics);
@@ -158,7 +158,7 @@ class RedisTimeoutHelperTest {
 
             final var result = helper.withTimeoutFallback(operation, OPERATION_NAME, () -> fallbackValue)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertEquals(fallbackValue, result);
             verify(metrics).recordRedisTimeout(eq(REPOSITORY_NAME), eq(OPERATION_NAME));
@@ -171,7 +171,7 @@ class RedisTimeoutHelperTest {
 
             final var result = helper.withTimeoutFallback(operation, OPERATION_NAME, () -> null)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertEquals(null, result);
             verify(metrics).recordRedisTimeout(eq(REPOSITORY_NAME), eq(OPERATION_NAME));
@@ -185,7 +185,7 @@ class RedisTimeoutHelperTest {
 
             final var result = helper.withTimeoutFallback(operation, OPERATION_NAME, () -> fallbackValue)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertEquals(fallbackValue, result);
             verify(metrics).recordRedisFailure(eq(REPOSITORY_NAME), eq(OPERATION_NAME));
@@ -202,7 +202,7 @@ class RedisTimeoutHelperTest {
             final var operation = Uni.createFrom().voidItem();
 
             final var result =
-                    helper.withTimeoutSilent(operation, OPERATION_NAME).await().indefinitely();
+                    helper.withTimeoutSilent(operation, OPERATION_NAME).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(null, result);
             verifyNoInteractions(metrics);
@@ -214,7 +214,7 @@ class RedisTimeoutHelperTest {
             final var operation = Uni.createFrom().<Void>nothing();
 
             final var result =
-                    helper.withTimeoutSilent(operation, OPERATION_NAME).await().indefinitely();
+                    helper.withTimeoutSilent(operation, OPERATION_NAME).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(null, result);
             verify(metrics).recordRedisTimeout(eq(REPOSITORY_NAME), eq(OPERATION_NAME));
@@ -226,7 +226,7 @@ class RedisTimeoutHelperTest {
             final var operation = Uni.createFrom().<Void>failure(new RuntimeException("Connection refused"));
 
             final var result =
-                    helper.withTimeoutSilent(operation, OPERATION_NAME).await().indefinitely();
+                    helper.withTimeoutSilent(operation, OPERATION_NAME).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(null, result);
             verify(metrics).recordRedisFailure(eq(REPOSITORY_NAME), eq(OPERATION_NAME));
@@ -246,7 +246,7 @@ class RedisTimeoutHelperTest {
             final var result = helperWithoutMetrics
                     .withTimeoutGraceful(operation, OPERATION_NAME)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isEmpty());
         }

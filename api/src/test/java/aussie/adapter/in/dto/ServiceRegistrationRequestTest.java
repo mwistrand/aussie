@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.DisplayName;
@@ -206,6 +207,183 @@ class ServiceRegistrationRequestTest {
             var model = request.toModel(true);
 
             assertEquals(EndpointVisibility.PUBLIC, model.defaultVisibility());
+        }
+
+        @Test
+        @DisplayName("Should default version to 1 when null")
+        void shouldDefaultVersionToOneWhenNull() {
+            var request = new ServiceRegistrationRequest(
+                    null,
+                    "test-service",
+                    null,
+                    "http://api.example.com:8080",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null);
+
+            var model = request.toModel(true);
+
+            assertEquals(1L, model.version());
+        }
+
+        @Test
+        @DisplayName("Should convert visibility rules when present")
+        void shouldConvertVisibilityRules() {
+            var rule = new VisibilityRuleDto("/admin/**", List.of("GET"), "PRIVATE");
+            var request = new ServiceRegistrationRequest(
+                    1L,
+                    "test-service",
+                    null,
+                    "http://api.example.com:8080",
+                    null,
+                    null,
+                    null,
+                    List.of(rule),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null);
+
+            var model = request.toModel(true);
+
+            assertEquals(1, model.visibilityRules().size());
+            assertEquals("/admin/**", model.visibilityRules().get(0).pattern());
+        }
+
+        @Test
+        @DisplayName("Should convert cors config when present")
+        void shouldConvertCorsConfig() {
+            var cors = new CorsConfigDto(List.of("https://example.com"), null, null, null, true, 3600L);
+            var request = new ServiceRegistrationRequest(
+                    1L,
+                    "test-service",
+                    null,
+                    "http://api.example.com:8080",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    cors,
+                    null,
+                    null,
+                    null);
+
+            var model = request.toModel(true);
+
+            assertTrue(model.corsConfig().isPresent());
+            assertEquals(
+                    List.of("https://example.com"), model.corsConfig().get().allowedOrigins());
+        }
+
+        @Test
+        @DisplayName("Should convert permission policy when present")
+        void shouldConvertPermissionPolicy() {
+            var policy = new ServicePermissionPolicyDto(Map.of("read", new OperationPermissionDto(Set.of("viewer"))));
+            var request = new ServiceRegistrationRequest(
+                    1L,
+                    "test-service",
+                    null,
+                    "http://api.example.com:8080",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    policy,
+                    null,
+                    null);
+
+            var model = request.toModel(true);
+
+            assertTrue(model.permissionPolicy().isPresent());
+        }
+
+        @Test
+        @DisplayName("Should convert rate limit config when present")
+        void shouldConvertRateLimitConfig() {
+            var rateLimit = new ServiceRateLimitConfigDto(100L, 60L, 50L, null);
+            var request = new ServiceRegistrationRequest(
+                    1L,
+                    "test-service",
+                    null,
+                    "http://api.example.com:8080",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    rateLimit,
+                    null);
+
+            var model = request.toModel(true);
+
+            assertTrue(model.rateLimitConfig().isPresent());
+        }
+
+        @Test
+        @DisplayName("Should convert sampling config when present")
+        void shouldConvertSamplingConfig() {
+            var sampling = new ServiceSamplingConfigDto(0.5);
+            var request = new ServiceRegistrationRequest(
+                    1L,
+                    "test-service",
+                    null,
+                    "http://api.example.com:8080",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    sampling);
+
+            var model = request.toModel(true);
+
+            assertTrue(model.samplingConfig().isPresent());
+        }
+
+        @Test
+        @DisplayName("Should convert access config when present")
+        void shouldConvertAccessConfig() {
+            var accessConfig = new ServiceAccessConfigDto(List.of("10.0.0.1"), null, null);
+            var request = new ServiceRegistrationRequest(
+                    1L,
+                    "test-service",
+                    null,
+                    "http://api.example.com:8080",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    accessConfig,
+                    null,
+                    null,
+                    null,
+                    null);
+
+            var model = request.toModel(true);
+
+            assertTrue(model.accessConfig().isPresent());
         }
     }
 }

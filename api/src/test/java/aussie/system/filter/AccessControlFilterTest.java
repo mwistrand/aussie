@@ -236,6 +236,32 @@ class AccessControlFilterTest {
         }
 
         @Test
+        @DisplayName("should use ServiceOnlyMatch when route found but serviceId does not match")
+        void serviceFoundButRouteServiceIdMismatch() {
+            setupPath("/my-service/api/users", "GET");
+            setupSocketAddress("10.0.0.1");
+
+            var myService = createService("my-service");
+            // Route belongs to a different service
+            var otherService = createService("other-service");
+            var otherRouteMatch = new RouteMatch(
+                    otherService, EndpointConfig.publicEndpoint("/api/users", Set.of("GET")), "/api/users", Map.of());
+
+            when(serviceRegistry.getService("my-service"))
+                    .thenReturn(Uni.createFrom().item(Optional.of(myService)));
+            when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.of(otherRouteMatch));
+
+            var source = SourceIdentifier.of("10.0.0.1");
+            when(sourceExtractor.extract(eq(requestContext), eq("10.0.0.1"))).thenReturn(source);
+            when(accessEvaluator.isAllowed(eq(source), any(ServiceOnlyMatch.class), eq(myService.accessConfig())))
+                    .thenReturn(true);
+
+            var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
+
+            assertNull(result);
+        }
+
+        @Test
         @DisplayName("should return null when service not found")
         void serviceNotFound() {
             setupPath("/unknown-service/api/users", "GET");
@@ -248,6 +274,33 @@ class AccessControlFilterTest {
 
             assertNull(result);
             verify(accessEvaluator, never()).isAllowed(any(), any(), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("Path normalization")
+    class PathNormalization {
+
+        @Test
+        @DisplayName("should handle path without leading slash")
+        void pathWithoutLeadingSlash() {
+            setupPath("my-service/api/users", "GET");
+            setupSocketAddress("10.0.0.1");
+
+            var service = createService("my-service");
+
+            when(serviceRegistry.getService("my-service"))
+                    .thenReturn(Uni.createFrom().item(Optional.of(service)));
+            when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.empty());
+
+            var source = SourceIdentifier.of("10.0.0.1");
+            when(sourceExtractor.extract(eq(requestContext), eq("10.0.0.1"))).thenReturn(source);
+            when(accessEvaluator.isAllowed(eq(source), any(ServiceOnlyMatch.class), eq(service.accessConfig())))
+                    .thenReturn(true);
+
+            var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
+
+            assertNull(result);
         }
     }
 

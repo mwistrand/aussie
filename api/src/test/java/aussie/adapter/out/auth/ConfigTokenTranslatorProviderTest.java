@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -167,7 +168,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("roles", List.of("admin", "user"));
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("admin", "user"), result.roles());
         }
@@ -190,7 +191,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("scope", "read write admin");
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("service.read", "service.write"), result.permissions());
         }
@@ -213,7 +214,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("groups", "admins, users, guests");
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("admins"), result.roles());
             assertEquals(Set.of("admin.all"), result.permissions());
@@ -237,7 +238,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("realm_access", Map.of("roles", List.of("admin", "viewer")));
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("admin"), result.roles());
         }
@@ -257,7 +258,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("other", "value");
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.roles().isEmpty());
             assertTrue(result.permissions().isEmpty());
@@ -288,7 +289,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("groups", List.of("APP_admin", "APP_user", "other"));
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("admin", "user"), result.roles());
         }
@@ -313,7 +314,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("groups", List.of("service:admin"));
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("service.admin"), result.roles());
         }
@@ -338,7 +339,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("groups", List.of("ADMIN", "User"));
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("admin"), result.roles());
         }
@@ -363,7 +364,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("groups", List.of("admin", "User"));
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("ADMIN"), result.roles());
         }
@@ -388,7 +389,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("groups", List.of("group-admin", "group-user"));
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("admin"), result.roles());
         }
@@ -416,7 +417,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("groups", List.of("APP_ADMIN"));
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("admin"), result.roles());
         }
@@ -447,7 +448,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("roles", List.of("admin", "viewer"));
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("admin", "viewer"), result.roles());
             assertEquals(
@@ -475,7 +476,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("scope", "read:users write:users openid");
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.roles().isEmpty());
             assertEquals(Set.of("users.read", "users.write"), result.permissions());
@@ -499,7 +500,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("roles", List.of("admin", "custom-role", "other"));
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("admin", "custom-role", "other"), result.roles());
         }
@@ -532,7 +533,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("permissions", List.of("read:services", "write:services"));
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("service.config.read", "service.config.update"), result.permissions());
         }
@@ -561,7 +562,7 @@ class ConfigTokenTranslatorProviderTest {
 
             var claims =
                     Map.<String, Object>of("realm_access", Map.of("roles", List.of("aussie-admin", "offline_access")));
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("aussie-admin"), result.roles());
             assertEquals(Set.of("admin"), result.permissions());
@@ -591,7 +592,7 @@ class ConfigTokenTranslatorProviderTest {
 
             var claims = Map.<String, Object>of(
                     "groups", List.of("12345678-1234-1234-1234-123456789abc", "some-other-group"));
-            var result = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Set.of("12345678-1234-1234-1234-123456789abc"), result.roles());
             assertEquals(Set.of("admin"), result.permissions());
@@ -621,7 +622,7 @@ class ConfigTokenTranslatorProviderTest {
                     """);
 
             var claims = Map.<String, Object>of("roles", List.of("admin"));
-            var result1 = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result1 = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
             assertEquals(Set.of("old.permission"), result1.permissions());
 
             // Update config file
@@ -643,7 +644,7 @@ class ConfigTokenTranslatorProviderTest {
             // Reload
             provider.reloadConfig();
 
-            var result2 = provider.translate(ISSUER, SUBJECT, claims).await().indefinitely();
+            var result2 = provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
             assertEquals(Set.of("new.permission"), result2.permissions());
         }
     }

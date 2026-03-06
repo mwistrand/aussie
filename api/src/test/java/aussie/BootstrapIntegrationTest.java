@@ -4,6 +4,7 @@ import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.util.Map;
 
 import jakarta.inject.Inject;
@@ -83,7 +84,7 @@ public class BootstrapIntegrationTest {
     @DisplayName("should create bootstrap key on startup")
     void shouldCreateBootstrapKeyOnStartup() {
         // The bootstrap key should have been created during application startup
-        var keys = repository.findAll().await().indefinitely();
+        var keys = repository.findAll().await().atMost(Duration.ofSeconds(5));
 
         var bootstrapKey =
                 keys.stream().filter(k -> k.name().equals("bootstrap-admin")).findFirst();
@@ -98,7 +99,7 @@ public class BootstrapIntegrationTest {
     @Test
     @DisplayName("bootstrap key should be validated correctly")
     void bootstrapKeyShouldBeValidated() {
-        var validated = apiKeyService.validate(TEST_BOOTSTRAP_KEY).await().indefinitely();
+        var validated = apiKeyService.validate(TEST_BOOTSTRAP_KEY).await().atMost(Duration.ofSeconds(5));
 
         assertTrue(validated.isPresent(), "Bootstrap key should validate successfully");
         assertTrue(

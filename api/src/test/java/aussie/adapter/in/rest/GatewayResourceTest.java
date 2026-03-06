@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -87,7 +88,7 @@ class GatewayResourceTest {
             var success = new GatewayResult.Success(200, Map.of(), new byte[0]);
             when(gatewayUseCase.forward(any())).thenReturn(Uni.createFrom().item(success));
 
-            var result = resource.proxyGet("api/users", requestContext).await().indefinitely();
+            var result = resource.proxyGet("api/users", requestContext).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(gatewayUseCase).forward(captor.capture());
@@ -105,7 +106,7 @@ class GatewayResourceTest {
             when(requestContext.getMethod()).thenReturn("POST");
             when(gatewayUseCase.forward(any())).thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyPost("api/users", requestContext, body).await().indefinitely();
+            resource.proxyPost("api/users", requestContext, body).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(gatewayUseCase).forward(captor.capture());
@@ -120,7 +121,7 @@ class GatewayResourceTest {
             when(requestContext.getMethod()).thenReturn("PUT");
             when(gatewayUseCase.forward(any())).thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyPut("api/users/1", requestContext, body).await().indefinitely();
+            resource.proxyPut("api/users/1", requestContext, body).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(gatewayUseCase).forward(captor.capture());
@@ -135,7 +136,7 @@ class GatewayResourceTest {
             when(requestContext.getMethod()).thenReturn("DELETE");
             when(gatewayUseCase.forward(any())).thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyDelete("api/users/1", requestContext).await().indefinitely();
+            resource.proxyDelete("api/users/1", requestContext).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(gatewayUseCase).forward(captor.capture());
@@ -150,7 +151,7 @@ class GatewayResourceTest {
             when(requestContext.getMethod()).thenReturn("PATCH");
             when(gatewayUseCase.forward(any())).thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyPatch("api/users/1", requestContext, body).await().indefinitely();
+            resource.proxyPatch("api/users/1", requestContext, body).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(gatewayUseCase).forward(captor.capture());
@@ -164,7 +165,7 @@ class GatewayResourceTest {
             when(requestContext.getMethod()).thenReturn("HEAD");
             when(gatewayUseCase.forward(any())).thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyHead("api/status", requestContext).await().indefinitely();
+            resource.proxyHead("api/status", requestContext).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(gatewayUseCase).forward(captor.capture());
@@ -178,7 +179,7 @@ class GatewayResourceTest {
             when(requestContext.getMethod()).thenReturn("OPTIONS");
             when(gatewayUseCase.forward(any())).thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyOptions("api/users", requestContext).await().indefinitely();
+            resource.proxyOptions("api/users", requestContext).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(gatewayUseCase).forward(captor.capture());
@@ -196,7 +197,7 @@ class GatewayResourceTest {
             var success = new GatewayResult.Success(200, Map.of(), new byte[0]);
             when(gatewayUseCase.forward(any())).thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyGet("api/test", requestContext).await().indefinitely();
+            resource.proxyGet("api/test", requestContext).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(gatewayUseCase).forward(captor.capture());
@@ -212,7 +213,7 @@ class GatewayResourceTest {
             var success = new GatewayResult.Success(200, Map.of(), new byte[0]);
             when(gatewayUseCase.forward(any())).thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyPost("api/test", requestContext, null).await().indefinitely();
+            resource.proxyPost("api/test", requestContext, null).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(gatewayUseCase).forward(captor.capture());
@@ -227,7 +228,7 @@ class GatewayResourceTest {
             var success = new GatewayResult.Success(200, Map.of(), new byte[0]);
             when(gatewayUseCase.forward(any())).thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyGet("api/data", requestContext).await().indefinitely();
+            resource.proxyGet("api/data", requestContext).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(gatewayUseCase).forward(captor.capture());
@@ -246,7 +247,7 @@ class GatewayResourceTest {
             var success = new GatewayResult.Success(200, Map.of(), new byte[0]);
             when(gatewayUseCase.forward(any())).thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyGet("test", requestContext).await().indefinitely();
+            resource.proxyGet("test", requestContext).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(gatewayUseCase).forward(captor.capture());
@@ -260,7 +261,7 @@ class GatewayResourceTest {
             var success = new GatewayResult.Success(200, Map.of(), new byte[0]);
             when(gatewayUseCase.forward(any())).thenReturn(Uni.createFrom().item(success));
 
-            resource.proxyGet("test", requestContext).await().indefinitely();
+            resource.proxyGet("test", requestContext).await().atMost(Duration.ofSeconds(5));
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(gatewayUseCase).forward(captor.capture());
@@ -282,7 +283,7 @@ class GatewayResourceTest {
             var success = new GatewayResult.Success(201, responseHeaders, body);
             when(gatewayUseCase.forward(any())).thenReturn(Uni.createFrom().item(success));
 
-            var response = resource.proxyGet("test", requestContext).await().indefinitely();
+            var response = resource.proxyGet("test", requestContext).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(201, response.getStatus());
             assertNotNull(response.getEntity());
@@ -294,7 +295,7 @@ class GatewayResourceTest {
             var success = new GatewayResult.Success(204, Map.of(), new byte[0]);
             when(gatewayUseCase.forward(any())).thenReturn(Uni.createFrom().item(success));
 
-            var response = resource.proxyGet("test", requestContext).await().indefinitely();
+            var response = resource.proxyGet("test", requestContext).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(204, response.getStatus());
             assertNull(response.getEntity());
@@ -308,7 +309,7 @@ class GatewayResourceTest {
 
             var ex = assertThrows(HttpProblem.class, () -> resource.proxyGet("unknown/path", requestContext)
                     .await()
-                    .indefinitely());
+                    .atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -321,7 +322,7 @@ class GatewayResourceTest {
 
             var ex = assertThrows(
                     HttpProblem.class,
-                    () -> resource.proxyGet("test", requestContext).await().indefinitely());
+                    () -> resource.proxyGet("test", requestContext).await().atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -334,7 +335,7 @@ class GatewayResourceTest {
 
             var ex = assertThrows(
                     HttpProblem.class,
-                    () -> resource.proxyGet("admin", requestContext).await().indefinitely());
+                    () -> resource.proxyGet("admin", requestContext).await().atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -347,7 +348,7 @@ class GatewayResourceTest {
 
             var ex = assertThrows(
                     HttpProblem.class,
-                    () -> resource.proxyGet("test", requestContext).await().indefinitely());
+                    () -> resource.proxyGet("test", requestContext).await().atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.BAD_GATEWAY.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -360,7 +361,7 @@ class GatewayResourceTest {
 
             var ex = assertThrows(
                     HttpProblem.class,
-                    () -> resource.proxyGet("test", requestContext).await().indefinitely());
+                    () -> resource.proxyGet("test", requestContext).await().atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -373,7 +374,7 @@ class GatewayResourceTest {
 
             var ex = assertThrows(
                     HttpProblem.class,
-                    () -> resource.proxyGet("test", requestContext).await().indefinitely());
+                    () -> resource.proxyGet("test", requestContext).await().atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.FORBIDDEN.getStatusCode(), ex.getStatus().getStatusCode());
         }
@@ -386,7 +387,7 @@ class GatewayResourceTest {
 
             var ex = assertThrows(
                     HttpProblem.class,
-                    () -> resource.proxyGet("test", requestContext).await().indefinitely());
+                    () -> resource.proxyGet("test", requestContext).await().atMost(Duration.ofSeconds(5)));
             assertEquals(
                     Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
         }

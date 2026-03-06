@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -42,8 +43,8 @@ class InMemoryTranslationConfigRepositoryTest {
         void shouldSaveAndRetrieve() {
             var version = TranslationConfigVersion.create("test-id", 1, testConfig, "user", "comment");
 
-            repository.save(version).await().indefinitely();
-            var result = repository.findById("test-id").await().indefinitely();
+            repository.save(version).await().atMost(Duration.ofSeconds(5));
+            var result = repository.findById("test-id").await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isPresent());
             assertEquals("test-id", result.get().id());
@@ -53,7 +54,7 @@ class InMemoryTranslationConfigRepositoryTest {
         @Test
         @DisplayName("should return empty for unknown id")
         void shouldReturnEmptyForUnknownId() {
-            var result = repository.findById("unknown").await().indefinitely();
+            var result = repository.findById("unknown").await().atMost(Duration.ofSeconds(5));
             assertTrue(result.isEmpty());
         }
     }
@@ -66,9 +67,9 @@ class InMemoryTranslationConfigRepositoryTest {
         @DisplayName("should find version by number")
         void shouldFindByNumber() {
             var version = TranslationConfigVersion.create("id", 5, testConfig, "user", null);
-            repository.save(version).await().indefinitely();
+            repository.save(version).await().atMost(Duration.ofSeconds(5));
 
-            var result = repository.findByVersion(5).await().indefinitely();
+            var result = repository.findByVersion(5).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isPresent());
             assertEquals("id", result.get().id());
@@ -77,7 +78,7 @@ class InMemoryTranslationConfigRepositoryTest {
         @Test
         @DisplayName("should return empty for unknown version number")
         void shouldReturnEmptyForUnknownVersion() {
-            var result = repository.findByVersion(999).await().indefinitely();
+            var result = repository.findByVersion(999).await().atMost(Duration.ofSeconds(5));
             assertTrue(result.isEmpty());
         }
     }
@@ -89,16 +90,16 @@ class InMemoryTranslationConfigRepositoryTest {
         @Test
         @DisplayName("should start at 1")
         void shouldStartAtOne() {
-            var next = repository.getNextVersionNumber().await().indefinitely();
+            var next = repository.getNextVersionNumber().await().atMost(Duration.ofSeconds(5));
             assertEquals(1, next);
         }
 
         @Test
         @DisplayName("should increment atomically")
         void shouldIncrementAtomically() {
-            var first = repository.getNextVersionNumber().await().indefinitely();
-            var second = repository.getNextVersionNumber().await().indefinitely();
-            var third = repository.getNextVersionNumber().await().indefinitely();
+            var first = repository.getNextVersionNumber().await().atMost(Duration.ofSeconds(5));
+            var second = repository.getNextVersionNumber().await().atMost(Duration.ofSeconds(5));
+            var third = repository.getNextVersionNumber().await().atMost(Duration.ofSeconds(5));
 
             assertEquals(1, first);
             assertEquals(2, second);
@@ -113,7 +114,7 @@ class InMemoryTranslationConfigRepositoryTest {
         @Test
         @DisplayName("should return empty when no active version")
         void shouldReturnEmptyWhenNoActive() {
-            var result = repository.getActive().await().indefinitely();
+            var result = repository.getActive().await().atMost(Duration.ofSeconds(5));
             assertTrue(result.isEmpty());
         }
 
@@ -121,10 +122,10 @@ class InMemoryTranslationConfigRepositoryTest {
         @DisplayName("should set and get active version")
         void shouldSetAndGetActive() {
             var version = TranslationConfigVersion.create("active-id", 1, testConfig, "user", null);
-            repository.save(version).await().indefinitely();
-            repository.setActive("active-id").await().indefinitely();
+            repository.save(version).await().atMost(Duration.ofSeconds(5));
+            repository.setActive("active-id").await().atMost(Duration.ofSeconds(5));
 
-            var result = repository.getActive().await().indefinitely();
+            var result = repository.getActive().await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isPresent());
             assertEquals("active-id", result.get().id());
@@ -134,7 +135,7 @@ class InMemoryTranslationConfigRepositoryTest {
         @Test
         @DisplayName("should return false for unknown version id")
         void shouldReturnFalseForUnknownId() {
-            var result = repository.setActive("unknown").await().indefinitely();
+            var result = repository.setActive("unknown").await().atMost(Duration.ofSeconds(5));
             assertFalse(result);
         }
 
@@ -144,15 +145,15 @@ class InMemoryTranslationConfigRepositoryTest {
             var v1 = TranslationConfigVersion.create("v1", 1, testConfig, "user", null);
             var v2 = TranslationConfigVersion.create("v2", 2, testConfig, "user", null);
 
-            repository.save(v1).await().indefinitely();
-            repository.save(v2).await().indefinitely();
-            repository.setActive("v1").await().indefinitely();
+            repository.save(v1).await().atMost(Duration.ofSeconds(5));
+            repository.save(v2).await().atMost(Duration.ofSeconds(5));
+            repository.setActive("v1").await().atMost(Duration.ofSeconds(5));
 
-            var active1 = repository.getActive().await().indefinitely();
+            var active1 = repository.getActive().await().atMost(Duration.ofSeconds(5));
             assertEquals("v1", active1.get().id());
 
-            repository.setActive("v2").await().indefinitely();
-            var active2 = repository.getActive().await().indefinitely();
+            repository.setActive("v2").await().atMost(Duration.ofSeconds(5));
+            var active2 = repository.getActive().await().atMost(Duration.ofSeconds(5));
             assertEquals("v2", active2.get().id());
         }
     }
@@ -164,7 +165,7 @@ class InMemoryTranslationConfigRepositoryTest {
         @Test
         @DisplayName("should return empty list when no versions")
         void shouldReturnEmptyList() {
-            var result = repository.listVersions().await().indefinitely();
+            var result = repository.listVersions().await().atMost(Duration.ofSeconds(5));
             assertTrue(result.isEmpty());
         }
 
@@ -174,17 +175,17 @@ class InMemoryTranslationConfigRepositoryTest {
             repository
                     .save(TranslationConfigVersion.create("a", 1, testConfig, "user", null))
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
             repository
                     .save(TranslationConfigVersion.create("b", 3, testConfig, "user", null))
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
             repository
                     .save(TranslationConfigVersion.create("c", 2, testConfig, "user", null))
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
-            var result = repository.listVersions().await().indefinitely();
+            var result = repository.listVersions().await().atMost(Duration.ofSeconds(5));
 
             assertEquals(3, result.size());
             assertEquals(3, result.get(0).version());
@@ -199,10 +200,10 @@ class InMemoryTranslationConfigRepositoryTest {
                 repository
                         .save(TranslationConfigVersion.create("v" + i, i, testConfig, "user", null))
                         .await()
-                        .indefinitely();
+                        .atMost(Duration.ofSeconds(5));
             }
 
-            var result = repository.listVersions(2, 1).await().indefinitely();
+            var result = repository.listVersions(2, 1).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(2, result.size());
             assertEquals(4, result.get(0).version());
@@ -215,14 +216,14 @@ class InMemoryTranslationConfigRepositoryTest {
             repository
                     .save(TranslationConfigVersion.create("v1", 1, testConfig, "user", null))
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
             repository
                     .save(TranslationConfigVersion.create("v2", 2, testConfig, "user", null))
                     .await()
-                    .indefinitely();
-            repository.setActive("v1").await().indefinitely();
+                    .atMost(Duration.ofSeconds(5));
+            repository.setActive("v1").await().atMost(Duration.ofSeconds(5));
 
-            var result = repository.listVersions().await().indefinitely();
+            var result = repository.listVersions().await().atMost(Duration.ofSeconds(5));
 
             var v1 = result.stream().filter(v -> v.version() == 1).findFirst().get();
             var v2 = result.stream().filter(v -> v.version() == 2).findFirst().get();
@@ -240,31 +241,39 @@ class InMemoryTranslationConfigRepositoryTest {
         @DisplayName("should delete version")
         void shouldDeleteVersion() {
             var version = TranslationConfigVersion.create("id", 1, testConfig, "user", null);
-            repository.save(version).await().indefinitely();
+            repository.save(version).await().atMost(Duration.ofSeconds(5));
 
-            var deleted = repository.delete("id").await().indefinitely();
+            var deleted = repository.delete("id").await().atMost(Duration.ofSeconds(5));
 
             assertTrue(deleted);
-            assertTrue(repository.findById("id").await().indefinitely().isEmpty());
+            assertTrue(repository
+                    .findById("id")
+                    .await()
+                    .atMost(Duration.ofSeconds(5))
+                    .isEmpty());
         }
 
         @Test
         @DisplayName("should not delete active version")
         void shouldNotDeleteActive() {
             var version = TranslationConfigVersion.create("id", 1, testConfig, "user", null);
-            repository.save(version).await().indefinitely();
-            repository.setActive("id").await().indefinitely();
+            repository.save(version).await().atMost(Duration.ofSeconds(5));
+            repository.setActive("id").await().atMost(Duration.ofSeconds(5));
 
-            var deleted = repository.delete("id").await().indefinitely();
+            var deleted = repository.delete("id").await().atMost(Duration.ofSeconds(5));
 
             assertFalse(deleted);
-            assertTrue(repository.findById("id").await().indefinitely().isPresent());
+            assertTrue(repository
+                    .findById("id")
+                    .await()
+                    .atMost(Duration.ofSeconds(5))
+                    .isPresent());
         }
 
         @Test
         @DisplayName("should return false for unknown id")
         void shouldReturnFalseForUnknown() {
-            var deleted = repository.delete("unknown").await().indefinitely();
+            var deleted = repository.delete("unknown").await().atMost(Duration.ofSeconds(5));
             assertFalse(deleted);
         }
 
@@ -272,10 +281,10 @@ class InMemoryTranslationConfigRepositoryTest {
         @DisplayName("should remove from version index")
         void shouldRemoveFromVersionIndex() {
             var version = TranslationConfigVersion.create("id", 5, testConfig, "user", null);
-            repository.save(version).await().indefinitely();
-            repository.delete("id").await().indefinitely();
+            repository.save(version).await().atMost(Duration.ofSeconds(5));
+            repository.delete("id").await().atMost(Duration.ofSeconds(5));
 
-            var result = repository.findByVersion(5).await().indefinitely();
+            var result = repository.findByVersion(5).await().atMost(Duration.ofSeconds(5));
             assertTrue(result.isEmpty());
         }
     }

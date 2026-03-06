@@ -75,7 +75,7 @@ class SessionServiceTest {
                             "Mozilla/5.0",
                             "192.168.1.1")
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertNotNull(session.id());
             assertEquals("user123", session.userId());
@@ -95,7 +95,7 @@ class SessionServiceTest {
             var session = sessionService
                     .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             var expectedExpiration = session.createdAt().plus(config.ttl());
             assertEquals(expectedExpiration, session.expiresAt());
@@ -107,12 +107,12 @@ class SessionServiceTest {
             var session1 = sessionService
                     .createSession("user1", "issuer", Map.of(), Set.of(), null, null)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             var session2 = sessionService
                     .createSession("user2", "issuer", Map.of(), Set.of(), null, null)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertFalse(session1.id().equals(session2.id()));
         }
@@ -123,9 +123,9 @@ class SessionServiceTest {
             var session = sessionService
                     .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
-            var found = repository.findById(session.id()).await().indefinitely();
+            var found = repository.findById(session.id()).await().atMost(Duration.ofSeconds(5));
             assertTrue(found.isPresent());
             assertEquals(session.id(), found.get().id());
         }
@@ -141,9 +141,9 @@ class SessionServiceTest {
             var created = sessionService
                     .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
-            var retrieved = sessionService.getSession(created.id()).await().indefinitely();
+            var retrieved = sessionService.getSession(created.id()).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(retrieved.isPresent());
             assertEquals(created.id(), retrieved.get().id());
@@ -152,7 +152,7 @@ class SessionServiceTest {
         @Test
         @DisplayName("should return empty for non-existent session")
         void shouldReturnEmptyForNonExistentSession() {
-            var retrieved = sessionService.getSession("non-existent").await().indefinitely();
+            var retrieved = sessionService.getSession("non-existent").await().atMost(Duration.ofSeconds(5));
 
             assertTrue(retrieved.isEmpty());
         }
@@ -172,10 +172,10 @@ class SessionServiceTest {
                     Instant.now().minus(Duration.ofHours(2)),
                     null,
                     null);
-            repository.save(expiredSession).await().indefinitely();
+            repository.save(expiredSession).await().atMost(Duration.ofSeconds(5));
 
             var retrieved =
-                    sessionService.getSession(expiredSession.id()).await().indefinitely();
+                    sessionService.getSession(expiredSession.id()).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(retrieved.isEmpty());
         }
@@ -195,9 +195,9 @@ class SessionServiceTest {
                     Instant.now().minus(Duration.ofHours(1)), // Last accessed 1 hour ago (idle timeout is 30m)
                     null,
                     null);
-            repository.save(idleSession).await().indefinitely();
+            repository.save(idleSession).await().atMost(Duration.ofSeconds(5));
 
-            var retrieved = sessionService.getSession(idleSession.id()).await().indefinitely();
+            var retrieved = sessionService.getSession(idleSession.id()).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(retrieved.isEmpty());
         }
@@ -213,7 +213,7 @@ class SessionServiceTest {
             var created = sessionService
                     .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             var originalLastAccessed = created.lastAccessedAt();
 
@@ -224,7 +224,7 @@ class SessionServiceTest {
                 Thread.currentThread().interrupt();
             }
 
-            var refreshed = sessionService.refreshSession(created.id()).await().indefinitely();
+            var refreshed = sessionService.refreshSession(created.id()).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(refreshed.isPresent());
             assertTrue(refreshed.get().lastAccessedAt().isAfter(originalLastAccessed));
@@ -238,7 +238,7 @@ class SessionServiceTest {
             var created = sessionService
                     .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             var originalExpiration = created.expiresAt();
 
@@ -249,7 +249,7 @@ class SessionServiceTest {
                 Thread.currentThread().interrupt();
             }
 
-            var refreshed = sessionService.refreshSession(created.id()).await().indefinitely();
+            var refreshed = sessionService.refreshSession(created.id()).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(refreshed.isPresent());
             assertTrue(refreshed.get().expiresAt().isAfter(originalExpiration));
@@ -259,7 +259,7 @@ class SessionServiceTest {
         @DisplayName("should return empty for non-existent session")
         void shouldReturnEmptyForNonExistentSession() {
             var refreshed =
-                    sessionService.refreshSession("non-existent").await().indefinitely();
+                    sessionService.refreshSession("non-existent").await().atMost(Duration.ofSeconds(5));
 
             assertTrue(refreshed.isEmpty());
         }
@@ -275,11 +275,11 @@ class SessionServiceTest {
             var created = sessionService
                     .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
-            sessionService.invalidateSession(created.id()).await().indefinitely();
+            sessionService.invalidateSession(created.id()).await().atMost(Duration.ofSeconds(5));
 
-            var found = repository.findById(created.id()).await().indefinitely();
+            var found = repository.findById(created.id()).await().atMost(Duration.ofSeconds(5));
             assertTrue(found.isEmpty());
         }
     }
@@ -295,22 +295,22 @@ class SessionServiceTest {
             sessionService
                     .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
             sessionService
                     .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             // Create a session for a different user
             var otherSession = sessionService
                     .createSession("other-user", "issuer", Map.of(), Set.of(), null, null)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
-            sessionService.invalidateAllUserSessions("user123").await().indefinitely();
+            sessionService.invalidateAllUserSessions("user123").await().atMost(Duration.ofSeconds(5));
 
             // Other user's session should still exist
-            var otherFound = repository.findById(otherSession.id()).await().indefinitely();
+            var otherFound = repository.findById(otherSession.id()).await().atMost(Duration.ofSeconds(5));
             assertTrue(otherFound.isPresent());
         }
     }

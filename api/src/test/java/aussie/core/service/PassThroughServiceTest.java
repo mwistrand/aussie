@@ -144,7 +144,7 @@ class PassThroughServiceTest {
             var request = createRequest("GET", "/some/path");
 
             var result =
-                    passThroughService.forward(reservedPath, request).await().indefinitely();
+                    passThroughService.forward(reservedPath, request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.ReservedPath.class, result);
             var reserved = (GatewayResult.ReservedPath) result;
@@ -160,7 +160,7 @@ class PassThroughServiceTest {
             var request = createRequest("GET", "/api/test");
 
             var result =
-                    passThroughService.forward("admin-service", request).await().indefinitely();
+                    passThroughService.forward("admin-service", request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.Success.class, result);
         }
@@ -178,7 +178,7 @@ class PassThroughServiceTest {
             var result = passThroughService
                     .forward("unknown-service", request)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.ServiceNotFound.class, result);
             var notFound = (GatewayResult.ServiceNotFound) result;
@@ -194,7 +194,7 @@ class PassThroughServiceTest {
             var request = createRequest("GET", "/api/test");
 
             var result =
-                    passThroughService.forward("my-service", request).await().indefinitely();
+                    passThroughService.forward("my-service", request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.Success.class, result);
         }
@@ -212,7 +212,7 @@ class PassThroughServiceTest {
 
             var request = createRequest("GET", "/api/items/123");
 
-            passThroughService.forward("my-service", request).await().indefinitely();
+            passThroughService.forward("my-service", request).await().atMost(Duration.ofSeconds(5));
 
             var forwardedRequest = proxyClient.getLastRequest();
             assertEquals(URI.create("http://backend:9090/api/items/123"), forwardedRequest.targetUri());
@@ -226,7 +226,7 @@ class PassThroughServiceTest {
 
             var request = createRequest("POST", "/api/items");
 
-            passThroughService.forward("my-service", request).await().indefinitely();
+            passThroughService.forward("my-service", request).await().atMost(Duration.ofSeconds(5));
 
             var forwardedRequest = proxyClient.getLastRequest();
             assertEquals("POST", forwardedRequest.method());
@@ -242,7 +242,7 @@ class PassThroughServiceTest {
             var request = createRequest("GET", "/api/data");
 
             var result =
-                    passThroughService.forward("my-service", request).await().indefinitely();
+                    passThroughService.forward("my-service", request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.Success.class, result);
             var success = (GatewayResult.Success) result;
@@ -260,7 +260,7 @@ class PassThroughServiceTest {
             var request = createRequest("GET", "/api/test");
 
             var result =
-                    passThroughService.forward("my-service", request).await().indefinitely();
+                    passThroughService.forward("my-service", request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.Error.class, result);
             var error = (GatewayResult.Error) result;
@@ -285,7 +285,7 @@ class PassThroughServiceTest {
                 var result = passThroughService
                         .forward("my-service", request)
                         .await()
-                        .indefinitely();
+                        .atMost(Duration.ofSeconds(5));
 
                 assertInstanceOf(GatewayResult.Success.class, result, "Should succeed for method: " + method);
             }
@@ -304,7 +304,7 @@ class PassThroughServiceTest {
                 var result = passThroughService
                         .forward("my-service", request)
                         .await()
-                        .indefinitely();
+                        .atMost(Duration.ofSeconds(5));
 
                 assertInstanceOf(GatewayResult.Success.class, result, "Should succeed for path: " + path);
             }
@@ -318,7 +318,7 @@ class PassThroughServiceTest {
 
             var request = createRequest("GET", "/api/users/123/orders");
 
-            passThroughService.forward("my-service", request).await().indefinitely();
+            passThroughService.forward("my-service", request).await().atMost(Duration.ofSeconds(5));
 
             var forwardedRequest = proxyClient.getLastRequest();
             assertEquals("/api/users/123/orders", forwardedRequest.targetUri().getPath());
@@ -340,7 +340,7 @@ class PassThroughServiceTest {
                     null,
                     "192.168.1.100");
 
-            passThroughService.forward("my-service", request).await().indefinitely();
+            passThroughService.forward("my-service", request).await().atMost(Duration.ofSeconds(5));
 
             var forwardedRequest = proxyClient.getLastRequest();
             var targetUri = forwardedRequest.targetUri();
@@ -363,7 +363,7 @@ class PassThroughServiceTest {
             var request = createRequest("GET", "/api/test");
 
             var result =
-                    passThroughService.forward("my-service", request).await().indefinitely();
+                    passThroughService.forward("my-service", request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.Success.class, result);
         }
@@ -381,7 +381,7 @@ class PassThroughServiceTest {
             var request = createRequest("GET", "/api/protected");
 
             var result =
-                    passThroughService.forward("auth-service", request).await().indefinitely();
+                    passThroughService.forward("auth-service", request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.Unauthorized.class, result);
             var unauthorized = (GatewayResult.Unauthorized) result;
@@ -401,7 +401,7 @@ class PassThroughServiceTest {
             var request = createRequest("GET", "/api/admin");
 
             var result =
-                    passThroughService.forward("auth-service", request).await().indefinitely();
+                    passThroughService.forward("auth-service", request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.Forbidden.class, result);
             var forbidden = (GatewayResult.Forbidden) result;
@@ -425,7 +425,7 @@ class PassThroughServiceTest {
             var request = createRequest("GET", "/api/protected");
 
             var result =
-                    passThroughService.forward("auth-service", request).await().indefinitely();
+                    passThroughService.forward("auth-service", request).await().atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.Success.class, result);
             var forwardedRequest = proxyClient.getLastRequest();
@@ -448,7 +448,7 @@ class PassThroughServiceTest {
             var result = passThroughService
                     .forward("protected-service", request)
                     .await()
-                    .indefinitely();
+                    .atMost(Duration.ofSeconds(5));
 
             assertInstanceOf(GatewayResult.Unauthorized.class, result);
         }
