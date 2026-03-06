@@ -57,9 +57,10 @@ public record ServiceRegistrationRequest(
      *
      * <p>Validates {@code baseUrl} against SSRF blocklists during conversion.
      *
+     * @param allowPrivateUpstreams whether to allow site-local (private) upstream addresses
      * @throws io.quarkiverse.resteasy.problem.HttpProblem if baseUrl fails validation
      */
-    public ServiceRegistration toModel() {
+    public ServiceRegistration toModel(boolean allowPrivateUpstreams) {
         var defaultVis = defaultVisibility != null
                 ? EndpointVisibility.valueOf(defaultVisibility.toUpperCase())
                 : EndpointVisibility.PRIVATE;
@@ -95,7 +96,7 @@ public record ServiceRegistrationRequest(
         return new ServiceRegistration(
                 serviceId,
                 displayName != null ? displayName : serviceId,
-                UrlValidator.validateServiceUrl(baseUrl, "baseUrl"),
+                UrlValidator.validateServiceUrl(baseUrl, "baseUrl", allowPrivateUpstreams),
                 routePrefix,
                 defaultVis,
                 defaultAuth,

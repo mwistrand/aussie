@@ -55,7 +55,7 @@ class GatewayServiceTest {
     private GatewayService gatewayService;
 
     // Permissive security config for testing
-    private static final GatewaySecurityConfig PERMISSIVE_CONFIG = () -> true;
+    private static final GatewaySecurityConfig PERMISSIVE_CONFIG = TestGatewaySecurityConfig.permissive();
 
     // Permissive rate limiting config (no window seconds limit)
     private static final RateLimitingConfig PERMISSIVE_RATE_LIMIT_CONFIG = TestRateLimitingConfig.permissive();

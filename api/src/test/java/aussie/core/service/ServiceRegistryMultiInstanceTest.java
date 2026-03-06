@@ -43,7 +43,7 @@ class ServiceRegistryMultiInstanceTest {
     private static final Duration TIMEOUT = Duration.ofSeconds(5);
 
     // Permissive security config for testing
-    private static final GatewaySecurityConfig PERMISSIVE_CONFIG = () -> true;
+    private static final GatewaySecurityConfig PERMISSIVE_CONFIG = TestGatewaySecurityConfig.permissive();
     private static final RateLimitingConfig PERMISSIVE_RATE_LIMIT_CONFIG = TestRateLimitingConfig.permissive();
 
     private ServiceRegistrationRepository sharedRepository;

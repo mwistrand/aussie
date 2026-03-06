@@ -26,6 +26,7 @@ import io.smallrye.mutiny.Uni;
 import aussie.adapter.in.dto.ServiceRegistrationRequest;
 import aussie.adapter.in.dto.ServiceRegistrationResponse;
 import aussie.adapter.in.problem.GatewayProblem;
+import aussie.core.model.auth.GatewaySecurityConfig;
 import aussie.core.model.auth.Permission;
 import aussie.core.model.service.RegistrationResult;
 import aussie.core.service.routing.ServiceRegistry;
@@ -46,11 +47,16 @@ public class AdminResource {
 
     private final ServiceRegistry serviceRegistry;
     private final CurrentIdentityAssociation identityAssociation;
+    private final GatewaySecurityConfig securityConfig;
 
     @Inject
-    public AdminResource(ServiceRegistry serviceRegistry, CurrentIdentityAssociation identityAssociation) {
+    public AdminResource(
+            ServiceRegistry serviceRegistry,
+            CurrentIdentityAssociation identityAssociation,
+            GatewaySecurityConfig securityConfig) {
         this.serviceRegistry = serviceRegistry;
         this.identityAssociation = identityAssociation;
+        this.securityConfig = securityConfig;
     }
 
     @POST
@@ -61,7 +67,7 @@ public class AdminResource {
     })
     public Uni<Response> registerService(@Valid ServiceRegistrationRequest request) {
         try {
-            var service = request.toModel();
+            var service = request.toModel(securityConfig.allowPrivateUpstreams());
 
             return identityAssociation.getDeferredIdentity().flatMap(identity -> {
                 var claims = extractClaims(identity);

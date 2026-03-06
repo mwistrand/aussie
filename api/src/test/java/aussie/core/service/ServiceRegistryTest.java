@@ -41,7 +41,7 @@ class ServiceRegistryTest {
     private ServiceAuthorizationService authService;
 
     // Permissive security config for testing
-    private static final GatewaySecurityConfig PERMISSIVE_CONFIG = () -> true;
+    private static final GatewaySecurityConfig PERMISSIVE_CONFIG = TestGatewaySecurityConfig.permissive();
     private static final aussie.core.config.RateLimitingConfig PERMISSIVE_RATE_LIMIT_CONFIG =
             TestRateLimitingConfig.permissive();
 

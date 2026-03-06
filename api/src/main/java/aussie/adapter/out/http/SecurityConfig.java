@@ -17,4 +17,12 @@ public interface SecurityConfig extends GatewaySecurityConfig {
     @WithDefault("false")
     @Override
     boolean publicDefaultVisibilityEnabled();
+
+    /**
+     * When true (default), upstream service URLs may use private (site-local) addresses.
+     * When false, only publicly routable addresses are accepted.
+     */
+    @WithDefault("true")
+    @Override
+    boolean allowPrivateUpstreams();
 }

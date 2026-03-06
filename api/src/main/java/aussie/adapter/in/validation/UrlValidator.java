@@ -22,12 +22,13 @@ public final class UrlValidator {
      * <p>Rejects non-HTTP schemes, missing hosts, and known internal/metadata
      * IP addresses to prevent SSRF attacks.
      *
-     * @param url       the URL string to validate
-     * @param paramName the parameter name for error messages
+     * @param url                   the URL string to validate
+     * @param paramName             the parameter name for error messages
+     * @param allowPrivateUpstreams whether to allow site-local (private) addresses
      * @return the parsed and validated URI
      * @throws io.quarkiverse.resteasy.problem.HttpProblem if validation fails
      */
-    public static URI validateServiceUrl(String url, String paramName) {
+    public static URI validateServiceUrl(String url, String paramName, boolean allowPrivateUpstreams) {
         final URI uri;
         try {
             uri = URI.create(url);
@@ -45,9 +46,11 @@ public final class UrlValidator {
             throw GatewayProblem.badRequest(paramName + " must have a valid host");
         }
 
-        if (isBlockedHost(host)) {
-            throw GatewayProblem.badRequest(
-                    paramName + " must not point to a loopback, link-local, or metadata address");
+        if (isBlockedHost(host, allowPrivateUpstreams)) {
+            final var detail = allowPrivateUpstreams
+                    ? paramName + " must not point to a loopback, link-local, or metadata address"
+                    : paramName + " must not point to a loopback, link-local, site-local, or metadata address";
+            throw GatewayProblem.badRequest(detail);
         }
 
         return uri;
@@ -56,27 +59,32 @@ public final class UrlValidator {
     /**
      * Check if a host is blocked for SSRF protection.
      *
-     * <p>Blocks:
+     * <p>Always blocks:
      * <ul>
      *   <li>Loopback addresses (127.x.x.x, ::1, localhost)</li>
      *   <li>Link-local addresses (169.254.x.x) - includes cloud metadata endpoints</li>
      *   <li>Wildcard addresses (0.0.0.0, ::)</li>
      * </ul>
      *
-     * <p>Note: Site-local addresses (10.x, 172.16-31.x, 192.168.x) are allowed
-     * for internal service-to-service routing.
+     * <p>When {@code allowPrivateUpstreams} is false, also blocks site-local
+     * addresses (10.x, 172.16-31.x, 192.168.x). These are allowed by default
+     * for gateway-to-upstream forwarding.
      *
-     * @param host the hostname or IP address to check
+     * @param host                  the hostname or IP address to check
+     * @param allowPrivateUpstreams whether to allow site-local addresses
      * @return true if the host is blocked
      */
-    private static boolean isBlockedHost(String host) {
+    private static boolean isBlockedHost(String host, boolean allowPrivateUpstreams) {
         if (host.equalsIgnoreCase("localhost") || host.equals("0.0.0.0") || host.equals("::")) {
             return true;
         }
 
         try {
             final var addr = InetAddress.getByName(host);
-            return addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isAnyLocalAddress();
+            if (addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isAnyLocalAddress()) {
+                return true;
+            }
+            return !allowPrivateUpstreams && addr.isSiteLocalAddress();
         } catch (UnknownHostException e) {
             return false;
         }

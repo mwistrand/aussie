@@ -960,6 +960,8 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | `AUSSIE_GATEWAY_CORS_ALLOWED_ORIGINS` | `*` | Allowed CORS origins |
 | `AUSSIE_GATEWAY_TRUSTED_PROXY_ENABLED` | `false` | Enable trusted proxy validation for forwarding headers |
 | `AUSSIE_GATEWAY_TRUSTED_PROXY_PROXIES` | - | Trusted proxy IPs/CIDRs (comma-separated) |
+| `AUSSIE_GATEWAY_SECURITY_PUBLIC_DEFAULT_VISIBILITY_ENABLED` | `false` | Allow services to set PUBLIC as default endpoint visibility |
+| `AUSSIE_GATEWAY_SECURITY_ALLOW_PRIVATE_UPSTREAMS` | `true` | Allow upstream URLs to use private (site-local) addresses |
 | `AUSSIE_GATEWAY_SECURITY_HEADERS_ENABLED` | `true` | Enable security response headers |
 | `AUSSIE_GATEWAY_SECURITY_HEADERS_CONTENT_TYPE_OPTIONS` | `nosniff` | X-Content-Type-Options header value |
 | `AUSSIE_GATEWAY_SECURITY_HEADERS_FRAME_OPTIONS` | `DENY` | X-Frame-Options header value |

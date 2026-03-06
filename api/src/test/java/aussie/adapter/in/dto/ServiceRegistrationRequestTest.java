@@ -41,7 +41,7 @@ class ServiceRegistrationRequestTest {
                     null,
                     null);
 
-            var model = request.toModel();
+            var model = request.toModel(true);
 
             assertEquals(1, model.endpoints().size());
             assertTrue(model.endpoints().get(0).authRequired());
@@ -68,7 +68,7 @@ class ServiceRegistrationRequestTest {
                     null,
                     null);
 
-            var model = request.toModel();
+            var model = request.toModel(true);
 
             assertEquals(1, model.endpoints().size());
             assertFalse(model.endpoints().get(0).authRequired());
@@ -97,7 +97,7 @@ class ServiceRegistrationRequestTest {
                     null,
                     null);
 
-            var model = request.toModel();
+            var model = request.toModel(true);
 
             assertEquals(2, model.endpoints().size());
             assertFalse(model.endpoints().get(0).authRequired()); // explicit false
@@ -125,7 +125,7 @@ class ServiceRegistrationRequestTest {
                     null,
                     null);
 
-            var model = request.toModel();
+            var model = request.toModel(true);
 
             assertTrue(model.defaultAuthRequired());
             assertTrue(model.endpoints().get(0).authRequired());
@@ -155,7 +155,7 @@ class ServiceRegistrationRequestTest {
                     null,
                     null);
 
-            var model = request.toModel();
+            var model = request.toModel(true);
 
             assertEquals(EndpointVisibility.PRIVATE, model.defaultVisibility());
         }
@@ -179,7 +179,7 @@ class ServiceRegistrationRequestTest {
                     null,
                     null);
 
-            var model = request.toModel();
+            var model = request.toModel(true);
 
             assertEquals("my-service", model.displayName());
         }
@@ -203,7 +203,7 @@ class ServiceRegistrationRequestTest {
                     null,
                     null);
 
-            var model = request.toModel();
+            var model = request.toModel(true);
 
             assertEquals(EndpointVisibility.PUBLIC, model.defaultVisibility());
         }
