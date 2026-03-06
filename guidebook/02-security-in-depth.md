@@ -707,10 +707,6 @@ The `Host` header is also stripped and replaced with the target's host (line 121
 
 A senior would likely forward all headers and strip only the ones that cause visible problems. The `proxy-authorization` header would not be stripped because proxy authentication is not a common pattern in modern architectures. The issue is that the RFC specifies these as hop-by-hop, and compliance-conscious environments (PCI-DSS, SOC 2) will flag unstripped hop-by-hop headers in a security audit. Doing it correctly from the start is cheaper than retrofitting it after an audit finding.
 
-### Trade-offs
-
-The hop-by-hop set is static. RFC 2616 specifies that the `Connection` header can declare additional headers as hop-by-hop (e.g., `Connection: X-Custom-Header`). The current implementation does not parse the `Connection` header to discover these additional headers. This is a known simplification. Implementing dynamic hop-by-hop detection adds complexity and is rarely needed in practice, but it means a client could send `Connection: X-Auth-Token` and the `X-Auth-Token` header would still be forwarded.
-
 ## Putting It Together: The Filter Chain
 
 Understanding the individual layers is necessary but not sufficient. The order in which they execute determines whether the system is coherent or contradictory. Here is the full chain for an incoming request:

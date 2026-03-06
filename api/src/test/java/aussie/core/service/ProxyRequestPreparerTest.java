@@ -22,8 +22,7 @@ import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.ForwardedHeaderBuilder;
-import aussie.core.service.gateway.*;
-import aussie.core.service.routing.*;
+import aussie.core.service.gateway.ProxyRequestPreparer;
 
 @DisplayName("ProxyRequestPreparer")
 class ProxyRequestPreparerTest {
@@ -165,6 +164,113 @@ class ProxyRequestPreparerTest {
             assertFalse(prepared.headers().containsKey("connection"));
             assertFalse(prepared.headers().containsKey("KEEP-ALIVE"));
             assertFalse(prepared.headers().containsKey("Transfer-ENCODING"));
+        }
+
+        @Test
+        @DisplayName("Should filter headers dynamically declared in Connection header")
+        void shouldFilterDynamicHopByHopHeaders() {
+            Map<String, List<String>> headers = new HashMap<>();
+            headers.put("Connection", List.of("X-Custom-Header, X-Internal-Token"));
+            headers.put("X-Custom-Header", List.of("some-value"));
+            headers.put("X-Internal-Token", List.of("secret"));
+            headers.put("Accept", List.of("application/json"));
+
+            var request = createRequest(headers);
+            var route = createRoute("http://backend:9090");
+
+            var prepared = preparer.prepare(request, route);
+
+            assertFalse(prepared.headers().containsKey("Connection"));
+            assertFalse(prepared.headers().containsKey("X-Custom-Header"));
+            assertFalse(prepared.headers().containsKey("X-Internal-Token"));
+            assertTrue(prepared.headers().containsKey("Accept"));
+        }
+
+        @Test
+        @DisplayName("Should not strip close or keep-alive as header names from Connection")
+        void shouldNotStripConnectionDirectives() {
+            Map<String, List<String>> headers = new HashMap<>();
+            headers.put("Connection", List.of("close, X-Strip-Me"));
+            headers.put("X-Strip-Me", List.of("gone"));
+            headers.put("close", List.of("should-survive"));
+            headers.put("Accept", List.of("text/html"));
+
+            var request = createRequest(headers);
+            var route = createRoute("http://backend:9090");
+
+            var prepared = preparer.prepare(request, route);
+
+            assertFalse(prepared.headers().containsKey("X-Strip-Me"));
+            assertTrue(prepared.headers().containsKey("close"));
+            assertTrue(prepared.headers().containsKey("Accept"));
+        }
+
+        @Test
+        @DisplayName("Should handle case-insensitive dynamic hop-by-hop headers")
+        void shouldHandleCaseInsensitiveDynamicHopByHop() {
+            Map<String, List<String>> headers = new HashMap<>();
+            headers.put("Connection", List.of("X-Auth-Token"));
+            headers.put("X-AUTH-TOKEN", List.of("secret"));
+            headers.put("Accept", List.of("application/json"));
+
+            var request = createRequest(headers);
+            var route = createRoute("http://backend:9090");
+
+            var prepared = preparer.prepare(request, route);
+
+            assertFalse(prepared.headers().containsKey("X-AUTH-TOKEN"));
+            assertTrue(prepared.headers().containsKey("Accept"));
+        }
+
+        @Test
+        @DisplayName("Should handle multiple Connection header values")
+        void shouldHandleMultipleConnectionValues() {
+            Map<String, List<String>> headers = new HashMap<>();
+            headers.put("Connection", List.of("X-Header-One", "X-Header-Two"));
+            headers.put("X-Header-One", List.of("val1"));
+            headers.put("X-Header-Two", List.of("val2"));
+            headers.put("Accept", List.of("*/*"));
+
+            var request = createRequest(headers);
+            var route = createRoute("http://backend:9090");
+
+            var prepared = preparer.prepare(request, route);
+
+            assertFalse(prepared.headers().containsKey("X-Header-One"));
+            assertFalse(prepared.headers().containsKey("X-Header-Two"));
+            assertTrue(prepared.headers().containsKey("Accept"));
+        }
+
+        @Test
+        @DisplayName("Should handle empty Connection header value")
+        void shouldHandleEmptyConnectionHeaderValue() {
+            Map<String, List<String>> headers = new HashMap<>();
+            headers.put("Connection", List.of(""));
+            headers.put("Accept", List.of("application/json"));
+
+            var request = createRequest(headers);
+            var route = createRoute("http://backend:9090");
+
+            var prepared = preparer.prepare(request, route);
+
+            assertTrue(prepared.headers().containsKey("Accept"));
+        }
+
+        @Test
+        @DisplayName("Should preserve all headers when Connection contains only directives")
+        void shouldPreserveHeadersWhenConnectionContainsOnlyDirectives() {
+            Map<String, List<String>> headers = new HashMap<>();
+            headers.put("Connection", List.of("close, keep-alive"));
+            headers.put("Accept", List.of("application/json"));
+            headers.put("X-Custom", List.of("value"));
+
+            var request = createRequest(headers);
+            var route = createRoute("http://backend:9090");
+
+            var prepared = preparer.prepare(request, route);
+
+            assertTrue(prepared.headers().containsKey("Accept"));
+            assertTrue(prepared.headers().containsKey("X-Custom"));
         }
     }
 
@@ -323,6 +429,21 @@ class ProxyRequestPreparerTest {
 
             assertFalse(filtered.containsKey("TRANSFER-ENCODING"));
             assertFalse(filtered.containsKey("connection"));
+        }
+
+        @Test
+        @DisplayName("Should filter dynamically declared hop-by-hop headers from response")
+        void shouldFilterDynamicHopByHopFromResponse() {
+            Map<String, List<String>> responseHeaders = new HashMap<>();
+            responseHeaders.put("Connection", List.of("X-Upstream-Internal"));
+            responseHeaders.put("X-Upstream-Internal", List.of("debug-info"));
+            responseHeaders.put("Content-Type", List.of("application/json"));
+
+            var filtered = preparer.filterResponseHeaders(responseHeaders);
+
+            assertFalse(filtered.containsKey("Connection"));
+            assertFalse(filtered.containsKey("X-Upstream-Internal"));
+            assertTrue(filtered.containsKey("Content-Type"));
         }
     }
 

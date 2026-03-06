@@ -2,6 +2,7 @@ package aussie.core.service.gateway;
 
 import java.net.URI;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,6 +40,11 @@ public class ProxyRequestPreparer {
             "trailer",
             "transfer-encoding",
             "upgrade");
+
+    /**
+     * Connection header directives that are not header names to strip.
+     */
+    private static final Set<String> CONNECTION_DIRECTIVES = Set.of("close", "keep-alive");
 
     private final ForwardedHeaderBuilderProvider headerBuilderProvider;
 
@@ -89,11 +95,13 @@ public class ProxyRequestPreparer {
     }
 
     private void copyFilteredHeaders(GatewayRequest request, Map<String, List<String>> headers) {
+        final var dynamicHopByHop = parseDynamicHopByHopHeaders(request.headers());
+
         for (var entry : request.headers().entrySet()) {
             final var headerName = entry.getKey();
             final var lowerName = headerName.toLowerCase();
 
-            if (shouldSkipHeader(lowerName)) {
+            if (shouldSkipHeader(lowerName, dynamicHopByHop)) {
                 continue;
             }
 
@@ -102,9 +110,9 @@ public class ProxyRequestPreparer {
         }
     }
 
-    private boolean shouldSkipHeader(String lowerName) {
-        // Skip hop-by-hop headers
-        if (HOP_BY_HOP_HEADERS.contains(lowerName)) {
+    private boolean shouldSkipHeader(String lowerName, Set<String> dynamicHopByHop) {
+        // Skip hop-by-hop headers (static per RFC 2616 + dynamic from Connection header)
+        if (HOP_BY_HOP_HEADERS.contains(lowerName) || dynamicHopByHop.contains(lowerName)) {
             return true;
         }
         // Skip Host header (will be set for target)
@@ -155,13 +163,47 @@ public class ProxyRequestPreparer {
      * Call this when processing upstream responses before returning to the client.
      */
     public Map<String, List<String>> filterResponseHeaders(Map<String, List<String>> responseHeaders) {
+        final var dynamicHopByHop = parseDynamicHopByHopHeaders(responseHeaders);
         Map<String, List<String>> filtered = new HashMap<>();
         for (var entry : responseHeaders.entrySet()) {
             var lowerName = entry.getKey().toLowerCase();
-            if (!HOP_BY_HOP_HEADERS.contains(lowerName)) {
-                filtered.put(entry.getKey(), entry.getValue());
+            if (!HOP_BY_HOP_HEADERS.contains(lowerName) && !dynamicHopByHop.contains(lowerName)) {
+                filtered.put(entry.getKey(), List.copyOf(entry.getValue()));
             }
         }
         return filtered;
+    }
+
+    /**
+     * Parses the Connection header to discover dynamically-declared hop-by-hop headers.
+     * Per RFC 2616 Section 14.10, the Connection header can list additional header names
+     * that are hop-by-hop for the current connection only (e.g., "Connection: X-Custom-Header").
+     * Connection directives like "close" and "keep-alive" are not header names to strip.
+     */
+    private Set<String> parseDynamicHopByHopHeaders(Map<String, List<String>> headers) {
+        final var connectionValues = findConnectionHeader(headers);
+        if (connectionValues.isEmpty()) {
+            return Set.of();
+        }
+
+        var dynamicHeaders = new HashSet<String>();
+        for (final var value : connectionValues) {
+            for (final var token : value.split(",")) {
+                final var trimmed = token.strip().toLowerCase();
+                if (!trimmed.isEmpty() && !CONNECTION_DIRECTIVES.contains(trimmed)) {
+                    dynamicHeaders.add(trimmed);
+                }
+            }
+        }
+        return dynamicHeaders;
+    }
+
+    private List<String> findConnectionHeader(Map<String, List<String>> headers) {
+        for (final var entry : headers.entrySet()) {
+            if ("connection".equalsIgnoreCase(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return List.of();
     }
 }

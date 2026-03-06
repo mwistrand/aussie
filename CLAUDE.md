@@ -39,6 +39,10 @@ Project layout:
 - Prefer `Optional` over null for API return types
 - Always use constructor injection
 
+## Testing
+
+- For Java tests, always use JUnit5 assertions
+
 ## Database
 
 - Cassandra and Redis by default
