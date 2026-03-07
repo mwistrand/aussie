@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,9 +19,12 @@ import org.junit.jupiter.api.Test;
 
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.routing.EndpointConfig;
+import aussie.core.model.routing.EndpointType;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.service.ServiceRegistration;
+import aussie.core.model.timeout.EndpointTimeoutConfig;
+import aussie.core.model.timeout.ServiceTimeoutConfig;
 import aussie.core.port.out.ForwardedHeaderBuilder;
 import aussie.core.service.gateway.ProxyRequestPreparer;
 
@@ -444,6 +448,89 @@ class ProxyRequestPreparerTest {
             assertFalse(filtered.containsKey("Connection"));
             assertFalse(filtered.containsKey("X-Upstream-Internal"));
             assertTrue(filtered.containsKey("Content-Type"));
+        }
+    }
+
+    @Nested
+    @DisplayName("Timeout Resolution")
+    class TimeoutResolutionTests {
+
+        @Test
+        @DisplayName("Should use endpoint timeout when both endpoint and service timeouts are set")
+        void shouldUseEndpointTimeoutOverService() {
+            var request = createRequest(Map.of());
+            var service = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://backend:9090")
+                    .timeoutConfig(ServiceTimeoutConfig.of(Duration.ofSeconds(30)))
+                    .build();
+            var endpoint = new EndpointConfig(
+                    "/api/test",
+                    Set.of("GET"),
+                    EndpointVisibility.PUBLIC,
+                    Optional.empty(),
+                    false,
+                    EndpointType.HTTP,
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(EndpointTimeoutConfig.of(Duration.ofSeconds(60))),
+                    Optional.empty());
+            var route = new RouteMatch(service, endpoint, "/api/test", Map.of());
+
+            var prepared = preparer.prepare(request, route);
+
+            assertEquals(Optional.of(Duration.ofSeconds(60)), prepared.requestTimeout());
+        }
+
+        @Test
+        @DisplayName("Should fall back to service timeout when endpoint timeout is absent")
+        void shouldFallBackToServiceTimeout() {
+            var request = createRequest(Map.of());
+            var service = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://backend:9090")
+                    .timeoutConfig(ServiceTimeoutConfig.of(Duration.ofSeconds(45)))
+                    .build();
+            var endpoint = new EndpointConfig("/api/test", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var route = new RouteMatch(service, endpoint, "/api/test", Map.of());
+
+            var prepared = preparer.prepare(request, route);
+
+            assertEquals(Optional.of(Duration.ofSeconds(45)), prepared.requestTimeout());
+        }
+
+        @Test
+        @DisplayName("Should return empty when neither endpoint nor service timeout is set")
+        void shouldReturnEmptyWhenNoTimeout() {
+            var request = createRequest(Map.of());
+            var route = createRoute("http://backend:9090");
+
+            var prepared = preparer.prepare(request, route);
+
+            assertTrue(prepared.requestTimeout().isEmpty());
+        }
+
+        @Test
+        @DisplayName("Should return empty when endpoint has defaults and no service timeout")
+        void shouldReturnEmptyWithEndpointDefaults() {
+            var request = createRequest(Map.of());
+            var service = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://backend:9090")
+                    .build();
+            var endpoint = new EndpointConfig(
+                    "/api/test",
+                    Set.of("GET"),
+                    EndpointVisibility.PUBLIC,
+                    Optional.empty(),
+                    false,
+                    EndpointType.HTTP,
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(EndpointTimeoutConfig.defaults()),
+                    Optional.empty());
+            var route = new RouteMatch(service, endpoint, "/api/test", Map.of());
+
+            var prepared = preparer.prepare(request, route);
+
+            assertTrue(prepared.requestTimeout().isEmpty());
         }
     }
 

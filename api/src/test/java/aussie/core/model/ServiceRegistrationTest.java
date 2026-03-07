@@ -116,6 +116,7 @@ class ServiceRegistrationTest {
                     Optional.empty(), // rateLimitConfig
                     Optional.empty(), // samplingConfig
                     Optional.empty(), // securityHeadersConfig
+                    Optional.empty(), // timeoutConfig
                     1L); // version
 
             assertNotNull(service);

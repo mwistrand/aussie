@@ -41,6 +41,7 @@ class ServiceRegistrationResponseTest {
                 Optional.of(rateLimitConfig),
                 Optional.empty(),
                 Optional.empty(),
+                Optional.empty(),
                 1L);
 
         var response = ServiceRegistrationResponse.fromModel(registration);
@@ -63,6 +64,7 @@ class ServiceRegistrationResponseTest {
                 true,
                 List.of(),
                 List.of(),
+                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
@@ -93,6 +95,7 @@ class ServiceRegistrationResponseTest {
                 Optional.empty(),
                 Optional.empty(),
                 Optional.of(rateLimitConfig),
+                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 5L);
@@ -131,6 +134,7 @@ class ServiceRegistrationResponseTest {
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
+                Optional.empty(),
                 1L);
 
         var response = ServiceRegistrationResponse.fromModel(registration);
@@ -152,6 +156,7 @@ class ServiceRegistrationResponseTest {
                 EndpointType.HTTP,
                 Optional.empty(),
                 Optional.empty(),
+                Optional.empty(),
                 Optional.empty());
         var registration = new ServiceRegistration(
                 "test-service",
@@ -162,6 +167,7 @@ class ServiceRegistrationResponseTest {
                 true,
                 List.of(),
                 List.of(endpoint),
+                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),

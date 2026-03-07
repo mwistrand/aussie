@@ -1,6 +1,7 @@
 package aussie.core.service.gateway;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -80,7 +81,24 @@ public class ProxyRequestPreparer {
             headers.put("X-Forwarded-Prefix", List.of(routePrefix));
         }
 
-        return new PreparedProxyRequest(request.method(), targetUri, headers, request.body());
+        var effectiveTimeout = resolveTimeout(route);
+        return new PreparedProxyRequest(request.method(), targetUri, headers, request.body(), effectiveTimeout);
+    }
+
+    /**
+     * Resolve the effective request timeout for a route match.
+     *
+     * <p>Priority order: endpoint timeout &gt; service timeout &gt; empty (global default).
+     */
+    private Optional<Duration> resolveTimeout(RouteMatch route) {
+        // Endpoint-level timeout takes highest priority
+        final var endpointTimeout = route.endpointConfig().timeoutConfig().flatMap(tc -> tc.requestTimeout());
+        if (endpointTimeout.isPresent()) {
+            return endpointTimeout;
+        }
+
+        // Fall back to service-level timeout
+        return route.service().timeoutConfig().flatMap(tc -> tc.requestTimeout());
     }
 
     private Map<String, List<String>> buildHeaders(GatewayRequest request, URI targetUri) {

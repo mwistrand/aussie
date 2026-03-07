@@ -57,6 +57,18 @@ public interface ResiliencyConfig {
         Duration requestTimeout();
 
         /**
+         * Maximum request timeout that services may configure via registration.
+         *
+         * <p>Service-level and endpoint-level timeouts cannot exceed this value.
+         * Defaults to 5 minutes, allowing services to set longer timeouts than
+         * the global default while still enforcing a platform ceiling.
+         *
+         * @return Maximum allowed request timeout (default: 5 minutes)
+         */
+        @WithDefault("PT5M")
+        Duration maxRequestTimeout();
+
+        /**
          * Maximum time to establish a TCP connection to the upstream service.
          *
          * @return Connect timeout duration (default: 5 seconds)

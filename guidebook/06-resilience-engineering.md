@@ -87,7 +87,7 @@ aussie.resiliency.jwks.fetch-timeout=PT5S
 
 **Connect timeout (5s)**: This bounds the TCP handshake only. If a host cannot complete a three-way handshake in 5 seconds, it is down. Making this shorter than the request timeout prevents wasting a full 30 seconds on a host that will never respond. Making it too short (sub-second) causes false failures under transient network congestion.
 
-**Request timeout (30s)**: This bounds the full HTTP round-trip after the connection is established. It must accommodate slow-but-legitimate upstream responses: large payloads, complex queries, cold starts. Thirty seconds is generous. In production, most API teams override this to something tighter per service registration. The gateway default is a safety net, not a target.
+**Request timeout (30s)**: This bounds the full HTTP round-trip after the connection is established. It must accommodate slow-but-legitimate upstream responses: large payloads, complex queries, cold starts. Thirty seconds is generous. Services can override this via `timeoutConfig` in their registration, at either the service level or per-endpoint. The resolution chain is: endpoint timeout > service timeout > platform default. The platform also enforces a maximum via `maxRequestTimeout` (default 5 minutes) to prevent runaway connections. See `ProxyRequestPreparer.resolveTimeout()` for the implementation.
 
 **Query timeout (5s)**: Cassandra queries in this gateway are simple key lookups and range scans over service registrations and rate limit configurations. If a query takes 5 seconds, something is wrong with the cluster, not the query. This value is deliberately tight to fail fast and let the gateway serve requests from its cache tier.
 
@@ -732,7 +732,7 @@ A cleaner approach would be to register typed exception handlers for specific Ve
 | Component | Timeout | Pool Size | Failure Mode | Rationale |
 |-----------|---------|-----------|--------------|-----------|
 | HTTP Proxy (connect) | 5s | 50/host, 200 total | 502 Bad Gateway | Dead host detection; no fallback possible |
-| HTTP Proxy (request) | 30s | (shared with connect) | 504 Gateway Timeout | Generous default; per-service override expected |
+| HTTP Proxy (request) | 30s (default), up to 5m (max) | (shared with connect) | 504 Gateway Timeout | Generous default; per-service/endpoint override via `timeoutConfig` |
 | Cassandra query | 5s | 30/node, 1024 req/conn | Propagate error | Simple lookups; 5s = cluster problem |
 | Redis session ops | 1s | 30 conn, 100 waiting | Propagate error (fail-hard) | No safe fallback for session state |
 | Redis cache reads | 1s | (shared pool) | `Optional.empty()` (fail-soft) | Cache miss is always valid |

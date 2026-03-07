@@ -59,6 +59,8 @@ class GatewayServiceTest {
 
     // Permissive rate limiting config (no window seconds limit)
     private static final RateLimitingConfig PERMISSIVE_RATE_LIMIT_CONFIG = TestRateLimitingConfig.permissive();
+    private static final aussie.core.config.ResiliencyConfig PERMISSIVE_RESILIENCY_CONFIG =
+            TestResiliencyConfig.permissive();
 
     // Test cache config
     private static final LocalCacheConfig TEST_CACHE_CONFIG = new LocalCacheConfig() {
@@ -90,7 +92,8 @@ class GatewayServiceTest {
 
     @BeforeEach
     void setUp() {
-        var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG);
+        var validator = new ServiceRegistrationValidator(
+                PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
         var defaultPolicy = new DefaultPermissionPolicy();
         var authService = new ServiceAuthorizationService(defaultPolicy);
         serviceRegistry = new ServiceRegistry(

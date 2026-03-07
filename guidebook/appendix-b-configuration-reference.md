@@ -701,7 +701,8 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
 | `aussie.resiliency.http.connect-timeout` | `Duration` | `PT5S` | `AUSSIE_RESILIENCY_HTTP_CONNECT_TIMEOUT` | Max time to establish TCP connection to upstream. |
-| `aussie.resiliency.http.request-timeout` | `Duration` | `PT30S` | `AUSSIE_RESILIENCY_HTTP_REQUEST_TIMEOUT` | Max time to wait for response. Returns 504 Gateway Timeout if exceeded. |
+| `aussie.resiliency.http.request-timeout` | `Duration` | `PT30S` | `AUSSIE_RESILIENCY_HTTP_REQUEST_TIMEOUT` | Default time to wait for upstream response. Returns 504 if exceeded. Services may override via `timeoutConfig`. |
+| `aussie.resiliency.http.max-request-timeout` | `Duration` | `PT5M` | `AUSSIE_RESILIENCY_HTTP_MAX_REQUEST_TIMEOUT` | Maximum request timeout that services may configure. Enforced at registration time. |
 | `aussie.resiliency.http.max-connections-per-host` | `int` | `50` | `AUSSIE_RESILIENCY_HTTP_MAX_CONNECTIONS_PER_HOST` | Max connections per upstream host (bulkhead). |
 | `aussie.resiliency.http.max-connections` | `int` | `200` | `AUSSIE_RESILIENCY_HTTP_MAX_CONNECTIONS` | Max total connections across all upstream hosts (bulkhead). |
 

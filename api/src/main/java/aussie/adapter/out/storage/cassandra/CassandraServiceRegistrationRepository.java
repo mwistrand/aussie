@@ -28,6 +28,7 @@ import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.sampling.ServiceSamplingConfig;
 import aussie.core.model.service.ServiceRegistration;
+import aussie.core.model.timeout.ServiceTimeoutConfig;
 import aussie.core.port.out.ServiceRegistrationRepository;
 
 /**
@@ -66,8 +67,8 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                         (service_id, display_name, base_url, route_prefix,
                          default_visibility, default_auth_required, visibility_rules, endpoints, access_config,
                          cors_config, permission_policy, rate_limit_config, sampling_config, security_headers_config,
-                         version, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
+                         timeout_config, version, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
                         """);
     }
 
@@ -114,6 +115,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                                     .securityHeadersConfig()
                                     .map(this::toJson)
                                     .orElse(null),
+                            registration.timeoutConfig().map(this::toJson).orElse(null),
                             registration.version());
                     return session.executeAsync(bound).toCompletableFuture();
                 })
@@ -219,6 +221,8 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                 Optional.ofNullable(
                                 row.isNull("security_headers_config") ? null : row.getString("security_headers_config"))
                         .map(json -> fromJson(json, ServiceSecurityHeadersConfig.class)),
+                Optional.ofNullable(row.isNull("timeout_config") ? null : row.getString("timeout_config"))
+                        .map(json -> fromJson(json, ServiceTimeoutConfig.class)),
                 version);
     }
 

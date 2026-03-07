@@ -1,5 +1,6 @@
 package aussie.adapter.in.dto;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
@@ -19,6 +20,7 @@ import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointType;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.sampling.EndpointSamplingConfig;
+import aussie.core.model.timeout.EndpointTimeoutConfig;
 
 /**
  * DTO for endpoint configuration in service registration requests.
@@ -32,6 +34,7 @@ import aussie.core.model.sampling.EndpointSamplingConfig;
  * @param audience        optional audience claim for tokens issued to this endpoint
  * @param rateLimitConfig optional endpoint-specific rate limiting
  * @param samplingConfig  optional endpoint-specific OTel sampling configuration
+ * @param timeoutConfig   optional endpoint-specific timeout configuration
  */
 @ValidEndpointMethods
 public record EndpointConfigDto(
@@ -46,7 +49,8 @@ public record EndpointConfigDto(
                 String type,
         @JsonProperty("audience") String audience,
         @JsonProperty("rateLimitConfig") @Valid EndpointRateLimitConfigDto rateLimitConfig,
-        @JsonProperty("samplingConfig") @Valid EndpointSamplingConfigDto samplingConfig) {
+        @JsonProperty("samplingConfig") @Valid EndpointSamplingConfigDto samplingConfig,
+        @JsonProperty("timeoutConfig") @Valid EndpointTimeoutConfigDto timeoutConfig) {
 
     /**
      * DTO for endpoint-specific rate limit configuration.
@@ -105,6 +109,39 @@ public record EndpointConfigDto(
         }
     }
 
+    /**
+     * DTO for endpoint-specific timeout configuration.
+     *
+     * @param requestTimeout maximum time to wait for upstream response (ISO-8601 duration)
+     */
+    public record EndpointTimeoutConfigDto(
+            @JsonProperty("requestTimeout")
+                    @Pattern(
+                            regexp = "^PT(?:\\d+H)?(?:\\d+M)?(?:\\d+(?:\\.\\d+)?S)?$",
+                            message = "requestTimeout must be an ISO-8601 duration (e.g., PT30S, PT2M, PT1M30S)")
+                    String requestTimeout) {
+
+        /**
+         * Convert this DTO to an EndpointTimeoutConfig model.
+         *
+         * @return the domain model
+         */
+        public EndpointTimeoutConfig toModel() {
+            return new EndpointTimeoutConfig(Optional.ofNullable(requestTimeout).map(Duration::parse));
+        }
+
+        /**
+         * Create a DTO from an EndpointTimeoutConfig model.
+         *
+         * @param model the domain model
+         * @return the DTO representation
+         */
+        public static EndpointTimeoutConfigDto fromModel(EndpointTimeoutConfig model) {
+            return new EndpointTimeoutConfigDto(
+                    model.requestTimeout().map(Duration::toString).orElse(null));
+        }
+    }
+
     public EndpointConfig toModel() {
         return toModel(false);
     }
@@ -120,6 +157,8 @@ public record EndpointConfigDto(
         var sampling = samplingConfig != null
                 ? Optional.of(samplingConfig.toModel())
                 : Optional.<EndpointSamplingConfig>empty();
+        var timeout =
+                timeoutConfig != null ? Optional.of(timeoutConfig.toModel()) : Optional.<EndpointTimeoutConfig>empty();
 
         return new EndpointConfig(
                 path,
@@ -130,6 +169,7 @@ public record EndpointConfigDto(
                 endpointType,
                 rateLimit,
                 sampling,
+                timeout,
                 Optional.ofNullable(audience));
     }
 
@@ -145,6 +185,7 @@ public record EndpointConfigDto(
                 model.rateLimitConfig()
                         .map(EndpointRateLimitConfigDto::fromModel)
                         .orElse(null),
-                model.samplingConfig().map(EndpointSamplingConfigDto::fromModel).orElse(null));
+                model.samplingConfig().map(EndpointSamplingConfigDto::fromModel).orElse(null),
+                model.timeoutConfig().map(EndpointTimeoutConfigDto::fromModel).orElse(null));
     }
 }

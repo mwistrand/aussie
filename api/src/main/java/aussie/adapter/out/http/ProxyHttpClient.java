@@ -106,6 +106,7 @@ public class ProxyHttpClient implements ProxyClient {
     public Uni<ProxyResponse> forward(PreparedProxyRequest preparedRequest) {
         var targetUri = preparedRequest.targetUri();
         var method = HttpMethod.valueOf(preparedRequest.method());
+        var effectiveTimeout = preparedRequest.requestTimeout().orElse(httpConfig.requestTimeout());
         final var startTime = System.currentTimeMillis();
 
         // Create a client span for the outgoing request
@@ -125,7 +126,7 @@ public class ProxyHttpClient implements ProxyClient {
             telemetryHelper.setRequestSize(span, preparedRequest.body().length);
         }
 
-        var request = createRequest(method, targetUri);
+        var request = createRequest(method, targetUri, effectiveTimeout);
         applyHeaders(preparedRequest, request);
 
         // Propagate trace context (W3C Trace Context headers)
@@ -205,7 +206,7 @@ public class ProxyHttpClient implements ProxyClient {
         return port;
     }
 
-    private HttpRequest<Buffer> createRequest(HttpMethod method, URI targetUri) {
+    private HttpRequest<Buffer> createRequest(HttpMethod method, URI targetUri, java.time.Duration timeout) {
         var path = targetUri.getRawPath();
         if (targetUri.getRawQuery() != null) {
             path += "?" + targetUri.getRawQuery();
@@ -213,7 +214,7 @@ public class ProxyHttpClient implements ProxyClient {
 
         return webClient
                 .request(method, getPort(targetUri), targetUri.getHost(), path)
-                .timeout(httpConfig.requestTimeout().toMillis());
+                .timeout(timeout.toMillis());
     }
 
     private void applyHeaders(PreparedProxyRequest preparedRequest, HttpRequest<Buffer> httpRequest) {

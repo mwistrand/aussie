@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -24,12 +25,16 @@ import aussie.core.model.ratelimit.ServiceWebSocketRateLimitConfig.RateLimitValu
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.service.ServiceRegistration;
+import aussie.core.model.timeout.EndpointTimeoutConfig;
+import aussie.core.model.timeout.ServiceTimeoutConfig;
 import aussie.core.service.routing.*;
 
 @DisplayName("ServiceRegistrationValidator")
 class ServiceRegistrationValidatorTest {
 
     private static final RateLimitingConfig PERMISSIVE_RATE_LIMIT_CONFIG = TestRateLimitingConfig.permissive();
+    private static final aussie.core.config.ResiliencyConfig PERMISSIVE_RESILIENCY_CONFIG =
+            TestResiliencyConfig.permissive();
 
     private ServiceRegistration.Builder createServiceBuilder() {
         return ServiceRegistration.builder("test-service").baseUrl("http://localhost:8080");
@@ -43,7 +48,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should reject PUBLIC defaultVisibility when disabled by policy")
         void shouldRejectPublicDefaultVisibilityWhenDisabled() {
             GatewaySecurityConfig config = TestGatewaySecurityConfig.withPublicVisibility(false);
-            var validator = new ServiceRegistrationValidator(config, PERMISSIVE_RATE_LIMIT_CONFIG);
+            var validator = new ServiceRegistrationValidator(
+                    config, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder()
                     .defaultVisibility(EndpointVisibility.PUBLIC)
                     .build();
@@ -59,7 +65,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept PUBLIC defaultVisibility when enabled by policy")
         void shouldAcceptPublicDefaultVisibilityWhenEnabled() {
             GatewaySecurityConfig config = TestGatewaySecurityConfig.permissive();
-            var validator = new ServiceRegistrationValidator(config, PERMISSIVE_RATE_LIMIT_CONFIG);
+            var validator = new ServiceRegistrationValidator(
+                    config, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder()
                     .defaultVisibility(EndpointVisibility.PUBLIC)
                     .build();
@@ -73,7 +80,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept PRIVATE defaultVisibility regardless of policy")
         void shouldAcceptPrivateDefaultVisibilityRegardlessOfPolicy() {
             GatewaySecurityConfig config = TestGatewaySecurityConfig.withPublicVisibility(false);
-            var validator = new ServiceRegistrationValidator(config, PERMISSIVE_RATE_LIMIT_CONFIG);
+            var validator = new ServiceRegistrationValidator(
+                    config, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder()
                     .defaultVisibility(EndpointVisibility.PRIVATE)
                     .build();
@@ -87,7 +95,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept null defaultVisibility (defaults to PRIVATE)")
         void shouldAcceptNullDefaultVisibility() {
             GatewaySecurityConfig config = TestGatewaySecurityConfig.withPublicVisibility(false);
-            var validator = new ServiceRegistrationValidator(config, PERMISSIVE_RATE_LIMIT_CONFIG);
+            var validator = new ServiceRegistrationValidator(
+                    config, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder().build();
 
             var result = validator.validate(service);
@@ -120,7 +129,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept visibility rule with valid pattern")
         void shouldAcceptVisibilityRuleWithValidPattern() {
             GatewaySecurityConfig config = TestGatewaySecurityConfig.permissive();
-            var validator = new ServiceRegistrationValidator(config, PERMISSIVE_RATE_LIMIT_CONFIG);
+            var validator = new ServiceRegistrationValidator(
+                    config, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
             var rule = new VisibilityRule("/api/**", Set.of(), EndpointVisibility.PUBLIC);
             var service = createServiceBuilder().visibilityRules(List.of(rule)).build();
 
@@ -133,7 +143,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept empty visibility rules")
         void shouldAcceptEmptyVisibilityRules() {
             GatewaySecurityConfig config = TestGatewaySecurityConfig.permissive();
-            var validator = new ServiceRegistrationValidator(config, PERMISSIVE_RATE_LIMIT_CONFIG);
+            var validator = new ServiceRegistrationValidator(
+                    config, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder().visibilityRules(List.of()).build();
 
             var result = validator.validate(service);
@@ -145,7 +156,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept multiple valid visibility rules")
         void shouldAcceptMultipleValidVisibilityRules() {
             GatewaySecurityConfig config = TestGatewaySecurityConfig.permissive();
-            var validator = new ServiceRegistrationValidator(config, PERMISSIVE_RATE_LIMIT_CONFIG);
+            var validator = new ServiceRegistrationValidator(
+                    config, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
             var rule1 = new VisibilityRule("/api/**", Set.of("GET"), EndpointVisibility.PUBLIC);
             var rule2 = new VisibilityRule("/internal/**", Set.of(), EndpointVisibility.PRIVATE);
             var service = createServiceBuilder()
@@ -161,7 +173,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept visibility rule with factory methods")
         void shouldAcceptVisibilityRuleWithFactoryMethods() {
             GatewaySecurityConfig config = TestGatewaySecurityConfig.permissive();
-            var validator = new ServiceRegistrationValidator(config, PERMISSIVE_RATE_LIMIT_CONFIG);
+            var validator = new ServiceRegistrationValidator(
+                    config, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
             var rule = VisibilityRule.publicRule("/api/**");
             var service = createServiceBuilder().visibilityRules(List.of(rule)).build();
 
@@ -180,7 +193,8 @@ class ServiceRegistrationValidatorTest {
         void shouldValidatePublicVisibilityPolicyFirst() {
             GatewaySecurityConfig config =
                     TestGatewaySecurityConfig.withPublicVisibility(false); // Disables PUBLIC default
-            var validator = new ServiceRegistrationValidator(config, PERMISSIVE_RATE_LIMIT_CONFIG);
+            var validator = new ServiceRegistrationValidator(
+                    config, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
             var rule = VisibilityRule.publicRule("/api/**");
             var service = createServiceBuilder()
                     .defaultVisibility(EndpointVisibility.PUBLIC)
@@ -200,7 +214,8 @@ class ServiceRegistrationValidatorTest {
         void shouldPassWithPrivateDefaultAndPublicRules() {
             GatewaySecurityConfig config =
                     TestGatewaySecurityConfig.withPublicVisibility(false); // Disables PUBLIC default
-            var validator = new ServiceRegistrationValidator(config, PERMISSIVE_RATE_LIMIT_CONFIG);
+            var validator = new ServiceRegistrationValidator(
+                    config, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
             var rule = VisibilityRule.publicRule("/api/**");
             var service = createServiceBuilder()
                     .defaultVisibility(EndpointVisibility.PRIVATE)
@@ -222,7 +237,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should reject when HTTP windowSeconds exceeds platform max")
         void shouldRejectWhenHttpWindowSecondsExceedsPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxWindowSeconds(300);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder()
                     .rateLimitConfig(ServiceRateLimitConfig.of(100, 600))
                     .build();
@@ -240,7 +256,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should reject when WebSocket connection windowSeconds exceeds platform max")
         void shouldRejectWhenWebSocketConnectionWindowSecondsExceedsPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxWindowSeconds(300);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             final var wsConfig = ServiceWebSocketRateLimitConfig.of(RateLimitValues.of(10, 600), null);
             var service = createServiceBuilder()
                     .rateLimitConfig(new ServiceRateLimitConfig(
@@ -261,7 +278,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should reject when WebSocket message windowSeconds exceeds platform max")
         void shouldRejectWhenWebSocketMessageWindowSecondsExceedsPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxWindowSeconds(300);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             final var wsConfig = ServiceWebSocketRateLimitConfig.of(null, RateLimitValues.of(100, 600));
             var service = createServiceBuilder()
                     .rateLimitConfig(new ServiceRateLimitConfig(
@@ -282,7 +300,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept WebSocket config with no windowSeconds set")
         void shouldAcceptWebSocketConfigWithNoWindowSeconds() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxWindowSeconds(300);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             final var connectionConfig = new RateLimitValues(Optional.of(50L), Optional.empty(), Optional.empty());
             final var wsConfig = new ServiceWebSocketRateLimitConfig(Optional.of(connectionConfig), Optional.empty());
             var service = createServiceBuilder()
@@ -299,7 +318,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept when windowSeconds equals platform max")
         void shouldAcceptWhenWindowSecondsEqualsPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxWindowSeconds(300);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder()
                     .rateLimitConfig(ServiceRateLimitConfig.of(100, 300))
                     .build();
@@ -313,7 +333,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept when windowSeconds is under platform max")
         void shouldAcceptWhenWindowSecondsUnderPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxWindowSeconds(300);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder()
                     .rateLimitConfig(ServiceRateLimitConfig.of(100, 60))
                     .build();
@@ -327,7 +348,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept when no rate limit config is set")
         void shouldAcceptWhenNoRateLimitConfig() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxWindowSeconds(300);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder().build();
 
             var result = validator.validate(service);
@@ -339,7 +361,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Error message should specify the platform maximum")
         void errorMessageShouldSpecifyPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxWindowSeconds(3600);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder()
                     .rateLimitConfig(ServiceRateLimitConfig.of(100, 86400))
                     .build();
@@ -360,7 +383,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should reject when HTTP requestsPerWindow exceeds platform max")
         void shouldRejectWhenHttpRequestsPerWindowExceedsPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxRequestsPerWindow(100);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder()
                     .rateLimitConfig(ServiceRateLimitConfig.of(500, 60))
                     .build();
@@ -378,7 +402,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should reject when HTTP burstCapacity exceeds platform max")
         void shouldRejectWhenHttpBurstCapacityExceedsPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxRequestsPerWindow(100);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder()
                     .rateLimitConfig(ServiceRateLimitConfig.of(50, 60, 200))
                     .build();
@@ -396,7 +421,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept when requestsPerWindow equals platform max")
         void shouldAcceptWhenRequestsPerWindowEqualsPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxRequestsPerWindow(100);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder()
                     .rateLimitConfig(ServiceRateLimitConfig.of(100, 60))
                     .build();
@@ -410,7 +436,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept when requestsPerWindow is under platform max")
         void shouldAcceptWhenRequestsPerWindowUnderPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxRequestsPerWindow(100);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder()
                     .rateLimitConfig(ServiceRateLimitConfig.of(50, 60))
                     .build();
@@ -424,7 +451,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept when no rate limit config is set")
         void shouldAcceptWhenNoRateLimitConfig() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxRequestsPerWindow(100);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder().build();
 
             var result = validator.validate(service);
@@ -436,7 +464,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should reject when WebSocket connection requestsPerWindow exceeds platform max")
         void shouldRejectWhenWebSocketConnectionRequestsExceedsPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxRequestsPerWindow(100);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             final var wsConfig = ServiceWebSocketRateLimitConfig.of(RateLimitValues.of(500, 60), null);
             var service = createServiceBuilder()
                     .rateLimitConfig(new ServiceRateLimitConfig(
@@ -456,7 +485,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should reject when WebSocket message requestsPerWindow exceeds platform max")
         void shouldRejectWhenWebSocketMessageRequestsExceedsPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxRequestsPerWindow(100);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             final var wsConfig = ServiceWebSocketRateLimitConfig.of(null, RateLimitValues.of(500, 60));
             var service = createServiceBuilder()
                     .rateLimitConfig(new ServiceRateLimitConfig(
@@ -476,7 +506,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should reject when WebSocket connection burstCapacity exceeds platform max")
         void shouldRejectWhenWebSocketConnectionBurstCapacityExceedsPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxRequestsPerWindow(100);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             final var connValues = RateLimitValues.of(50, 60, 500);
             final var wsConfig = ServiceWebSocketRateLimitConfig.of(connValues, null);
             var service = createServiceBuilder()
@@ -497,7 +528,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should reject when WebSocket message burstCapacity exceeds platform max")
         void shouldRejectWhenWebSocketMessageBurstCapacityExceedsPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxRequestsPerWindow(100);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             final var msgValues = RateLimitValues.of(50, 60, 500);
             final var wsConfig = ServiceWebSocketRateLimitConfig.of(null, msgValues);
             var service = createServiceBuilder()
@@ -518,7 +550,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Error message should specify the platform maximum")
         void errorMessageShouldSpecifyPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxRequestsPerWindow(1000);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var service = createServiceBuilder()
                     .rateLimitConfig(ServiceRateLimitConfig.of(5000, 60))
                     .build();
@@ -539,7 +572,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should reject when endpoint requestsPerWindow exceeds platform max")
         void shouldRejectWhenEndpointRequestsPerWindowExceedsPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxRequestsPerWindow(100);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var endpoint = new EndpointConfig(
                     "/api/test",
                     Set.of("GET"),
@@ -563,7 +597,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should reject when endpoint burstCapacity exceeds platform max")
         void shouldRejectWhenEndpointBurstCapacityExceedsPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxRequestsPerWindow(100);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var endpoint = new EndpointConfig(
                     "/api/test",
                     Set.of("GET"),
@@ -587,7 +622,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should reject when endpoint windowSeconds exceeds platform max")
         void shouldRejectWhenEndpointWindowSecondsExceedsPlatformMax() {
             var rateLimitConfig = TestRateLimitingConfig.withMaximums(Long.MAX_VALUE, 300);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var endpoint = new EndpointConfig(
                     "/api/test",
                     Set.of("GET"),
@@ -612,7 +648,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept endpoint with valid rate limits")
         void shouldAcceptEndpointWithValidRateLimits() {
             var rateLimitConfig = TestRateLimitingConfig.withMaximums(1000, 3600);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var endpoint = new EndpointConfig(
                     "/api/test",
                     Set.of("GET"),
@@ -632,7 +669,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Should accept endpoint without rate limit config")
         void shouldAcceptEndpointWithoutRateLimitConfig() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxRequestsPerWindow(100);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var endpoint = EndpointConfig.publicEndpoint("/api/test", Set.of("GET"));
             var service = createServiceBuilder().endpoints(List.of(endpoint)).build();
 
@@ -645,7 +683,8 @@ class ServiceRegistrationValidatorTest {
         @DisplayName("Error message should include endpoint path")
         void errorMessageShouldIncludeEndpointPath() {
             var rateLimitConfig = TestRateLimitingConfig.withMaxRequestsPerWindow(100);
-            var validator = new ServiceRegistrationValidator(TestGatewaySecurityConfig.permissive(), rateLimitConfig);
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), rateLimitConfig, PERMISSIVE_RESILIENCY_CONFIG);
             var endpoint = new EndpointConfig(
                     "/api/users",
                     Set.of("GET"),
@@ -662,6 +701,172 @@ class ServiceRegistrationValidatorTest {
             var invalid = (ValidationResult.Invalid) result;
             assertEquals(
                     "Endpoint '/api/users' requestsPerWindow 500 exceeds the platform maximum of 100.",
+                    invalid.reason());
+        }
+    }
+
+    @Nested
+    @DisplayName("Timeout Validation")
+    class TimeoutValidationTests {
+
+        @Test
+        @DisplayName("Should reject when service requestTimeout exceeds platform max")
+        void shouldRejectWhenServiceTimeoutExceedsPlatformMax() {
+            var resiliencyConfig = TestResiliencyConfig.withMaxRequestTimeout(Duration.ofMinutes(2));
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), PERMISSIVE_RATE_LIMIT_CONFIG, resiliencyConfig);
+            var service = createServiceBuilder()
+                    .timeoutConfig(ServiceTimeoutConfig.of(Duration.ofMinutes(3)))
+                    .build();
+
+            var result = validator.validate(service);
+
+            assertInstanceOf(ValidationResult.Invalid.class, result);
+            var invalid = (ValidationResult.Invalid) result;
+            assertEquals(400, invalid.suggestedStatusCode());
+            assertTrue(invalid.reason().contains("Service"));
+            assertTrue(invalid.reason().contains("PT3M"));
+            assertTrue(invalid.reason().contains("PT2M"));
+        }
+
+        @Test
+        @DisplayName("Should accept when service requestTimeout equals platform max")
+        void shouldAcceptWhenServiceTimeoutEqualsPlatformMax() {
+            var resiliencyConfig = TestResiliencyConfig.withMaxRequestTimeout(Duration.ofMinutes(2));
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), PERMISSIVE_RATE_LIMIT_CONFIG, resiliencyConfig);
+            var service = createServiceBuilder()
+                    .timeoutConfig(ServiceTimeoutConfig.of(Duration.ofMinutes(2)))
+                    .build();
+
+            var result = validator.validate(service);
+
+            assertInstanceOf(ValidationResult.Valid.class, result);
+        }
+
+        @Test
+        @DisplayName("Should accept when service requestTimeout is under platform max")
+        void shouldAcceptWhenServiceTimeoutUnderPlatformMax() {
+            var resiliencyConfig = TestResiliencyConfig.withMaxRequestTimeout(Duration.ofMinutes(2));
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), PERMISSIVE_RATE_LIMIT_CONFIG, resiliencyConfig);
+            var service = createServiceBuilder()
+                    .timeoutConfig(ServiceTimeoutConfig.of(Duration.ofSeconds(30)))
+                    .build();
+
+            var result = validator.validate(service);
+
+            assertInstanceOf(ValidationResult.Valid.class, result);
+        }
+
+        @Test
+        @DisplayName("Should accept when no timeout config is set")
+        void shouldAcceptWhenNoTimeoutConfig() {
+            var resiliencyConfig = TestResiliencyConfig.withMaxRequestTimeout(Duration.ofSeconds(30));
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), PERMISSIVE_RATE_LIMIT_CONFIG, resiliencyConfig);
+            var service = createServiceBuilder().build();
+
+            var result = validator.validate(service);
+
+            assertInstanceOf(ValidationResult.Valid.class, result);
+        }
+
+        @Test
+        @DisplayName("Should reject when endpoint requestTimeout exceeds platform max")
+        void shouldRejectWhenEndpointTimeoutExceedsPlatformMax() {
+            var resiliencyConfig = TestResiliencyConfig.withMaxRequestTimeout(Duration.ofMinutes(2));
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), PERMISSIVE_RATE_LIMIT_CONFIG, resiliencyConfig);
+            var endpoint = new EndpointConfig(
+                    "/api/slow",
+                    Set.of("GET"),
+                    EndpointVisibility.PUBLIC,
+                    Optional.empty(),
+                    false,
+                    aussie.core.model.routing.EndpointType.HTTP,
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(EndpointTimeoutConfig.of(Duration.ofMinutes(5))),
+                    Optional.empty());
+            var service = createServiceBuilder().endpoints(List.of(endpoint)).build();
+
+            var result = validator.validate(service);
+
+            assertInstanceOf(ValidationResult.Invalid.class, result);
+            var invalid = (ValidationResult.Invalid) result;
+            assertEquals(400, invalid.suggestedStatusCode());
+            assertTrue(invalid.reason().contains("/api/slow"));
+            assertTrue(invalid.reason().contains("PT5M"));
+            assertTrue(invalid.reason().contains("PT2M"));
+        }
+
+        @Test
+        @DisplayName("Should accept when endpoint requestTimeout is under platform max")
+        void shouldAcceptWhenEndpointTimeoutUnderPlatformMax() {
+            var resiliencyConfig = TestResiliencyConfig.withMaxRequestTimeout(Duration.ofMinutes(2));
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), PERMISSIVE_RATE_LIMIT_CONFIG, resiliencyConfig);
+            var endpoint = new EndpointConfig(
+                    "/api/slow",
+                    Set.of("GET"),
+                    EndpointVisibility.PUBLIC,
+                    Optional.empty(),
+                    false,
+                    aussie.core.model.routing.EndpointType.HTTP,
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(EndpointTimeoutConfig.of(Duration.ofSeconds(90))),
+                    Optional.empty());
+            var service = createServiceBuilder().endpoints(List.of(endpoint)).build();
+
+            var result = validator.validate(service);
+
+            assertInstanceOf(ValidationResult.Valid.class, result);
+        }
+
+        @Test
+        @DisplayName("Error message should include duration values for service timeout")
+        void errorMessageShouldIncludeDurationValues() {
+            var resiliencyConfig = TestResiliencyConfig.withMaxRequestTimeout(Duration.ofSeconds(30));
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), PERMISSIVE_RATE_LIMIT_CONFIG, resiliencyConfig);
+            var service = createServiceBuilder()
+                    .timeoutConfig(ServiceTimeoutConfig.of(Duration.ofSeconds(60)))
+                    .build();
+
+            var result = validator.validate(service);
+
+            assertInstanceOf(ValidationResult.Invalid.class, result);
+            var invalid = (ValidationResult.Invalid) result;
+            assertEquals("Service requestTimeout PT1M exceeds the platform maximum of PT30S.", invalid.reason());
+        }
+
+        @Test
+        @DisplayName("Error message should include endpoint path for endpoint timeout")
+        void errorMessageShouldIncludeEndpointPath() {
+            var resiliencyConfig = TestResiliencyConfig.withMaxRequestTimeout(Duration.ofSeconds(30));
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(), PERMISSIVE_RATE_LIMIT_CONFIG, resiliencyConfig);
+            var endpoint = new EndpointConfig(
+                    "/api/reports",
+                    Set.of("GET"),
+                    EndpointVisibility.PUBLIC,
+                    Optional.empty(),
+                    false,
+                    aussie.core.model.routing.EndpointType.HTTP,
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(EndpointTimeoutConfig.of(Duration.ofSeconds(60))),
+                    Optional.empty());
+            var service = createServiceBuilder().endpoints(List.of(endpoint)).build();
+
+            var result = validator.validate(service);
+
+            assertInstanceOf(ValidationResult.Invalid.class, result);
+            var invalid = (ValidationResult.Invalid) result;
+            assertEquals(
+                    "Endpoint '/api/reports' requestTimeout PT1M exceeds the platform maximum of PT30S.",
                     invalid.reason());
         }
     }

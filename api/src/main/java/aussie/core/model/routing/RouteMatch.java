@@ -14,8 +14,9 @@ import aussie.core.model.service.ServiceRegistration;
  * variables extracted from the request path.
  *
  * <p>
- * Configuration values (visibility, authRequired, rateLimitConfig) are resolved
- * from the endpoint when available, falling back to service defaults otherwise.
+ * Configuration values (visibility, authRequired, rateLimitConfig, samplingConfig,
+ * timeoutConfig) are resolved from the endpoint when available, falling back to
+ * service defaults otherwise.
  */
 public record RouteMatch(
         ServiceRegistration service,

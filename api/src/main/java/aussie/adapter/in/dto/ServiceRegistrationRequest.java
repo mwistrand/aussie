@@ -15,6 +15,7 @@ import aussie.core.model.common.CorsConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.sampling.ServiceSamplingConfig;
 import aussie.core.model.service.ServiceRegistration;
+import aussie.core.model.timeout.ServiceTimeoutConfig;
 
 /**
  * DTO for service registration requests.
@@ -33,6 +34,7 @@ import aussie.core.model.service.ServiceRegistration;
  * @param permissionPolicy    permission policy for authorization
  * @param rateLimitConfig     service-level rate limiting configuration
  * @param samplingConfig      service-level OTel sampling configuration
+ * @param timeoutConfig       service-level timeout configuration
  */
 public record ServiceRegistrationRequest(
         @Min(value = 1, message = "version must be at least 1") Long version,
@@ -51,7 +53,8 @@ public record ServiceRegistrationRequest(
         @Valid CorsConfigDto cors,
         @Valid ServicePermissionPolicyDto permissionPolicy,
         @Valid ServiceRateLimitConfigDto rateLimitConfig,
-        @Valid ServiceSamplingConfigDto samplingConfig) {
+        @Valid ServiceSamplingConfigDto samplingConfig,
+        @Valid ServiceTimeoutConfigDto timeoutConfig) {
     /**
      * Convert this DTO to a {@link ServiceRegistration} domain model.
      *
@@ -93,6 +96,9 @@ public record ServiceRegistrationRequest(
                 ? Optional.of(samplingConfig.toModel())
                 : Optional.<ServiceSamplingConfig>empty();
 
+        var timeoutConfigModel =
+                timeoutConfig != null ? Optional.of(timeoutConfig.toModel()) : Optional.<ServiceTimeoutConfig>empty();
+
         return new ServiceRegistration(
                 serviceId,
                 displayName != null ? displayName : serviceId,
@@ -108,6 +114,7 @@ public record ServiceRegistrationRequest(
                 rateLimitConfigModel,
                 samplingConfigModel,
                 Optional.empty(), // securityHeadersConfig - not set via registration request
+                timeoutConfigModel,
                 version == null ? 1L : version); // New registrations start at version 1
     }
 }

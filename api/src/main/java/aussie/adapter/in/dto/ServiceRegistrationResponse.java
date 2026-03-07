@@ -17,6 +17,7 @@ public record ServiceRegistrationResponse(
         CorsConfigDto cors,
         ServicePermissionPolicyDto permissionPolicy,
         ServiceRateLimitConfigDto rateLimitConfig,
+        ServiceTimeoutConfigDto timeoutConfig,
         Long version) {
     public static ServiceRegistrationResponse fromModel(ServiceRegistration model) {
         var visibilityRuleDtos = model.visibilityRules().isEmpty()
@@ -42,6 +43,9 @@ public record ServiceRegistrationResponse(
                 .map(ServiceRateLimitConfigDto::fromModel)
                 .orElse(null);
 
+        var timeoutConfigDto =
+                model.timeoutConfig().map(ServiceTimeoutConfigDto::fromModel).orElse(null);
+
         return new ServiceRegistrationResponse(
                 model.serviceId(),
                 model.displayName(),
@@ -55,6 +59,7 @@ public record ServiceRegistrationResponse(
                 corsConfigDto,
                 permissionPolicyDto,
                 rateLimitConfigDto,
+                timeoutConfigDto,
                 model.version());
     }
 }

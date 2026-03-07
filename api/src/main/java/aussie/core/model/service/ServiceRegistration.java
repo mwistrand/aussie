@@ -18,6 +18,7 @@ import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.sampling.ServiceSamplingConfig;
+import aussie.core.model.timeout.ServiceTimeoutConfig;
 
 /**
  * Represents a registered backend service in the gateway.
@@ -50,6 +51,7 @@ import aussie.core.model.sampling.ServiceSamplingConfig;
  * @param rateLimitConfig service-level rate limit configuration
  * @param samplingConfig service-level OTel sampling configuration
  * @param securityHeadersConfig per-service security header overrides
+ * @param timeoutConfig service-level timeout configuration
  * @param version optimistic locking version for concurrent updates
  */
 public record ServiceRegistration(
@@ -67,6 +69,7 @@ public record ServiceRegistration(
         Optional<ServiceRateLimitConfig> rateLimitConfig,
         Optional<ServiceSamplingConfig> samplingConfig,
         Optional<ServiceSecurityHeadersConfig> securityHeadersConfig,
+        Optional<ServiceTimeoutConfig> timeoutConfig,
         long version) {
     public ServiceRegistration {
         if (serviceId == null || serviceId.isBlank()) {
@@ -108,6 +111,9 @@ public record ServiceRegistration(
         if (securityHeadersConfig == null) {
             securityHeadersConfig = Optional.empty();
         }
+        if (timeoutConfig == null) {
+            timeoutConfig = Optional.empty();
+        }
         if (version < 0) {
             version = 1;
         }
@@ -132,6 +138,7 @@ public record ServiceRegistration(
                 rateLimitConfig,
                 samplingConfig,
                 securityHeadersConfig,
+                timeoutConfig,
                 version + 1);
     }
 
@@ -154,6 +161,7 @@ public record ServiceRegistration(
                 rateLimitConfig,
                 samplingConfig,
                 securityHeadersConfig,
+                timeoutConfig,
                 version);
     }
 
@@ -176,6 +184,7 @@ public record ServiceRegistration(
                 Optional.ofNullable(config),
                 samplingConfig,
                 securityHeadersConfig,
+                timeoutConfig,
                 version);
     }
 
@@ -198,6 +207,7 @@ public record ServiceRegistration(
                 rateLimitConfig,
                 Optional.ofNullable(config),
                 securityHeadersConfig,
+                timeoutConfig,
                 version);
     }
 
@@ -219,6 +229,30 @@ public record ServiceRegistration(
                 permissionPolicy,
                 rateLimitConfig,
                 samplingConfig,
+                Optional.ofNullable(config),
+                timeoutConfig,
+                version);
+    }
+
+    /**
+     * Create a new ServiceRegistration with the given timeout config.
+     */
+    public ServiceRegistration withTimeoutConfig(ServiceTimeoutConfig config) {
+        return new ServiceRegistration(
+                serviceId,
+                displayName,
+                baseUrl,
+                routePrefix,
+                defaultVisibility,
+                defaultAuthRequired,
+                visibilityRules,
+                endpoints,
+                accessConfig,
+                corsConfig,
+                permissionPolicy,
+                rateLimitConfig,
+                samplingConfig,
+                securityHeadersConfig,
                 Optional.ofNullable(config),
                 version);
     }
@@ -322,6 +356,7 @@ public record ServiceRegistration(
         private ServiceRateLimitConfig rateLimitConfig;
         private ServiceSamplingConfig samplingConfig;
         private ServiceSecurityHeadersConfig securityHeadersConfig;
+        private ServiceTimeoutConfig timeoutConfig;
         private long version = 1;
 
         private Builder(String serviceId) {
@@ -398,6 +433,11 @@ public record ServiceRegistration(
             return this;
         }
 
+        public Builder timeoutConfig(ServiceTimeoutConfig timeoutConfig) {
+            this.timeoutConfig = timeoutConfig;
+            return this;
+        }
+
         public Builder version(long version) {
             this.version = version;
             return this;
@@ -419,6 +459,7 @@ public record ServiceRegistration(
                     Optional.ofNullable(rateLimitConfig),
                     Optional.ofNullable(samplingConfig),
                     Optional.ofNullable(securityHeadersConfig),
+                    Optional.ofNullable(timeoutConfig),
                     version);
         }
     }

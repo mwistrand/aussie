@@ -81,6 +81,7 @@ class AdminResourceUnitTest {
                 null,
                 null,
                 null,
+                null,
                 null);
     }
 
@@ -206,6 +207,7 @@ class AdminResourceUnitTest {
                     "/test",
                     "PRIVATE",
                     true,
+                    null,
                     null,
                     null,
                     null,

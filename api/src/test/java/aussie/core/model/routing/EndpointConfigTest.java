@@ -36,6 +36,7 @@ class EndpointConfigTest {
                             EndpointType.HTTP,
                             Optional.empty(),
                             Optional.empty(),
+                            Optional.empty(),
                             Optional.empty()));
         }
 
@@ -51,6 +52,7 @@ class EndpointConfigTest {
                             Optional.empty(),
                             false,
                             EndpointType.HTTP,
+                            Optional.empty(),
                             Optional.empty(),
                             Optional.empty(),
                             Optional.empty()));
@@ -70,6 +72,7 @@ class EndpointConfigTest {
                             EndpointType.HTTP,
                             Optional.empty(),
                             Optional.empty(),
+                            Optional.empty(),
                             Optional.empty()));
         }
 
@@ -83,6 +86,7 @@ class EndpointConfigTest {
                     null,
                     false,
                     EndpointType.HTTP,
+                    Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty());
@@ -102,6 +106,7 @@ class EndpointConfigTest {
                     null,
                     Optional.empty(),
                     Optional.empty(),
+                    Optional.empty(),
                     Optional.empty());
 
             assertEquals(EndpointType.HTTP, config.type());
@@ -118,6 +123,7 @@ class EndpointConfigTest {
                     false,
                     EndpointType.HTTP,
                     null,
+                    Optional.empty(),
                     Optional.empty(),
                     Optional.empty());
 
@@ -136,6 +142,7 @@ class EndpointConfigTest {
                     EndpointType.HTTP,
                     Optional.empty(),
                     null,
+                    Optional.empty(),
                     Optional.empty());
 
             assertTrue(config.samplingConfig().isEmpty());
@@ -151,6 +158,7 @@ class EndpointConfigTest {
                     Optional.empty(),
                     false,
                     EndpointType.HTTP,
+                    Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
                     null);
@@ -170,6 +178,7 @@ class EndpointConfigTest {
                     EndpointType.WEBSOCKET,
                     Optional.empty(),
                     Optional.empty(),
+                    Optional.empty(),
                     Optional.empty());
 
             assertEquals(Set.of("GET"), config.methods());
@@ -185,6 +194,7 @@ class EndpointConfigTest {
                     Optional.empty(),
                     false,
                     EndpointType.WEBSOCKET,
+                    Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty());
@@ -206,6 +216,7 @@ class EndpointConfigTest {
                             EndpointType.HTTP,
                             Optional.empty(),
                             Optional.empty(),
+                            Optional.empty(),
                             Optional.empty()));
         }
 
@@ -223,6 +234,7 @@ class EndpointConfigTest {
                             EndpointType.HTTP,
                             Optional.empty(),
                             Optional.empty(),
+                            Optional.empty(),
                             Optional.empty()));
         }
 
@@ -236,6 +248,7 @@ class EndpointConfigTest {
                     Optional.empty(),
                     false,
                     EndpointType.WEBSOCKET,
+                    Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty());
@@ -258,6 +271,7 @@ class EndpointConfigTest {
                     EndpointType.HTTP,
                     Optional.of(rateLimitConfig),
                     Optional.of(samplingConfig),
+                    Optional.empty(),
                     Optional.of("my-audience"));
 
             assertEquals("/api/test", config.path());

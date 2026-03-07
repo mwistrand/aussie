@@ -45,6 +45,8 @@ class ServiceRegistryMultiInstanceTest {
     // Permissive security config for testing
     private static final GatewaySecurityConfig PERMISSIVE_CONFIG = TestGatewaySecurityConfig.permissive();
     private static final RateLimitingConfig PERMISSIVE_RATE_LIMIT_CONFIG = TestRateLimitingConfig.permissive();
+    private static final aussie.core.config.ResiliencyConfig PERMISSIVE_RESILIENCY_CONFIG =
+            TestResiliencyConfig.permissive();
 
     private ServiceRegistrationRepository sharedRepository;
     private ServiceRegistry instanceA;
@@ -55,7 +57,8 @@ class ServiceRegistryMultiInstanceTest {
         // Shared repository simulates persistent storage
         sharedRepository = new InMemoryServiceRegistrationRepository();
 
-        var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG);
+        var validator = new ServiceRegistrationValidator(
+                PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
         var defaultPolicy = new DefaultPermissionPolicy();
         var authService = new ServiceAuthorizationService(defaultPolicy);
 
@@ -286,7 +289,8 @@ class ServiceRegistryMultiInstanceTest {
             final var findAllCount = new AtomicInteger(0);
             var countingRepo = new CountingRepository(sharedRepository, findAllCount);
 
-            var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG);
+            var validator = new ServiceRegistrationValidator(
+                    PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
             var authService = new ServiceAuthorizationService(new DefaultPermissionPolicy());
             var shortTtlConfig = shortTtlCacheConfig(Duration.ofMillis(50));
 
@@ -358,7 +362,8 @@ class ServiceRegistryMultiInstanceTest {
             // Repository that fails on the first findAll, then succeeds
             var failOnceRepo = new FailOnceRepository(sharedRepository, callCount);
 
-            var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG);
+            var validator = new ServiceRegistrationValidator(
+                    PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
             var authService = new ServiceAuthorizationService(new DefaultPermissionPolicy());
             var shortTtlConfig = shortTtlCacheConfig(Duration.ofMillis(50));
 

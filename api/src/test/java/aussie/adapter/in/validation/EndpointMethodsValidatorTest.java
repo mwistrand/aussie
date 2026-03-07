@@ -50,7 +50,8 @@ class EndpointMethodsValidatorTest {
         @Test
         @DisplayName("should accept WebSocket endpoint with null methods")
         void shouldAcceptWebSocketWithNullMethods() {
-            var dto = new EndpointConfigDto("/ws/echo", null, "PUBLIC", null, false, "WEBSOCKET", null, null, null);
+            var dto =
+                    new EndpointConfigDto("/ws/echo", null, "PUBLIC", null, false, "WEBSOCKET", null, null, null, null);
 
             assertTrue(validator.isValid(dto, context));
         }
@@ -59,7 +60,7 @@ class EndpointMethodsValidatorTest {
         @DisplayName("should accept WebSocket endpoint with empty methods")
         void shouldAcceptWebSocketWithEmptyMethods() {
             var dto = new EndpointConfigDto(
-                    "/ws/echo", Collections.emptySet(), "PUBLIC", null, false, "WEBSOCKET", null, null, null);
+                    "/ws/echo", Collections.emptySet(), "PUBLIC", null, false, "WEBSOCKET", null, null, null, null);
 
             assertTrue(validator.isValid(dto, context));
         }
@@ -67,7 +68,8 @@ class EndpointMethodsValidatorTest {
         @Test
         @DisplayName("should accept case-insensitive WebSocket type")
         void shouldAcceptCaseInsensitiveWebSocketType() {
-            var dto = new EndpointConfigDto("/ws/echo", null, "PUBLIC", null, false, "websocket", null, null, null);
+            var dto =
+                    new EndpointConfigDto("/ws/echo", null, "PUBLIC", null, false, "websocket", null, null, null, null);
 
             assertTrue(validator.isValid(dto, context));
         }
@@ -81,7 +83,7 @@ class EndpointMethodsValidatorTest {
         @DisplayName("should accept HTTP endpoint with methods")
         void shouldAcceptHttpWithMethods() {
             var dto = new EndpointConfigDto(
-                    "/api/test", Set.of("GET", "POST"), "PUBLIC", null, false, "HTTP", null, null, null);
+                    "/api/test", Set.of("GET", "POST"), "PUBLIC", null, false, "HTTP", null, null, null, null);
 
             assertTrue(validator.isValid(dto, context));
         }
@@ -89,7 +91,8 @@ class EndpointMethodsValidatorTest {
         @Test
         @DisplayName("should accept endpoint with methods when type is null")
         void shouldAcceptNullTypeWithMethods() {
-            var dto = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, false, null, null, null, null);
+            var dto = new EndpointConfigDto(
+                    "/api/test", Set.of("GET"), "PUBLIC", null, false, null, null, null, null, null);
 
             assertTrue(validator.isValid(dto, context));
         }
@@ -97,7 +100,7 @@ class EndpointMethodsValidatorTest {
         @Test
         @DisplayName("should reject HTTP endpoint with null methods")
         void shouldRejectHttpWithNullMethods() {
-            var dto = new EndpointConfigDto("/api/test", null, "PUBLIC", null, false, "HTTP", null, null, null);
+            var dto = new EndpointConfigDto("/api/test", null, "PUBLIC", null, false, "HTTP", null, null, null, null);
 
             assertFalse(validator.isValid(dto, context));
             verify(context).disableDefaultConstraintViolation();
@@ -108,7 +111,7 @@ class EndpointMethodsValidatorTest {
         @DisplayName("should reject HTTP endpoint with empty methods")
         void shouldRejectHttpWithEmptyMethods() {
             var dto = new EndpointConfigDto(
-                    "/api/test", Collections.emptySet(), "PUBLIC", null, false, "HTTP", null, null, null);
+                    "/api/test", Collections.emptySet(), "PUBLIC", null, false, "HTTP", null, null, null, null);
 
             assertFalse(validator.isValid(dto, context));
         }
@@ -116,7 +119,7 @@ class EndpointMethodsValidatorTest {
         @Test
         @DisplayName("should reject endpoint with null methods when type is null")
         void shouldRejectNullTypeWithNullMethods() {
-            var dto = new EndpointConfigDto("/api/test", null, "PUBLIC", null, false, null, null, null, null);
+            var dto = new EndpointConfigDto("/api/test", null, "PUBLIC", null, false, null, null, null, null, null);
 
             assertFalse(validator.isValid(dto, context));
         }
@@ -124,7 +127,8 @@ class EndpointMethodsValidatorTest {
         @Test
         @DisplayName("should not build custom violation for valid endpoint")
         void shouldNotBuildViolationForValidEndpoint() {
-            var dto = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, false, null, null, null, null);
+            var dto = new EndpointConfigDto(
+                    "/api/test", Set.of("GET"), "PUBLIC", null, false, null, null, null, null, null);
 
             validator.isValid(dto, context);
 

@@ -185,6 +185,7 @@ class SamplingResolverTest {
                     EndpointType.HTTP,
                     Optional.empty(),
                     Optional.of(endpointSamplingConfig),
+                    Optional.empty(),
                     Optional.empty());
             var route = new RouteMatch(service, endpoint, "/api/test", java.util.Map.of());
 
@@ -286,6 +287,7 @@ class SamplingResolverTest {
                     EndpointType.HTTP,
                     Optional.empty(),
                     Optional.of(endpointSamplingConfig),
+                    Optional.empty(),
                     Optional.empty());
             var route = new RouteMatch(service, endpoint, "/api/test", java.util.Map.of());
 

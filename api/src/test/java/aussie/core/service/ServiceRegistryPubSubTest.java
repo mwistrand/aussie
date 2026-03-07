@@ -41,6 +41,8 @@ class ServiceRegistryPubSubTest {
     private static final GatewaySecurityConfig PERMISSIVE_CONFIG = TestGatewaySecurityConfig.permissive();
     private static final aussie.core.config.RateLimitingConfig PERMISSIVE_RATE_LIMIT_CONFIG =
             TestRateLimitingConfig.permissive();
+    private static final aussie.core.config.ResiliencyConfig PERMISSIVE_RESILIENCY_CONFIG =
+            TestResiliencyConfig.permissive();
 
     private static final LocalCacheConfig TEST_CACHE_CONFIG = new LocalCacheConfig() {
         @Override
@@ -76,7 +78,8 @@ class ServiceRegistryPubSubTest {
 
     @BeforeEach
     void setUp() {
-        var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG);
+        var validator = new ServiceRegistrationValidator(
+                PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
         var authService = new ServiceAuthorizationService(new DefaultPermissionPolicy());
         repository = new InMemoryServiceRegistrationRepository();
         eventPublisher = new InMemoryServiceConfigEventPublisher();
@@ -229,7 +232,8 @@ class ServiceRegistryPubSubTest {
 
         @BeforeEach
         void setUp() {
-            var validator = new ServiceRegistrationValidator(PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG);
+            var validator = new ServiceRegistrationValidator(
+                    PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
             var authService = new ServiceAuthorizationService(new DefaultPermissionPolicy());
 
             // Second registry sharing the same repository and event publisher

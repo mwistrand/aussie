@@ -31,7 +31,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should use explicit authRequired=true when specified")
         void shouldUseExplicitAuthRequiredTrue() {
-            var dto = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, true, null, null, null, null);
+            var dto = new EndpointConfigDto(
+                    "/api/test", Set.of("GET"), "PUBLIC", null, true, null, null, null, null, null);
 
             var model = dto.toModel();
 
@@ -41,7 +42,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should use explicit authRequired=false when specified")
         void shouldUseExplicitAuthRequiredFalse() {
-            var dto = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, false, null, null, null, null);
+            var dto = new EndpointConfigDto(
+                    "/api/test", Set.of("GET"), "PUBLIC", null, false, null, null, null, null, null);
 
             var model = dto.toModel();
 
@@ -51,7 +53,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should default to false when authRequired is null and no default provided")
         void shouldDefaultToFalseWhenAuthRequiredNull() {
-            var dto = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null, null);
+            var dto = new EndpointConfigDto(
+                    "/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null, null, null);
 
             var model = dto.toModel();
 
@@ -61,7 +64,7 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should default visibility to PUBLIC when not specified")
         void shouldDefaultVisibilityToPublic() {
-            var dto = new EndpointConfigDto("/api/test", Set.of("GET"), null, null, null, null, null, null, null);
+            var dto = new EndpointConfigDto("/api/test", Set.of("GET"), null, null, null, null, null, null, null, null);
 
             var model = dto.toModel();
 
@@ -71,7 +74,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should parse visibility case-insensitively")
         void shouldParseVisibilityCaseInsensitively() {
-            var dto = new EndpointConfigDto("/api/test", Set.of("GET"), "private", null, null, null, null, null, null);
+            var dto = new EndpointConfigDto(
+                    "/api/test", Set.of("GET"), "private", null, null, null, null, null, null, null);
 
             var model = dto.toModel();
 
@@ -82,7 +86,7 @@ class EndpointConfigDtoTest {
         @DisplayName("Should preserve pathRewrite when specified")
         void shouldPreservePathRewrite() {
             var dto = new EndpointConfigDto(
-                    "/api/test", Set.of("GET"), "PUBLIC", "/rewritten", null, null, null, null, null);
+                    "/api/test", Set.of("GET"), "PUBLIC", "/rewritten", null, null, null, null, null, null);
 
             var model = dto.toModel();
 
@@ -92,7 +96,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should default type to HTTP when not specified")
         void shouldDefaultTypeToHttp() {
-            var dto = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null, null);
+            var dto = new EndpointConfigDto(
+                    "/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null, null, null);
 
             var model = dto.toModel();
 
@@ -102,7 +107,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should parse WEBSOCKET type")
         void shouldParseWebSocketType() {
-            var dto = new EndpointConfigDto("/ws/echo", null, "PUBLIC", null, false, "WEBSOCKET", null, null, null);
+            var dto =
+                    new EndpointConfigDto("/ws/echo", null, "PUBLIC", null, false, "WEBSOCKET", null, null, null, null);
 
             var model = dto.toModel();
 
@@ -112,7 +118,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should default methods to GET for WEBSOCKET endpoints when not specified")
         void shouldDefaultMethodsToGetForWebSocket() {
-            var dto = new EndpointConfigDto("/ws/echo", null, "PUBLIC", null, false, "WEBSOCKET", null, null, null);
+            var dto =
+                    new EndpointConfigDto("/ws/echo", null, "PUBLIC", null, false, "WEBSOCKET", null, null, null, null);
 
             var model = dto.toModel();
 
@@ -122,7 +129,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should parse type case-insensitively")
         void shouldParseTypeCaseInsensitively() {
-            var dto = new EndpointConfigDto("/ws/echo", null, "PUBLIC", null, false, "websocket", null, null, null);
+            var dto =
+                    new EndpointConfigDto("/ws/echo", null, "PUBLIC", null, false, "websocket", null, null, null, null);
 
             var model = dto.toModel();
 
@@ -133,7 +141,7 @@ class EndpointConfigDtoTest {
         @DisplayName("Should preserve audience when specified")
         void shouldPreserveAudience() {
             var dto = new EndpointConfigDto(
-                    "/api/test", Set.of("GET"), "PUBLIC", null, true, null, "my-service", null, null);
+                    "/api/test", Set.of("GET"), "PUBLIC", null, true, null, "my-service", null, null, null);
 
             var model = dto.toModel();
 
@@ -143,7 +151,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should default audience to empty when not specified")
         void shouldDefaultAudienceToEmpty() {
-            var dto = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, true, null, null, null, null);
+            var dto = new EndpointConfigDto(
+                    "/api/test", Set.of("GET"), "PUBLIC", null, true, null, null, null, null, null);
 
             var model = dto.toModel();
 
@@ -158,7 +167,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should use explicit authRequired=true even when default is false")
         void shouldUseExplicitTrueOverDefaultFalse() {
-            var dto = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, true, null, null, null, null);
+            var dto = new EndpointConfigDto(
+                    "/api/test", Set.of("GET"), "PUBLIC", null, true, null, null, null, null, null);
 
             var model = dto.toModel(false);
 
@@ -168,7 +178,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should use explicit authRequired=false even when default is true")
         void shouldUseExplicitFalseOverDefaultTrue() {
-            var dto = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, false, null, null, null, null);
+            var dto = new EndpointConfigDto(
+                    "/api/test", Set.of("GET"), "PUBLIC", null, false, null, null, null, null, null);
 
             var model = dto.toModel(true);
 
@@ -178,7 +189,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should inherit default=true when authRequired is null")
         void shouldInheritDefaultTrueWhenNull() {
-            var dto = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null, null);
+            var dto = new EndpointConfigDto(
+                    "/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null, null, null);
 
             var model = dto.toModel(true);
 
@@ -188,7 +200,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should inherit default=false when authRequired is null")
         void shouldInheritDefaultFalseWhenNull() {
-            var dto = new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null, null);
+            var dto = new EndpointConfigDto(
+                    "/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null, null, null);
 
             var model = dto.toModel(false);
 
@@ -210,6 +223,7 @@ class EndpointConfigDtoTest {
                     Optional.of("/rewritten"),
                     true,
                     EndpointType.HTTP,
+                    Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty());
@@ -236,6 +250,7 @@ class EndpointConfigDtoTest {
                     EndpointType.HTTP,
                     Optional.empty(),
                     Optional.empty(),
+                    Optional.empty(),
                     Optional.empty());
 
             var dto = EndpointConfigDto.fromModel(model);
@@ -254,6 +269,7 @@ class EndpointConfigDtoTest {
                     Optional.empty(),
                     false,
                     EndpointType.WEBSOCKET,
+                    Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty());
@@ -371,7 +387,7 @@ class EndpointConfigDtoTest {
         void shouldConvertWithRateLimitConfig() {
             var rateLimitDto = new EndpointRateLimitConfigDto(100L, 60L, null);
             var dto = new EndpointConfigDto(
-                    "/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, rateLimitDto, null);
+                    "/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, rateLimitDto, null, null);
 
             var model = dto.toModel();
 
@@ -384,7 +400,7 @@ class EndpointConfigDtoTest {
         void shouldConvertWithSamplingConfig() {
             var samplingDto = new EndpointSamplingConfigDto(0.5);
             var dto = new EndpointConfigDto(
-                    "/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null, samplingDto);
+                    "/api/test", Set.of("GET"), "PUBLIC", null, null, null, null, null, samplingDto, null);
 
             var model = dto.toModel();
 
@@ -410,6 +426,7 @@ class EndpointConfigDtoTest {
                     EndpointType.HTTP,
                     Optional.of(rateLimitModel),
                     Optional.empty(),
+                    Optional.empty(),
                     Optional.empty());
 
             var dto = EndpointConfigDto.fromModel(model);
@@ -433,6 +450,7 @@ class EndpointConfigDtoTest {
                     EndpointType.HTTP,
                     Optional.empty(),
                     Optional.of(samplingModel),
+                    Optional.empty(),
                     Optional.empty());
 
             var dto = EndpointConfigDto.fromModel(model);
@@ -458,6 +476,7 @@ class EndpointConfigDtoTest {
                     "HTTP",
                     "my-service",
                     null,
+                    null,
                     null);
 
             var model = original.toModel();
@@ -476,7 +495,7 @@ class EndpointConfigDtoTest {
         @DisplayName("Should preserve WEBSOCKET type through round-trip conversion")
         void shouldPreserveWebSocketTypeThroughRoundTrip() {
             var original =
-                    new EndpointConfigDto("/ws/chat", null, "PRIVATE", null, true, "WEBSOCKET", null, null, null);
+                    new EndpointConfigDto("/ws/chat", null, "PRIVATE", null, true, "WEBSOCKET", null, null, null, null);
 
             var model = original.toModel();
             var roundTripped = EndpointConfigDto.fromModel(model);
@@ -489,7 +508,7 @@ class EndpointConfigDtoTest {
         @DisplayName("Should preserve audience through round-trip conversion")
         void shouldPreserveAudienceThroughRoundTrip() {
             var original = new EndpointConfigDto(
-                    "/api/test", Set.of("GET"), "PUBLIC", null, true, "HTTP", "test-audience", null, null);
+                    "/api/test", Set.of("GET"), "PUBLIC", null, true, "HTTP", "test-audience", null, null, null);
 
             var model = original.toModel();
             var roundTripped = EndpointConfigDto.fromModel(model);
@@ -501,8 +520,8 @@ class EndpointConfigDtoTest {
         @Test
         @DisplayName("Should handle null audience through round-trip conversion")
         void shouldHandleNullAudienceThroughRoundTrip() {
-            var original =
-                    new EndpointConfigDto("/api/test", Set.of("GET"), "PUBLIC", null, true, "HTTP", null, null, null);
+            var original = new EndpointConfigDto(
+                    "/api/test", Set.of("GET"), "PUBLIC", null, true, "HTTP", null, null, null, null);
 
             var model = original.toModel();
             var roundTripped = EndpointConfigDto.fromModel(model);

@@ -1,11 +1,13 @@
 package aussie.core.service.routing;
 
+import java.time.Duration;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import aussie.core.config.RateLimitingConfig;
+import aussie.core.config.ResiliencyConfig;
 import aussie.core.model.auth.GatewaySecurityConfig;
 import aussie.core.model.common.ValidationResult;
 import aussie.core.model.ratelimit.ServiceWebSocketRateLimitConfig.RateLimitValues;
@@ -20,11 +22,16 @@ public class ServiceRegistrationValidator {
 
     private final GatewaySecurityConfig securityConfig;
     private final RateLimitingConfig rateLimitingConfig;
+    private final ResiliencyConfig.HttpConfig httpConfig;
 
     @Inject
-    public ServiceRegistrationValidator(GatewaySecurityConfig securityConfig, RateLimitingConfig rateLimitingConfig) {
+    public ServiceRegistrationValidator(
+            GatewaySecurityConfig securityConfig,
+            RateLimitingConfig rateLimitingConfig,
+            ResiliencyConfig resiliencyConfig) {
         this.securityConfig = securityConfig;
         this.rateLimitingConfig = rateLimitingConfig;
+        this.httpConfig = resiliencyConfig.http();
     }
 
     /**
@@ -62,6 +69,12 @@ public class ServiceRegistrationValidator {
         final var endpointResult = validateEndpointRateLimits(registration);
         if (endpointResult.isInvalid()) {
             return endpointResult;
+        }
+
+        // Check service-level and endpoint-level timeouts against platform maximum
+        final var timeoutResult = validateTimeouts(registration);
+        if (timeoutResult.isInvalid()) {
+            return timeoutResult;
         }
 
         return ValidationResult.valid();
@@ -198,6 +211,43 @@ public class ServiceRegistrationValidator {
             }
         }
 
+        return ValidationResult.valid();
+    }
+
+    private ValidationResult validateTimeouts(ServiceRegistration registration) {
+        final var platformMax = httpConfig.maxRequestTimeout();
+
+        // Check service-level timeout
+        final var serviceTimeoutResult =
+                checkTimeout("Service", registration.timeoutConfig().flatMap(tc -> tc.requestTimeout()), platformMax);
+        if (serviceTimeoutResult.isInvalid()) {
+            return serviceTimeoutResult;
+        }
+
+        // Check endpoint-level timeouts
+        for (final var endpoint : registration.endpoints()) {
+            if (endpoint.timeoutConfig().isEmpty()) {
+                continue;
+            }
+
+            final var endpointTimeout = endpoint.timeoutConfig().get().requestTimeout();
+            final var endpointResult =
+                    checkTimeout("Endpoint '%s'".formatted(endpoint.path()), endpointTimeout, platformMax);
+            if (endpointResult.isInvalid()) {
+                return endpointResult;
+            }
+        }
+
+        return ValidationResult.valid();
+    }
+
+    private ValidationResult checkTimeout(String context, Optional<Duration> timeout, Duration platformMax) {
+        if (timeout.isPresent() && timeout.get().compareTo(platformMax) > 0) {
+            return ValidationResult.invalid(
+                    "%s requestTimeout %s exceeds the platform maximum of %s."
+                            .formatted(context, timeout.get(), platformMax),
+                    400);
+        }
         return ValidationResult.valid();
     }
 }

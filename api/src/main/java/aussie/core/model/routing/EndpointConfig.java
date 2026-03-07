@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import aussie.core.model.ratelimit.EndpointRateLimitConfig;
 import aussie.core.model.sampling.EndpointSamplingConfig;
+import aussie.core.model.timeout.EndpointTimeoutConfig;
 
 /**
  * Configuration for a specific endpoint within a service.
@@ -20,6 +21,7 @@ import aussie.core.model.sampling.EndpointSamplingConfig;
  * @param type            HTTP or WEBSOCKET
  * @param rateLimitConfig optional endpoint-specific rate limiting
  * @param samplingConfig  optional endpoint-specific OTel sampling configuration
+ * @param timeoutConfig   optional endpoint-specific timeout configuration
  * @param audience        optional audience claim for tokens issued to this endpoint
  */
 public record EndpointConfig(
@@ -31,6 +33,7 @@ public record EndpointConfig(
         @JsonProperty("type") EndpointType type,
         @JsonProperty("rateLimitConfig") Optional<EndpointRateLimitConfig> rateLimitConfig,
         @JsonProperty("samplingConfig") Optional<EndpointSamplingConfig> samplingConfig,
+        @JsonProperty("timeoutConfig") Optional<EndpointTimeoutConfig> timeoutConfig,
         @JsonProperty("audience") Optional<String> audience) {
 
     @JsonCreator
@@ -53,6 +56,9 @@ public record EndpointConfig(
         if (samplingConfig == null) {
             samplingConfig = Optional.empty();
         }
+        if (timeoutConfig == null) {
+            timeoutConfig = Optional.empty();
+        }
         if (audience == null) {
             audience = Optional.empty();
         }
@@ -67,7 +73,7 @@ public record EndpointConfig(
     }
 
     /**
-     * Convenience constructor without samplingConfig and audience (defaults to empty).
+     * Convenience constructor without samplingConfig, timeoutConfig, and audience (defaults to empty).
      */
     public EndpointConfig(
             String path,
@@ -86,11 +92,12 @@ public record EndpointConfig(
                 type,
                 rateLimitConfig,
                 Optional.empty(),
+                Optional.empty(),
                 Optional.empty());
     }
 
     /**
-     * Convenience constructor without rate limit config, sampling config, and audience (defaults to HTTP).
+     * Convenience constructor without rate limit config, sampling config, timeout config, and audience (defaults to HTTP).
      */
     public EndpointConfig(
             String path,
@@ -108,11 +115,12 @@ public record EndpointConfig(
                 type,
                 Optional.empty(),
                 Optional.empty(),
+                Optional.empty(),
                 Optional.empty());
     }
 
     /**
-     * Convenience constructor without type, rate limit config, sampling config, and audience (defaults to HTTP).
+     * Convenience constructor without type, rate limit config, sampling config, timeout config, and audience (defaults to HTTP).
      */
     public EndpointConfig(
             String path,
@@ -129,11 +137,12 @@ public record EndpointConfig(
                 EndpointType.HTTP,
                 Optional.empty(),
                 Optional.empty(),
+                Optional.empty(),
                 Optional.empty());
     }
 
     /**
-     * Convenience constructor without authRequired, type, rate limit config, sampling config, and audience.
+     * Convenience constructor without authRequired, type, rate limit config, sampling config, timeout config, and audience.
      */
     public EndpointConfig(
             String path, Set<String> methods, EndpointVisibility visibility, Optional<String> pathRewrite) {
@@ -144,6 +153,7 @@ public record EndpointConfig(
                 pathRewrite,
                 false,
                 EndpointType.HTTP,
+                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty());
@@ -167,6 +177,7 @@ public record EndpointConfig(
                 EndpointType.WEBSOCKET,
                 Optional.empty(),
                 Optional.empty(),
+                Optional.empty(),
                 Optional.empty());
     }
 
@@ -178,6 +189,7 @@ public record EndpointConfig(
                 Optional.empty(),
                 authRequired,
                 EndpointType.WEBSOCKET,
+                Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty());
