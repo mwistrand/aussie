@@ -17,6 +17,9 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 - [Token Revocation](token-revocation.md)
 - [Token Translation](token-translation.md)
 - [PKCE](pkce.md)
+- [Session Management](#session-management)
+- [Auth Rate Limiting (Brute Force Protection)](#auth-rate-limiting-brute-force-protection)
+- [Local Caching](#local-caching)
 - [Admin API](#admin-api)
 - [Benchmarking](#benchmarking)
 - [Service Permission Policies](#service-permission-policies)
@@ -506,8 +509,8 @@ Default headers (always set when enabled):
 - `X-Permitted-Cross-Domain-Policies: none`
 
 Optional headers (set only when configured):
-- `Strict-Transport-Security` -- enable only when behind TLS termination. Incorrect HSTS can lock browsers out of your site.
-- `Permissions-Policy` -- restrict browser features (camera, microphone, etc.)
+- `Strict-Transport-Security`: enable only when behind TLS termination. Incorrect HSTS can lock browsers out of your site.
+- `Permissions-Policy`: restrict browser features (camera, microphone, etc.)
 
 To customize global defaults:
 ```bash
@@ -649,6 +652,103 @@ openssl rsa -in aussie-private.pem -pubout -out aussie-public.pem
 # Base64 encode for configuration
 cat aussie-private.pem | base64 -w0 > aussie-private.b64
 ```
+
+## Session Management
+
+Aussie supports server-side sessions for maintaining authentication state across requests. Sessions are stored in Redis and identified by a cookie.
+
+### Configuration
+
+```properties
+# Enable sessions (default: true)
+aussie.session.enabled=true
+
+# Session lifetime and idle timeout
+aussie.session.ttl=PT8H
+aussie.session.idle-timeout=PT30M
+aussie.session.sliding-expiration=true
+
+# Cookie settings
+aussie.session.cookie.name=aussie_session
+aussie.session.cookie.secure=true
+aussie.session.cookie.http-only=true
+aussie.session.cookie.same-site=Lax
+
+# Session storage
+aussie.session.storage.provider=redis
+aussie.session.storage.redis.key-prefix=aussie:session:
+
+# JWS token issuance from sessions
+aussie.session.jws.enabled=true
+aussie.session.jws.ttl=PT5M
+aussie.session.jws.issuer=aussie-gateway
+aussie.session.jws.include-claims=sub,email,name,roles
+```
+
+When `sliding-expiration` is enabled, the idle timeout resets on each request. Sessions are hard-capped by `ttl` regardless of activity.
+
+### Cookie Security
+
+For production deployments behind TLS:
+- `secure=true` ensures cookies are only sent over HTTPS
+- `http-only=true` prevents JavaScript access
+- `same-site=Lax` or `Strict` provides CSRF protection
+
+Set `cookie.domain` if Aussie is accessed from multiple subdomains. For local development, set `cookie.secure=false` in the dev profile.
+
+## Auth Rate Limiting (Brute Force Protection)
+
+Aussie includes built-in brute force protection for authentication endpoints. After repeated failed attempts, the offending IP or credential is temporarily locked out.
+
+### Configuration
+
+```properties
+# Enable auth rate limiting (default: true)
+aussie.auth.rate-limit.enabled=true
+
+# Lock out after 5 failures within 1 hour
+aussie.auth.rate-limit.max-failed-attempts=5
+aussie.auth.rate-limit.failed-attempt-window=PT1H
+aussie.auth.rate-limit.lockout-duration=PT15M
+
+# Track by IP and/or credential identifier
+aussie.auth.rate-limit.track-by-ip=true
+aussie.auth.rate-limit.track-by-identifier=true
+
+# Progressive lockout: each subsequent lockout is 1.5x longer
+aussie.auth.rate-limit.progressive-lockout-multiplier=1.5
+aussie.auth.rate-limit.max-lockout-duration=PT24H
+
+# Include Retry-After header in 429 responses
+aussie.auth.rate-limit.include-headers=true
+```
+
+### Behavior
+
+When a client exceeds `max-failed-attempts` within `failed-attempt-window`, subsequent authentication attempts receive a 429 response with a `Retry-After` header. Each subsequent lockout is multiplied by `progressive-lockout-multiplier`, up to `max-lockout-duration`.
+
+Tracking can be by IP address, credential identifier (API key ID, username), or both. When both are enabled, either dimension triggering a lockout blocks the attempt.
+
+## Local Caching
+
+Aussie uses in-memory (Caffeine) caches for service route configurations, rate limit configurations, and sampling configurations. These caches reduce load on the backing stores (Cassandra/Redis).
+
+### Configuration
+
+```properties
+# TTL for each cache type
+aussie.cache.local.service-routes-ttl=PT30S
+aussie.cache.local.rate-limit-config-ttl=PT30S
+aussie.cache.local.sampling-config-ttl=PT30S
+
+# Maximum entries across all local caches
+aussie.cache.local.max-entries=10000
+
+# Jitter factor to prevent thundering herd on TTL expiry
+aussie.cache.local.jitter-factor=0.1
+```
+
+Service configuration pub/sub provides near-instant cache invalidation across instances. The TTL-based refresh serves as a fallback in case events are missed.
 
 ## Admin API
 
@@ -937,6 +1037,8 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | `AUSSIE_AUTH_DANGEROUS_NOOP` | `false` | Disable authentication (NEVER use in production) |
 | `AUSSIE_API_KEYS_ENABLED` | `false` | Enable API key authentication (fallback) |
 | `AUSSIE_AUTH_API_KEYS_MAX_TTL` | `P365D` | Maximum TTL for API keys |
+| `AUSSIE_AUTH_ENCRYPTION_KEY` | - | Base64-encoded 256-bit AES key for encrypting API key records at rest |
+| `AUSSIE_AUTH_ENCRYPTION_KEY_ID` | `v1` | Version identifier for the encryption key (update when rotating) |
 
 ### Token Configuration
 
@@ -946,6 +1048,8 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | `AUSSIE_AUTH_ROUTE_AUTH_JWS_TOKEN_TTL` | `PT5M` | Default TTL for issued tokens |
 | `AUSSIE_AUTH_ROUTE_AUTH_JWS_MAX_TOKEN_TTL` | `PT24H` | Maximum allowed JWT token TTL |
 | `AUSSIE_AUTH_ROUTE_AUTH_JWS_ISSUER` | `aussie-gateway` | Issuer claim for JWS tokens |
+| `AUSSIE_AUTH_ROUTE_AUTH_JWS_KEY_ID` | `v1` | Key ID for JWS token header |
+| `AUSSIE_AUTH_ROUTE_AUTH_JWS_FORWARDED_CLAIMS` | `sub,email,name,groups,roles,effective_permissions` | Claims forwarded from upstream token |
 | `AUSSIE_AUTH_ROUTE_AUTH_JWS_DEFAULT_AUDIENCE` | - | Default audience claim for issued tokens |
 | `AUSSIE_AUTH_ROUTE_AUTH_JWS_REQUIRE_AUDIENCE` | `false` | Require audience claim in all tokens |
 | `AUSSIE_JWS_SIGNING_KEY` | - | RSA signing key (base64-encoded PKCS#8 PEM) |
@@ -963,8 +1067,19 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CASSANDRA_CONTACT_POINTS` | `cassandra:9042` | Cassandra contact points |
-| `CASSANDRA_RUN_MIGRATIONS` | `false` | Run database migrations on startup |
+| `AUSSIE_STORAGE_REPOSITORY_PROVIDER` | - | Repository backend: `memory`, `cassandra` (auto-selected by priority if unset) |
+| `AUSSIE_STORAGE_CACHE_ENABLED` | `false` | Enable caching layer for repository reads |
+| `AUSSIE_STORAGE_CACHE_PROVIDER` | - | Cache backend: `redis` |
+| `AUSSIE_STORAGE_CACHE_TTL` | `PT15M` | Cache entry TTL |
+| `AUSSIE_STORAGE_CASSANDRA_CONTACT_POINTS` | `cassandra:9042` | Cassandra contact points |
+| `AUSSIE_STORAGE_CASSANDRA_DATACENTER` | `datacenter1` | Cassandra datacenter name |
+| `AUSSIE_STORAGE_CASSANDRA_KEYSPACE` | `aussie` | Cassandra keyspace |
+| `AUSSIE_STORAGE_CASSANDRA_USERNAME` | - | Cassandra username |
+| `AUSSIE_STORAGE_CASSANDRA_PASSWORD` | - | Cassandra password |
+| `AUSSIE_STORAGE_CASSANDRA_RUN_MIGRATIONS` | `false` | Run database migrations on startup |
+| `AUSSIE_AUTH_STORAGE_PROVIDER` | - | Auth storage backend (falls back to `aussie.storage.*` settings) |
+| `AUSSIE_AUTH_CACHE_ENABLED` | `false` | Enable caching for auth storage |
+| `AUSSIE_AUTH_ROLES_STORAGE_PROVIDER` | - | Roles storage backend (falls back to auth storage settings) |
 | `REDIS_HOSTS` | `redis://localhost:6379` | Redis connection string |
 
 ### Gateway Configuration
@@ -974,8 +1089,14 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | `AUSSIE_GATEWAY_FORWARDING_USE_RFC7239` | `true` | Use RFC 7239 Forwarded headers |
 | `AUSSIE_GATEWAY_LIMITS_MAX_BODY_SIZE` | `10485760` | Maximum request body size (bytes) |
 | `AUSSIE_GATEWAY_LIMITS_MAX_HEADER_SIZE` | `8192` | Maximum single header size (bytes) |
+| `AUSSIE_GATEWAY_LIMITS_MAX_TOTAL_HEADERS_SIZE` | `32768` | Maximum total headers size (bytes) |
 | `AUSSIE_GATEWAY_CORS_ENABLED` | `true` | Enable CORS support |
-| `AUSSIE_GATEWAY_CORS_ALLOWED_ORIGINS` | `*` | Allowed CORS origins |
+| `AUSSIE_GATEWAY_CORS_ALLOWED_ORIGINS` | `*` | Allowed CORS origins (comma-separated) |
+| `AUSSIE_GATEWAY_CORS_ALLOWED_METHODS` | `GET,POST,PUT,DELETE,PATCH,OPTIONS,HEAD` | Allowed HTTP methods |
+| `AUSSIE_GATEWAY_CORS_ALLOWED_HEADERS` | `Content-Type,Authorization,X-Requested-With,Accept,Origin` | Allowed request headers |
+| `AUSSIE_GATEWAY_CORS_EXPOSED_HEADERS` | - | Response headers exposed to the client |
+| `AUSSIE_GATEWAY_CORS_ALLOW_CREDENTIALS` | `true` | Allow credentials in CORS requests |
+| `AUSSIE_GATEWAY_CORS_MAX_AGE` | `3600` | Preflight cache duration in seconds |
 | `AUSSIE_GATEWAY_TRUSTED_PROXY_ENABLED` | `false` | Enable trusted proxy validation for forwarding headers |
 | `AUSSIE_GATEWAY_TRUSTED_PROXY_PROXIES` | - | Trusted proxy IPs/CIDRs (comma-separated) |
 | `AUSSIE_GATEWAY_SECURITY_PUBLIC_DEFAULT_VISIBILITY_ENABLED` | `false` | Allow services to set PUBLIC as default endpoint visibility |
@@ -994,9 +1115,22 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `AUSSIE_RATE_LIMITING_ENABLED` | `true` | Enable rate limiting |
-| `AUSSIE_RATE_LIMITING_ALGORITHM` | `BUCKET` | Algorithm: BUCKET, FIXED_WINDOW, SLIDING_WINDOW |
+| `AUSSIE_RATE_LIMITING_ALGORITHM` | `BUCKET` | Algorithm: `BUCKET`, `FIXED_WINDOW`, `SLIDING_WINDOW` |
+| `AUSSIE_RATE_LIMITING_PLATFORM_MAX_REQUESTS_PER_WINDOW` | `Long.MAX_VALUE` | Maximum rate limit ceiling for service configs |
+| `AUSSIE_RATE_LIMITING_PLATFORM_MAX_WINDOW_SECONDS` | `Long.MAX_VALUE` | Maximum window duration for service configs |
 | `AUSSIE_RATE_LIMITING_DEFAULT_REQUESTS_PER_WINDOW` | `100` | Default requests per window |
 | `AUSSIE_RATE_LIMITING_WINDOW_SECONDS` | `60` | Window duration in seconds |
+| `AUSSIE_RATE_LIMITING_BURST_CAPACITY` | `100` | Burst capacity (bucket algorithm) |
+| `AUSSIE_RATE_LIMITING_INCLUDE_HEADERS` | `true` | Include rate limit headers in responses |
+| `AUSSIE_RATE_LIMITING_REDIS_ENABLED` | `false` | Use Redis for distributed rate limiting |
+| `AUSSIE_RATE_LIMITING_WEBSOCKET_CONNECTION_ENABLED` | `true` | Enable WebSocket connection rate limiting |
+| `AUSSIE_RATE_LIMITING_WEBSOCKET_CONNECTION_REQUESTS_PER_WINDOW` | `10` | WebSocket connections per window |
+| `AUSSIE_RATE_LIMITING_WEBSOCKET_CONNECTION_WINDOW_SECONDS` | `60` | WebSocket connection window duration |
+| `AUSSIE_RATE_LIMITING_WEBSOCKET_CONNECTION_BURST_CAPACITY` | `5` | WebSocket connection burst capacity |
+| `AUSSIE_RATE_LIMITING_WEBSOCKET_MESSAGE_ENABLED` | `true` | Enable WebSocket message rate limiting |
+| `AUSSIE_RATE_LIMITING_WEBSOCKET_MESSAGE_REQUESTS_PER_WINDOW` | `100` | WebSocket messages per window |
+| `AUSSIE_RATE_LIMITING_WEBSOCKET_MESSAGE_WINDOW_SECONDS` | `1` | WebSocket message window duration |
+| `AUSSIE_RATE_LIMITING_WEBSOCKET_MESSAGE_BURST_CAPACITY` | `50` | WebSocket message burst capacity |
 
 ### Token Revocation
 
@@ -1042,6 +1176,7 @@ See [PKCE](pkce.md) for implementation details.
 |----------|---------|-------------|
 | `AUSSIE_RESILIENCY_HTTP_CONNECT_TIMEOUT` | `PT5S` | Maximum time to establish connection to upstream service |
 | `AUSSIE_RESILIENCY_HTTP_REQUEST_TIMEOUT` | `PT30S` | Maximum time to wait for response from upstream (returns 504 if exceeded) |
+| `AUSSIE_RESILIENCY_HTTP_MAX_REQUEST_TIMEOUT` | `PT5M` | Maximum timeout services may configure (ceiling for service/endpoint overrides) |
 | `AUSSIE_RESILIENCY_JWKS_FETCH_TIMEOUT` | `PT5S` | Maximum time to fetch JWKS from identity provider |
 | `AUSSIE_RESILIENCY_JWKS_MAX_CACHE_ENTRIES` | `100` | Maximum number of JWKS entries to cache (LRU eviction) |
 | `AUSSIE_RESILIENCY_JWKS_CACHE_TTL` | `PT1H` | Time-to-live for cached JWKS entries |
@@ -1079,5 +1214,93 @@ This health check always reports UP since configuration is validated at startup.
 |----------|---------|-------------|
 | `AUSSIE_TELEMETRY_ENABLED` | `false` | Master toggle for telemetry |
 | `AUSSIE_TELEMETRY_TRACING_ENABLED` | `false` | Enable distributed tracing |
+| `AUSSIE_TELEMETRY_TRACING_SAMPLING_RATE` | `1.0` | Default trace sampling rate (0.0-1.0) |
 | `AUSSIE_TELEMETRY_METRICS_ENABLED` | `false` | Enable metrics collection |
+| `AUSSIE_TELEMETRY_SECURITY_ENABLED` | `false` | Enable security monitoring |
+| `AUSSIE_TELEMETRY_SECURITY_RATE_LIMIT_WINDOW` | `PT1M` | Security event rate limit window |
+| `AUSSIE_TELEMETRY_SECURITY_RATE_LIMIT_THRESHOLD` | `1000` | Security event rate limit threshold |
+| `AUSSIE_TELEMETRY_SECURITY_DOS_DETECTION_ENABLED` | `true` | Enable DoS detection |
+| `AUSSIE_TELEMETRY_SECURITY_DOS_DETECTION_SPIKE_THRESHOLD` | `5.0` | Spike multiplier for DoS detection |
+| `AUSSIE_TELEMETRY_SECURITY_DOS_DETECTION_ERROR_RATE_THRESHOLD` | `0.5` | Error rate threshold for DoS detection |
+| `AUSSIE_TELEMETRY_ATTRIBUTION_ENABLED` | `false` | Enable traffic attribution |
+| `AUSSIE_TELEMETRY_ATTRIBUTION_TENANT_HEADER` | `X-Tenant-ID` | Header for tenant identification |
+| `AUSSIE_TELEMETRY_ATTRIBUTION_CLIENT_APP_HEADER` | `X-Client-Application` | Header for client app identification |
+| `AUSSIE_TELEMETRY_SAMPLING_ENABLED` | `false` | Enable hierarchical trace sampling |
+| `AUSSIE_TELEMETRY_SAMPLING_DEFAULT_RATE` | `1.0` | Default sampling rate |
+| `AUSSIE_TELEMETRY_SAMPLING_MINIMUM_RATE` | `0.0` | Minimum sampling rate (floor) |
+| `AUSSIE_TELEMETRY_SAMPLING_MAXIMUM_RATE` | `1.0` | Maximum sampling rate (ceiling) |
+| `AUSSIE_TELEMETRY_SAMPLING_CACHE_REDIS_ENABLED` | `true` | Enable Redis cache for sampling configs |
+| `AUSSIE_TELEMETRY_SAMPLING_CACHE_REDIS_TTL` | `PT5M` | Sampling config Redis cache TTL |
+| `AUSSIE_TELEMETRY_SAMPLING_LOOKUP_TIMEOUT` | `PT5S` | Sampling config lookup timeout |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | OpenTelemetry exporter endpoint |
+
+### Session Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_SESSION_ENABLED` | `true` | Enable session management |
+| `AUSSIE_SESSION_TTL` | `PT8H` | Maximum session lifetime |
+| `AUSSIE_SESSION_IDLE_TIMEOUT` | `PT30M` | Close session after this idle duration |
+| `AUSSIE_SESSION_SLIDING_EXPIRATION` | `true` | Reset idle timeout on each request |
+| `AUSSIE_SESSION_ID_GENERATION_MAX_RETRIES` | `3` | Max retries for unique session ID generation |
+| `AUSSIE_SESSION_COOKIE_NAME` | `aussie_session` | Session cookie name |
+| `AUSSIE_SESSION_COOKIE_PATH` | `/` | Session cookie path |
+| `AUSSIE_SESSION_COOKIE_DOMAIN` | - | Session cookie domain |
+| `AUSSIE_SESSION_COOKIE_SECURE` | `true` | Require HTTPS for session cookies |
+| `AUSSIE_SESSION_COOKIE_HTTP_ONLY` | `true` | Prevent JavaScript access to session cookies |
+| `AUSSIE_SESSION_COOKIE_SAME_SITE` | `Lax` | SameSite attribute: `Strict`, `Lax`, `None` |
+| `AUSSIE_SESSION_STORAGE_PROVIDER` | `redis` | Session storage backend: `redis` |
+| `AUSSIE_SESSION_STORAGE_REDIS_KEY_PREFIX` | `aussie:session:` | Redis key prefix for sessions |
+| `AUSSIE_SESSION_JWS_ENABLED` | `true` | Issue JWS tokens for session authentication |
+| `AUSSIE_SESSION_JWS_TTL` | `PT5M` | JWS token TTL |
+| `AUSSIE_SESSION_JWS_ISSUER` | `aussie-gateway` | JWS token issuer claim |
+| `AUSSIE_SESSION_JWS_AUDIENCE` | - | JWS token audience claim |
+| `AUSSIE_SESSION_JWS_INCLUDE_CLAIMS` | `sub,email,name,roles` | Claims included in session JWS tokens |
+
+### Auth Rate Limiting (Brute Force Protection)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_AUTH_RATE_LIMIT_ENABLED` | `true` | Enable authentication rate limiting |
+| `AUSSIE_AUTH_RATE_LIMIT_MAX_FAILED_ATTEMPTS` | `5` | Max failed attempts before lockout |
+| `AUSSIE_AUTH_RATE_LIMIT_LOCKOUT_DURATION` | `PT15M` | Initial lockout duration |
+| `AUSSIE_AUTH_RATE_LIMIT_FAILED_ATTEMPT_WINDOW` | `PT1H` | Window for tracking failed attempts |
+| `AUSSIE_AUTH_RATE_LIMIT_TRACK_BY_IP` | `true` | Track failed attempts by IP address |
+| `AUSSIE_AUTH_RATE_LIMIT_TRACK_BY_IDENTIFIER` | `true` | Track failed attempts by credential identifier |
+| `AUSSIE_AUTH_RATE_LIMIT_PROGRESSIVE_LOCKOUT_MULTIPLIER` | `1.5` | Multiplier for progressive lockout duration |
+| `AUSSIE_AUTH_RATE_LIMIT_MAX_LOCKOUT_DURATION` | `PT24H` | Maximum lockout duration |
+| `AUSSIE_AUTH_RATE_LIMIT_INCLUDE_HEADERS` | `true` | Include rate limit headers in auth error responses |
+
+### Local Cache
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_CACHE_LOCAL_SERVICE_ROUTES_TTL` | `PT30S` | TTL for cached service route configurations |
+| `AUSSIE_CACHE_LOCAL_RATE_LIMIT_CONFIG_TTL` | `PT30S` | TTL for cached rate limit configurations |
+| `AUSSIE_CACHE_LOCAL_SAMPLING_CONFIG_TTL` | `PT30S` | TTL for cached sampling configurations |
+| `AUSSIE_CACHE_LOCAL_MAX_ENTRIES` | `10000` | Maximum entries in local cache |
+| `AUSSIE_CACHE_LOCAL_JITTER_FACTOR` | `0.1` | Random jitter factor for cache TTL to avoid thundering herd |
+
+### Key Rotation
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_AUTH_KEY_ROTATION_ENABLED` | `false` | Enable automated signing key rotation |
+| `AUSSIE_AUTH_KEY_ROTATION_SCHEDULE` | `0 0 0 1 */3 ?` | Cron schedule for key rotation (default: quarterly) |
+| `AUSSIE_AUTH_KEY_ROTATION_GRACE_PERIOD` | `PT24H` | Grace period after rotation during which old key is still accepted |
+| `AUSSIE_AUTH_KEY_ROTATION_DEPRECATION_PERIOD` | `P7D` | Period before old key stops being used for signing |
+| `AUSSIE_AUTH_KEY_ROTATION_RETENTION_PERIOD` | `P30D` | Period before old key is deleted |
+| `AUSSIE_AUTH_KEY_ROTATION_KEY_SIZE` | `2048` | RSA key size in bits |
+| `AUSSIE_AUTH_KEY_ROTATION_CACHE_REFRESH_INTERVAL` | `PT5M` | Interval to refresh key cache |
+| `AUSSIE_AUTH_KEY_ROTATION_CLEANUP_INTERVAL` | `PT1H` | Interval to clean up expired keys |
+| `AUSSIE_AUTH_KEY_ROTATION_STORAGE` | `config` | Key storage backend: `config`, `vault` |
+
+### Translation Config Storage
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUSSIE_TRANSLATION_CONFIG_STORAGE_PROVIDER` | - | Translation config storage backend: `memory`, `cassandra` |
+| `AUSSIE_TRANSLATION_CONFIG_CACHE_ENABLED` | `true` | Enable caching for translation configs |
+| `AUSSIE_TRANSLATION_CONFIG_CACHE_PROVIDER` | - | Translation config cache backend: `redis` |
+| `AUSSIE_TRANSLATION_CONFIG_CACHE_MEMORY_TTL` | `PT5M` | In-memory cache TTL |
+| `AUSSIE_TRANSLATION_CONFIG_CACHE_MEMORY_MAX_SIZE` | `100` | Maximum in-memory cache entries |

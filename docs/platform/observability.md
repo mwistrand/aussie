@@ -42,6 +42,11 @@ aussie.telemetry.attribution.enabled=true
 | `aussie.telemetry.tracing.sample-rate` | `1.0` | Trace sampling rate (0.0-1.0) |
 | `aussie.telemetry.metrics.enabled` | `false` | Enable metrics collection |
 | `aussie.telemetry.security.enabled` | `false` | Enable security monitoring |
+| `aussie.telemetry.security.rate-limit-window` | `PT1M` | Window for security event rate limiting |
+| `aussie.telemetry.security.rate-limit-threshold` | `1000` | Max security events per window before throttling |
+| `aussie.telemetry.security.dos-detection.enabled` | `true` | Enable automatic DoS pattern detection |
+| `aussie.telemetry.security.dos-detection.spike-threshold` | `5.0` | Request rate spike multiplier for DoS detection |
+| `aussie.telemetry.security.dos-detection.error-rate-threshold` | `0.5` | Error rate threshold for DoS detection |
 | `aussie.telemetry.attribution.enabled` | `false` | Enable traffic attribution |
 
 ### OpenTelemetry Configuration
@@ -240,6 +245,9 @@ Some span attributes can be enabled or disabled to control cardinality and stora
 | `aussie.telemetry.attributes.rate-limit-remaining` | `true` | Remaining requests in window |
 | `aussie.telemetry.attributes.rate-limit-type` | `true` | Type of rate limit (http, ws_connection) |
 | `aussie.telemetry.attributes.rate-limit-retry-after` | `true` | Seconds until rate limit resets |
+| `aussie.telemetry.attributes.auth-rate-limited` | `true` | Whether request was auth rate limited (brute force protection) |
+| `aussie.telemetry.attributes.auth-lockout-key` | `true` | The lockout key (IP or identifier) |
+| `aussie.telemetry.attributes.auth-lockout-retry-after` | `true` | Seconds until auth lockout resets |
 
 **High-Cardinality Warning**: `upstream-uri` is disabled by default because it includes query parameters, which can create unbounded cardinality. Enable only for debugging in non-production environments.
 

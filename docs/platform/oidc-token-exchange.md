@@ -83,6 +83,21 @@ aussie.auth.oidc.token-exchange.refresh-token.key-prefix=aussie:oidc:refresh:
 aussie.auth.oidc.token-exchange.timeout=PT10S
 ```
 
+### Token Validation
+
+If you need Aussie to validate the IdP's tokens locally (e.g., for session creation), configure the IdP's JWKS endpoint:
+
+```properties
+# IdP issuer for token validation
+aussie.auth.oidc.token-exchange.issuer=https://auth.example.com
+
+# JWKS URI for token signature verification
+aussie.auth.oidc.token-exchange.jwks-uri=https://auth.example.com/.well-known/jwks.json
+
+# Expected audiences (comma-separated)
+aussie.auth.oidc.token-exchange.audiences=aussie-gateway
+```
+
 ### Scopes
 
 Configure the scopes to request:
