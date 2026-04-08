@@ -12,6 +12,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Native build:** `./gradlew build -Dquarkus.native.enabled=true`
 - **Uber-jar:** `./gradlew build -Dquarkus.package.jar.type=uber-jar`
 - **Coverage report:** `make coverage` (generates JaCoCo HTML + CLI coverage)
+- **Run benchmarks:** `cd api && ./gradlew jmh` (JMH results in `api/build/results/jmh/`)
+- **Single benchmark:** `cd api && ./gradlew jmh -Pjmh.includes='RouteMatchingBenchmark'`
 
 ## Architecture
 
@@ -23,6 +25,7 @@ This is a Quarkus REST application using Gradle. Key dependencies:
 Project layout:
 - `src/main/java/aussie/` - Application code (REST resources)
 - `src/test/java/aussie/` - Unit/integration tests with `@QuarkusTest`
+- `src/jmh/java/aussie/benchmark/` - JMH performance benchmarks
 - `src/native-test/java/aussie/` - Native image integration tests
 
 ## Code Style
@@ -42,6 +45,14 @@ Project layout:
 ## Testing
 
 - For Java tests, always use JUnit5 assertions
+
+## Benchmarks
+
+- JMH benchmarks live in `src/jmh/java/aussie/benchmark/`
+- When adding new hot-path logic (request filters, routing, caching, rate limiting), add a corresponding JMH benchmark
+- Benchmarks should target pure domain logic that does not require a running Quarkus container
+- Use `@State(Scope.Thread)` for mutable state, `@State(Scope.Benchmark)` for read-only shared fixtures
+- Use `Blackhole.consume()` for results and `@Param` for scaling benchmarks
 
 ## Database
 

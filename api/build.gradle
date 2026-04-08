@@ -3,6 +3,7 @@ plugins {
     id 'jacoco'
     id 'io.quarkus'
     id 'com.diffplug.spotless' version '6.25.0'
+    id 'me.champeau.jmh' version '0.7.2'
 }
 
 repositories {
@@ -97,6 +98,23 @@ compileJava {
 
 compileTestJava {
     options.encoding = 'UTF-8'
+}
+
+jmh {
+    fork = (findProperty('jmh.fork') ?: '2').toInteger()
+    warmupIterations = (findProperty('jmh.warmupIterations') ?: '5').toInteger()
+    iterations = (findProperty('jmh.iterations') ?: '5').toInteger()
+    jmhVersion = '1.37'
+    failOnError = true
+    resultFormat = 'JSON'
+    zip64 = true
+    if (project.hasProperty('jmh.includes')) {
+        includes = [project.property('jmh.includes').toString()]
+    }
+}
+
+tasks.named('jmhJar') {
+    zip64 = true
 }
 
 spotless {

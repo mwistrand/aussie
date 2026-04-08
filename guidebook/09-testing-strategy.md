@@ -920,3 +920,21 @@ The textbook testing pyramid says "many unit tests, fewer integration tests, eve
 - **WireMock tests** are the closest to true integration tests, but they mock the upstream, not the downstream. The gateway is real, the backend is fake. This is the opposite of the usual mocking direction.
 
 The common thread across all these patterns is specificity. Each test technique was chosen because it answers a question that other techniques cannot. ArchUnit answers "is the architecture intact?" Contract tests answer "does this implementation satisfy the SPI?" ArgumentCaptor answers "was this complex argument constructed correctly?" No single technique is sufficient. A staff engineer's testing strategy is not about picking one approach. It is about knowing which tool to reach for when.
+
+## JMH Benchmarks: Guarding the Hot Path
+
+Functional correctness tests verify that code produces the right results. They do not verify that code produces those results *fast enough*. For a gateway that sits on the critical path of every request, performance regressions in hot-path logic multiply across all traffic. A 200ns regression in route matching, applied to 10,000 requests per second, is 2ms of added CPU time per second: invisible in a unit test, measurable in production.
+
+Aussie uses [JMH](https://github.com/openjdk/jmh) (Java Microbenchmark Harness) to establish performance baselines for hot-path operations. Benchmarks live in `api/src/jmh/java/aussie/benchmark/` and target pure domain logic that requires no running Quarkus container:
+
+- **Route matching**: regex compilation, pattern matching, path variable extraction, path rewriting
+- **Token bucket rate limiting**: allowed/rejected decisions, refill calculations, burst capacity capping
+- **Bloom filter revocation checks**: the ~100ns "definitely not revoked" fast path
+- **Revocation cache lookups**: Caffeine cache hit/miss/expiry paths
+- **CIDR and IP matching**: trusted proxy validation, access control evaluation
+- **Local cache operations**: Caffeine get/put with TTL jitter, concurrent throughput
+- **CORS origin matching**: exact, wildcard subdomain, and miss-all-configured-origins paths
+
+Run benchmarks with `./gradlew jmh` from the `api/` directory. Results are written to `api/build/results/jmh/` in JSON format.
+
+**When to add a benchmark.** If you are adding or modifying logic that executes on every request (or a high fraction of requests), add a corresponding JMH benchmark. Logic that only runs at configuration time (admin operations, service registration) does not need benchmarks. Logic that delegates to third-party libraries (JWT signature verification, Cassandra queries) does not benefit from benchmarking; you would be measuring the library, not your code.

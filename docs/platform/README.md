@@ -22,6 +22,7 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 - [Local Caching](#local-caching)
 - [Admin API](#admin-api)
 - [Benchmarking](#benchmarking)
+- [JMH Microbenchmarks](jmh-benchmarks.md)
 - [Service Permission Policies](#service-permission-policies)
 - [Service Configuration Pub/Sub](#service-configuration-pubsub)
 - [Environment Variables Reference](#environment-variables-reference)
@@ -824,6 +825,8 @@ See [Token Translation](token-translation.md) for full documentation.
 ## Benchmarking
 
 The `aussie benchmark` command runs authenticated latency benchmarks through the Aussie gateway. This is useful for measuring gateway overhead, validating performance SLAs, and identifying latency regressions.
+
+For JVM-level microbenchmarks of hot-path domain logic (routing, rate limiting, caching, CIDR matching), see [JMH Microbenchmarks](jmh-benchmarks.md).
 
 ### Required Permission
 
