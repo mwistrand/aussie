@@ -7,17 +7,19 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * Integration tests for Benchmark authorization endpoint.
+ * Integration test for the benchmark authorization endpoint.
  *
- * <p>Uses default test profile with dangerous-noop enabled, which grants wildcard
- * permissions (effectively admin access).
+ * <p>The default test profile runs with {@code aussie.auth.dangerous-noop=true},
+ * which grants wildcard permissions and effectively short-circuits the
+ * {@code @PermissionsAllowed} check. The purpose of this test is to keep the
+ * endpoint wired into the app and return 204 from the noop path.
  */
 @QuarkusTest
 @DisplayName("Benchmark Resource Tests")
 class BenchmarkResourceTest {
 
     @Test
-    @DisplayName("Should return 204 when user has benchmark permission")
+    @DisplayName("authorize endpoint should return 204 when caller is permitted")
     void shouldReturn204WhenAuthorized() {
         given().when().get("/admin/benchmark/authorize").then().statusCode(204);
     }

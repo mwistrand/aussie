@@ -10,11 +10,18 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.core.service.routing.ServiceRegistry;
 
+/**
+ * Integration smoke tests for service admin endpoints.
+ *
+ * <p>Branch coverage (validation, defaults, individual error cases) lives in
+ * {@code AdminResourceUnitTest}. This class verifies real CRUD round-trip and
+ * the SSRF baseUrl guard — both regression hot-spots that need integration
+ * coverage.
+ */
 @QuarkusTest
 @DisplayName("Admin Resource Tests")
 class AdminResourceTest {
@@ -32,307 +39,65 @@ class AdminResourceTest {
                         s -> serviceRegistry.unregister(s.serviceId()).await().atMost(java.time.Duration.ofSeconds(5)));
     }
 
-    @Nested
-    @DisplayName("Service Registration")
-    class ServiceRegistrationTests {
-
-        @Test
-        @DisplayName("Should register a new service")
-        void shouldRegisterNewService() {
-            var requestBody =
-                    """
-                {
-                    "serviceId": "test-service",
-                    "displayName": "Test Service",
-                    "baseUrl": "http://backend.local:8081",
-                    "endpoints": [
-                        {
-                            "path": "/api/test",
-                            "methods": ["GET", "POST"],
-                            "visibility": "PUBLIC"
-                        }
-                    ]
-                }
-                """;
-
-            given().contentType(ContentType.JSON)
-                    .body(requestBody)
-                    .when()
-                    .post("/admin/services")
-                    .then()
-                    .statusCode(201)
-                    .body("serviceId", equalTo("test-service"))
-                    .body("displayName", equalTo("Test Service"))
-                    .body("baseUrl", equalTo("http://backend.local:8081"))
-                    .body("endpoints", hasSize(1))
-                    .body("endpoints[0].path", equalTo("/api/test"))
-                    .body("endpoints[0].visibility", equalTo("PUBLIC"));
-        }
-
-        @Test
-        @DisplayName("Should register service with private endpoints")
-        void shouldRegisterServiceWithPrivateEndpoints() {
-            var requestBody =
-                    """
-                {
-                    "serviceId": "private-service",
-                    "displayName": "Private Service",
-                    "baseUrl": "http://backend.local:8082",
-                    "endpoints": [
-                        {
-                            "path": "/api/public",
-                            "methods": ["GET"],
-                            "visibility": "PUBLIC"
-                        },
-                        {
-                            "path": "/api/private",
-                            "methods": ["GET", "POST"],
-                            "visibility": "PRIVATE"
-                        }
-                    ],
-                    "accessConfig": {
-                        "allowedIps": ["10.0.0.0/8"],
-                        "allowedDomains": ["internal.example.com"]
-                    }
-                }
-                """;
-
-            given().contentType(ContentType.JSON)
-                    .body(requestBody)
-                    .when()
-                    .post("/admin/services")
-                    .then()
-                    .statusCode(201)
-                    .body("serviceId", equalTo("private-service"))
-                    .body("endpoints", hasSize(2))
-                    .body("accessConfig.allowedIps[0]", equalTo("10.0.0.0/8"))
-                    .body("accessConfig.allowedDomains[0]", equalTo("internal.example.com"));
-        }
-
-        @Test
-        @DisplayName("Should reject service with blocked baseUrl")
-        void shouldRejectServiceWithBlockedBaseUrl() {
-            var requestBody =
-                    """
-                {
-                    "serviceId": "ssrf-service",
-                    "baseUrl": "http://169.254.169.254/metadata"
-                }
-                """;
-
-            given().contentType(ContentType.JSON)
-                    .body(requestBody)
-                    .when()
-                    .post("/admin/services")
-                    .then()
-                    .statusCode(400)
-                    .body("detail", equalTo("baseUrl must not point to a loopback, link-local, or metadata address"));
-        }
-
-        @Test
-        @DisplayName("Should reject service with missing required fields")
-        void shouldRejectServiceWithMissingFields() {
-            var requestBody =
-                    """
-                {
-                    "displayName": "No ID Service"
-                }
-                """;
-
-            given().contentType(ContentType.JSON)
-                    .body(requestBody)
-                    .when()
-                    .post("/admin/services")
-                    .then()
-                    .statusCode(400);
-        }
-
-        @Test
-        @DisplayName("Should inherit defaultAuthRequired=true for endpoints without explicit authRequired")
-        void shouldInheritDefaultAuthRequiredTrue() {
-            var requestBody =
-                    """
-                {
-                    "serviceId": "auth-inherit-service",
-                    "baseUrl": "http://backend.local:8081",
-                    "defaultAuthRequired": true,
-                    "endpoints": [
-                        {
-                            "path": "/api/public",
-                            "methods": ["GET"],
-                            "visibility": "PUBLIC",
-                            "authRequired": false
-                        },
-                        {
-                            "path": "/api/protected",
-                            "methods": ["GET"],
-                            "visibility": "PUBLIC"
-                        }
-                    ]
-                }
-                """;
-
-            given().contentType(ContentType.JSON)
-                    .body(requestBody)
-                    .when()
-                    .post("/admin/services")
-                    .then()
-                    .statusCode(201)
-                    .body("serviceId", equalTo("auth-inherit-service"))
-                    .body("defaultAuthRequired", equalTo(true))
-                    .body("endpoints[0].path", equalTo("/api/public"))
-                    .body("endpoints[0].authRequired", equalTo(false))
-                    .body("endpoints[1].path", equalTo("/api/protected"))
-                    .body("endpoints[1].authRequired", equalTo(true));
-        }
-
-        @Test
-        @DisplayName("Should inherit defaultAuthRequired=false for endpoints without explicit authRequired")
-        void shouldInheritDefaultAuthRequiredFalse() {
-            var requestBody =
-                    """
-                {
-                    "serviceId": "no-auth-service",
-                    "baseUrl": "http://backend.local:8081",
-                    "defaultAuthRequired": false,
-                    "endpoints": [
-                        {
-                            "path": "/api/admin",
-                            "methods": ["GET"],
-                            "visibility": "PRIVATE",
-                            "authRequired": true
-                        },
-                        {
-                            "path": "/api/public",
-                            "methods": ["GET"],
-                            "visibility": "PUBLIC"
-                        }
-                    ]
-                }
-                """;
-
-            given().contentType(ContentType.JSON)
-                    .body(requestBody)
-                    .when()
-                    .post("/admin/services")
-                    .then()
-                    .statusCode(201)
-                    .body("serviceId", equalTo("no-auth-service"))
-                    .body("defaultAuthRequired", equalTo(false))
-                    .body("endpoints[0].path", equalTo("/api/admin"))
-                    .body("endpoints[0].authRequired", equalTo(true))
-                    .body("endpoints[1].path", equalTo("/api/public"))
-                    .body("endpoints[1].authRequired", equalTo(false));
-        }
-
-        @Test
-        @DisplayName("Should default defaultAuthRequired to true when not specified")
-        void shouldDefaultAuthRequiredToTrue() {
-            var requestBody =
-                    """
-                {
-                    "serviceId": "default-auth-service",
-                    "baseUrl": "http://backend.local:8081",
-                    "endpoints": [
-                        {
-                            "path": "/api/test",
-                            "methods": ["GET"],
-                            "visibility": "PUBLIC"
-                        }
-                    ]
-                }
-                """;
-
-            given().contentType(ContentType.JSON)
-                    .body(requestBody)
-                    .when()
-                    .post("/admin/services")
-                    .then()
-                    .statusCode(201)
-                    .body("serviceId", equalTo("default-auth-service"))
-                    .body("defaultAuthRequired", equalTo(true))
-                    .body("endpoints[0].authRequired", equalTo(true));
-        }
-    }
-
-    @Nested
-    @DisplayName("Service Retrieval")
-    class ServiceRetrievalTests {
-
-        @Test
-        @DisplayName("Should list all registered services")
-        void shouldListAllServices() {
-            // Register two services
-            registerTestService("service-1", "http://backend.local:8081");
-            registerTestService("service-2", "http://backend.local:8082");
-
-            given().when().get("/admin/services").then().statusCode(200).body("$", hasSize(2));
-        }
-
-        @Test
-        @DisplayName("Should get specific service by ID")
-        void shouldGetServiceById() {
-            registerTestService("my-service", "http://backend.local:8083");
-
-            given().when()
-                    .get("/admin/services/my-service")
-                    .then()
-                    .statusCode(200)
-                    .body("serviceId", equalTo("my-service"))
-                    .body("baseUrl", equalTo("http://backend.local:8083"));
-        }
-
-        @Test
-        @DisplayName("Should return 404 for non-existent service")
-        void shouldReturn404ForNonExistentService() {
-            given().when().get("/admin/services/non-existent").then().statusCode(404);
-        }
-    }
-
-    @Nested
-    @DisplayName("Service Deletion")
-    class ServiceDeletionTests {
-
-        @Test
-        @DisplayName("Should delete existing service")
-        void shouldDeleteExistingService() {
-            registerTestService("to-delete", "http://backend.local:8084");
-
-            given().when().delete("/admin/services/to-delete").then().statusCode(204);
-
-            // Verify it's gone
-            given().when().get("/admin/services/to-delete").then().statusCode(404);
-        }
-
-        @Test
-        @DisplayName("Should return 404 when deleting non-existent service")
-        void shouldReturn404WhenDeletingNonExistent() {
-            given().when().delete("/admin/services/non-existent").then().statusCode(404);
-        }
-    }
-
-    private void registerTestService(String serviceId, String baseUrl) {
-        var requestBody = String.format(
+    @Test
+    @DisplayName("should round-trip service registration: create, list, get, delete")
+    void shouldRoundTripServiceLifecycle() {
+        var requestBody =
                 """
-            {
-                "serviceId": "%s",
-                "baseUrl": "%s",
-                "endpoints": [
-                    {
-                        "path": "/api/test",
-                        "methods": ["GET"],
-                        "visibility": "PUBLIC"
-                    }
-                ]
-            }
-            """,
-                serviceId, baseUrl);
+                {
+                    "serviceId": "lifecycle-service",
+                    "displayName": "Lifecycle Service",
+                    "baseUrl": "http://backend.local:8081",
+                    "endpoints": [
+                        {
+                            "path": "/api/test",
+                            "methods": ["GET", "POST"],
+                            "visibility": "PUBLIC"
+                        }
+                    ]
+                }
+                """;
 
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
                 .post("/admin/services")
                 .then()
-                .statusCode(201);
+                .statusCode(201)
+                .body("serviceId", equalTo("lifecycle-service"))
+                .body("endpoints", hasSize(1))
+                .body("endpoints[0].path", equalTo("/api/test"));
+
+        given().when().get("/admin/services").then().statusCode(200).body("$", hasSize(1));
+
+        given().when()
+                .get("/admin/services/lifecycle-service")
+                .then()
+                .statusCode(200)
+                .body("baseUrl", equalTo("http://backend.local:8081"));
+
+        given().when().delete("/admin/services/lifecycle-service").then().statusCode(204);
+
+        given().when().get("/admin/services/lifecycle-service").then().statusCode(404);
+    }
+
+    @Test
+    @DisplayName("should reject service with SSRF-prone baseUrl")
+    void shouldRejectServiceWithBlockedBaseUrl() {
+        var requestBody =
+                """
+                {
+                    "serviceId": "ssrf-service",
+                    "baseUrl": "http://169.254.169.254/metadata"
+                }
+                """;
+
+        given().contentType(ContentType.JSON)
+                .body(requestBody)
+                .when()
+                .post("/admin/services")
+                .then()
+                .statusCode(400)
+                .body("detail", equalTo("baseUrl must not point to a loopback, link-local, or metadata address"));
     }
 }
