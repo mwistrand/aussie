@@ -462,6 +462,20 @@ class ProxyHttpClientTest {
         void shouldReturnFalseForPlainException() throws Exception {
             assertFalse(invokeIsTimeoutException(new RuntimeException("plain error")));
         }
+
+        @Test
+        @DisplayName("shouldReturnTrueForNettyConnectTimeoutException")
+        void shouldReturnTrueForNettyConnectTimeoutException() throws Exception {
+            assertTrue(invokeIsTimeoutException(new io.netty.channel.ConnectTimeoutException("connect timed out")));
+        }
+
+        @Test
+        @DisplayName("shouldReturnTrueForNestedNettyConnectTimeoutException")
+        void shouldReturnTrueForNestedNettyConnectTimeoutException() throws Exception {
+            var cause = new io.netty.channel.ConnectTimeoutException("connect timed out");
+            var wrapper = new RuntimeException("wrapper", cause);
+            assertTrue(invokeIsTimeoutException(wrapper));
+        }
     }
 
     @Nested

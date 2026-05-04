@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -79,11 +80,27 @@ public class ProxyHttpClient implements ProxyClient {
     @PostConstruct
     void init() {
         var options = new WebClientOptions()
-                .setConnectTimeout((int) httpConfig.connectTimeout().toMillis());
+                .setConnectTimeout((int) httpConfig.connectTimeout().toMillis())
+                // Per-upstream-host pool. Vert.x defaults this to 5, which queues requests
+                // on connection acquisition under any meaningful concurrency. Apply the
+                // configured value (`aussie.resiliency.http.max-connections-per-host`).
+                .setMaxPoolSize(httpConfig.maxConnectionsPerHost())
+                // Reuse connections across requests. Default is true; set explicitly so
+                // intent survives future Vert.x default changes.
+                .setKeepAlive(true)
+                // Close idle keep-alive connections after this many seconds to free
+                // upstream sockets when load tapers off.
+                .setIdleTimeout(75)
+                // Disable Nagle's algorithm: latency-sensitive proxy traffic does not
+                // benefit from coalescing small writes.
+                .setTcpNoDelay(true)
+                // SO_REUSEPORT lets multiple event-loop threads bind the client socket
+                // pool on platforms that support it (Linux). Silently ignored elsewhere.
+                .setReusePort(true);
         this.webClient = WebClient.create(vertx, options);
         LOG.infov(
-                "ProxyHttpClient initialized with connect timeout: {0}, request timeout: {1}",
-                httpConfig.connectTimeout(), httpConfig.requestTimeout());
+                "ProxyHttpClient initialized with connect timeout: {0}, request timeout: {1}, max conns/host: {2}",
+                httpConfig.connectTimeout(), httpConfig.requestTimeout(), httpConfig.maxConnectionsPerHost());
     }
 
     /**
@@ -170,8 +187,7 @@ public class ProxyHttpClient implements ProxyClient {
     private boolean isTimeoutException(Throwable error) {
         var current = error;
         while (current != null) {
-            var className = current.getClass().getName();
-            if (className.contains("TimeoutException")) {
+            if (current instanceof TimeoutException || current instanceof io.netty.channel.ConnectTimeoutException) {
                 return true;
             }
             current = current.getCause();

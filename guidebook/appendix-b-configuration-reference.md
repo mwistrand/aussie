@@ -744,8 +744,8 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | `%prod` | `aussie.resiliency.cassandra.pool-local-size` | `50` |
 | `%prod` | `aussie.resiliency.redis.pool-size` | `50` |
 | `%prod` | `aussie.resiliency.redis.pool-waiting` | `200` |
-| `%prod` | `aussie.resiliency.http.max-connections-per-host` | `100` |
-| `%prod` | `aussie.resiliency.http.max-connections` | `500` |
+| `%prod` | `aussie.resiliency.http.max-connections-per-host` | `200` |
+| `%prod` | `aussie.resiliency.http.max-connections` | `2000` |
 | `%prod` | `aussie.resiliency.jwks.max-connections` | `20` |
 
 **Timeout behavior by operation type:**
@@ -935,6 +935,7 @@ These properties configure Quarkus framework features and third-party integratio
 |----------|---------|--------|--------------|-------------|
 | `quarkus.vertx.warning-exception-time` | `2s` | `1s` | `QUARKUS_VERTX_WARNING_EXCEPTION_TIME` | Warn if event loop is blocked this long. |
 | `quarkus.vertx.max-event-loop-execute-time` | `5s` | `2s` | `QUARKUS_VERTX_MAX_EVENT_LOOP_EXECUTE_TIME` | Max allowed event loop execution time. |
+| `quarkus.vertx.prefer-native-transport` | `true` | _(inherited)_ | `QUARKUS_VERTX_PREFER_NATIVE_TRANSPORT` | Use epoll/kqueue/io_uring instead of NIO when available; lower per-request syscall cost. Falls back to NIO on platforms without native transport. |
 
 Dev profile uses tighter thresholds to catch blocking operations early. Production uses more lenient thresholds to avoid false alarms from transient GC pauses.
 
@@ -997,6 +998,29 @@ Dev profile uses tighter thresholds to catch blocking operations early. Producti
 | Property | Default | Env Variable | Description |
 |----------|---------|--------------|-------------|
 | `quarkus.smallrye-health.root-path` | `/q/health` | `QUARKUS_SMALLRYE_HEALTH_ROOT_PATH` | Health endpoint path. |
+
+### 21.7 HTTP Server Socket Tuning (Inbound)
+
+These properties tighten kernel-level socket behavior on the inbound listener for a gateway workload. Several flags are Linux-specific; Quarkus/Vert.x silently ignores unsupported flags on other platforms.
+
+| Property | Default | Env Variable | Description |
+|----------|---------|--------------|-------------|
+| `quarkus.http.so-reuse-port` | `true` | `QUARKUS_HTTP_SO_REUSE_PORT` | Allow multiple event-loop threads to bind the listening socket (Linux). |
+| `quarkus.http.tcp-quick-ack` | `true` | `QUARKUS_HTTP_TCP_QUICK_ACK` | Send TCP ACKs immediately rather than batching (Linux only). |
+| `quarkus.http.tcp-fast-open` | `true` | `QUARKUS_HTTP_TCP_FAST_OPEN` | Send SYN+data on initial handshake when supported by client and kernel (Linux/macOS). |
+| `quarkus.http.idle-timeout` | `PT60S` | `QUARKUS_HTTP_IDLE_TIMEOUT` | Close idle keep-alive connections after this duration to release resources. |
+
+### 21.8 Hot-Path Log Level Guardrails
+
+DEBUG and TRACE logging on the request path allocates strings and serializes context per request. The following overrides cap log output at INFO so a misconfigured root logger cannot turn the gateway into a logging benchmark.
+
+| Property | Default | Env Variable | Description |
+|----------|---------|--------------|-------------|
+| `quarkus.log.category."aussie.system.filter".level` | `INFO` | `QUARKUS_LOG_CATEGORY__AUSSIE_SYSTEM_FILTER__LEVEL` | Cap for system filter chain logging. |
+| `quarkus.log.category."aussie.adapter.in.http".level` | `INFO` | `QUARKUS_LOG_CATEGORY__AUSSIE_ADAPTER_IN_HTTP__LEVEL` | Cap for inbound HTTP adapter logging. |
+| `quarkus.log.category."aussie.adapter.out.http".level` | `INFO` | `QUARKUS_LOG_CATEGORY__AUSSIE_ADAPTER_OUT_HTTP__LEVEL` | Cap for outbound HTTP adapter (proxy client) logging. |
+
+Override these per-instance for targeted debugging; do not lower them globally in production.
 
 ## 22. Secrets Inventory
 
@@ -1061,7 +1085,7 @@ Quarkus profiles control which configuration values are active. Aussie uses thre
 | Rate limits | 1000 req/window, 500 burst | 100 req/window, 100 burst |
 | Telemetry | All enabled | All disabled by default |
 | Event loop detection | 1s warn, 2s max | 2s warn, 5s max |
-| Connection pools (HTTP) | 50/host, 200 total | 100/host, 500 total |
+| Connection pools (HTTP) | 50/host, 200 total | 200/host, 2000 total |
 | Connection pools (Cassandra) | 30/node | 50/node |
 | Connection pools (Redis) | 30 connections, 100 waiting | 50 connections, 200 waiting |
 | CORS origins | `localhost:3000` | `*` (must be overridden) |

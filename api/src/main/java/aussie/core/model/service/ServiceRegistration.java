@@ -1,12 +1,11 @@
 package aussie.core.model.service;
 
 import java.net.URI;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 import aussie.core.model.auth.ServiceAccessConfig;
 import aussie.core.model.auth.ServicePermissionPolicy;
@@ -16,6 +15,7 @@ import aussie.core.model.common.ServiceSecurityHeadersConfig;
 import aussie.core.model.ratelimit.ServiceRateLimitConfig;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.routing.RouteIndex;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.sampling.ServiceSamplingConfig;
 import aussie.core.model.timeout.ServiceTimeoutConfig;
@@ -268,25 +268,7 @@ public record ServiceRegistration(
     public Optional<RouteMatch> findRoute(String path, String method) {
         final var normalizedPath = normalizePath(path);
         final var upperMethod = method.toUpperCase();
-
-        for (final var endpoint : endpoints) {
-            if (!endpoint.methods().contains(upperMethod) && !endpoint.methods().contains("*")) {
-                continue;
-            }
-
-            final var pattern = compilePathPattern(endpoint.path());
-            final var matcher = pattern.matcher(normalizedPath);
-            if (matcher.matches()) {
-                final var pathVariables = extractPathVariables(endpoint.path(), matcher);
-                final var targetPath = endpoint.pathRewrite()
-                        .map(rewrite -> applyPathRewrite(rewrite, pathVariables, normalizedPath))
-                        .orElse(normalizedPath);
-
-                return Optional.of(new RouteMatch(this, endpoint, targetPath, pathVariables));
-            }
-        }
-
-        return Optional.empty();
+        return routeIndex().findMatch(this, normalizedPath, upperMethod);
     }
 
     private String normalizePath(String path) {
@@ -299,43 +281,16 @@ public record ServiceRegistration(
         return path;
     }
 
-    private Pattern compilePathPattern(String pathTemplate) {
-        // Convert path template with {param} placeholders to regex
-        var regex = pathTemplate
-                .replaceAll("\\{([^/]+)\\}", "(?<$1>[^/]+)")
-                .replaceAll("\\*\\*", ".*")
-                .replaceAll("(?<!\\.)\\*", "[^/]*");
-
-        return Pattern.compile("^" + regex + "$");
+    private RouteIndex routeIndex() {
+        return ROUTE_INDEX_CACHE.get(endpoints, RouteIndex::build);
     }
 
-    private Map<String, String> extractPathVariables(String pathTemplate, Matcher matcher) {
-        final var variables = new HashMap<String, String>();
-        final var paramPattern = Pattern.compile("\\{([^/]+)\\}");
-        final var paramMatcher = paramPattern.matcher(pathTemplate);
-
-        while (paramMatcher.find()) {
-            final var paramName = paramMatcher.group(1);
-            try {
-                final var value = matcher.group(paramName);
-                if (value != null) {
-                    variables.put(paramName, value);
-                }
-            } catch (IllegalArgumentException e) {
-                // Group not found, skip
-            }
-        }
-
-        return variables;
-    }
-
-    private String applyPathRewrite(String rewritePattern, Map<String, String> pathVariables, String originalPath) {
-        var result = rewritePattern;
-        for (final var entry : pathVariables.entrySet()) {
-            result = result.replace("{" + entry.getKey() + "}", entry.getValue());
-        }
-        return result;
-    }
+    // Weak-keyed cache: identity comparison plus weak references mean an entry is
+    // eligible for eviction once the keying endpoints list is no longer reachable
+    // from any live registration, so the cache cannot grow unbounded across
+    // service re-registrations.
+    private static final Cache<List<EndpointConfig>, RouteIndex> ROUTE_INDEX_CACHE =
+            Caffeine.newBuilder().weakKeys().build();
 
     public static Builder builder(String serviceId) {
         return new Builder(serviceId);
