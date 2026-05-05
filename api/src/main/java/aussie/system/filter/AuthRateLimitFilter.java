@@ -19,10 +19,10 @@ import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.TelemetryHelper;
 import aussie.core.config.AuthRateLimitConfig;
 import aussie.core.service.auth.AuthRateLimitService;
-import aussie.core.service.common.TrustedProxyValidator;
 import aussie.core.util.SecureHash;
 import aussie.spi.FailedAttemptRepository;
 import aussie.spi.SecurityEvent;
+import aussie.system.context.ClientContextResolver;
 
 /**
  * Reactive filter that enforces authentication rate limits.
@@ -46,7 +46,7 @@ public class AuthRateLimitFilter {
     private final SecurityEventDispatcher securityEventDispatcher;
     private final TelemetryHelper telemetryHelper;
     private final FailedAttemptRepository failedAttemptRepository;
-    private final TrustedProxyValidator trustedProxyValidator;
+    private final ClientContextResolver clientContextResolver;
 
     @Inject
     public AuthRateLimitFilter(
@@ -55,13 +55,13 @@ public class AuthRateLimitFilter {
             SecurityEventDispatcher securityEventDispatcher,
             TelemetryHelper telemetryHelper,
             FailedAttemptRepository failedAttemptRepository,
-            TrustedProxyValidator trustedProxyValidator) {
+            ClientContextResolver clientContextResolver) {
         this.rateLimitService = rateLimitService;
         this.config = config;
         this.securityEventDispatcher = securityEventDispatcher;
         this.telemetryHelper = telemetryHelper;
         this.failedAttemptRepository = failedAttemptRepository;
-        this.trustedProxyValidator = trustedProxyValidator;
+        this.clientContextResolver = clientContextResolver;
     }
 
     /**
@@ -157,72 +157,8 @@ public class AuthRateLimitFilter {
         telemetryHelper.setAuthLockoutRetryAfter(span, result.retryAfterSeconds());
     }
 
-    /**
-     * Extracts the client IP, only trusting forwarding headers when the direct
-     * connection comes from a known proxy.
-     */
     private String extractClientIp(ContainerRequestContext ctx, HttpServerRequest vertxRequest) {
-        final var remoteAddress = vertxRequest.remoteAddress();
-        final var socketIp = remoteAddress != null ? remoteAddress.host() : null;
-
-        if (!trustedProxyValidator.shouldTrustForwardingHeaders(socketIp)) {
-            return socketIp != null ? socketIp : "unknown";
-        }
-
-        // RFC 7239 Forwarded header (preferred)
-        final var forwarded = ctx.getHeaderString("Forwarded");
-        if (forwarded != null) {
-            final var ip = parseForwardedFor(forwarded);
-            if (ip != null) {
-                return ip;
-            }
-        }
-
-        // X-Forwarded-For fallback
-        final var xForwardedFor = ctx.getHeaderString("X-Forwarded-For");
-        if (xForwardedFor != null) {
-            return xForwardedFor.split(",")[0].trim();
-        }
-
-        return socketIp != null ? socketIp : "unknown";
-    }
-
-    /**
-     * Parse the client IP from RFC 7239 Forwarded header.
-     *
-     * @param forwarded the Forwarded header value
-     * @return the client IP, or null if not found
-     */
-    private String parseForwardedFor(String forwarded) {
-        // Handle multiple forwarded entries (take first one - closest to client)
-        final var firstEntry = forwarded.split(",")[0].trim();
-
-        for (final var part : firstEntry.split(";")) {
-            final var trimmed = part.trim();
-            if (trimmed.toLowerCase().startsWith("for=")) {
-                var value = trimmed.substring(4);
-                // Remove quotes if present
-                if (value.startsWith("\"") && value.endsWith("\"")) {
-                    value = value.substring(1, value.length() - 1);
-                }
-                // Handle IPv6 brackets - extract address and skip port stripping
-                if (value.startsWith("[")) {
-                    final var bracketEnd = value.indexOf(']');
-                    if (bracketEnd > 0) {
-                        // Extract just the IPv6 address without brackets (port is after bracket)
-                        return value.substring(1, bracketEnd);
-                    }
-                }
-                // Remove port if present (for IPv4 only - identified by having exactly one colon)
-                final var colonCount = value.length() - value.replace(":", "").length();
-                if (colonCount == 1) {
-                    final var colonIndex = value.indexOf(':');
-                    value = value.substring(0, colonIndex);
-                }
-                return value;
-            }
-        }
-        return null;
+        return clientContextResolver.getOrCompute(ctx, vertxRequest).resolvedIp();
     }
 
     private String extractIdentifier(ContainerRequestContext ctx) {

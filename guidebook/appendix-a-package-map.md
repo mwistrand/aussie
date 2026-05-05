@@ -774,6 +774,14 @@ These packages implement outbound ports with concrete infrastructure.
 
 JAX-RS server filters that intercept requests before they reach resource classes. These are the only classes permitted to depend on both adapter and core packages simultaneously.
 
+### `system/context`
+
+| Class | Description |
+|---|---|
+| `ClientContext` | Per-request value object holding the resolved socket IP, trusted-proxy decision, and forwarded client IP. |
+| `ClientContextResolver` | Computes a `ClientContext` from the Vert.x request once, caching it on `ContainerRequestContext`. The single source of truth for client IP resolution across filters. |
+| `ClientContextFilter` | `@ServerRequestFilter(priority = AUTHENTICATION - 150)`. Runs ahead of every auth/rate-limit filter so the resolved context is available without re-parsing forwarded headers. |
+
 ### `system/filter`
 
 | Class | Priority | Description |
@@ -784,7 +792,7 @@ JAX-RS server filters that intercept requests before they reach resource classes
 | `AccessControlFilter` | `@ServerRequestFilter` | Evaluates IP allowlists/denylists and endpoint visibility. Blocks requests to private endpoints and denied IPs. |
 | `AuthenticationFilter` | `AUTHENTICATION` | **Deprecated.** Legacy authentication filter retained for backward compatibility with custom `AuthenticationProvider` SPIs. Superseded by Quarkus Security integration (`ApiKeyAuthenticationMechanism`, `JwtAuthenticationMechanism`). Disabled by default. |
 
-**Allowed dependencies:** `core/service`, `core/model`, `core/config`, `core/port/out`, `core/util`, `spi`, `adapter/in/problem`, `adapter/out/telemetry`.
+**Allowed dependencies:** `core/service`, `core/model`, `core/config`, `core/port/out`, `core/util`, `spi`, `adapter/in/problem`, `adapter/out/telemetry`, `system/context`.
 
 ## Quick Reference: File Counts by Package
 
@@ -826,8 +834,9 @@ JAX-RS server filters that intercept requests before they reach resource classes
 | `adapter/out/storage` | 10 (+ 9 cassandra + 17 memory + 15 redis) |
 | `adapter/out/telemetry` | 19 |
 | `adapter/out/threading` | 1 |
+| `system/context` | 3 |
 | `system/filter` | 5 |
-| **Total** | **343** |
+| **Total** | **346** |
 
 ## How to Use This Map
 
@@ -835,6 +844,6 @@ JAX-RS server filters that intercept requests before they reach resource classes
 
 **Adding a new REST endpoint.** Create the DTO in `adapter/in/dto`. Create the resource class in `adapter/in/rest`. The resource depends on a core port or service, never on adapter/out classes. If the endpoint needs a new use case, define it in `core/port/in` and implement it in `core/service`.
 
-**Adding a new filter.** Place it in `system/filter`. Filters are the one place where imports from both `adapter` and `core` are acceptable. Set the priority relative to the existing chain: `RequestValidationFilter` and `AuthRateLimitFilter` run first, then `RateLimitFilter`, then `AccessControlFilter`, then authentication.
+**Adding a new filter.** Place it in `system/filter`. Filters are the one place where imports from both `adapter` and `core` are acceptable. Set the priority relative to the existing chain: `ClientContextFilter` runs first (`AUTHENTICATION - 150`), then `RequestValidationFilter` and `AuthRateLimitFilter` (`AUTHENTICATION - 100`), then `RateLimitFilter`, then `AccessControlFilter`, then authentication. New filters that need the resolved client IP must read it via `ClientContextResolver.getOrCompute(ctx, vertxRequest)` rather than re-parsing forwarded headers.
 
 **Finding where something is implemented.** Start at the interface in `core/port/out`. Search for classes that `implements` it. In-memory implementations are in `adapter/out/storage/memory` or `adapter/out/ratelimit/memory`. Redis implementations are in the corresponding `redis` subpackages. Cassandra implementations are in `adapter/out/storage/cassandra`.

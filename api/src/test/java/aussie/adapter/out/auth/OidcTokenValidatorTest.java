@@ -36,6 +36,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.core.config.ResiliencyConfig;
 import aussie.core.model.auth.TokenProviderConfig;
 import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.port.out.JwksCache;
@@ -55,6 +56,12 @@ class OidcTokenValidatorTest {
     @Mock
     private JwksCache jwksCache;
 
+    @Mock
+    private ResiliencyConfig resiliencyConfig;
+
+    @Mock
+    private ResiliencyConfig.JwksConfig jwksConfig;
+
     private OidcTokenValidator validator;
     private TokenProviderConfig config;
 
@@ -72,7 +79,9 @@ class OidcTokenValidatorTest {
 
     @BeforeEach
     void setUp() {
-        validator = new OidcTokenValidator(jwksCache);
+        when(resiliencyConfig.jwks()).thenReturn(jwksConfig);
+        when(jwksConfig.cacheTtl()).thenReturn(Duration.ofHours(1));
+        validator = new OidcTokenValidator(jwksCache, resiliencyConfig);
         config = TokenProviderConfig.builder("test-provider", TEST_ISSUER, TEST_JWKS_URI)
                 .build();
     }
@@ -342,6 +351,72 @@ class OidcTokenValidatorTest {
     }
 
     @Nested
+    @DisplayName("validate() consumer cache + token header parse")
+    class ConsumerCacheTests {
+
+        @Test
+        @DisplayName("repeated validation reuses the cached JwtConsumer (no behavioral change)")
+        void repeatedValidationReturnsConsistentResults() throws Exception {
+            final var token = createValidToken();
+            when(jwksCache.getKey(TEST_JWKS_URI, TEST_KEY_ID))
+                    .thenReturn(Uni.createFrom().item(Optional.of(rsaJwk)));
+
+            final var first = validator.validate(token, config).await().atMost(Duration.ofSeconds(1));
+            final var second = validator.validate(token, config).await().atMost(Duration.ofSeconds(1));
+
+            assertInstanceOf(TokenValidationResult.Valid.class, first);
+            assertInstanceOf(TokenValidationResult.Valid.class, second);
+            assertEquals(
+                    ((TokenValidationResult.Valid) first).subject(), ((TokenValidationResult.Valid) second).subject());
+            verify(jwksCache, org.mockito.Mockito.times(2)).getKey(TEST_JWKS_URI, TEST_KEY_ID);
+        }
+
+        @Test
+        @DisplayName("different audiences for same issuer use distinct consumers")
+        void differentAudiencesDoNotShareConsumer() throws Exception {
+            final var configA = TokenProviderConfig.builder("test-provider", TEST_ISSUER, TEST_JWKS_URI)
+                    .audiences(Set.of("aud-a"))
+                    .build();
+            final var configB = TokenProviderConfig.builder("test-provider", TEST_ISSUER, TEST_JWKS_URI)
+                    .audiences(Set.of("aud-b"))
+                    .build();
+            final var tokenA = createTokenWithAudience("aud-a");
+            final var tokenB = createTokenWithAudience("aud-b");
+            when(jwksCache.getKey(TEST_JWKS_URI, TEST_KEY_ID))
+                    .thenReturn(Uni.createFrom().item(Optional.of(rsaJwk)));
+
+            final var resultA = validator.validate(tokenA, configA).await().atMost(Duration.ofSeconds(1));
+            final var resultB = validator.validate(tokenB, configB).await().atMost(Duration.ofSeconds(1));
+
+            // If configs erroneously shared a consumer, one of these would fail audience validation.
+            assertInstanceOf(TokenValidationResult.Valid.class, resultA);
+            assertInstanceOf(TokenValidationResult.Valid.class, resultB);
+        }
+
+        @Test
+        @DisplayName("token with missing kid header still validates against single-key JWKS")
+        void tokenWithoutKidIsAccepted() throws Exception {
+            final var token = createTokenWithoutKid();
+            // jwksCache.getKey is queried with null kid; JwksCacheService returns the lone key.
+            when(jwksCache.getKey(TEST_JWKS_URI, null))
+                    .thenReturn(Uni.createFrom().item(Optional.of(rsaJwk)));
+
+            final var result = validator.validate(token, config).await().atMost(Duration.ofSeconds(1));
+
+            assertInstanceOf(TokenValidationResult.Valid.class, result);
+        }
+
+        @Test
+        @DisplayName("token whose first segment is not valid base64url returns Invalid")
+        void malformedHeaderReturnsInvalid() {
+            final var result =
+                    validator.validate("!!!.payload.sig", config).await().atMost(Duration.ofSeconds(1));
+
+            assertInstanceOf(TokenValidationResult.Invalid.class, result);
+        }
+    }
+
+    @Nested
     @DisplayName("validate() error handling")
     class ErrorHandlingTests {
 
@@ -429,6 +504,24 @@ class OidcTokenValidatorTest {
         jws.setKey(keyPair.getPrivate());
         jws.setKeyIdHeaderValue(TEST_KEY_ID);
         jws.setAlgorithmHeaderValue(AlgorithmIdentifiers.RSA_USING_SHA256);
+
+        return jws.getCompactSerialization();
+    }
+
+    private String createTokenWithoutKid() throws Exception {
+        final var claims = new JwtClaims();
+        claims.setSubject(TEST_SUBJECT);
+        claims.setIssuer(TEST_ISSUER);
+        claims.setExpirationTime(
+                NumericDate.fromSeconds(Instant.now().plusSeconds(3600).getEpochSecond()));
+        claims.setIssuedAt(NumericDate.now());
+        claims.setGeneratedJwtId();
+
+        final var jws = new JsonWebSignature();
+        jws.setPayload(claims.toJson());
+        jws.setKey(keyPair.getPrivate());
+        jws.setAlgorithmHeaderValue(AlgorithmIdentifiers.RSA_USING_SHA256);
+        // intentionally no setKeyIdHeaderValue so the null-kid path is exercised
 
         return jws.getCompactSerialization();
     }

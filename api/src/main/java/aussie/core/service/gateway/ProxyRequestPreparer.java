@@ -117,31 +117,37 @@ public class ProxyRequestPreparer {
 
         for (var entry : request.headers().entrySet()) {
             final var headerName = entry.getKey();
-            final var lowerName = headerName.toLowerCase();
 
-            if (shouldSkipHeader(lowerName, dynamicHopByHop)) {
+            if (shouldSkipHeader(headerName, dynamicHopByHop)) {
                 continue;
             }
 
-            // Use List.copyOf for efficient immutable copy - lists are only read, not modified
-            headers.put(headerName, List.copyOf(entry.getValue()));
+            // Share the list reference: the value list is read, never mutated downstream,
+            // so List.copyOf would just churn the allocator with no observable benefit.
+            headers.put(headerName, entry.getValue());
         }
     }
 
-    private boolean shouldSkipHeader(String lowerName, Set<String> dynamicHopByHop) {
-        // Skip hop-by-hop headers (static per RFC 2616 + dynamic from Connection header)
-        if (HOP_BY_HOP_HEADERS.contains(lowerName) || dynamicHopByHop.contains(lowerName)) {
-            return true;
+    /**
+     * Case-insensitive check against the static hop-by-hop set, the dynamic set parsed
+     * from {@code Connection}, and a couple of always-skipped headers ({@code Host},
+     * {@code Content-Length}). Avoids the per-header {@code toLowerCase()} allocation
+     * the previous implementation paid on every header in every request.
+     */
+    private boolean shouldSkipHeader(String headerName, Set<String> dynamicHopByHop) {
+        for (final var hop : HOP_BY_HOP_HEADERS) {
+            if (hop.equalsIgnoreCase(headerName)) {
+                return true;
+            }
         }
-        // Skip Host header (will be set for target)
-        if ("host".equals(lowerName)) {
-            return true;
+        if (!dynamicHopByHop.isEmpty()) {
+            for (final var hop : dynamicHopByHop) {
+                if (hop.equalsIgnoreCase(headerName)) {
+                    return true;
+                }
+            }
         }
-        // Skip Content-Length as it will be set by the HTTP client
-        if ("content-length".equals(lowerName)) {
-            return true;
-        }
-        return false;
+        return "host".equalsIgnoreCase(headerName) || "content-length".equalsIgnoreCase(headerName);
     }
 
     private void setHostHeader(Map<String, List<String>> headers, URI targetUri) {
@@ -182,14 +188,33 @@ public class ProxyRequestPreparer {
      */
     public Map<String, List<String>> filterResponseHeaders(Map<String, List<String>> responseHeaders) {
         final var dynamicHopByHop = parseDynamicHopByHopHeaders(responseHeaders);
-        Map<String, List<String>> filtered = new HashMap<>();
+        final var filtered = new HashMap<String, List<String>>(responseHeaders.size());
         for (var entry : responseHeaders.entrySet()) {
-            var lowerName = entry.getKey().toLowerCase();
-            if (!HOP_BY_HOP_HEADERS.contains(lowerName) && !dynamicHopByHop.contains(lowerName)) {
-                filtered.put(entry.getKey(), List.copyOf(entry.getValue()));
+            if (isHopByHop(entry.getKey(), dynamicHopByHop)) {
+                continue;
             }
+            // Share the list reference; the upstream response map is built per request and
+            // is not mutated after this call returns.
+            filtered.put(entry.getKey(), entry.getValue());
         }
         return filtered;
+    }
+
+    private boolean isHopByHop(String headerName, Set<String> dynamicHopByHop) {
+        for (final var hop : HOP_BY_HOP_HEADERS) {
+            if (hop.equalsIgnoreCase(headerName)) {
+                return true;
+            }
+        }
+        if (dynamicHopByHop.isEmpty()) {
+            return false;
+        }
+        for (final var hop : dynamicHopByHop) {
+            if (hop.equalsIgnoreCase(headerName)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -216,10 +241,23 @@ public class ProxyRequestPreparer {
         return dynamicHeaders;
     }
 
+    /**
+     * Look up the {@code Connection} header. Tries the two common cases first; if those
+     * miss and the source map happens to be case-sensitive, falls back to a single
+     * case-insensitive scan over the keys.
+     */
     private List<String> findConnectionHeader(Map<String, List<String>> headers) {
-        for (final var entry : headers.entrySet()) {
-            if ("connection".equalsIgnoreCase(entry.getKey())) {
-                return entry.getValue();
+        var values = headers.get("Connection");
+        if (values != null) {
+            return values;
+        }
+        values = headers.get("connection");
+        if (values != null) {
+            return values;
+        }
+        for (final var key : headers.keySet()) {
+            if ("connection".equalsIgnoreCase(key)) {
+                return headers.get(key);
             }
         }
         return List.of();

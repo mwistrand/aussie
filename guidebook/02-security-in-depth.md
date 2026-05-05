@@ -488,34 +488,27 @@ The separation of auth rate limiting from HTTP rate limiting is the more fundame
 
 ### Consistent Trusted Proxy Validation
 
-The filter accepts `HttpServerRequest` as a second parameter (RESTEasy Reactive injects it automatically) to get the socket-level IP of the direct connection. Before reading any forwarding headers, it consults `TrustedProxyValidator`:
+The filter resolves the client IP via `ClientContextResolver`, which performs the trusted-proxy check once per request and stashes the result on the JAX-RS request context. The resolver is invoked by the dedicated `ClientContextFilter` at priority `Priorities.AUTHENTICATION - 150`, so every downstream auth-related filter sees the same decision:
 
 ```java
-// AuthRateLimitFilter.java, lines 74-87
+// AuthRateLimitFilter.java
 @ServerRequestFilter(priority = Priorities.AUTHENTICATION - 100)
 public Uni<Response> filter(ContainerRequestContext requestContext, HttpServerRequest vertxRequest) {
     ...
-    final var ip = extractClientIp(requestContext, vertxRequest);
+    final var ip = clientContextResolver.getOrCompute(requestContext, vertxRequest).resolvedIp();
     ...
 }
 
-// AuthRateLimitFilter.java, lines 164-170
-private String extractClientIp(ContainerRequestContext ctx, HttpServerRequest vertxRequest) {
-    final var remoteAddress = vertxRequest.remoteAddress();
-    final var socketIp = remoteAddress != null ? remoteAddress.host() : null;
-
-    if (!trustedProxyValidator.shouldTrustForwardingHeaders(socketIp)) {
-        return socketIp != null ? socketIp : "unknown";
-    }
-    // ... read Forwarded / X-Forwarded-For headers ...
-}
+// ClientContextResolver.resolve consults TrustedProxyValidator once:
+final var trust = trustedProxyValidator.shouldTrustForwardingHeaders(socketIp);
+final var forwardedClientIp = trust ? extractForwardedClientIp(request) : null;
 ```
 
-This is the same pattern used by the access control layer (`SourceIdentifierExtractor`) and the general rate limit filter (`RateLimitFilter`). Without this check, an attacker connecting directly (not through the real ingress proxy) could set an arbitrary `X-Forwarded-For` header to rotate their apparent IP and evade IP-based lockout tracking. The identifier-based tracking provides a second line of defense, but consistent proxy validation is the correct primary control.
+Without this check, an attacker connecting directly (not through the real ingress proxy) could set an arbitrary `X-Forwarded-For` header to rotate their apparent IP and evade IP-based lockout tracking. The identifier-based tracking provides a second line of defense, but consistent proxy validation is the correct primary control.
 
 ### Trade-offs
 
-The `parseForwardedFor` logic is duplicated across `AuthRateLimitFilter`, `RateLimitFilter`, and (with slight differences) `SourceIdentifierExtractor`. Extracting it to a shared utility would reduce the risk of behavioral divergence, but the current duplication is contained to three call sites and each caller applies the result differently (prefixed vs. unprefixed, different fallback behavior). The duplication is acknowledged as a maintenance cost worth revisiting if the parsing logic needs to change.
+`ClientContextResolver` lives in `aussie.system.context` and is the single source of truth for `(socketIp, trustForwardingHeaders, forwardedClientIp)`. New filters that need the client IP must read it from the resolver rather than re-parsing `Forwarded` / `X-Forwarded-For` themselves; the access-control source extractor (`SourceIdentifierExtractor`) still does its own richer parse for host/forwarded-chain information, which is a separate concern.
 
 ## 2.8 CORS at the Vert.x Layer
 

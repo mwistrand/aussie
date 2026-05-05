@@ -30,11 +30,11 @@ import aussie.core.model.service.ServicePath;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
-import aussie.core.service.common.TrustedProxyValidator;
 import aussie.core.service.ratelimit.RateLimitResolver;
 import aussie.core.service.routing.ServiceRegistry;
 import aussie.core.util.SecureHash;
 import aussie.spi.SecurityEvent;
+import aussie.system.context.ClientContextResolver;
 
 /**
  * Reactive filter that enforces rate limits on incoming requests.
@@ -71,7 +71,7 @@ public class RateLimitFilter {
     private final RateLimitResolver rateLimitResolver;
     private final ServiceRegistry serviceRegistry;
     private final TelemetryHelper telemetryHelper;
-    private final TrustedProxyValidator trustedProxyValidator;
+    private final ClientContextResolver clientContextResolver;
 
     @Inject
     public RateLimitFilter(
@@ -82,7 +82,7 @@ public class RateLimitFilter {
             RateLimitResolver rateLimitResolver,
             ServiceRegistry serviceRegistry,
             TelemetryHelper telemetryHelper,
-            TrustedProxyValidator trustedProxyValidator) {
+            ClientContextResolver clientContextResolver) {
         this.rateLimiter = rateLimiter;
         this.configInstance = configInstance;
         this.metrics = metrics;
@@ -90,7 +90,7 @@ public class RateLimitFilter {
         this.rateLimitResolver = rateLimitResolver;
         this.serviceRegistry = serviceRegistry;
         this.telemetryHelper = telemetryHelper;
-        this.trustedProxyValidator = trustedProxyValidator;
+        this.clientContextResolver = clientContextResolver;
     }
 
     private RateLimitingConfig config() {
@@ -112,7 +112,7 @@ public class RateLimitFilter {
         final var method = request.method().name();
         final var servicePath = ServicePath.parse(path);
         final var serviceId = servicePath.serviceId();
-        final var clientId = extractClientId(request);
+        final var clientId = extractClientId(requestContext, request);
 
         final RouteLookupResult routeResult =
                 serviceRegistry.findRoute(path, method).orElse(null);
@@ -204,11 +204,14 @@ public class RateLimitFilter {
     // Client Identification (priority: session > auth > api key > IP)
     // -------------------------------------------------------------------------
 
-    private String extractClientId(HttpServerRequest request) {
+    private String extractClientId(ContainerRequestContext requestContext, HttpServerRequest request) {
         return extractSessionId(request)
                 .or(() -> extractAuthHeaderHash(request))
                 .or(() -> extractApiKeyId(request))
-                .orElseGet(() -> extractClientIp(request));
+                .orElseGet(() -> "ip:"
+                        + clientContextResolver
+                                .getOrCompute(requestContext, request)
+                                .resolvedIp());
     }
 
     private Optional<String> extractSessionId(HttpServerRequest request) {
@@ -230,74 +233,6 @@ public class RateLimitFilter {
 
     private Optional<String> extractApiKeyId(HttpServerRequest request) {
         return Optional.ofNullable(request.getHeader("X-API-Key-ID")).map(id -> "apikey:" + id);
-    }
-
-    /**
-     * Extracts the client IP, only trusting forwarding headers when the direct
-     * connection comes from a known proxy.
-     */
-    private String extractClientIp(HttpServerRequest request) {
-        final var remoteAddress = request.remoteAddress();
-        final var socketIp = remoteAddress != null ? remoteAddress.host() : null;
-
-        if (!trustedProxyValidator.shouldTrustForwardingHeaders(socketIp)) {
-            return "ip:" + (socketIp != null ? socketIp : "unknown");
-        }
-
-        // RFC 7239 Forwarded header (preferred)
-        final var forwarded = request.getHeader("Forwarded");
-        if (forwarded != null) {
-            final var ip = parseForwardedFor(forwarded);
-            if (ip != null) {
-                return "ip:" + ip;
-            }
-        }
-
-        // X-Forwarded-For fallback
-        final var xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (xForwardedFor != null) {
-            return "ip:" + xForwardedFor.split(",")[0].trim();
-        }
-
-        return "ip:" + (socketIp != null ? socketIp : "unknown");
-    }
-
-    /**
-     * Parse the client IP from RFC 7239 Forwarded header.
-     *
-     * @param forwarded the Forwarded header value
-     * @return the client IP, or null if not found
-     */
-    private String parseForwardedFor(String forwarded) {
-        // Handle multiple forwarded entries (take first one - closest to client)
-        final var firstEntry = forwarded.split(",")[0].trim();
-
-        for (final var part : firstEntry.split(";")) {
-            final var trimmed = part.trim();
-            if (trimmed.toLowerCase().startsWith("for=")) {
-                var value = trimmed.substring(4);
-                // Remove quotes if present
-                if (value.startsWith("\"") && value.endsWith("\"")) {
-                    value = value.substring(1, value.length() - 1);
-                }
-                // Handle IPv6 brackets - extract address and skip port stripping
-                if (value.startsWith("[")) {
-                    final var bracketEnd = value.indexOf(']');
-                    if (bracketEnd > 0) {
-                        // Extract just the IPv6 address without brackets (port is after bracket)
-                        return value.substring(1, bracketEnd);
-                    }
-                }
-                // Remove port if present (for IPv4 only - identified by having exactly one colon)
-                final var colonCount = value.length() - value.replace(":", "").length();
-                if (colonCount == 1) {
-                    final var colonIndex = value.indexOf(':');
-                    value = value.substring(0, colonIndex);
-                }
-                return value;
-            }
-        }
-        return null;
     }
 
     private EffectiveRateLimit resolveEffectiveLimit(RouteLookupResult routeResult) {

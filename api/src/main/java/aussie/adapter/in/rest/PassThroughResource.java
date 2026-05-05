@@ -1,8 +1,5 @@
 package aussie.adapter.in.rest;
 
-import java.util.HashMap;
-import java.util.List;
-
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.DELETE;
@@ -123,20 +120,16 @@ public class PassThroughResource {
     }
 
     private GatewayRequest toGatewayRequest(String path, ContainerRequestContext requestContext, byte[] body) {
-        var headers = new HashMap<String, List<String>>();
-        for (var entry : requestContext.getHeaders().entrySet()) {
-            headers.put(entry.getKey(), List.copyOf(entry.getValue()));
-        }
-
-        var clientIp = extractClientIp();
-
+        // MultivaluedMap<String, String> IS-A Map<String, List<String>>. The map is read-only
+        // for the rest of this request, so passing it directly avoids a per-request HashMap +
+        // per-value List.copyOf round-trip.
         return new GatewayRequest(
                 requestContext.getMethod(),
                 path,
-                headers,
+                requestContext.getHeaders(),
                 requestContext.getUriInfo().getRequestUri(),
                 body,
-                clientIp);
+                extractClientIp());
     }
 
     private String extractClientIp() {

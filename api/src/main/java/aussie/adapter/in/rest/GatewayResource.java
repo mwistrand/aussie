@@ -1,8 +1,5 @@
 package aussie.adapter.in.rest;
 
-import java.util.HashMap;
-import java.util.List;
-
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.DELETE;
@@ -97,20 +94,15 @@ public class GatewayResource {
     }
 
     private GatewayRequest toGatewayRequest(String path, ContainerRequestContext requestContext, byte[] body) {
-        var headers = new HashMap<String, List<String>>();
-        for (var entry : requestContext.getHeaders().entrySet()) {
-            headers.put(entry.getKey(), List.copyOf(entry.getValue()));
-        }
-
-        var clientIp = extractClientIp();
-
+        // MultivaluedMap<String, String> IS-A Map<String, List<String>>; pass it through
+        // instead of materialising a defensive copy that the downstream pipeline never mutates.
         return new GatewayRequest(
                 requestContext.getMethod(),
                 path,
-                headers,
+                requestContext.getHeaders(),
                 requestContext.getUriInfo().getRequestUri(),
                 body,
-                clientIp);
+                extractClientIp());
     }
 
     private String extractClientIp() {

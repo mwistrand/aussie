@@ -32,6 +32,7 @@ import aussie.core.config.AuthRateLimitConfig;
 import aussie.core.service.auth.AuthRateLimitService;
 import aussie.core.service.common.TrustedProxyValidator;
 import aussie.spi.FailedAttemptRepository;
+import aussie.system.context.ClientContextResolver;
 
 @DisplayName("AuthRateLimitFilter")
 class AuthRateLimitFilterTest {
@@ -76,13 +77,15 @@ class AuthRateLimitFilterTest {
                 securityEventDispatcher,
                 telemetryHelper,
                 failedAttemptRepository,
-                trustedProxyValidator);
+                new ClientContextResolver(trustedProxyValidator));
     }
 
     private void setupRequestContext(String path, String forwarded, String xForwardedFor) {
         when(uriInfo.getPath()).thenReturn(path);
-        when(requestContext.getHeaderString("Forwarded")).thenReturn(forwarded);
-        when(requestContext.getHeaderString("X-Forwarded-For")).thenReturn(xForwardedFor);
+        // Forwarded / X-Forwarded-For are read from the Vert.x request via ClientContextResolver,
+        // not from the JAX-RS context, so they must be set on vertxRequest.
+        when(vertxRequest.getHeader("Forwarded")).thenReturn(forwarded);
+        when(vertxRequest.getHeader("X-Forwarded-For")).thenReturn(xForwardedFor);
         when(requestContext.getHeaderString("X-API-Key")).thenReturn(null);
         when(requestContext.getHeaderString("Authorization")).thenReturn(null);
     }

@@ -2,6 +2,7 @@ package aussie.core.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
@@ -275,6 +276,34 @@ class ProxyRequestPreparerTest {
 
             assertTrue(prepared.headers().containsKey("Accept"));
             assertTrue(prepared.headers().containsKey("X-Custom"));
+        }
+
+        @Test
+        @DisplayName("Should resolve Connection header in any case (canonical, lower, upper)")
+        void shouldResolveConnectionHeaderInAnyCase() {
+            for (final var key : List.of("Connection", "connection", "CONNECTION")) {
+                final Map<String, List<String>> headers = new HashMap<>();
+                headers.put(key, List.of("X-Strip-Me"));
+                headers.put("X-Strip-Me", List.of("gone"));
+                headers.put("Accept", List.of("application/json"));
+
+                final var prepared = preparer.prepare(createRequest(headers), createRoute("http://backend:9090"));
+
+                assertFalse(prepared.headers().containsKey("X-Strip-Me"), "case=" + key);
+                assertTrue(prepared.headers().containsKey("Accept"), "case=" + key);
+            }
+        }
+
+        @Test
+        @DisplayName("Forwarded value lists are passed through by reference, not copied")
+        void shouldShareValueListReference() {
+            final var acceptValues = List.of("application/json");
+            final Map<String, List<String>> headers = new HashMap<>();
+            headers.put("Accept", acceptValues);
+
+            final var prepared = preparer.prepare(createRequest(headers), createRoute("http://backend:9090"));
+
+            assertSame(acceptValues, prepared.headers().get("Accept"));
         }
     }
 

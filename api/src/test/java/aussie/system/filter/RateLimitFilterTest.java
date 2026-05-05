@@ -56,6 +56,7 @@ import aussie.core.port.out.RateLimiter;
 import aussie.core.service.common.TrustedProxyValidator;
 import aussie.core.service.ratelimit.RateLimitResolver;
 import aussie.core.service.routing.ServiceRegistry;
+import aussie.system.context.ClientContextResolver;
 
 @DisplayName("RateLimitFilter")
 class RateLimitFilterTest {
@@ -124,7 +125,7 @@ class RateLimitFilterTest {
                 rateLimitResolver,
                 serviceRegistry,
                 telemetryHelper,
-                trustedProxyValidator);
+                new ClientContextResolver(trustedProxyValidator));
     }
 
     private ServiceRegistration createTestService(String serviceId) {

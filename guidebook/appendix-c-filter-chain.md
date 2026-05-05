@@ -61,6 +61,11 @@ The following diagram traces a standard HTTP request from arrival through both f
   |         (lower priority = runs first)     |
   =============================================
   |                                           |
+  |  [Priority 850] ClientContextFilter       |
+  |    |            (@ServerRequestFilter)    |
+  |    |-- resolves client IP / trusted proxy |
+  |    |   once and stashes on request bag    |
+  |    v                                      |
   |  [Priority 900] AuthRateLimitFilter       |
   |    |            (@ServerRequestFilter)    |
   |    |-- not auth endpoint? --> continue    |
@@ -118,7 +123,7 @@ The following diagram traces a standard HTTP request from arrival through both f
                   RESPONSE
 ```
 
-A few things to note about this diagram. First, the WebSocket filters (priorities 50 and 40) only affect WebSocket upgrade requests. For standard HTTP requests, both call `ctx.next()` immediately and pass through in microseconds. Second, the three filters at priority 900 (`AuthRateLimitFilter`, `RequestValidationFilter`, and `ConflictingAuthFilter`) all compute to `Priorities.AUTHENTICATION - 100`, which is `1000 - 100 = 900`. Their relative ordering among themselves is not guaranteed by the spec and depends on container implementation details. Third, the response path is considerably simpler than the request path; only `RateLimitFilter` has a response filter, and it only adds headers.
+A few things to note about this diagram. First, the WebSocket filters (priorities 50 and 40) only affect WebSocket upgrade requests. For standard HTTP requests, both call `ctx.next()` immediately and pass through in microseconds. Second, `ClientContextFilter` runs at priority 850 (`Priorities.AUTHENTICATION - 150`) so it precedes every filter that needs the client IP or the trusted-proxy decision; downstream filters read its result via `ClientContextResolver.getOrCompute(ctx, vertxRequest)` instead of re-parsing `Forwarded` / `X-Forwarded-For` headers themselves. Third, the three filters at priority 900 (`AuthRateLimitFilter`, `RequestValidationFilter`, and `ConflictingAuthFilter`) all compute to `Priorities.AUTHENTICATION - 100`, which is `1000 - 100 = 900`. Their relative ordering among themselves is not guaranteed by the spec and depends on container implementation details. Fourth, the response path is considerably simpler than the request path; only `RateLimitFilter` has a response filter, and it only adds headers.
 
 ## Layer 1: Vert.x RouteFilters
 

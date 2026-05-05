@@ -187,14 +187,14 @@ The fixed window's boundary problem is worth understanding concretely. If the li
 
 ## 4. Multi-Layer Client Identification
 
-A rate limiter is only as good as its ability to distinguish one client from another. Aussie uses a priority chain of four identification strategies, implemented in `RateLimitFilter.extractClientId` at line 203 of `api/src/main/java/aussie/system/filter/RateLimitFilter.java`:
+A rate limiter is only as good as its ability to distinguish one client from another. Aussie uses a priority chain of four identification strategies, implemented in `RateLimitFilter.extractClientId` (`api/src/main/java/aussie/system/filter/RateLimitFilter.java`):
 
 ```java
-private String extractClientId(HttpServerRequest request) {
+private String extractClientId(ContainerRequestContext requestContext, HttpServerRequest request) {
     return extractSessionId(request)
             .or(() -> extractAuthHeaderHash(request))
             .or(() -> extractApiKeyId(request))
-            .orElseGet(() -> extractClientIp(request));
+            .orElseGet(() -> "ip:" + clientContextResolver.getOrCompute(requestContext, request).resolvedIp());
 }
 ```
 
@@ -242,69 +242,13 @@ Note that this uses `X-API-Key-ID`, not the API key itself. The ID is a non-secr
 
 ### Layer 4: Client IP (Fallback)
 
-The IP extraction is the most complex layer because it must handle proxy chains, and because IPv6 introduces syntactic complications:
+The IP layer is delegated to `ClientContextResolver` (`api/src/main/java/aussie/system/context/ClientContextResolver.java`), which resolves the client IP exactly once per request and caches the result on `ContainerRequestContext`. `ClientContextFilter` runs at priority `Priorities.AUTHENTICATION - 150` (850), ahead of `AuthRateLimitFilter` (900) and `RateLimitFilter` (950), so by the time either rate-limit filter executes the resolved IP is already memoised. Subsequent filters call:
 
 ```java
-private String extractClientIp(HttpServerRequest request) {
-    // RFC 7239 Forwarded header (preferred)
-    final var forwarded = request.getHeader("Forwarded");
-    if (forwarded != null) {
-        final var ip = parseForwardedFor(forwarded);
-        if (ip != null) {
-            return "ip:" + ip;
-        }
-    }
-
-    // X-Forwarded-For fallback
-    final var xForwardedFor = request.getHeader("X-Forwarded-For");
-    if (xForwardedFor != null) {
-        return "ip:" + xForwardedFor.split(",")[0].trim();
-    }
-
-    // Remote address fallback
-    final var remoteAddress = request.remoteAddress();
-    if (remoteAddress != null) {
-        return "ip:" + remoteAddress.host();
-    }
-
-    return "ip:unknown";
-}
+clientContextResolver.getOrCompute(requestContext, vertxRequest).resolvedIp();
 ```
 
-The RFC 7239 `Forwarded` header parser at line 262 handles several edge cases:
-
-```java
-private String parseForwardedFor(String forwarded) {
-    final var firstEntry = forwarded.split(",")[0].trim();
-
-    for (final var part : firstEntry.split(";")) {
-        final var trimmed = part.trim();
-        if (trimmed.toLowerCase().startsWith("for=")) {
-            var value = trimmed.substring(4);
-            if (value.startsWith("\"") && value.endsWith("\"")) {
-                value = value.substring(1, value.length() - 1);
-            }
-            // Handle IPv6 brackets
-            if (value.startsWith("[")) {
-                final var bracketEnd = value.indexOf(']');
-                if (bracketEnd > 0) {
-                    return value.substring(1, bracketEnd);
-                }
-            }
-            // Remove port for IPv4 only
-            final var colonCount = value.length() - value.replace(":", "").length();
-            if (colonCount == 1) {
-                final var colonIndex = value.indexOf(':');
-                value = value.substring(0, colonIndex);
-            }
-            return value;
-        }
-    }
-    return null;
-}
-```
-
-The IPv6 handling is subtle. An IPv6 address like `[2001:db8::1]:8080` contains multiple colons. The naive approach of stripping everything after the first colon would mangle the address. Instead, the parser checks whether the value starts with `[`, and if so, extracts the address between the brackets. For IPv4, it counts colons: exactly one colon means `address:port`, so it strips the port. Multiple colons mean it is an unbracketed IPv6 address (unusual but possible), and the parser leaves it alone.
+The resolver itself implements the priority chain: RFC 7239 `Forwarded` (when the socket peer is a trusted proxy), then `X-Forwarded-For`, then the socket address, with `"unknown"` as the final sentinel. The IPv6 bracket handling and IPv4 port stripping in the `Forwarded` parser are unchanged from the previous inline implementations and are exercised by `ClientContextResolverTest`.
 
 **Why this ordering matters.** Consider a corporate environment where 500 developers share a single public IP behind NAT. If you rate limit by IP only, the entire office shares one rate limit bucket. By prioritizing session IDs and bearer tokens, each developer gets their own bucket. The IP fallback exists for unauthenticated requests, where it is the best you can do.
 

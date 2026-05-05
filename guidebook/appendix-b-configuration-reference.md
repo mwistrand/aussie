@@ -714,7 +714,7 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 |----------|------|---------|--------------|-------------|
 | `aussie.resiliency.jwks.fetch-timeout` | `Duration` | `PT5S` | `AUSSIE_RESILIENCY_JWKS_FETCH_TIMEOUT` | Max time to fetch JWKS from identity provider. Falls back to cached keys if available. |
 | `aussie.resiliency.jwks.max-cache-entries` | `int` | `100` | `AUSSIE_RESILIENCY_JWKS_MAX_CACHE_ENTRIES` | Max JWKS entries to cache (LRU eviction). |
-| `aussie.resiliency.jwks.cache-ttl` | `Duration` | `PT1H` | `AUSSIE_RESILIENCY_JWKS_CACHE_TTL` | JWKS cache entry TTL. Entries refreshed on access after expiry. |
+| `aussie.resiliency.jwks.cache-ttl` | `Duration` | `PT1H` | `AUSSIE_RESILIENCY_JWKS_CACHE_TTL` | JWKS cache entry TTL. Entries refreshed on access after expiry. Also used as the TTL for the `OidcTokenValidator` `JwtConsumer` cache (bounded at 64 entries) so cached consumers expire alongside the keys they verify against. |
 | `aussie.resiliency.jwks.max-connections` | `int` | `10` | `AUSSIE_RESILIENCY_JWKS_MAX_CONNECTIONS` | Max concurrent JWKS fetch connections (bulkhead). |
 
 ### 18.3 Cassandra
