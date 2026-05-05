@@ -44,6 +44,19 @@ public record RouteMatch(
         return Optional.of(endpointConfig);
     }
 
+    // Direct overrides for hot-path lookups so callers don't pay for an Optional
+    // round-trip on every authenticated request (the inherited default routes
+    // through endpoint().map(...).orElseGet(...)).
+    @Override
+    public EndpointVisibility visibility() {
+        return endpointConfig.visibility();
+    }
+
+    @Override
+    public boolean authRequired() {
+        return endpointConfig.authRequired();
+    }
+
     /**
      * Return the full target URI for this route match without query parameters.
      */

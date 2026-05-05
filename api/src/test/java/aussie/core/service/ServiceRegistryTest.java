@@ -468,6 +468,24 @@ class ServiceRegistryTest {
         }
 
         @Test
+        @DisplayName("Should return ServiceOnlyMatch in pass-through mode when serviceId matches but endpoint does not")
+        void shouldReturnServiceOnlyMatchInPassThroughMode() {
+            var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
+            var service = ServiceRegistration.builder("user-service")
+                    .baseUrl("http://localhost:8080")
+                    .endpoints(List.of(endpoint))
+                    .build();
+            registry.register(service).await().atMost(TIMEOUT);
+
+            // /{registeredServiceId}/<unmatched-endpoint> -> service resolves but endpoint does not
+            var result = registry.findRoute("/user-service/api/unknown", "GET");
+
+            assertTrue(result.isPresent());
+            assertInstanceOf(ServiceOnlyMatch.class, result.get());
+            assertEquals("user-service", result.get().service().serviceId());
+        }
+
+        @Test
         @DisplayName("Should normalize paths without leading slash")
         void shouldNormalizePathsWithoutLeadingSlash() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());

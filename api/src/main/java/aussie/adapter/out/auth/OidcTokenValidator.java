@@ -50,11 +50,21 @@ public class OidcTokenValidator implements TokenValidatorProvider {
 
     private final JwksCache jwksCache;
     private final Cache<ConsumerKey, JwtConsumer> consumerCache;
+    // Per-config derived state (canonical audiences set, pre-built expectedAudience array,
+    // claims mapping snapshot). Each (issuer, audiences, mapping) tuple pays for the
+    // Set.copyOf / toArray work exactly once instead of on every authenticated request.
+    // Shares the JWKS cache TTL so config hot-reloads cannot pin stale claimsMapping past
+    // the rotation window.
+    private final Cache<TokenProviderConfig, IssuerState> issuerStateCache;
 
     @Inject
     public OidcTokenValidator(JwksCache jwksCache, ResiliencyConfig resiliencyConfig) {
         this.jwksCache = jwksCache;
         this.consumerCache = Caffeine.newBuilder()
+                .maximumSize(MAX_CONSUMER_CACHE_SIZE)
+                .expireAfterWrite(resiliencyConfig.jwks().cacheTtl())
+                .build();
+        this.issuerStateCache = Caffeine.newBuilder()
                 .maximumSize(MAX_CONSUMER_CACHE_SIZE)
                 .expireAfterWrite(resiliencyConfig.jwks().cacheTtl())
                 .build();
@@ -134,9 +144,10 @@ public class OidcTokenValidator implements TokenValidatorProvider {
     private Uni<TokenValidationResult> validateWithKey(ParsedToken parsed, TokenProviderConfig config, JsonWebKey key) {
         return Uni.createFrom().item(() -> {
             try {
-                final var consumer = getOrBuildConsumer(config, key);
+                final var state = issuerState(config);
+                final var consumer = getOrBuildConsumer(state, key);
                 final var claims = consumer.processToClaims(parsed.token());
-                return buildValidResult(claims, config);
+                return buildValidResult(claims, state);
             } catch (InvalidJwtException e) {
                 LOG.debugv("JWT validation failed: {0}", e.getMessage());
                 return new TokenValidationResult.Invalid(summarizeJwtError(e));
@@ -144,23 +155,27 @@ public class OidcTokenValidator implements TokenValidatorProvider {
         });
     }
 
-    private JwtConsumer getOrBuildConsumer(TokenProviderConfig config, JsonWebKey key) {
-        // Snapshot audiences to guarantee a stable equals/hashCode for the cache key,
-        // independent of the Set implementation supplied by config.
-        final var cacheKey = new ConsumerKey(config.issuer(), Set.copyOf(config.audiences()), key.getKeyId());
-        return consumerCache.get(cacheKey, k -> buildConsumer(config, key));
+    private IssuerState issuerState(TokenProviderConfig config) {
+        return issuerStateCache.get(config, IssuerState::of);
     }
 
-    private JwtConsumer buildConsumer(TokenProviderConfig config, JsonWebKey key) {
+    private JwtConsumer getOrBuildConsumer(IssuerState state, JsonWebKey key) {
+        // Audiences are already canonicalized on the IssuerState, so reusing the same
+        // immutable Set here keeps the cache key allocation-free for the hot path.
+        final var cacheKey = new ConsumerKey(state.issuer(), state.audiences(), key.getKeyId());
+        return consumerCache.get(cacheKey, k -> buildConsumer(state, key));
+    }
+
+    private JwtConsumer buildConsumer(IssuerState state, JsonWebKey key) {
         final var builder = new JwtConsumerBuilder()
                 .setRequireSubject()
                 .setRequireExpirationTime()
                 .setAllowedClockSkewInSeconds(CLOCK_SKEW_SECONDS)
-                .setExpectedIssuer(config.issuer())
+                .setExpectedIssuer(state.issuer())
                 .setVerificationKey(key.getKey());
 
-        if (!config.audiences().isEmpty()) {
-            builder.setExpectedAudience(config.audiences().toArray(new String[0]));
+        if (state.expectedAudience() != null) {
+            builder.setExpectedAudience(state.expectedAudience());
         } else {
             builder.setSkipDefaultAudienceValidation();
         }
@@ -168,13 +183,13 @@ public class OidcTokenValidator implements TokenValidatorProvider {
         return builder.build();
     }
 
-    private TokenValidationResult buildValidResult(JwtClaims claims, TokenProviderConfig config) {
+    private TokenValidationResult buildValidResult(JwtClaims claims, IssuerState state) {
         try {
             final var subject = claims.getSubject();
             final var issuer = claims.getIssuer();
             final var expiration = claims.getExpirationTime();
 
-            final var claimsMap = applyClaimsMapping(claims, config.claimsMapping());
+            final var claimsMap = applyClaimsMapping(claims, state.claimsMapping());
 
             return new TokenValidationResult.Valid(
                     subject, issuer, claimsMap, Instant.ofEpochSecond(expiration.getValue()));
@@ -224,6 +239,22 @@ public class OidcTokenValidator implements TokenValidatorProvider {
      * so we share one across requests instead of rebuilding the validator chain per call.
      */
     private record ConsumerKey(String issuer, Set<String> audiences, String kid) {}
+
+    /**
+     * Per-{@link TokenProviderConfig} pre-computed validator state. Builds the canonical
+     * audiences set and {@code expectedAudience} array exactly once so the request hot
+     * path can skip {@code Set.copyOf} + {@code toArray} on every authenticated call.
+     */
+    private record IssuerState(
+            String issuer, Set<String> audiences, String[] expectedAudience, Map<String, String> claimsMapping) {
+
+        static IssuerState of(TokenProviderConfig config) {
+            final var canonicalAudiences = Set.copyOf(config.audiences());
+            final var expectedAudience =
+                    canonicalAudiences.isEmpty() ? null : canonicalAudiences.toArray(new String[0]);
+            return new IssuerState(config.issuer(), canonicalAudiences, expectedAudience, config.claimsMapping());
+        }
+    }
 
     /**
      * A token plus the {@code kid} from its header, parsed once and reused so the JWS header

@@ -66,14 +66,26 @@ public final class RouteIndex {
      *
      * <p>Iterates first-segment-bucket candidates and wildcard candidates merged in
      * registration order so the first-match-wins behavior matches a linear scan.
+     *
+     * @see #match(ServiceRegistration, String, String) for the nullable hot-path variant
      */
     public Optional<RouteMatch> findMatch(ServiceRegistration service, String normalizedPath, String upperMethod) {
+        return Optional.ofNullable(match(service, normalizedPath, upperMethod));
+    }
+
+    /**
+     * Nullable hot-path variant of {@link #findMatch}: returns {@code null} on miss to
+     * avoid the per-request {@code Optional} allocation incurred by {@code findMatch}.
+     *
+     * @return the matching {@link RouteMatch}, or {@code null} if no endpoint matched
+     */
+    public RouteMatch match(ServiceRegistration service, String normalizedPath, String upperMethod) {
         final var firstSegment = firstSegmentOf(normalizedPath);
         final var bucket = byFirstSegment.getOrDefault(firstSegment, List.of());
         final var wildcards = wildcardEndpoints;
 
         if (bucket.isEmpty() && wildcards.isEmpty()) {
-            return Optional.empty();
+            return null;
         }
 
         var i = 0;
@@ -87,12 +99,12 @@ public final class RouteIndex {
             }
 
             final var match = candidate.tryMatch(service, normalizedPath, upperMethod);
-            if (match.isPresent()) {
+            if (match != null) {
                 return match;
             }
         }
 
-        return Optional.empty();
+        return null;
     }
 
     /**
@@ -137,15 +149,15 @@ public final class RouteIndex {
             return new CompiledEndpoint(endpoint, pattern, paramNames, firstStaticSegment, order);
         }
 
-        Optional<RouteMatch> tryMatch(ServiceRegistration service, String normalizedPath, String upperMethod) {
+        RouteMatch tryMatch(ServiceRegistration service, String normalizedPath, String upperMethod) {
             final var methods = endpoint.methods();
             if (!methods.contains(upperMethod) && !methods.contains("*")) {
-                return Optional.empty();
+                return null;
             }
 
             final var matcher = pattern.matcher(normalizedPath);
             if (!matcher.matches()) {
-                return Optional.empty();
+                return null;
             }
 
             final var pathVariables = extractPathVariables(matcher);
@@ -153,7 +165,7 @@ public final class RouteIndex {
                     .map(rewrite -> applyPathRewrite(rewrite, pathVariables))
                     .orElse(normalizedPath);
 
-            return Optional.of(new RouteMatch(service, endpoint, targetPath, pathVariables));
+            return new RouteMatch(service, endpoint, targetPath, pathVariables);
         }
 
         private Map<String, String> extractPathVariables(Matcher matcher) {

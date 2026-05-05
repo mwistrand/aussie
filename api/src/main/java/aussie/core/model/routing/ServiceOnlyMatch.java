@@ -28,4 +28,16 @@ public record ServiceOnlyMatch(ServiceRegistration service) implements RouteLook
     public Optional<EndpointConfig> endpoint() {
         return Optional.empty();
     }
+
+    // Direct service-default reads so the hot path skips the inherited
+    // Optional round-trip in RouteLookupResult's defaults.
+    @Override
+    public EndpointVisibility visibility() {
+        return service.defaultVisibility();
+    }
+
+    @Override
+    public boolean authRequired() {
+        return service.defaultAuthRequired();
+    }
 }

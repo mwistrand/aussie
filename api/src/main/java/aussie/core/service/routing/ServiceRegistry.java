@@ -26,6 +26,7 @@ import aussie.core.model.common.ValidationResult;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.ServiceOnlyMatch;
+import aussie.core.model.routing.ServiceRoutes;
 import aussie.core.model.service.RegistrationResult;
 import aussie.core.model.service.ServiceConfigEvent;
 import aussie.core.model.service.ServicePath;
@@ -71,8 +72,10 @@ public class ServiceRegistry {
     // Local cache for compiled route patterns (always in-memory for fast matching)
     private final Map<String, CompiledRoute> compiledRoutes = new ConcurrentHashMap<>();
 
-    // Per-service index for O(1) lookup by service ID. Kept in sync with compiledRoutes.
-    private final Map<String, ServiceRegistration> servicesById = new ConcurrentHashMap<>();
+    // Per-service index for O(1) lookup by service ID. Each entry pre-bakes the
+    // compiled RouteIndex so the request hot path performs a single map get
+    // followed by a direct match call (no Caffeine lookup, no Optional alloc).
+    private final Map<String, ServiceRoutes> servicesById = new ConcurrentHashMap<>();
 
     // TTL tracking for multi-instance cache refresh
     private final AtomicReference<Instant> lastRefreshed = new AtomicReference<>(Instant.MIN);
@@ -201,9 +204,9 @@ public class ServiceRegistry {
                     // Build the new state off-line first, then merge into the live maps so
                     // concurrent readers never observe an empty map mid-refresh.
                     final var nextRoutes = new HashMap<String, CompiledRoute>();
-                    final var nextById = new HashMap<String, ServiceRegistration>();
+                    final var nextById = new HashMap<String, ServiceRoutes>();
                     for (var registration : registrations) {
-                        nextById.put(registration.serviceId(), registration);
+                        nextById.put(registration.serviceId(), ServiceRoutes.of(registration));
                         for (var endpoint : registration.endpoints()) {
                             nextRoutes.put(
                                     buildRouteKey(registration.serviceId(), endpoint.path()),
@@ -618,15 +621,15 @@ public class ServiceRegistry {
         final var endpointPath = servicePath.path();
 
         // Check if the parsed serviceId corresponds to a registered service
-        final var serviceRegistration = servicesById.get(serviceId);
+        final var routes = servicesById.get(serviceId);
 
-        if (serviceRegistration != null) {
+        if (routes != null) {
             // Pass-through mode: /demo-service/api/users -> match /api/users against demo-service
-            final var routeMatch = serviceRegistration.findRoute(endpointPath, method);
-
-            return routeMatch.isPresent()
-                    ? routeMatch.map(r -> r) // Widen type from RouteMatch to RouteLookupResult
-                    : Optional.of(new ServiceOnlyMatch(serviceRegistration));
+            final var match = routes.matchEndpoint(normalizePath(endpointPath), method.toUpperCase());
+            if (match != null) {
+                return Optional.of(match);
+            }
+            return Optional.of(new ServiceOnlyMatch(routes.service()));
         }
 
         // Implicit gateway mode: No matching serviceId found, so treat the path as an
@@ -648,16 +651,18 @@ public class ServiceRegistry {
      */
     private Optional<RouteLookupResult> findRouteByEndpointPath(String endpointPath, String method) {
         ServiceRegistration firstService = null;
+        final var normalizedPath = normalizePath(endpointPath);
+        final var upperMethod = method.toUpperCase();
 
-        for (var serviceRegistration : servicesById.values()) {
+        for (var routes : servicesById.values()) {
             // Track the first service for fallback
             if (firstService == null) {
-                firstService = serviceRegistration;
+                firstService = routes.service();
             }
 
-            var routeMatch = serviceRegistration.findRoute(endpointPath, method);
-            if (routeMatch.isPresent()) {
-                return routeMatch.map(r -> r);
+            final var match = routes.matchEndpoint(normalizedPath, upperMethod);
+            if (match != null) {
+                return Optional.of(match);
             }
         }
 
@@ -669,8 +674,15 @@ public class ServiceRegistry {
         return Optional.empty();
     }
 
+    private static String normalizePath(String path) {
+        if (path == null || path.isEmpty()) {
+            return "/";
+        }
+        return path.startsWith("/") ? path : "/" + path;
+    }
+
     private void compileAndCacheRoutes(ServiceRegistration service) {
-        servicesById.put(service.serviceId(), service);
+        servicesById.put(service.serviceId(), ServiceRoutes.of(service));
         for (var endpoint : service.endpoints()) {
             var routeKey = buildRouteKey(service.serviceId(), endpoint.path());
             compiledRoutes.put(routeKey, new CompiledRoute(service, endpoint));
@@ -706,7 +718,8 @@ public class ServiceRegistry {
         if (serviceId == null || ServicePath.UNKNOWN_SERVICE.equals(serviceId)) {
             return Optional.empty();
         }
-        return Optional.ofNullable(servicesById.get(serviceId));
+        final var routes = servicesById.get(serviceId);
+        return routes == null ? Optional.empty() : Optional.of(routes.service());
     }
 
     /**
