@@ -50,7 +50,12 @@ COPY --chown=185 --from=builder /workspace/build/quarkus-app/quarkus/ /deploymen
 
 EXPOSE 8080
 USER 185
-ENV JAVA_OPTS_APPEND="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
+# Generational ZGC keeps GC pauses sub-millisecond on JDK 21, which a 1ms-budget
+# gateway path cannot tolerate from G1. AlwaysPreTouch faults pages at startup
+# so the first burst of traffic does not pay page-fault latency. Heap sizing
+# (-Xms/-Xmx) and Netty direct-memory tuning are deployment-specific and should
+# be set per environment via JAVA_OPTS.
+ENV JAVA_OPTS_APPEND="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager -XX:+UseZGC -XX:+ZGenerational -XX:+AlwaysPreTouch"
 ENV JAVA_APP_JAR="/deployments/quarkus-run.jar"
 
 ENTRYPOINT [ "/opt/jboss/container/java/run/run-java.sh" ]
