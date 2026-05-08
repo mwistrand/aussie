@@ -19,8 +19,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import aussie.adapter.out.ratelimit.memory.InMemoryRateLimiter;
 import aussie.adapter.out.ratelimit.redis.RedisRateLimiter;
 import aussie.core.config.RateLimitingConfig;
+import aussie.core.config.RateLimitingConfig.RateLimitFallbackBehavior;
 import aussie.core.model.ratelimit.AlgorithmRegistry;
 import aussie.core.model.ratelimit.RateLimitAlgorithm;
+import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
 
 @DisplayName("RateLimiterProviderLoader")
@@ -39,6 +41,12 @@ class RateLimiterProviderLoaderTest {
     @Mock
     private RateLimitingConfig.RedisConfig redisConfig;
 
+    @Mock
+    private RateLimitingConfig.FallbackConfig fallbackConfig;
+
+    @Mock
+    private Instance<Metrics> metricsInstance;
+
     private RateLimiter producedLimiter;
 
     @AfterEach
@@ -49,7 +57,13 @@ class RateLimiterProviderLoaderTest {
     }
 
     private RateLimiterProviderLoader createLoader() {
-        return new RateLimiterProviderLoader(config, algorithmRegistry, redisDataSource);
+        return new RateLimiterProviderLoader(config, algorithmRegistry, redisDataSource, metricsInstance);
+    }
+
+    private void stubFallback(RateLimitFallbackBehavior behavior) {
+        when(config.fallback()).thenReturn(fallbackConfig);
+        when(fallbackConfig.behavior()).thenReturn(behavior);
+        when(metricsInstance.isResolvable()).thenReturn(false);
     }
 
     @Nested
@@ -111,6 +125,7 @@ class RateLimiterProviderLoaderTest {
             when(config.algorithm()).thenReturn(RateLimitAlgorithm.BUCKET);
             when(config.defaultRequestsPerWindow()).thenReturn(100L);
             when(config.windowSeconds()).thenReturn(60L);
+            stubFallback(RateLimitFallbackBehavior.LOCAL_BUCKET);
 
             final var loader = createLoader();
             producedLimiter = loader.produceRateLimiter();

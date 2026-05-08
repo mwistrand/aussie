@@ -8,10 +8,12 @@ import io.quarkus.redis.datasource.keys.ReactiveKeyCommands;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
+import aussie.core.config.RateLimitingConfig.RateLimitFallbackBehavior;
 import aussie.core.model.ratelimit.BucketState;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
 import aussie.core.model.ratelimit.RateLimitDecision;
 import aussie.core.model.ratelimit.RateLimitKey;
+import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
 
 /**
@@ -128,11 +130,26 @@ public final class RedisRateLimiter implements RateLimiter {
     private final ReactiveRedisDataSource redisDataSource;
     private final ReactiveKeyCommands<String> keyCommands;
     private final boolean enabled;
+    private final RateLimiter fallback;
+    private final RateLimitFallbackBehavior fallbackBehavior;
+    private final Metrics metrics;
 
     public RedisRateLimiter(ReactiveRedisDataSource redisDataSource, boolean enabled) {
+        this(redisDataSource, enabled, null, RateLimitFallbackBehavior.ALLOW, null);
+    }
+
+    public RedisRateLimiter(
+            ReactiveRedisDataSource redisDataSource,
+            boolean enabled,
+            RateLimiter fallback,
+            RateLimitFallbackBehavior fallbackBehavior,
+            Metrics metrics) {
         this.redisDataSource = redisDataSource;
         this.keyCommands = redisDataSource.key(String.class);
         this.enabled = enabled;
+        this.fallback = fallback;
+        this.fallbackBehavior = fallbackBehavior == null ? RateLimitFallbackBehavior.ALLOW : fallbackBehavior;
+        this.metrics = metrics;
     }
 
     @Override
@@ -150,10 +167,7 @@ public final class RedisRateLimiter implements RateLimiter {
         return executeTokenBucketScript(cacheKey, capacity, refillRate, nowMs, windowSeconds)
                 .map(result -> parseDecision(result, limit))
                 .onFailure()
-                .recoverWithItem(error -> {
-                    LOG.warnv(error, "Redis rate limit check failed, allowing request");
-                    return RateLimitDecision.allow();
-                });
+                .recoverWithUni(error -> handleBackendFailure(key, limit, error, true));
     }
 
     @Override
@@ -170,10 +184,82 @@ public final class RedisRateLimiter implements RateLimiter {
         return executeStatusScript(cacheKey, capacity, refillRate, nowMs)
                 .map(result -> parseDecision(result, limit))
                 .onFailure()
-                .recoverWithItem(error -> {
-                    LOG.warnv(error, "Redis rate limit status check failed");
-                    return RateLimitDecision.allow();
-                });
+                .recoverWithUni(error -> handleBackendFailure(key, limit, error, false));
+    }
+
+    /**
+     * Apply the configured fallback strategy when the Redis backend is unavailable.
+     *
+     * <p>Behavior is controlled by {@link RateLimitFallbackBehavior}:
+     * <ul>
+     *   <li>{@code LOCAL_BUCKET} - delegate to the in-process limiter; if no fallback bucket is wired,
+     *       fail closed.</li>
+     *   <li>{@code DENY} - reject the request (fail closed).</li>
+     *   <li>{@code ALLOW} - permit the request (fail open; legacy/dev behavior).</li>
+     * </ul>
+     *
+     * @param consume {@code true} for {@link #checkAndConsume}, {@code false} for {@link #getStatus}
+     */
+    private Uni<RateLimitDecision> handleBackendFailure(
+            RateLimitKey key, EffectiveRateLimit limit, Throwable error, boolean consume) {
+        final var serviceId = key.serviceId();
+        switch (fallbackBehavior) {
+            case LOCAL_BUCKET -> {
+                if (fallback != null) {
+                    LOG.warnv(
+                            error,
+                            "Redis rate limit unavailable; routing through local fallback bucket for service={0}",
+                            serviceId);
+                    recordFallback(serviceId, "local-bucket");
+                    return consume ? fallback.checkAndConsume(key, limit) : fallback.getStatus(key, limit);
+                }
+                LOG.warnv(
+                        error,
+                        "Redis rate limit unavailable and no fallback bucket wired; failing closed for service={0}",
+                        serviceId);
+                recordFallback(serviceId, "deny");
+                return Uni.createFrom().item(buildDenyDecision(limit));
+            }
+            case DENY -> {
+                LOG.warnv(error, "Redis rate limit unavailable; failing closed for service={0}", serviceId);
+                recordFallback(serviceId, "deny");
+                return Uni.createFrom().item(buildDenyDecision(limit));
+            }
+            case ALLOW -> {
+                LOG.warnv(
+                        error,
+                        "Redis rate limit unavailable; failing open (allow) for service={0}. "
+                                + "This is the legacy behavior; switch to LOCAL_BUCKET or DENY in production.",
+                        serviceId);
+                recordFallback(serviceId, "allow");
+                return Uni.createFrom().item(RateLimitDecision.allow());
+            }
+        }
+        return Uni.createFrom().item(RateLimitDecision.allow());
+    }
+
+    /**
+     * Record a fallback activation if a metrics sink is wired; otherwise no-op.
+     */
+    private void recordFallback(String serviceId, String mode) {
+        if (metrics != null) {
+            metrics.recordRateLimitFallback(serviceId, mode);
+        }
+    }
+
+    /**
+     * Build a rejection decision with reset timing derived from the limit window.
+     * Used when the Redis backend is unavailable and the configured fallback is to fail closed.
+     */
+    private RateLimitDecision buildDenyDecision(EffectiveRateLimit limit) {
+        final var resetAt = Instant.now().plusSeconds(limit.windowSeconds());
+        return RateLimitDecision.rejected(
+                limit.burstCapacity(),
+                limit.windowSeconds(),
+                resetAt,
+                limit.windowSeconds(),
+                (int) limit.burstCapacity(),
+                new BucketState(0, System.currentTimeMillis()));
     }
 
     @Override

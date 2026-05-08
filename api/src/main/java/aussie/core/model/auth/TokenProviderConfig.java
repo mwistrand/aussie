@@ -14,6 +14,7 @@ import java.util.Set;
  * @param jwksUri             JWKS endpoint for key retrieval
  * @param discoveryUri        optional OIDC discovery endpoint
  * @param audiences           allowed aud claim values
+ * @param allowedAlgorithms   allowed JWS {@code alg} header values
  * @param keyRefreshInterval  how often to refresh JWKS (default 1 hour)
  * @param claimsMapping       map external claim names to internal claim names
  */
@@ -23,8 +24,12 @@ public record TokenProviderConfig(
         URI jwksUri,
         Optional<URI> discoveryUri,
         Set<String> audiences,
+        Set<String> allowedAlgorithms,
         Duration keyRefreshInterval,
         Map<String, String> claimsMapping) {
+
+    private static final Set<String> DEFAULT_ALGORITHMS =
+            Set.of("RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "EdDSA");
 
     public TokenProviderConfig {
         if (id == null || id.isBlank()) {
@@ -41,6 +46,9 @@ public record TokenProviderConfig(
         }
         if (audiences == null) {
             audiences = Set.of();
+        }
+        if (allowedAlgorithms == null || allowedAlgorithms.isEmpty()) {
+            allowedAlgorithms = DEFAULT_ALGORITHMS;
         }
         if (keyRefreshInterval == null) {
             keyRefreshInterval = Duration.ofHours(1);
@@ -63,6 +71,7 @@ public record TokenProviderConfig(
         private final URI jwksUri;
         private URI discoveryUri;
         private Set<String> audiences = Set.of();
+        private Set<String> allowedAlgorithms = DEFAULT_ALGORITHMS;
         private Duration keyRefreshInterval = Duration.ofHours(1);
         private Map<String, String> claimsMapping = Map.of();
 
@@ -79,6 +88,11 @@ public record TokenProviderConfig(
 
         public Builder audiences(Set<String> audiences) {
             this.audiences = audiences;
+            return this;
+        }
+
+        public Builder allowedAlgorithms(Set<String> allowedAlgorithms) {
+            this.allowedAlgorithms = allowedAlgorithms;
             return this;
         }
 
@@ -99,6 +113,7 @@ public record TokenProviderConfig(
                     jwksUri,
                     Optional.ofNullable(discoveryUri),
                     audiences,
+                    allowedAlgorithms,
                     keyRefreshInterval,
                     claimsMapping);
         }

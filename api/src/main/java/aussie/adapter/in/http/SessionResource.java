@@ -30,6 +30,7 @@ import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.config.SessionConfig;
 import aussie.core.model.session.Session;
 import aussie.core.port.in.SessionManagement;
+import aussie.core.util.SecureHash;
 
 /**
  * REST endpoints for session management.
@@ -171,7 +172,9 @@ public class SessionResource {
         return sessionManagement
                 .invalidateSession(sessionPrincipal.getSessionId())
                 .map(v -> {
-                    LOG.infof("Session invalidated: %s", sessionPrincipal.getSessionId());
+                    LOG.infof(
+                            "Session invalidated: hash=%s",
+                            SecureHash.truncatedSha256(sessionPrincipal.getSessionId(), 8));
 
                     io.vertx.core.http.Cookie logoutCookie = cookieManager.createLogoutCookie();
                     NewCookie jaxrsCookie = new NewCookie.Builder(logoutCookie.getName())

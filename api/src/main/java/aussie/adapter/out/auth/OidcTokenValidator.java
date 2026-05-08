@@ -14,6 +14,8 @@ import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.jose4j.base64url.Base64Url;
 import org.jose4j.json.JsonUtil;
+import org.jose4j.jwa.AlgorithmConstraints;
+import org.jose4j.jwa.AlgorithmConstraints.ConstraintType;
 import org.jose4j.jwk.JsonWebKey;
 import org.jose4j.jwt.JwtClaims;
 import org.jose4j.jwt.MalformedClaimException;
@@ -167,20 +169,17 @@ public class OidcTokenValidator implements TokenValidatorProvider {
     }
 
     private JwtConsumer buildConsumer(IssuerState state, JsonWebKey key) {
-        final var builder = new JwtConsumerBuilder()
+        return new JwtConsumerBuilder()
                 .setRequireSubject()
                 .setRequireExpirationTime()
+                .setRequireJwtId()
                 .setAllowedClockSkewInSeconds(CLOCK_SKEW_SECONDS)
                 .setExpectedIssuer(state.issuer())
-                .setVerificationKey(key.getKey());
-
-        if (state.expectedAudience() != null) {
-            builder.setExpectedAudience(state.expectedAudience());
-        } else {
-            builder.setSkipDefaultAudienceValidation();
-        }
-
-        return builder.build();
+                .setExpectedAudience(true, state.expectedAudience())
+                .setJwsAlgorithmConstraints(new AlgorithmConstraints(
+                        ConstraintType.PERMIT, state.allowedAlgorithms().toArray(new String[0])))
+                .setVerificationKey(key.getKey())
+                .build();
     }
 
     private TokenValidationResult buildValidResult(JwtClaims claims, IssuerState state) {
@@ -246,13 +245,26 @@ public class OidcTokenValidator implements TokenValidatorProvider {
      * path can skip {@code Set.copyOf} + {@code toArray} on every authenticated call.
      */
     private record IssuerState(
-            String issuer, Set<String> audiences, String[] expectedAudience, Map<String, String> claimsMapping) {
+            String issuer,
+            Set<String> audiences,
+            String[] expectedAudience,
+            Set<String> allowedAlgorithms,
+            Map<String, String> claimsMapping) {
 
         static IssuerState of(TokenProviderConfig config) {
+            if (config.audiences() == null || config.audiences().isEmpty()) {
+                throw new IllegalStateException(
+                        "Token provider '" + config.id() + "' has no audiences configured; refuse to validate.");
+            }
+            if (config.allowedAlgorithms() == null || config.allowedAlgorithms().isEmpty()) {
+                throw new IllegalStateException(
+                        "Token provider '" + config.id() + "' has no allowed algorithms configured.");
+            }
             final var canonicalAudiences = Set.copyOf(config.audiences());
-            final var expectedAudience =
-                    canonicalAudiences.isEmpty() ? null : canonicalAudiences.toArray(new String[0]);
-            return new IssuerState(config.issuer(), canonicalAudiences, expectedAudience, config.claimsMapping());
+            final var expectedAudience = canonicalAudiences.toArray(new String[0]);
+            final var canonicalAlgorithms = Set.copyOf(config.allowedAlgorithms());
+            return new IssuerState(
+                    config.issuer(), canonicalAudiences, expectedAudience, canonicalAlgorithms, config.claimsMapping());
         }
     }
 

@@ -143,6 +143,15 @@ public interface Metrics {
      */
     void recordRateLimitExceeded(String serviceId, String limitType);
 
+    /**
+     * Record activation of the rate-limit fallback path (the remote backend
+     * errored and the limiter applied its configured fallback behavior).
+     *
+     * @param serviceId the target service ID
+     * @param mode      the resolved fallback mode ({@code local-bucket}, {@code deny}, {@code allow})
+     */
+    void recordRateLimitFallback(String serviceId, String mode);
+
     // ========== Resiliency Metrics ==========
 
     /**

@@ -13,6 +13,7 @@ import org.jboss.logging.Logger;
 
 import aussie.core.model.session.Session;
 import aussie.core.port.out.SessionRepository;
+import aussie.core.util.SecureHash;
 
 /**
  * In-memory implementation of SessionRepository.
@@ -49,10 +50,16 @@ public class InMemorySessionRepository implements SessionRepository {
             if (existing == null) {
                 // Successfully inserted - update user index
                 userSessionIndex.put(session.userId() + ":" + session.id(), session.id());
-                LOG.debugf("Session created: %s for user %s", session.id(), session.userId());
+                if (LOG.isDebugEnabled()) {
+                    LOG.debugf(
+                            "Session created: hash=%s for user %s",
+                            SecureHash.truncatedSha256(session.id(), 8), session.userId());
+                }
                 return true;
             }
-            LOG.debugf("Session ID collision detected: %s", session.id());
+            if (LOG.isDebugEnabled()) {
+                LOG.debugf("Session ID collision detected: hash=%s", SecureHash.truncatedSha256(session.id(), 8));
+            }
             return false;
         });
     }
@@ -93,7 +100,9 @@ public class InMemorySessionRepository implements SessionRepository {
             Session session = sessions.remove(sessionId);
             if (session != null) {
                 userSessionIndex.remove(session.userId() + ":" + sessionId);
-                LOG.debugf("Session deleted: %s", sessionId);
+                if (LOG.isDebugEnabled()) {
+                    LOG.debugf("Session deleted: hash=%s", SecureHash.truncatedSha256(sessionId, 8));
+                }
             }
             return null;
         });
@@ -109,7 +118,11 @@ public class InMemorySessionRepository implements SessionRepository {
                         String sessionId = userSessionIndex.remove(key);
                         if (sessionId != null) {
                             sessions.remove(sessionId);
-                            LOG.debugf("Session deleted for user logout: %s", sessionId);
+                            if (LOG.isDebugEnabled()) {
+                                LOG.debugf(
+                                        "Session deleted for user logout: hash=%s",
+                                        SecureHash.truncatedSha256(sessionId, 8));
+                            }
                         }
                     });
             return null;

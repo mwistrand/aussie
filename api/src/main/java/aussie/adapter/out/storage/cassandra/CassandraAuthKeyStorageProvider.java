@@ -139,7 +139,10 @@ public class CassandraAuthKeyStorageProvider implements AuthKeyStorageProvider {
     private ApiKeyEncryptionService createEncryptionService(StorageAdapterConfig config) {
         Optional<String> encryptionKey = config.get("aussie.auth.encryption.key");
         String keyId = config.getOrDefault("aussie.auth.encryption.key-id", "v1");
-        return new ApiKeyEncryptionService(encryptionKey, keyId);
+        String profile = config.getOrDefault("quarkus.profile", "");
+        boolean allowPlaintextReads =
+                Boolean.parseBoolean(config.getOrDefault("aussie.auth.encryption.allow-plaintext-reads", "false"));
+        return new ApiKeyEncryptionService(encryptionKey, keyId, profile, allowPlaintextReads);
     }
 
     /**

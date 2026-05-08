@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -135,7 +136,8 @@ class TokenValidationServiceTest {
             when(providerProps.issuer()).thenReturn("https://issuer.example.com");
             when(providerProps.jwksUri()).thenReturn("https://issuer.example.com/.well-known/jwks.json");
             when(providerProps.discoveryUri()).thenReturn(Optional.empty());
-            when(providerProps.audiences()).thenReturn(Set.of());
+            when(providerProps.audiences()).thenReturn(Set.of("aussie-gateway"));
+            when(providerProps.allowedAlgorithms()).thenReturn(Set.of("RS256"));
             when(providerProps.keyRefreshInterval()).thenReturn(Duration.ofHours(1));
             when(providerProps.claimsMapping()).thenReturn(Map.of());
             when(config.providers()).thenReturn(Map.of("provider1", providerProps));
@@ -164,7 +166,8 @@ class TokenValidationServiceTest {
             when(providerProps.issuer()).thenReturn("https://issuer.example.com");
             when(providerProps.jwksUri()).thenReturn("https://issuer.example.com/.well-known/jwks.json");
             when(providerProps.discoveryUri()).thenReturn(Optional.empty());
-            when(providerProps.audiences()).thenReturn(Set.of());
+            when(providerProps.audiences()).thenReturn(Set.of("aussie-gateway"));
+            when(providerProps.allowedAlgorithms()).thenReturn(Set.of("RS256"));
             when(providerProps.keyRefreshInterval()).thenReturn(Duration.ofHours(1));
             when(providerProps.claimsMapping()).thenReturn(Map.of());
             when(config.providers()).thenReturn(Map.of("provider1", providerProps));
@@ -186,7 +189,8 @@ class TokenValidationServiceTest {
             when(providerProps.issuer()).thenReturn("https://issuer.example.com");
             when(providerProps.jwksUri()).thenReturn("https://issuer.example.com/.well-known/jwks.json");
             when(providerProps.discoveryUri()).thenReturn(Optional.empty());
-            when(providerProps.audiences()).thenReturn(Set.of());
+            when(providerProps.audiences()).thenReturn(Set.of("aussie-gateway"));
+            when(providerProps.allowedAlgorithms()).thenReturn(Set.of("RS256"));
             when(providerProps.keyRefreshInterval()).thenReturn(Duration.ofHours(1));
             when(providerProps.claimsMapping()).thenReturn(Map.of());
             when(config.providers()).thenReturn(Map.of("provider1", providerProps));
@@ -224,7 +228,8 @@ class TokenValidationServiceTest {
             when(providerProps.issuer()).thenReturn("https://issuer.example.com");
             when(providerProps.jwksUri()).thenReturn("https://issuer.example.com/.well-known/jwks.json");
             when(providerProps.discoveryUri()).thenReturn(Optional.empty());
-            when(providerProps.audiences()).thenReturn(Set.of());
+            when(providerProps.audiences()).thenReturn(Set.of("aussie-gateway"));
+            when(providerProps.allowedAlgorithms()).thenReturn(Set.of("RS256"));
             when(providerProps.keyRefreshInterval()).thenReturn(Duration.ofHours(1));
             when(providerProps.claimsMapping()).thenReturn(Map.of());
             when(config.providers()).thenReturn(Map.of("provider1", providerProps));
@@ -247,6 +252,68 @@ class TokenValidationServiceTest {
     }
 
     @Nested
+    @DisplayName("startup validation")
+    class StartupValidationTests {
+
+        @Test
+        @DisplayName("should fail fast when a provider has no audiences configured")
+        void shouldThrowWhenProviderHasNoAudiences() {
+            var providerProps = mock(RouteAuthConfig.TokenProviderProperties.class);
+            when(providerProps.issuer()).thenReturn("https://issuer.example.com");
+            when(providerProps.jwksUri()).thenReturn("https://issuer.example.com/.well-known/jwks.json");
+            when(providerProps.discoveryUri()).thenReturn(Optional.empty());
+            when(providerProps.audiences()).thenReturn(Set.of());
+            when(providerProps.allowedAlgorithms()).thenReturn(Set.of("RS256"));
+            when(providerProps.keyRefreshInterval()).thenReturn(Duration.ofHours(1));
+            when(providerProps.claimsMapping()).thenReturn(Map.of());
+            when(config.providers()).thenReturn(Map.of("provider1", providerProps));
+
+            var ex = assertThrows(IllegalStateException.class, () -> createService(true));
+            assertTrue(
+                    ex.getMessage().contains("audiences"),
+                    "error must call out the missing audiences config, got: " + ex.getMessage());
+            assertTrue(
+                    ex.getMessage().contains("provider1"),
+                    "error must identify the offending provider, got: " + ex.getMessage());
+        }
+
+        @Test
+        @DisplayName("should fail fast when a provider has no allowed algorithms configured")
+        void shouldThrowWhenProviderHasNoAllowedAlgorithms() {
+            var providerProps = mock(RouteAuthConfig.TokenProviderProperties.class);
+            when(providerProps.issuer()).thenReturn("https://issuer.example.com");
+            when(providerProps.jwksUri()).thenReturn("https://issuer.example.com/.well-known/jwks.json");
+            when(providerProps.discoveryUri()).thenReturn(Optional.empty());
+            when(providerProps.audiences()).thenReturn(Set.of("aussie-gateway"));
+            when(providerProps.allowedAlgorithms()).thenReturn(Set.of());
+            when(providerProps.keyRefreshInterval()).thenReturn(Duration.ofHours(1));
+            when(providerProps.claimsMapping()).thenReturn(Map.of());
+            when(config.providers()).thenReturn(Map.of("provider1", providerProps));
+
+            var ex = assertThrows(IllegalStateException.class, () -> createService(true));
+            assertTrue(
+                    ex.getMessage().contains("allowed algorithms")
+                            || ex.getMessage().contains("allowed-algorithms"),
+                    "error must call out the missing algorithms config, got: " + ex.getMessage());
+            assertTrue(
+                    ex.getMessage().contains("provider1"),
+                    "error must identify the offending provider, got: " + ex.getMessage());
+        }
+
+        @Test
+        @DisplayName("should not validate provider configs when route auth is disabled")
+        void shouldSkipValidationWhenDisabled() {
+            var providerProps = mock(RouteAuthConfig.TokenProviderProperties.class);
+            when(providerProps.audiences()).thenReturn(Set.of());
+            when(providerProps.allowedAlgorithms()).thenReturn(Set.of());
+            when(config.providers()).thenReturn(Map.of("provider1", providerProps));
+
+            var service = createService(false);
+            assertFalse(service.isEnabled());
+        }
+    }
+
+    @Nested
     @DisplayName("getProviderConfig()")
     class GetProviderConfigTests {
 
@@ -264,7 +331,8 @@ class TokenValidationServiceTest {
             when(providerProps.issuer()).thenReturn("https://issuer.example.com");
             when(providerProps.jwksUri()).thenReturn("https://issuer.example.com/.well-known/jwks.json");
             when(providerProps.discoveryUri()).thenReturn(Optional.empty());
-            when(providerProps.audiences()).thenReturn(Set.of());
+            when(providerProps.audiences()).thenReturn(Set.of("aussie-gateway"));
+            when(providerProps.allowedAlgorithms()).thenReturn(Set.of("RS256"));
             when(providerProps.keyRefreshInterval()).thenReturn(Duration.ofHours(1));
             when(providerProps.claimsMapping()).thenReturn(Map.of());
             when(config.providers()).thenReturn(Map.of("myProvider", providerProps));

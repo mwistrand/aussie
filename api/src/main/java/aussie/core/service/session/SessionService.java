@@ -17,6 +17,7 @@ import aussie.core.model.session.SessionInvalidatedEvent;
 import aussie.core.port.in.SessionManagement;
 import aussie.core.port.out.SessionRepository;
 import aussie.core.service.auth.TokenRevocationService;
+import aussie.core.util.SecureHash;
 
 /**
  * Implementation of session management operations.
@@ -100,7 +101,7 @@ public class SessionService implements SessionManagement {
 
         return getRepository().saveIfAbsent(session).flatMap(saved -> {
             if (saved) {
-                LOG.infof("Session created: %s for user %s", sessionId, userId);
+                LOG.infof("Session created: hash=%s for user %s", SecureHash.truncatedSha256(sessionId, 8), userId);
                 return Uni.createFrom().item(session);
             }
 
@@ -122,13 +123,22 @@ public class SessionService implements SessionManagement {
 
             // Check if session is valid
             if (!session.isValid(config.idleTimeout())) {
-                LOG.debugf("Session %s is invalid (expired or idle)", sessionId);
+                if (LOG.isDebugEnabled()) {
+                    LOG.debugf(
+                            "Session hash=%s is invalid (expired or idle)", SecureHash.truncatedSha256(sessionId, 8));
+                }
                 // Async delete of invalid session
                 getRepository()
                         .delete(sessionId)
                         .subscribe()
                         .with(
-                                v -> LOG.debugf("Cleaned up invalid session: %s", sessionId),
+                                v -> {
+                                    if (LOG.isDebugEnabled()) {
+                                        LOG.debugf(
+                                                "Cleaned up invalid session: hash=%s",
+                                                SecureHash.truncatedSha256(sessionId, 8));
+                                    }
+                                },
                                 e -> LOG.warnf("Failed to clean up session: %s", e.getMessage()));
                 return Optional.empty();
             }
@@ -161,7 +171,7 @@ public class SessionService implements SessionManagement {
 
     @Override
     public Uni<Void> invalidateSession(String sessionId) {
-        LOG.infof("Invalidating session: %s", sessionId);
+        LOG.infof("Invalidating session: hash=%s", SecureHash.truncatedSha256(sessionId, 8));
         return getRepository().delete(sessionId).invoke(() -> {
             // Fire event to notify WebSocket connections to close
             sessionInvalidatedEvent.fireAsync(SessionInvalidatedEvent.forSession(sessionId));

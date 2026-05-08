@@ -13,6 +13,7 @@ import org.jboss.logging.Logger;
 
 import aussie.core.config.OidcConfig;
 import aussie.core.port.out.OidcRefreshTokenRepository;
+import aussie.core.util.SecureHash;
 
 /**
  * Redis implementation of OIDC refresh token storage.
@@ -40,7 +41,13 @@ public class RedisOidcRefreshTokenRepository implements OidcRefreshTokenReposito
 
         return valueCommands
                 .setex(key, ttl.toSeconds(), refreshToken)
-                .invoke(() -> LOG.debugf("Stored refresh token for session: %s with TTL: %s", sessionId, ttl))
+                .invoke(() -> {
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debugf(
+                                "Stored refresh token for session: hash=%s with TTL: %s",
+                                SecureHash.truncatedSha256(sessionId, 8), ttl);
+                    }
+                })
                 .replaceWithVoid();
     }
 
@@ -50,10 +57,14 @@ public class RedisOidcRefreshTokenRepository implements OidcRefreshTokenReposito
 
         return valueCommands.get(key).map(token -> {
             if (token == null) {
-                LOG.debugf("No refresh token found for session: %s", sessionId);
+                if (LOG.isDebugEnabled()) {
+                    LOG.debugf("No refresh token found for session: hash=%s", SecureHash.truncatedSha256(sessionId, 8));
+                }
                 return Optional.<String>empty();
             }
-            LOG.debugf("Retrieved refresh token for session: %s", sessionId);
+            if (LOG.isDebugEnabled()) {
+                LOG.debugf("Retrieved refresh token for session: hash=%s", SecureHash.truncatedSha256(sessionId, 8));
+            }
             return Optional.of(token);
         });
     }
@@ -65,8 +76,9 @@ public class RedisOidcRefreshTokenRepository implements OidcRefreshTokenReposito
         return valueCommands
                 .getdel(key)
                 .invoke(deleted -> {
-                    if (deleted != null) {
-                        LOG.debugf("Deleted refresh token for session: %s", sessionId);
+                    if (deleted != null && LOG.isDebugEnabled()) {
+                        LOG.debugf(
+                                "Deleted refresh token for session: hash=%s", SecureHash.truncatedSha256(sessionId, 8));
                     }
                 })
                 .replaceWithVoid();

@@ -72,6 +72,17 @@ public interface RouteAuthConfig {
         Set<String> audiences();
 
         /**
+         * Allowed JWS signature algorithms for this issuer.
+         *
+         * <p>Defaults to a whitelist of asymmetric algorithms; any token whose
+         * {@code alg} header is not in this set is rejected before signature
+         * verification. Must be set explicitly to enable HS* (symmetric) algs.
+         */
+        @WithName("allowed-algorithms")
+        @WithDefault("RS256,RS384,RS512,ES256,ES384,ES512,EdDSA")
+        Set<String> allowedAlgorithms();
+
+        /**
          * How often to refresh JWKS keys.
          */
         @WithName("key-refresh-interval")

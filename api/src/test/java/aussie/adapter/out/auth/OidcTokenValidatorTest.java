@@ -48,6 +48,7 @@ class OidcTokenValidatorTest {
     private static final String TEST_ISSUER = "https://auth.example.com";
     private static final String TEST_SUBJECT = "user-123";
     private static final String TEST_KEY_ID = "test-key-1";
+    private static final String TEST_AUDIENCE = "test-audience";
     private static final URI TEST_JWKS_URI = URI.create("https://auth.example.com/.well-known/jwks.json");
 
     private static KeyPair keyPair;
@@ -83,6 +84,7 @@ class OidcTokenValidatorTest {
         when(jwksConfig.cacheTtl()).thenReturn(Duration.ofHours(1));
         validator = new OidcTokenValidator(jwksCache, resiliencyConfig);
         config = TokenProviderConfig.builder("test-provider", TEST_ISSUER, TEST_JWKS_URI)
+                .audiences(Set.of(TEST_AUDIENCE))
                 .build();
     }
 
@@ -171,6 +173,7 @@ class OidcTokenValidatorTest {
         @DisplayName("should apply claims mapping when configured")
         void shouldApplyClaimsMapping() throws Exception {
             final var mappedConfig = TokenProviderConfig.builder("test-provider", TEST_ISSUER, TEST_JWKS_URI)
+                    .audiences(Set.of(TEST_AUDIENCE))
                     .claimsMapping(Map.of("external_id", "internal_id"))
                     .build();
             final var token = createTokenWithClaims(Map.of("external_id", "ext-123"));
@@ -455,16 +458,29 @@ class OidcTokenValidatorTest {
 
     private String createValidToken() throws Exception {
         return createToken(
-                TEST_SUBJECT, TEST_ISSUER, null, Instant.now().plusSeconds(3600), keyPair, TEST_KEY_ID, Map.of());
+                TEST_SUBJECT,
+                TEST_ISSUER,
+                TEST_AUDIENCE,
+                Instant.now().plusSeconds(3600),
+                keyPair,
+                TEST_KEY_ID,
+                Map.of());
     }
 
     private String createExpiredToken() throws Exception {
         return createToken(
-                TEST_SUBJECT, TEST_ISSUER, null, Instant.now().minusSeconds(3600), keyPair, TEST_KEY_ID, Map.of());
+                TEST_SUBJECT,
+                TEST_ISSUER,
+                TEST_AUDIENCE,
+                Instant.now().minusSeconds(3600),
+                keyPair,
+                TEST_KEY_ID,
+                Map.of());
     }
 
     private String createTokenWithIssuer(String issuer) throws Exception {
-        return createToken(TEST_SUBJECT, issuer, null, Instant.now().plusSeconds(3600), keyPair, TEST_KEY_ID, Map.of());
+        return createToken(
+                TEST_SUBJECT, issuer, TEST_AUDIENCE, Instant.now().plusSeconds(3600), keyPair, TEST_KEY_ID, Map.of());
     }
 
     private String createTokenWithAudience(String audience) throws Exception {
@@ -474,18 +490,25 @@ class OidcTokenValidatorTest {
 
     private String createTokenWithKey(KeyPair signingKey) throws Exception {
         return createToken(
-                TEST_SUBJECT, TEST_ISSUER, null, Instant.now().plusSeconds(3600), signingKey, TEST_KEY_ID, Map.of());
+                TEST_SUBJECT,
+                TEST_ISSUER,
+                TEST_AUDIENCE,
+                Instant.now().plusSeconds(3600),
+                signingKey,
+                TEST_KEY_ID,
+                Map.of());
     }
 
     private String createTokenWithKeyId(String keyId) throws Exception {
-        return createToken(TEST_SUBJECT, TEST_ISSUER, null, Instant.now().plusSeconds(3600), keyPair, keyId, Map.of());
+        return createToken(
+                TEST_SUBJECT, TEST_ISSUER, TEST_AUDIENCE, Instant.now().plusSeconds(3600), keyPair, keyId, Map.of());
     }
 
     private String createTokenWithClaims(Map<String, Object> additionalClaims) throws Exception {
         return createToken(
                 TEST_SUBJECT,
                 TEST_ISSUER,
-                null,
+                TEST_AUDIENCE,
                 Instant.now().plusSeconds(3600),
                 keyPair,
                 TEST_KEY_ID,
@@ -512,6 +535,7 @@ class OidcTokenValidatorTest {
         final var claims = new JwtClaims();
         claims.setSubject(TEST_SUBJECT);
         claims.setIssuer(TEST_ISSUER);
+        claims.setAudience(TEST_AUDIENCE);
         claims.setExpirationTime(
                 NumericDate.fromSeconds(Instant.now().plusSeconds(3600).getEpochSecond()));
         claims.setIssuedAt(NumericDate.now());

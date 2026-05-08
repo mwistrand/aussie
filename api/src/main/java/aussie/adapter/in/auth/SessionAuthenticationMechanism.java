@@ -25,6 +25,7 @@ import aussie.core.config.SessionConfig;
 import aussie.core.model.auth.Permission;
 import aussie.core.model.session.Session;
 import aussie.core.port.in.SessionManagement;
+import aussie.core.util.SecureHash;
 
 /**
  * HTTP authentication mechanism for session-based authentication.
@@ -60,31 +61,30 @@ public class SessionAuthenticationMechanism implements HttpAuthenticationMechani
 
     @Override
     public Uni<SecurityIdentity> authenticate(RoutingContext context, IdentityProviderManager identityProviderManager) {
-        LOG.infof(
-                "SessionAuthenticationMechanism.authenticate() called for path: %s",
-                context.request().path());
+        if (LOG.isDebugEnabled()) {
+            LOG.debugf(
+                    "SessionAuthenticationMechanism.authenticate() called for path: %s",
+                    context.request().path());
+        }
 
-        // Skip if sessions are disabled
         if (!config.enabled()) {
-            LOG.info("Sessions disabled, skipping");
             return Uni.createFrom().nullItem();
         }
 
-        // Extract session ID from cookie
         Optional<String> sessionIdOpt = cookieManager.extractSessionId(context.request());
         if (sessionIdOpt.isEmpty()) {
-            LOG.info("No session cookie found");
             return Uni.createFrom().nullItem();
         }
-        LOG.infof("Found session cookie: %s", sessionIdOpt.get());
+        final String sessionId = sessionIdOpt.get();
+        if (LOG.isDebugEnabled()) {
+            LOG.debugf("session_present hash=%s", SecureHash.truncatedSha256(sessionId, 8));
+        }
 
-        String sessionId = sessionIdOpt.get();
-
-        // Validate session
         return sessionManagement.getSession(sessionId).flatMap(sessionOpt -> {
             if (sessionOpt.isEmpty()) {
-                LOG.debugf("Session not found or invalid: %s", sessionId);
-                // Record invalid session metrics (cookie was present but session not found)
+                if (LOG.isDebugEnabled()) {
+                    LOG.debugf("session_invalid hash=%s", SecureHash.truncatedSha256(sessionId, 8));
+                }
                 metrics.recordAuthFailure("invalid_session", null);
                 securityMonitor.recordAuthFailure("session", "Session not found or expired", null);
                 return Uni.createFrom().nullItem();
@@ -92,17 +92,20 @@ public class SessionAuthenticationMechanism implements HttpAuthenticationMechani
 
             Session session = sessionOpt.get();
 
-            // Refresh session (sliding expiration)
             if (config.slidingExpiration()) {
                 sessionManagement
                         .refreshSession(sessionId)
                         .subscribe()
                         .with(
-                                result -> LOG.debugf("Session refreshed: %s", sessionId),
+                                result -> {
+                                    if (LOG.isDebugEnabled()) {
+                                        LOG.debugf(
+                                                "session_refreshed hash=%s", SecureHash.truncatedSha256(sessionId, 8));
+                                    }
+                                },
                                 error -> LOG.warnf("Failed to refresh session: %s", error.getMessage()));
             }
 
-            // Build security identity from session
             SecurityIdentity identity = buildIdentity(session);
             return Uni.createFrom().item(identity);
         });

@@ -568,6 +568,9 @@ class PassThroughServiceTest {
         public void recordRateLimitExceeded(String serviceId, String limitType) {}
 
         @Override
+        public void recordRateLimitFallback(String serviceId, String mode) {}
+
+        @Override
         public void recordProxyTimeout(String serviceId, String timeoutType) {}
 
         @Override

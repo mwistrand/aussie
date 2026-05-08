@@ -434,6 +434,23 @@ public class GatewayMetrics implements Metrics {
                 .increment();
     }
 
+    /**
+     * Record activation of the rate-limit fallback path.
+     */
+    @Override
+    public void recordRateLimitFallback(String serviceId, String mode) {
+        if (!enabled) {
+            return;
+        }
+
+        Counter.builder("aussie.ratelimit.fallback.activations")
+                .description("Rate limit fallback activations (Redis backend unavailable)")
+                .tag("service_id", nullSafe(serviceId))
+                .tag("mode", mode)
+                .register(registry)
+                .increment();
+    }
+
     // -------------------------------------------------------------------------
     // Helper Methods
     // -------------------------------------------------------------------------

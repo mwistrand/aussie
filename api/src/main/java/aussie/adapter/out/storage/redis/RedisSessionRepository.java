@@ -18,6 +18,7 @@ import org.jboss.logging.Logger;
 import aussie.core.config.SessionConfig;
 import aussie.core.model.session.Session;
 import aussie.core.port.out.SessionRepository;
+import aussie.core.util.SecureHash;
 
 /**
  * Redis implementation of SessionRepository.
@@ -57,10 +58,14 @@ public class RedisSessionRepository implements SessionRepository {
             if (result != null) {
                 // Successfully set - update user index
                 updateUserIndex(session.userId(), session.id());
-                LOG.debugf("Session created in Redis: %s", session.id());
+                if (LOG.isDebugEnabled()) {
+                    LOG.debugf("Session created in Redis: hash=%s", SecureHash.truncatedSha256(session.id(), 8));
+                }
                 return true;
             }
-            LOG.debugf("Session ID collision in Redis: %s", session.id());
+            if (LOG.isDebugEnabled()) {
+                LOG.debugf("Session ID collision in Redis: hash=%s", SecureHash.truncatedSha256(session.id(), 8));
+            }
             return false;
         });
         return timeoutHelper.withTimeout(operation, "saveIfAbsent");

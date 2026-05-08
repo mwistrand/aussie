@@ -25,9 +25,10 @@ class ApiKeyEncryptionServiceTest {
 
     private ApiKeyEncryptionService createService(boolean encrypted) {
         if (encrypted) {
-            return new ApiKeyEncryptionService(Optional.of(TEST_KEY), "v1");
+            return new ApiKeyEncryptionService(Optional.of(TEST_KEY), "v1", "test", false);
         }
-        return new ApiKeyEncryptionService(Optional.empty(), "v1");
+        // Tests that round-trip the PLAIN: format need plaintext reads enabled.
+        return new ApiKeyEncryptionService(Optional.empty(), "v1", "test", true);
     }
 
     @Nested

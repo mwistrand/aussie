@@ -108,6 +108,11 @@ public interface RateLimitingConfig {
     RedisConfig redis();
 
     /**
+     * Behavior when the configured rate limit backend (Redis) is unavailable.
+     */
+    FallbackConfig fallback();
+
+    /**
      * Redis-specific rate limiting configuration.
      */
     interface RedisConfig {
@@ -123,6 +128,39 @@ public interface RateLimitingConfig {
          */
         @WithDefault("false")
         boolean enabled();
+    }
+
+    /**
+     * Fallback behavior for the distributed rate limiter when the
+     * remote backend cannot be reached.
+     */
+    interface FallbackConfig {
+
+        /**
+         * Behavior when the Redis backend errors.
+         *
+         * <p>{@code LOCAL_BUCKET} (default) keeps coarse local protection by
+         * routing the request through the in-memory limiter using the same
+         * effective rate limit. {@code DENY} fails the request closed (429).
+         * {@code ALLOW} preserves the legacy fail-open behavior and is intended
+         * only for dev/test profiles.
+         *
+         * @return the fallback behavior (default: {@code LOCAL_BUCKET})
+         */
+        @WithDefault("LOCAL_BUCKET")
+        RateLimitFallbackBehavior behavior();
+    }
+
+    /**
+     * Choices for {@link FallbackConfig#behavior()}.
+     */
+    enum RateLimitFallbackBehavior {
+        /** Use the in-memory limiter as a coarse local backup. */
+        LOCAL_BUCKET,
+        /** Fail closed: reject the request with 429. */
+        DENY,
+        /** Fail open: allow the request (legacy behavior; dev/test only). */
+        ALLOW
     }
 
     /**

@@ -47,19 +47,35 @@ public class ApiKeyEncryptionService {
     private static final int TAG_LENGTH_BITS = 128;
     private static final String FIELD_SEPARATOR = "\u0000";
 
+    private static final String PROD_PROFILE = "prod";
+
     private final SecretKey secretKey;
     private final String keyId;
     private final boolean encryptionEnabled;
+    private final boolean allowPlaintextReads;
     private final SecureRandom secureRandom;
 
     @Inject
     public ApiKeyEncryptionService(
             @ConfigProperty(name = "aussie.auth.encryption.key") Optional<String> encryptionKey,
-            @ConfigProperty(name = "aussie.auth.encryption.key-id", defaultValue = "v1") String keyId) {
+            @ConfigProperty(name = "aussie.auth.encryption.key-id", defaultValue = "v1") String keyId,
+            @ConfigProperty(name = "quarkus.profile", defaultValue = "") String profile,
+            @ConfigProperty(name = "aussie.auth.encryption.allow-plaintext-reads", defaultValue = "false")
+                    boolean allowPlaintextReads) {
         this.keyId = keyId;
         this.secureRandom = new SecureRandom();
+        this.allowPlaintextReads = allowPlaintextReads;
 
-        if (encryptionKey.isPresent() && !encryptionKey.get().isBlank()) {
+        final boolean keyPresent =
+                encryptionKey.isPresent() && !encryptionKey.get().isBlank();
+
+        if (!keyPresent && isProd(profile)) {
+            throw new IllegalStateException("aussie.auth.encryption.key must be set under prod profile. "
+                    + "Use ApiKeyEncryptionService.generateKey() to mint a 256-bit key, "
+                    + "store it in your secrets manager, and inject via AUTH_ENCRYPTION_KEY.");
+        }
+
+        if (keyPresent) {
             byte[] keyBytes = Base64.getDecoder().decode(encryptionKey.get());
             if (keyBytes.length != 32) {
                 throw new IllegalArgumentException(
@@ -71,8 +87,25 @@ public class ApiKeyEncryptionService {
         } else {
             this.secretKey = null;
             this.encryptionEnabled = false;
-            LOG.warn("API key encryption is DISABLED. Set aussie.auth.encryption.key to enable.");
+            LOG.warn("API key encryption is DISABLED (non-prod profile). "
+                    + "Set aussie.auth.encryption.key to enable.");
+            if (allowPlaintextReads) {
+                LOG.warn("aussie.auth.encryption.allow-plaintext-reads=true; existing PLAIN: records "
+                        + "will still be readable. Disable once migration is complete.");
+            }
         }
+    }
+
+    private static boolean isProd(String profile) {
+        if (profile == null) {
+            return false;
+        }
+        for (String name : profile.split(",")) {
+            if (PROD_PROFILE.equalsIgnoreCase(name.trim())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -122,8 +155,12 @@ public class ApiKeyEncryptionService {
      * @throws RuntimeException if decryption fails
      */
     public ApiKey decrypt(String encryptedData) {
-        // Handle plaintext format
         if (encryptedData.startsWith("PLAIN:")) {
+            if (!allowPlaintextReads) {
+                throw new IllegalStateException("Refusing to decrypt PLAIN:-prefixed record: "
+                        + "aussie.auth.encryption.allow-plaintext-reads is false. "
+                        + "Re-encrypt this record or enable the migration flag.");
+            }
             String encoded = encryptedData.substring(6);
             String serialized = new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8);
             return deserialize(serialized);

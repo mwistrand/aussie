@@ -28,7 +28,14 @@ class TokenProviderConfigTest {
             assertThrows(
                     IllegalArgumentException.class,
                     () -> new TokenProviderConfig(
-                            null, "issuer", JWKS_URI, Optional.empty(), Set.of(), Duration.ofHours(1), Map.of()));
+                            null,
+                            "issuer",
+                            JWKS_URI,
+                            Optional.empty(),
+                            Set.of(),
+                            Set.of("RS256"),
+                            Duration.ofHours(1),
+                            Map.of()));
         }
 
         @Test
@@ -37,7 +44,14 @@ class TokenProviderConfigTest {
             assertThrows(
                     IllegalArgumentException.class,
                     () -> new TokenProviderConfig(
-                            "id", "  ", JWKS_URI, Optional.empty(), Set.of(), Duration.ofHours(1), Map.of()));
+                            "id",
+                            "  ",
+                            JWKS_URI,
+                            Optional.empty(),
+                            Set.of(),
+                            Set.of("RS256"),
+                            Duration.ofHours(1),
+                            Map.of()));
         }
 
         @Test
@@ -46,7 +60,14 @@ class TokenProviderConfigTest {
             assertThrows(
                     IllegalArgumentException.class,
                     () -> new TokenProviderConfig(
-                            "id", "issuer", null, Optional.empty(), Set.of(), Duration.ofHours(1), Map.of()));
+                            "id",
+                            "issuer",
+                            null,
+                            Optional.empty(),
+                            Set.of(),
+                            Set.of("RS256"),
+                            Duration.ofHours(1),
+                            Map.of()));
         }
     }
 
@@ -57,12 +78,15 @@ class TokenProviderConfigTest {
         @Test
         @DisplayName("Should default null optional fields to sensible values")
         void shouldDefaultNullFields() {
-            var config = new TokenProviderConfig("id", "issuer", JWKS_URI, null, null, null, null);
+            var config = new TokenProviderConfig("id", "issuer", JWKS_URI, null, null, null, null, null);
 
             assertEquals(Optional.empty(), config.discoveryUri());
             assertEquals(Set.of(), config.audiences());
             assertEquals(Duration.ofHours(1), config.keyRefreshInterval());
             assertEquals(Map.of(), config.claimsMapping());
+            // Default algorithm whitelist is the asymmetric set; HS* is excluded by default.
+            assertEquals(
+                    Set.of("RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "EdDSA"), config.allowedAlgorithms());
         }
     }
 
@@ -77,6 +101,7 @@ class TokenProviderConfigTest {
             var config = TokenProviderConfig.builder("auth0", "https://auth0.example.com", JWKS_URI)
                     .discoveryUri(discoveryUri)
                     .audiences(Set.of("api"))
+                    .allowedAlgorithms(Set.of("RS256"))
                     .keyRefreshInterval(Duration.ofMinutes(30))
                     .claimsMapping(Map.of("sub", "userId"))
                     .build();
@@ -84,6 +109,7 @@ class TokenProviderConfigTest {
             assertEquals("auth0", config.id());
             assertEquals(Optional.of(discoveryUri), config.discoveryUri());
             assertEquals(Set.of("api"), config.audiences());
+            assertEquals(Set.of("RS256"), config.allowedAlgorithms());
             assertEquals(Duration.ofMinutes(30), config.keyRefreshInterval());
             assertEquals(Map.of("sub", "userId"), config.claimsMapping());
         }

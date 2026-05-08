@@ -63,20 +63,30 @@ public class TokenValidationService {
             String providerId = entry.getKey();
             var props = entry.getValue();
 
-            try {
-                var providerConfig = TokenProviderConfig.builder(
-                                providerId, props.issuer(), URI.create(props.jwksUri()))
-                        .discoveryUri(props.discoveryUri().map(URI::create).orElse(null))
-                        .audiences(props.audiences())
-                        .keyRefreshInterval(props.keyRefreshInterval())
-                        .claimsMapping(props.claimsMapping())
-                        .build();
-
-                providerConfigs.put(providerId, providerConfig);
-                LOG.infov("Loaded token provider config: {0} (issuer: {1})", providerId, props.issuer());
-            } catch (Exception e) {
-                LOG.errorv(e, "Failed to load token provider config: {0}", providerId);
+            if (props.audiences() == null || props.audiences().isEmpty()) {
+                throw new IllegalStateException(String.format(
+                        "Token provider '%s' has no audiences configured. Set "
+                                + "aussie.auth.route-auth.providers.%s.audiences=<expected-aud> "
+                                + "or remove the provider.",
+                        providerId, providerId));
             }
+            if (props.allowedAlgorithms() == null || props.allowedAlgorithms().isEmpty()) {
+                throw new IllegalStateException(String.format(
+                        "Token provider '%s' has no allowed algorithms configured. Set "
+                                + "aussie.auth.route-auth.providers.%s.allowed-algorithms=<comma-list>.",
+                        providerId, providerId));
+            }
+
+            var providerConfig = TokenProviderConfig.builder(providerId, props.issuer(), URI.create(props.jwksUri()))
+                    .discoveryUri(props.discoveryUri().map(URI::create).orElse(null))
+                    .audiences(props.audiences())
+                    .allowedAlgorithms(props.allowedAlgorithms())
+                    .keyRefreshInterval(props.keyRefreshInterval())
+                    .claimsMapping(props.claimsMapping())
+                    .build();
+
+            providerConfigs.put(providerId, providerConfig);
+            LOG.infov("Loaded token provider config: {0} (issuer: {1})", providerId, props.issuer());
         }
     }
 
