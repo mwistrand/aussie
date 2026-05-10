@@ -113,6 +113,10 @@ jmh {
     }
 }
 
+dependencies {
+    jmhImplementation 'org.mockito:mockito-core:5.11.0'
+}
+
 tasks.named('jmhJar') {
     zip64 = true
 }

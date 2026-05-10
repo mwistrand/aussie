@@ -222,6 +222,7 @@ class RevocationBloomFilterTest {
 
         @Test
         @DisplayName("should schedule periodic rebuild on init")
+        @SuppressWarnings("unchecked")
         void shouldSchedulePeriodicRebuild() {
             when(vertx.setPeriodic(anyLong(), any(java.util.function.Consumer.class)))
                     .thenReturn(1L);
@@ -234,6 +235,7 @@ class RevocationBloomFilterTest {
 
         @Test
         @DisplayName("should subscribe to revocation events when pubsub enabled")
+        @SuppressWarnings("unchecked")
         void shouldSubscribeWhenPubSubEnabled() {
             when(pubSubConfig.enabled()).thenReturn(true);
             when(eventPublisher.subscribe()).thenReturn(Multi.createFrom().empty());

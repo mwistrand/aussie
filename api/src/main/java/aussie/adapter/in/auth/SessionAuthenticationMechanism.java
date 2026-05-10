@@ -26,6 +26,7 @@ import aussie.core.model.auth.Permission;
 import aussie.core.model.session.Session;
 import aussie.core.port.in.SessionManagement;
 import aussie.core.util.SecureHash;
+import aussie.system.filter.RouteResolutionFilter;
 
 /**
  * HTTP authentication mechanism for session-based authentication.
@@ -61,6 +62,11 @@ public class SessionAuthenticationMechanism implements HttpAuthenticationMechani
 
     @Override
     public Uni<SecurityIdentity> authenticate(RoutingContext context, IdentityProviderManager identityProviderManager) {
+        // Skip if the resolved route is PUBLIC
+        if (Boolean.TRUE.equals(context.get(RouteResolutionFilter.PUBLIC_KEY))) {
+            return Uni.createFrom().nullItem();
+        }
+
         if (LOG.isDebugEnabled()) {
             LOG.debugf(
                     "SessionAuthenticationMechanism.authenticate() called for path: %s",

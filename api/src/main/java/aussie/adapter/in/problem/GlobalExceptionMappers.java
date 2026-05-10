@@ -40,7 +40,7 @@ public class GlobalExceptionMappers {
     }
 
     private Response toResponse(HttpProblem problem) {
-        return Response.status(problem.getStatus())
+        return Response.status(problem.getStatusCode())
                 .type(PROBLEM_JSON)
                 .entity(problem)
                 .build();

@@ -20,7 +20,7 @@ class GatewayProblemTest {
         @DisplayName("serviceNotFound should return 404 with service details")
         void serviceNotFound() {
             var problem = GatewayProblem.serviceNotFound("my-service");
-            assertEquals(Status.NOT_FOUND, problem.getStatus());
+            assertEquals(Status.NOT_FOUND.getStatusCode(), problem.getStatusCode());
             assertEquals("Service Not Found", problem.getTitle());
             assertNotNull(problem.getDetail());
         }
@@ -29,7 +29,7 @@ class GatewayProblemTest {
         @DisplayName("routeNotFound should return 404 with path details")
         void routeNotFound() {
             var problem = GatewayProblem.routeNotFound("/api/v1/foo");
-            assertEquals(Status.NOT_FOUND, problem.getStatus());
+            assertEquals(Status.NOT_FOUND.getStatusCode(), problem.getStatusCode());
             assertEquals("Route Not Found", problem.getTitle());
             assertNotNull(problem.getDetail());
         }
@@ -38,7 +38,7 @@ class GatewayProblemTest {
         @DisplayName("resourceNotFound should return 404 with resource type and ID")
         void resourceNotFound() {
             var problem = GatewayProblem.resourceNotFound("Role", "admin");
-            assertEquals(Status.NOT_FOUND, problem.getStatus());
+            assertEquals(Status.NOT_FOUND.getStatusCode(), problem.getStatusCode());
             assertEquals("Role Not Found", problem.getTitle());
             assertNotNull(problem.getDetail());
         }
@@ -47,7 +47,7 @@ class GatewayProblemTest {
         @DisplayName("notFound should return generic 404")
         void notFound() {
             var problem = GatewayProblem.notFound("Item not found");
-            assertEquals(Status.NOT_FOUND, problem.getStatus());
+            assertEquals(Status.NOT_FOUND.getStatusCode(), problem.getStatusCode());
             assertEquals("Not Found", problem.getTitle());
             assertEquals("Item not found", problem.getDetail());
         }
@@ -61,7 +61,7 @@ class GatewayProblemTest {
         @DisplayName("badRequest should return 400")
         void badRequest() {
             var problem = GatewayProblem.badRequest("Invalid input");
-            assertEquals(Status.BAD_REQUEST, problem.getStatus());
+            assertEquals(Status.BAD_REQUEST.getStatusCode(), problem.getStatusCode());
             assertEquals("Bad Request", problem.getTitle());
             assertEquals("Invalid input", problem.getDetail());
         }
@@ -70,7 +70,7 @@ class GatewayProblemTest {
         @DisplayName("validationError should return 400")
         void validationError() {
             var problem = GatewayProblem.validationError("Field 'name' is required");
-            assertEquals(Status.BAD_REQUEST, problem.getStatus());
+            assertEquals(Status.BAD_REQUEST.getStatusCode(), problem.getStatusCode());
             assertEquals("Validation Error", problem.getTitle());
             assertEquals("Field 'name' is required", problem.getDetail());
         }
@@ -84,7 +84,7 @@ class GatewayProblemTest {
         @DisplayName("unauthorized should return 401")
         void unauthorized() {
             var problem = GatewayProblem.unauthorized("Token expired");
-            assertEquals(Status.UNAUTHORIZED, problem.getStatus());
+            assertEquals(Status.UNAUTHORIZED.getStatusCode(), problem.getStatusCode());
             assertEquals("Unauthorized", problem.getTitle());
             assertEquals("Token expired", problem.getDetail());
         }
@@ -93,7 +93,7 @@ class GatewayProblemTest {
         @DisplayName("forbidden should return 403")
         void forbidden() {
             var problem = GatewayProblem.forbidden("Insufficient permissions");
-            assertEquals(Status.FORBIDDEN, problem.getStatus());
+            assertEquals(Status.FORBIDDEN.getStatusCode(), problem.getStatusCode());
             assertEquals("Forbidden", problem.getTitle());
             assertEquals("Insufficient permissions", problem.getDetail());
         }
@@ -107,7 +107,7 @@ class GatewayProblemTest {
         @DisplayName("badGateway should return 502")
         void badGateway() {
             var problem = GatewayProblem.badGateway("Upstream unavailable");
-            assertEquals(Status.BAD_GATEWAY, problem.getStatus());
+            assertEquals(Status.BAD_GATEWAY.getStatusCode(), problem.getStatusCode());
             assertEquals("Bad Gateway", problem.getTitle());
             assertEquals("Upstream unavailable", problem.getDetail());
         }
@@ -121,7 +121,7 @@ class GatewayProblemTest {
         @DisplayName("tooManyRequests with full details should return 429")
         void tooManyRequestsWithDetails() {
             var problem = GatewayProblem.tooManyRequests("Rate limited", 30, 100, 0, 1709683200);
-            assertEquals(429, problem.getStatus().getStatusCode());
+            assertEquals(429, problem.getStatusCode());
             assertEquals("Too Many Requests", problem.getTitle());
             assertEquals("Rate limited", problem.getDetail());
         }
@@ -130,7 +130,7 @@ class GatewayProblemTest {
         @DisplayName("tooManyRequests with minimal details should return 429")
         void tooManyRequestsMinimal() {
             var problem = GatewayProblem.tooManyRequests("Slow down", 60);
-            assertEquals(429, problem.getStatus().getStatusCode());
+            assertEquals(429, problem.getStatusCode());
             assertEquals("Too Many Requests", problem.getTitle());
             assertEquals("Slow down", problem.getDetail());
         }
@@ -144,7 +144,7 @@ class GatewayProblemTest {
         @DisplayName("payloadTooLarge should return 413")
         void payloadTooLarge() {
             var problem = GatewayProblem.payloadTooLarge("Body exceeds 10MB");
-            assertEquals(Status.REQUEST_ENTITY_TOO_LARGE, problem.getStatus());
+            assertEquals(Status.REQUEST_ENTITY_TOO_LARGE.getStatusCode(), problem.getStatusCode());
             assertEquals("Payload Too Large", problem.getTitle());
             assertEquals("Body exceeds 10MB", problem.getDetail());
         }
@@ -153,7 +153,7 @@ class GatewayProblemTest {
         @DisplayName("headerTooLarge should return 431")
         void headerTooLarge() {
             var problem = GatewayProblem.headerTooLarge("Headers exceed 8KB");
-            assertEquals(431, problem.getStatus().getStatusCode());
+            assertEquals(431, problem.getStatusCode());
             assertEquals("Request Header Fields Too Large", problem.getTitle());
             assertEquals("Headers exceed 8KB", problem.getDetail());
         }
@@ -167,7 +167,7 @@ class GatewayProblemTest {
         @DisplayName("conflict should return 409")
         void conflict() {
             var problem = GatewayProblem.conflict("Resource already exists");
-            assertEquals(Status.CONFLICT, problem.getStatus());
+            assertEquals(Status.CONFLICT.getStatusCode(), problem.getStatusCode());
             assertEquals("Conflict", problem.getTitle());
             assertEquals("Resource already exists", problem.getDetail());
         }
@@ -176,7 +176,7 @@ class GatewayProblemTest {
         @DisplayName("internalError should return 500")
         void internalError() {
             var problem = GatewayProblem.internalError("Unexpected error");
-            assertEquals(Status.INTERNAL_SERVER_ERROR, problem.getStatus());
+            assertEquals(Status.INTERNAL_SERVER_ERROR.getStatusCode(), problem.getStatusCode());
             assertEquals("Internal Server Error", problem.getTitle());
             assertEquals("Unexpected error", problem.getDetail());
         }
@@ -185,7 +185,7 @@ class GatewayProblemTest {
         @DisplayName("featureDisabled should return 404")
         void featureDisabled() {
             var problem = GatewayProblem.featureDisabled("Sessions");
-            assertEquals(Status.NOT_FOUND, problem.getStatus());
+            assertEquals(Status.NOT_FOUND.getStatusCode(), problem.getStatusCode());
             assertEquals("Feature Disabled", problem.getTitle());
             assertNotNull(problem.getDetail());
         }

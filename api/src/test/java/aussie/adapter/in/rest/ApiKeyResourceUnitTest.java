@@ -209,8 +209,7 @@ class ApiKeyResourceUnitTest {
 
             var ex = assertThrows(
                     HttpProblem.class, () -> resource.getKey("unknown").await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -236,8 +235,7 @@ class ApiKeyResourceUnitTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.revokeKey("unknown").await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
     }
 

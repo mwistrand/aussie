@@ -118,8 +118,7 @@ class SessionResourceTest {
             final var request = new SessionResource.CreateSessionRequest("user-1", "issuer", Map.of(), Set.of(), null);
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.createSession(request));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -184,9 +183,7 @@ class SessionResourceTest {
                     HttpProblem.class,
                     () -> resource.createSession(request).await().atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(),
-                    ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -200,8 +197,7 @@ class SessionResourceTest {
             when(config.enabled()).thenReturn(false);
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.getSession());
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -211,8 +207,7 @@ class SessionResourceTest {
             when(securityIdentity.isAnonymous()).thenReturn(true);
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.getSession());
-            assertEquals(
-                    Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -223,8 +218,7 @@ class SessionResourceTest {
             when(securityIdentity.getPrincipal()).thenReturn(mock(Principal.class));
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.getSession());
-            assertEquals(
-                    Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -240,8 +234,7 @@ class SessionResourceTest {
             final var ex = assertThrows(
                     HttpProblem.class, () -> resource.getSession().await().atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -276,8 +269,7 @@ class SessionResourceTest {
             when(config.enabled()).thenReturn(false);
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.logout());
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -325,8 +317,7 @@ class SessionResourceTest {
             when(config.enabled()).thenReturn(false);
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.logoutAll());
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -336,8 +327,7 @@ class SessionResourceTest {
             when(securityIdentity.isAnonymous()).thenReturn(true);
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.logoutAll());
-            assertEquals(
-                    Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -371,8 +361,7 @@ class SessionResourceTest {
             when(config.enabled()).thenReturn(false);
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.refreshSession());
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -382,8 +371,7 @@ class SessionResourceTest {
             when(securityIdentity.isAnonymous()).thenReturn(true);
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.refreshSession());
-            assertEquals(
-                    Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -399,8 +387,7 @@ class SessionResourceTest {
             final var ex = assertThrows(
                     HttpProblem.class, () -> resource.refreshSession().await().atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -437,8 +424,7 @@ class SessionResourceTest {
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.authCallback("token", "/dashboard"));
 
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -448,8 +434,7 @@ class SessionResourceTest {
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.authCallback(null, "/dashboard"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -459,8 +444,7 @@ class SessionResourceTest {
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.authCallback("  ", "/dashboard"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -470,8 +454,7 @@ class SessionResourceTest {
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.authCallback("not-a-jwt", "/dashboard"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -492,8 +475,7 @@ class SessionResourceTest {
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.authCallback(jwt, "/dashboard"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test

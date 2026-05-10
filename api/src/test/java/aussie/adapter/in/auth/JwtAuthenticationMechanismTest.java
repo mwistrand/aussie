@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import aussie.core.service.auth.TokenValidationService;
+import aussie.system.filter.RouteResolutionFilter;
 
 @DisplayName("JwtAuthenticationMechanism")
 class JwtAuthenticationMechanismTest {
@@ -51,6 +52,22 @@ class JwtAuthenticationMechanismTest {
     @Nested
     @DisplayName("authenticate")
     class AuthenticateTests {
+
+        @Test
+        @DisplayName("should short-circuit for PUBLIC routes without consulting validation or identity provider")
+        void shouldShortCircuitForPublicRoute() {
+            when(routingContext.get(RouteResolutionFilter.PUBLIC_KEY)).thenReturn(Boolean.TRUE);
+
+            SecurityIdentity result = mechanism
+                    .authenticate(routingContext, identityProviderManager)
+                    .await()
+                    .atMost(Duration.ofSeconds(5));
+
+            assertNull(result);
+            verify(tokenValidationService, never()).isEnabled();
+            verify(httpRequest, never()).getHeader("Authorization");
+            verify(identityProviderManager, never()).authenticate(any());
+        }
 
         @Test
         @DisplayName("should return null when token validation is not enabled")

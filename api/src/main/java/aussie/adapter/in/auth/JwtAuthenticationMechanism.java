@@ -17,6 +17,7 @@ import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
 import aussie.core.service.auth.TokenValidationService;
+import aussie.system.filter.RouteResolutionFilter;
 
 /**
  * Quarkus HTTP authentication mechanism for JWT token authentication.
@@ -53,6 +54,11 @@ public class JwtAuthenticationMechanism implements HttpAuthenticationMechanism {
 
     @Override
     public Uni<SecurityIdentity> authenticate(RoutingContext context, IdentityProviderManager identityProviderManager) {
+        // Skip if the resolved route is PUBLIC
+        if (Boolean.TRUE.equals(context.get(RouteResolutionFilter.PUBLIC_KEY))) {
+            return Uni.createFrom().nullItem();
+        }
+
         // Skip if JWT validation is not enabled
         if (!tokenValidationService.isEnabled()) {
             return Uni.createFrom().nullItem();

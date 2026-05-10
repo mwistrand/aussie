@@ -145,8 +145,7 @@ class OidcResourceUnitTest {
                     () -> resource.authorize(
                             "http:///path", "challenge", "S256", null, "https://idp.example.com/auth"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -158,8 +157,7 @@ class OidcResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.authorize("https://app.example.com/callback", "challenge", "S256", null, "  "));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -176,8 +174,7 @@ class OidcResourceUnitTest {
                             null,
                             "ftp://idp.example.com/auth"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -190,8 +187,7 @@ class OidcResourceUnitTest {
                     () -> resource.authorize(
                             "https://app.example.com/callback", "challenge", "S256", null, "http:///path"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -205,8 +201,7 @@ class OidcResourceUnitTest {
                     () -> resource.authorize(
                             "https://app.example.com/callback", "  ", "S256", null, "https://idp.example.com/auth"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -298,8 +293,7 @@ class OidcResourceUnitTest {
                             null,
                             "https://idp.example.com/auth"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -312,8 +306,7 @@ class OidcResourceUnitTest {
                     () -> resource.authorize(
                             "example.com/callback", "challenge", "S256", null, "https://idp.example.com/auth"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -330,8 +323,7 @@ class OidcResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.exchangeToken("  ", "verifier", "state", "https://app.example.com/callback"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -343,8 +335,7 @@ class OidcResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.exchangeToken("code", "verifier", "  ", "https://app.example.com/callback"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -357,8 +348,7 @@ class OidcResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.exchangeToken("code", "  ", "state", "https://app.example.com/callback"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -448,8 +438,7 @@ class OidcResourceUnitTest {
                     .await()
                     .atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -466,9 +455,7 @@ class OidcResourceUnitTest {
                     .await()
                     .atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(),
-                    ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -486,9 +473,7 @@ class OidcResourceUnitTest {
                     .await()
                     .atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(),
-                    ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -962,9 +947,7 @@ class OidcResourceUnitTest {
             final var ex = assertThrows(
                     InvocationTargetException.class, () -> method.invoke(resource, "ht tp://bad url[", "redirect_uri"));
             final var problem = assertInstanceOf(HttpProblem.class, ex.getCause());
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(),
-                    problem.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), problem.getStatusCode());
             assertTrue(problem.getDetail().contains("not a valid URL"));
         }
     }

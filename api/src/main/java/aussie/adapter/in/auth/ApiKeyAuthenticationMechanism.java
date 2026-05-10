@@ -20,6 +20,7 @@ import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 
 import aussie.core.model.auth.Permission;
+import aussie.system.filter.RouteResolutionFilter;
 
 /**
  * Quarkus HTTP authentication mechanism for API key authentication.
@@ -111,6 +112,11 @@ public class ApiKeyAuthenticationMechanism implements HttpAuthenticationMechanis
 
     @Override
     public Uni<SecurityIdentity> authenticate(RoutingContext context, IdentityProviderManager identityProviderManager) {
+        // Skip if the resolved route is PUBLIC (also bypasses the dangerous-noop fallback below)
+        if (Boolean.TRUE.equals(context.get(RouteResolutionFilter.PUBLIC_KEY))) {
+            return Uni.createFrom().nullItem();
+        }
+
         LOG.debugf(
                 "ApiKeyAuthenticationMechanism.authenticate() called for path: %s",
                 context.request().path());

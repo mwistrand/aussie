@@ -145,6 +145,7 @@ public class WebSocketGateway {
                 .end("Rate limit exceeded. Retry after " + rl.retryAfterSeconds() + " seconds.");
     }
 
+    @SuppressWarnings("deprecation")
     private void establishProxy(RoutingContext ctx, WebSocketUpgradeResult.Authorized auth) {
         final var sessionId = UUID.randomUUID().toString();
         final var serviceId = auth.route().service().serviceId();

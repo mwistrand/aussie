@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import aussie.core.config.SessionConfig;
+import aussie.system.filter.RouteResolutionFilter;
 
 @DisplayName("ConflictingAuthFilter")
 @SuppressWarnings("unchecked")
@@ -53,6 +54,22 @@ class ConflictingAuthFilterTest {
 
     private ConflictingAuthFilter createFilter() {
         return new ConflictingAuthFilter(sessionConfigInstance, cookieManagerInstance, routingContext);
+    }
+
+    @Nested
+    @DisplayName("when the resolved route is PUBLIC")
+    class PublicRoute {
+
+        @Test
+        @DisplayName("should skip filtering even when both auth header and cookie are present")
+        void shouldSkipFiltering() {
+            when(routingContext.get(RouteResolutionFilter.PUBLIC_KEY)).thenReturn(Boolean.TRUE);
+
+            createFilter().filter(requestContext);
+
+            verify(sessionConfigInstance, never()).isResolvable();
+            verify(requestContext, never()).abortWith(any());
+        }
     }
 
     @Nested

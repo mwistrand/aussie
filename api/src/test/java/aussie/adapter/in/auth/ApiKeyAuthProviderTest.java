@@ -22,6 +22,7 @@ import aussie.core.model.auth.Permission;
 import aussie.core.service.auth.ApiKeyService;
 
 @DisplayName("ApiKeyAuthProvider")
+@SuppressWarnings("deprecation")
 class ApiKeyAuthProviderTest {
 
     private ApiKeyAuthProvider provider;

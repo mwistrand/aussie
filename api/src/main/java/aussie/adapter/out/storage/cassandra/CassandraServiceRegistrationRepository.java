@@ -195,7 +195,8 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
 
     private ServiceRegistration fromRow(Row row) {
         // Default to true for existing rows where column is null
-        boolean defaultAuthRequired = row.isNull("default_auth_required") ? true : row.getBool("default_auth_required");
+        boolean defaultAuthRequired =
+                row.isNull("default_auth_required") ? true : row.getBoolean("default_auth_required");
 
         // Default to 1 for existing rows where version is null
         long version = row.isNull("version") ? 1L : row.getLong("version");

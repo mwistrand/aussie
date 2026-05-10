@@ -81,8 +81,7 @@ class SigningKeyResourceTest {
             when(keyRotationConfig.enabled()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.listKeys());
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -169,8 +168,7 @@ class SigningKeyResourceTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.getKey("nonexistent", false).await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -249,8 +247,7 @@ class SigningKeyResourceTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.deprecateKey("nonexistent").await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -277,8 +274,7 @@ class SigningKeyResourceTest {
             when(keyRotationConfig.enabled()).thenReturn(true);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.retireKey("key-1", false));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -292,8 +288,7 @@ class SigningKeyResourceTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.retireKey("nonexistent", true).await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
     }
 

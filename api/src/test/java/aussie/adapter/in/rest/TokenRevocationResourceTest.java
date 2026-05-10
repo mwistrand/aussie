@@ -74,8 +74,7 @@ class TokenRevocationResourceTest {
             when(config.enabled()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.revokeToken("test-jti", null));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -84,8 +83,7 @@ class TokenRevocationResourceTest {
             when(config.enabled()).thenReturn(true);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.revokeToken(null, null));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -94,8 +92,7 @@ class TokenRevocationResourceTest {
             when(config.enabled()).thenReturn(true);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.revokeToken("  ", null));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -152,8 +149,7 @@ class TokenRevocationResourceTest {
 
             var request = new RevokeByTokenRequest("some.jwt.token", null);
             var ex = assertThrows(HttpProblem.class, () -> resource.revokeByToken(request));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -162,8 +158,7 @@ class TokenRevocationResourceTest {
             when(config.enabled()).thenReturn(true);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.revokeByToken(null));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -173,8 +168,7 @@ class TokenRevocationResourceTest {
 
             var request = new RevokeByTokenRequest(null, null);
             var ex = assertThrows(HttpProblem.class, () -> resource.revokeByToken(request));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -184,8 +178,7 @@ class TokenRevocationResourceTest {
 
             var request = new RevokeByTokenRequest("  ", null);
             var ex = assertThrows(HttpProblem.class, () -> resource.revokeByToken(request));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -199,8 +192,7 @@ class TokenRevocationResourceTest {
 
             var request = new RevokeByTokenRequest(token, null);
             var ex = assertThrows(HttpProblem.class, () -> resource.revokeByToken(request));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -260,8 +252,7 @@ class TokenRevocationResourceTest {
 
             var request = new RevokeByTokenRequest("not-a-valid-jwt", null);
             var ex = assertThrows(HttpProblem.class, () -> resource.revokeByToken(request));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -275,8 +266,7 @@ class TokenRevocationResourceTest {
             when(config.enabled()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.revokeUserTokens("user123", null));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -286,8 +276,7 @@ class TokenRevocationResourceTest {
             when(config.checkUserRevocation()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.revokeUserTokens("user123", null));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -297,8 +286,7 @@ class TokenRevocationResourceTest {
             when(config.checkUserRevocation()).thenReturn(true);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.revokeUserTokens(null, null));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -308,8 +296,7 @@ class TokenRevocationResourceTest {
             when(config.checkUserRevocation()).thenReturn(true);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.revokeUserTokens("  ", null));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -352,8 +339,7 @@ class TokenRevocationResourceTest {
             when(config.enabled()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.checkRevocationStatus("test-jti"));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -362,8 +348,7 @@ class TokenRevocationResourceTest {
             when(config.enabled()).thenReturn(true);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.checkRevocationStatus(null));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -372,8 +357,7 @@ class TokenRevocationResourceTest {
             when(config.enabled()).thenReturn(true);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.checkRevocationStatus("  "));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -421,8 +405,7 @@ class TokenRevocationResourceTest {
             when(config.enabled()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.listRevokedTokens(null));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -497,8 +480,7 @@ class TokenRevocationResourceTest {
             when(config.enabled()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.listRevokedUsers(null));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -543,8 +525,7 @@ class TokenRevocationResourceTest {
         @DisplayName("throws HttpProblem when request is null")
         void shouldThrowWhenRequestIsNull() {
             var ex = assertThrows(HttpProblem.class, () -> resource.inspectToken(null));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -552,8 +533,7 @@ class TokenRevocationResourceTest {
         void shouldThrowWhenTokenIsNull() {
             var request = new InspectTokenRequest(null);
             var ex = assertThrows(HttpProblem.class, () -> resource.inspectToken(request));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -561,8 +541,7 @@ class TokenRevocationResourceTest {
         void shouldThrowWhenTokenIsBlank() {
             var request = new InspectTokenRequest("  ");
             var ex = assertThrows(HttpProblem.class, () -> resource.inspectToken(request));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -624,8 +603,7 @@ class TokenRevocationResourceTest {
         void shouldThrowWhenTokenFormatIsInvalid() {
             var request = new InspectTokenRequest("completely-invalid-jwt");
             var ex = assertThrows(HttpProblem.class, () -> resource.inspectToken(request));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -663,8 +641,7 @@ class TokenRevocationResourceTest {
             when(config.enabled()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.rebuildBloomFilter());
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test

@@ -17,6 +17,7 @@ import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
 import aussie.core.config.SessionConfig;
+import aussie.system.filter.RouteResolutionFilter;
 
 /**
  * Request filter that rejects requests with conflicting authentication.
@@ -50,6 +51,11 @@ public class ConflictingAuthFilter implements ContainerRequestFilter {
         LOG.infof(
                 "ConflictingAuthFilter.filter() called for path: %s",
                 requestContext.getUriInfo().getPath());
+
+        // Skip if the resolved route is PUBLIC
+        if (Boolean.TRUE.equals(routingContext.get(RouteResolutionFilter.PUBLIC_KEY))) {
+            return;
+        }
 
         // Skip if session config is not available (e.g., in tests without session config)
         if (!sessionConfigInstance.isResolvable()) {

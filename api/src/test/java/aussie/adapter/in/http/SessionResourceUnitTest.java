@@ -250,8 +250,7 @@ class SessionResourceUnitTest {
             when(securityIdentity.getPrincipal()).thenReturn(mock(Principal.class));
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.logoutAll());
-            assertEquals(
-                    Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -267,8 +266,7 @@ class SessionResourceUnitTest {
             when(securityIdentity.getPrincipal()).thenReturn(mock(Principal.class));
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.refreshSession());
-            assertEquals(
-                    Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -284,8 +282,7 @@ class SessionResourceUnitTest {
             final var jwt = buildJwt("{\"sub\":\"\",\"iss\":\"test\"}");
 
             final var ex = assertThrows(HttpProblem.class, () -> resource.authCallback(jwt, "/dashboard"));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -392,9 +389,7 @@ class SessionResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.authCallback(jwt, "/dashboard").await().atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(),
-                    ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(), ex.getStatusCode());
         }
     }
 

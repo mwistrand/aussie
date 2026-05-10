@@ -65,8 +65,7 @@ class LockoutResourceTest {
             when(config.enabled()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.listLockouts(null));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -75,8 +74,7 @@ class LockoutResourceTest {
             when(config.enabled()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.getIpLockoutStatus("1.2.3.4"));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -85,8 +83,7 @@ class LockoutResourceTest {
             when(config.enabled()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.getUserLockoutStatus("user@example.com"));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -95,8 +92,7 @@ class LockoutResourceTest {
             when(config.enabled()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.getApiKeyLockoutStatus("abc12345"));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -105,8 +101,7 @@ class LockoutResourceTest {
             when(config.enabled()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.clearIpLockout("1.2.3.4", null));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -115,8 +110,7 @@ class LockoutResourceTest {
             when(config.enabled()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.clearUserLockout("user@example.com", null));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -125,8 +119,7 @@ class LockoutResourceTest {
             when(config.enabled()).thenReturn(false);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.clearApiKeyLockout("abc12345", null));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -137,8 +130,7 @@ class LockoutResourceTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.clearAllLockouts(new LockoutResource.ClearAllLockoutsRequest(true, "test")));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -361,8 +353,7 @@ class LockoutResourceTest {
 
             var request = new LockoutResource.ClearAllLockoutsRequest(false, "test");
             var ex = assertThrows(HttpProblem.class, () -> resource.clearAllLockouts(request));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -371,8 +362,7 @@ class LockoutResourceTest {
             when(config.enabled()).thenReturn(true);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.clearAllLockouts(null));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test

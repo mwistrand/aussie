@@ -90,8 +90,7 @@ class OidcResourceTest {
                             null,
                             "https://idp.example.com/auth"));
 
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -103,8 +102,7 @@ class OidcResourceTest {
                     HttpProblem.class,
                     () -> resource.authorize(null, "challenge", "S256", null, "https://idp.example.com/auth"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -116,8 +114,7 @@ class OidcResourceTest {
                     HttpProblem.class,
                     () -> resource.authorize("  ", "challenge", "S256", null, "https://idp.example.com/auth"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -130,8 +127,7 @@ class OidcResourceTest {
                     () -> resource.authorize(
                             "example.com/callback", "challenge", "S256", null, "https://idp.example.com/auth"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -144,8 +140,7 @@ class OidcResourceTest {
                     () -> resource.authorize(
                             "ftp://example.com/callback", "challenge", "S256", null, "https://idp.example.com/auth"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -157,8 +152,7 @@ class OidcResourceTest {
                     HttpProblem.class,
                     () -> resource.authorize("https://app.example.com/callback", "challenge", "S256", null, null));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -172,8 +166,7 @@ class OidcResourceTest {
                     () -> resource.authorize(
                             "https://app.example.com/callback", null, "S256", null, "https://idp.example.com/auth"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -192,8 +185,7 @@ class OidcResourceTest {
                             null,
                             "https://idp.example.com/auth"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -257,8 +249,7 @@ class OidcResourceTest {
                     HttpProblem.class,
                     () -> resource.exchangeToken("code", "verifier", "state", "https://app.example.com/callback"));
 
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -270,8 +261,7 @@ class OidcResourceTest {
                     HttpProblem.class,
                     () -> resource.exchangeToken(null, "verifier", "state", "https://app.example.com/callback"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -283,8 +273,7 @@ class OidcResourceTest {
                     HttpProblem.class,
                     () -> resource.exchangeToken("code", "verifier", null, "https://app.example.com/callback"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -297,8 +286,7 @@ class OidcResourceTest {
                     HttpProblem.class,
                     () -> resource.exchangeToken("code", null, "state", "https://app.example.com/callback"));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -314,8 +302,7 @@ class OidcResourceTest {
                     .await()
                     .atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -535,9 +522,7 @@ class OidcResourceTest {
                 method.invoke(resource, "ftp://example.com/file", "redirect_uri");
             } catch (java.lang.reflect.InvocationTargetException e) {
                 assertTrue(e.getCause() instanceof HttpProblem);
-                assertEquals(
-                        Response.Status.BAD_REQUEST.getStatusCode(),
-                        ((HttpProblem) e.getCause()).getStatus().getStatusCode());
+                assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ((HttpProblem) e.getCause()).getStatusCode());
                 return;
             }
             throw new AssertionError("Expected HttpProblem to be thrown");
@@ -553,9 +538,7 @@ class OidcResourceTest {
                 method.invoke(resource, "http:///path", "redirect_uri");
             } catch (java.lang.reflect.InvocationTargetException e) {
                 assertTrue(e.getCause() instanceof HttpProblem);
-                assertEquals(
-                        Response.Status.BAD_REQUEST.getStatusCode(),
-                        ((HttpProblem) e.getCause()).getStatus().getStatusCode());
+                assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ((HttpProblem) e.getCause()).getStatusCode());
                 return;
             }
             throw new AssertionError("Expected HttpProblem to be thrown");

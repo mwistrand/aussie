@@ -134,8 +134,7 @@ class AdminResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.registerService(request).await().atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.FORBIDDEN.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.FORBIDDEN.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -152,8 +151,7 @@ class AdminResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.registerService(request).await().atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -170,8 +168,7 @@ class AdminResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.registerService(request).await().atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.CONFLICT.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.CONFLICT.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -188,8 +185,7 @@ class AdminResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.registerService(request).await().atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -218,8 +214,7 @@ class AdminResourceUnitTest {
 
             var ex = assertThrows(HttpProblem.class, () -> resource.registerService(request));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -253,8 +248,7 @@ class AdminResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.unregisterService("test-service").await().atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -319,8 +313,7 @@ class AdminResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.getService("test-service").await().atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -469,8 +462,7 @@ class AdminResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.unregisterService("test-service").await().atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.FORBIDDEN.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.FORBIDDEN.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -485,8 +477,7 @@ class AdminResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.unregisterService("test-service").await().atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -501,8 +492,7 @@ class AdminResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.unregisterService("test-service").await().atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.CONFLICT.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.CONFLICT.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -517,8 +507,7 @@ class AdminResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.unregisterService("test-service").await().atMost(Duration.ofSeconds(5)));
 
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
     }
 }

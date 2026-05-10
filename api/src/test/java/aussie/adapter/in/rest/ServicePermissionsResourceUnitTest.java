@@ -102,8 +102,7 @@ class ServicePermissionsResourceUnitTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.getPermissions("unknown-svc").await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -119,8 +118,7 @@ class ServicePermissionsResourceUnitTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.getPermissions("svc1").await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.FORBIDDEN.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.FORBIDDEN.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -168,8 +166,7 @@ class ServicePermissionsResourceUnitTest {
         @DisplayName("should throw HttpProblem when ifMatch is null")
         void shouldThrowWhenIfMatchNull() {
             var ex = assertThrows(HttpProblem.class, () -> resource.updatePermissions("svc1", null, null));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -182,8 +179,7 @@ class ServicePermissionsResourceUnitTest {
             var ex = assertThrows(HttpProblem.class, () -> resource.updatePermissions("unknown-svc", 1L, null)
                     .await()
                     .atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -199,8 +195,7 @@ class ServicePermissionsResourceUnitTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.updatePermissions("svc1", 1L, null).await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.FORBIDDEN.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.FORBIDDEN.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -216,8 +211,7 @@ class ServicePermissionsResourceUnitTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.updatePermissions("svc1", 3L, null).await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.CONFLICT.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.CONFLICT.getStatusCode(), ex.getStatusCode());
         }
 
         @Test

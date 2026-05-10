@@ -31,6 +31,7 @@ import aussie.core.service.auth.SigningKeyRegistry;
 
 @DisplayName("JwksResource")
 @ExtendWith(MockitoExtension.class)
+@SuppressWarnings("unchecked")
 class JwksResourceTest {
 
     private static RSAPublicKey publicKey;
@@ -118,7 +119,6 @@ class JwksResourceTest {
             assertEquals("public, max-age=3600", response.getHeaderString("Cache-Control"));
 
             final var body = (Map<String, Object>) response.getEntity();
-            @SuppressWarnings("unchecked")
             final var keys = (List<Map<String, Object>>) body.get("keys");
             assertEquals(2, keys.size());
         }
@@ -141,7 +141,6 @@ class JwksResourceTest {
             final var response = resource.getJwks();
 
             final var body = (Map<String, Object>) response.getEntity();
-            @SuppressWarnings("unchecked")
             final var keys = (List<Map<String, Object>>) body.get("keys");
             final var jwk = keys.get(0);
 
@@ -181,7 +180,6 @@ class JwksResourceTest {
             final var response = resource.getJwks();
 
             final var body = (Map<String, Object>) response.getEntity();
-            @SuppressWarnings("unchecked")
             final var keys = (List<Map<String, Object>>) body.get("keys");
             final var jwk = keys.get(0);
 
@@ -207,7 +205,6 @@ class JwksResourceTest {
             final var response = resource.getJwks();
 
             final var body = (Map<String, Object>) response.getEntity();
-            @SuppressWarnings("unchecked")
             final var keys = (List<Map<String, Object>>) body.get("keys");
             final var jwk = keys.get(0);
 

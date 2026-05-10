@@ -310,8 +310,7 @@ class GatewayResourceTest {
             var ex = assertThrows(HttpProblem.class, () -> resource.proxyGet("unknown/path", requestContext)
                     .await()
                     .atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -323,8 +322,7 @@ class GatewayResourceTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.proxyGet("test", requestContext).await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -336,8 +334,7 @@ class GatewayResourceTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.proxyGet("admin", requestContext).await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -349,8 +346,7 @@ class GatewayResourceTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.proxyGet("test", requestContext).await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.BAD_GATEWAY.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_GATEWAY.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -362,8 +358,7 @@ class GatewayResourceTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.proxyGet("test", requestContext).await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -375,8 +370,7 @@ class GatewayResourceTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.proxyGet("test", requestContext).await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.FORBIDDEN.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.FORBIDDEN.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -388,8 +382,7 @@ class GatewayResourceTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.proxyGet("test", requestContext).await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
     }
 }

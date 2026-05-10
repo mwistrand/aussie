@@ -108,8 +108,7 @@ class RoleResourceUnitTest {
 
             var ex = assertThrows(
                     HttpProblem.class, () -> resource.getRole("unknown").await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
     }
 
@@ -123,8 +122,7 @@ class RoleResourceUnitTest {
             var request = new UpdateRoleRequest("New Name", null, Set.of("read"), Set.of("write"), null);
 
             var ex = assertThrows(HttpProblem.class, () -> resource.updateRole("role-1", request));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -133,8 +131,7 @@ class RoleResourceUnitTest {
             var request = new UpdateRoleRequest(null, null, Set.of("read"), null, Set.of("write"));
 
             var ex = assertThrows(HttpProblem.class, () -> resource.updateRole("role-1", request));
-            assertEquals(
-                    Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -187,8 +184,7 @@ class RoleResourceUnitTest {
             var ex = assertThrows(
                     HttpProblem.class,
                     () -> resource.deleteRole("unknown").await().atMost(Duration.ofSeconds(5)));
-            assertEquals(
-                    Response.Status.NOT_FOUND.getStatusCode(), ex.getStatus().getStatusCode());
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
         }
     }
 }

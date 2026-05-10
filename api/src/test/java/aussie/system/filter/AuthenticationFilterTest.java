@@ -41,7 +41,7 @@ import aussie.spi.AuthenticationProvider;
  * legacy mode is disabled (the default).
  */
 @DisplayName("AuthenticationFilter (deprecated)")
-@SuppressWarnings("unchecked")
+@SuppressWarnings({"unchecked", "deprecation"})
 class AuthenticationFilterTest {
 
     private ContainerRequestContext requestContext;

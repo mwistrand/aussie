@@ -143,6 +143,18 @@ The filter reads a global `GatewayCorsConfig` from CDI. If CORS is disabled or t
 
 For non-preflight requests, the filter always calls `next()`, even if the origin is not allowed (it simply omits the CORS headers, and the browser enforces the policy on the client side).
 
+### RouteResolutionFilter (Priority 95)
+
+**File:** `api/src/main/java/aussie/system/filter/RouteResolutionFilter.java`
+
+This filter resolves the registered route for the inbound request once and caches the result on the `RoutingContext`, so downstream consumers (auth mechanisms, rate limit, access control) read the cached lookup instead of re-querying `ServiceRegistry`. It runs between CORS (100) and SecurityHeaders (90), so CORS preflights short-circuit at 100 without paying for route resolution.
+
+The filter calls `ServiceRegistry.findRoute(path, method)` and stashes the `Optional<RouteLookupResult>` under the `aussie.route.lookup` key. When the resolved route's effective visibility is `PUBLIC`, the filter also sets `aussie.route.public = Boolean.TRUE`. The four authentication components (`JwtAuthenticationMechanism`, `ApiKeyAuthenticationMechanism`, `SessionAuthenticationMechanism`, `ConflictingAuthFilter`) consult this flag and short-circuit immediately for PUBLIC routes, skipping all credential extraction and validation. `AccessControlFilter` separately enforces source-based access for PRIVATE routes; PUBLIC routes pass through.
+
+**What it modifies:** Sets `aussie.route.lookup` and (when the route is PUBLIC) `aussie.route.public` on the `RoutingContext`.
+
+**Short-circuit conditions:** None. The filter always calls `rc.next()`.
+
 ### SecurityHeadersFilter (Priority 90)
 
 **File:** `api/src/main/java/aussie/adapter/in/http/SecurityHeadersFilter.java`
@@ -343,9 +355,10 @@ The following table lists every filter in numeric execution order across both la
 | Runs | Priority | Class | Package | Short-Circuits? |
 |------|----------|-------|---------|-----------------|
 | 1 | 100 | `CorsFilter` | `adapter.in.http` | Yes (OPTIONS preflight) |
-| 2 | 90 | `SecurityHeadersFilter` | `adapter.in.http` | No |
-| 3 | 50 | `WebSocketUpgradeFilter` | `adapter.in.websocket` | Yes (WS upgrade) |
-| 4 | 40 | `WebSocketRateLimitFilter` | `adapter.in.websocket` | Yes (429 on WS rate limit) |
+| 2 | 95 | `RouteResolutionFilter` | `system.filter` | No |
+| 3 | 90 | `SecurityHeadersFilter` | `adapter.in.http` | No |
+| 4 | 50 | `WebSocketUpgradeFilter` | `adapter.in.websocket` | Yes (WS upgrade) |
+| 5 | 40 | `WebSocketRateLimitFilter` | `adapter.in.websocket` | Yes (429 on WS rate limit) |
 
 ### JAX-RS Layer (lower number = runs first)
 

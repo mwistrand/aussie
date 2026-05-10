@@ -76,7 +76,7 @@ class RequestValidationFilterTest {
                     .thenReturn(ValidationResult.invalid("Body too large", 413));
 
             var ex = assertThrows(HttpProblem.class, () -> filter.filter(requestContext));
-            assertEquals(413, ex.getStatus().getStatusCode());
+            assertEquals(413, ex.getStatusCode());
         }
 
         @Test
@@ -89,7 +89,7 @@ class RequestValidationFilterTest {
                     .thenReturn(ValidationResult.invalid("Header too large", 431));
 
             var ex = assertThrows(HttpProblem.class, () -> filter.filter(requestContext));
-            assertEquals(431, ex.getStatus().getStatusCode());
+            assertEquals(431, ex.getStatusCode());
         }
 
         @Test
@@ -102,7 +102,7 @@ class RequestValidationFilterTest {
                     .thenReturn(ValidationResult.invalid("Bad request", 400));
 
             var ex = assertThrows(HttpProblem.class, () -> filter.filter(requestContext));
-            assertEquals(400, ex.getStatus().getStatusCode());
+            assertEquals(400, ex.getStatusCode());
         }
     }
 

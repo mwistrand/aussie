@@ -25,6 +25,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
+import aussie.system.filter.RouteResolutionFilter;
+
 @DisplayName("ApiKeyAuthenticationMechanism")
 class ApiKeyAuthenticationMechanismTest {
 
@@ -38,8 +40,10 @@ class ApiKeyAuthenticationMechanismTest {
 
     @BeforeEach
     void setUp() {
-        // The test classpath pins aussie.auth.dangerous-noop=true, which would short-circuit
-        // every no-token / deferred-token path into the noop identity. Pin it false here so
+        // The test classpath pins aussie.auth.dangerous-noop=true, which would
+        // short-circuit
+        // every no-token / deferred-token path into the noop identity. Pin it false
+        // here so
         // the JWT-shape guard's actual return value (nullItem) is observable.
         previousNoopProperty = System.setProperty(NOOP_PROPERTY, "false");
 
@@ -92,9 +96,11 @@ class ApiKeyAuthenticationMechanismTest {
         @Test
         @DisplayName("delegates aussie_-prefixed dotted tokens to the API-key provider (not deferred)")
         void delegatesAussiePrefixedDottedTokens() {
-            // JwtAuthenticationMechanism defers anything starting with "aussie_" back to this
+            // JwtAuthenticationMechanism defers anything starting with "aussie_" back to
+            // this
             // mechanism. Without the API_KEY_PREFIX bypass, a three-dot-segment key like
-            // "aussie_foo.bar.baz" would be deferred by both and the request would 401 with no
+            // "aussie_foo.bar.baz" would be deferred by both and the request would 401 with
+            // no
             // provider running.
             when(httpRequest.getHeader("Authorization")).thenReturn("Bearer aussie_foo.bar.baz");
 
@@ -207,6 +213,20 @@ class ApiKeyAuthenticationMechanismTest {
                     .atMost(Duration.ofSeconds(5));
 
             assertNull(result);
+        }
+
+        @Test
+        @DisplayName("should short-circuit for PUBLIC routes without inspecting headers or noop config")
+        void shouldShortCircuitForPublicRoute() {
+            when(routingContext.get(RouteResolutionFilter.PUBLIC_KEY)).thenReturn(Boolean.TRUE);
+
+            SecurityIdentity result = mechanism
+                    .authenticate(routingContext, identityProviderManager)
+                    .await()
+                    .atMost(Duration.ofSeconds(5));
+
+            assertNull(result);
+            verify(routingContext, never()).request();
             verify(identityProviderManager, never()).authenticate(any());
         }
     }

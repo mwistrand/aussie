@@ -32,6 +32,7 @@ import aussie.adapter.out.telemetry.SecurityMonitor;
 import aussie.core.config.SessionConfig;
 import aussie.core.model.session.Session;
 import aussie.core.port.in.SessionManagement;
+import aussie.system.filter.RouteResolutionFilter;
 
 @DisplayName("SessionAuthenticationMechanism")
 class SessionAuthenticationMechanismTest {
@@ -84,6 +85,20 @@ class SessionAuthenticationMechanismTest {
     @Nested
     @DisplayName("authenticate()")
     class AuthenticateTests {
+
+        @Test
+        @DisplayName("should short-circuit for PUBLIC routes without inspecting session cookie or config")
+        void shouldShortCircuitForPublicRoute() {
+            when(routingContext.get(RouteResolutionFilter.PUBLIC_KEY)).thenReturn(Boolean.TRUE);
+
+            var result = mechanism
+                    .authenticate(routingContext, identityProviderManager)
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            assertNull(result);
+            verify(cookieManager, never()).extractSessionId(httpRequest);
+        }
 
         @Test
         @DisplayName("should return null when sessions disabled")
