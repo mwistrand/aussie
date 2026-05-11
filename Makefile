@@ -3,6 +3,9 @@ COMPOSE=docker compose
 .PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage reset
 
 up:
+	# Bring up cassandra/redis and force-rerun the migration sidecar first so
+	# new V*.cql files always apply before any dependent service (api) starts.
+	$(MAKE) storage
 	$(COMPOSE) up -d --build
 
 down:
@@ -16,7 +19,11 @@ otel-down:
 	$(COMPOSE) stop jaeger prometheus grafana alertmanager || true
 
 storage:
-	$(COMPOSE) up -d --build cassandra cassandra-init redis
+	$(COMPOSE) up -d --build cassandra redis
+	# Force-recreate the one-shot migration sidecar so new V*.cql files apply
+	# on every invocation (otherwise a previously-exited container is left as-is
+	# and new migrations silently skip). --no-deps avoids restarting Cassandra.
+	$(COMPOSE) up -d --force-recreate --no-deps cassandra-init
 storage-down:
 	$(COMPOSE) stop cassandra cassandra-init redis || true
 

@@ -100,6 +100,7 @@ export async function generateToken(
     .setExpirationTime(expiry)
     .setIssuer('demo-app')
     .setAudience('aussie-gateway')
+    .setJti(crypto.randomUUID())
     .sign(privateKey);
 
   return jwt;

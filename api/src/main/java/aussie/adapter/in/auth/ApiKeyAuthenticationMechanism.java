@@ -44,6 +44,7 @@ public class ApiKeyAuthenticationMechanism implements HttpAuthenticationMechanis
 
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String AUTHORIZATION_HEADER = "Authorization";
+    private static final String API_KEY_PREFIX = "aussie_";
 
     private final AtomicBoolean noopWarningLogged = new AtomicBoolean();
 
@@ -119,7 +120,7 @@ public class ApiKeyAuthenticationMechanism implements HttpAuthenticationMechanis
         // Check for Bearer token first - always validate API keys when provided
         if (authHeader != null && !authHeader.isBlank() && authHeader.startsWith(BEARER_PREFIX)) {
             String apiKey = authHeader.substring(BEARER_PREFIX.length()).trim();
-            if (!apiKey.isBlank()) {
+            if (!apiKey.isBlank() && (apiKey.startsWith(API_KEY_PREFIX) || !looksLikeJwt(apiKey))) {
                 // Create authentication request and delegate to identity provider
                 ApiKeyAuthenticationRequest request = new ApiKeyAuthenticationRequest(apiKey);
                 return identityProviderManager.authenticate(request);
@@ -149,5 +150,21 @@ public class ApiKeyAuthenticationMechanism implements HttpAuthenticationMechanis
     @Override
     public Uni<HttpCredentialTransport> getCredentialTransport(RoutingContext context) {
         return Uni.createFrom().item(new HttpCredentialTransport(HttpCredentialTransport.Type.AUTHORIZATION, "Bearer"));
+    }
+
+    // A JWS/JWT compact serialization is three non-empty dot-separated parts. API keys
+    // are Base64URL strings without dots, so this cleanly defers JWTs to
+    // JwtAuthenticationMechanism instead of treating them as API-key lookup misses
+    // (which would 401 before the JWT mechanism ever runs).
+    private static boolean looksLikeJwt(String token) {
+        int first = token.indexOf('.');
+        if (first <= 0) {
+            return false;
+        }
+        int second = token.indexOf('.', first + 1);
+        if (second <= first + 1) {
+            return false;
+        }
+        return token.indexOf('.', second + 1) == -1 && second + 1 < token.length();
     }
 }

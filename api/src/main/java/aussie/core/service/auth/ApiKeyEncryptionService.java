@@ -64,7 +64,6 @@ public class ApiKeyEncryptionService {
                     boolean allowPlaintextReads) {
         this.keyId = keyId;
         this.secureRandom = new SecureRandom();
-        this.allowPlaintextReads = allowPlaintextReads;
 
         final boolean keyPresent =
                 encryptionKey.isPresent() && !encryptionKey.get().isBlank();
@@ -89,10 +88,20 @@ public class ApiKeyEncryptionService {
             this.encryptionEnabled = false;
             LOG.warn("API key encryption is DISABLED (non-prod profile). "
                     + "Set aussie.auth.encryption.key to enable.");
-            if (allowPlaintextReads) {
-                LOG.warn("aussie.auth.encryption.allow-plaintext-reads=true; existing PLAIN: records "
-                        + "will still be readable. Disable once migration is complete.");
-            }
+        }
+
+        // When encryption is disabled the service only writes PLAIN: records, so reads of those
+        // same records must be permitted regardless of the flag — gating them would render the
+        // service unable to read its own writes. The flag stays meaningful when encryption is
+        // enabled: it controls whether legacy PLAIN: rows are still readable during migration.
+        this.allowPlaintextReads = allowPlaintextReads || !this.encryptionEnabled;
+        if (this.encryptionEnabled && allowPlaintextReads) {
+            LOG.warn("aussie.auth.encryption.allow-plaintext-reads=true; existing PLAIN: records "
+                    + "will still be readable. Disable once migration is complete.");
+        } else if (!this.encryptionEnabled && !allowPlaintextReads) {
+            LOG.warn("aussie.auth.encryption.allow-plaintext-reads=false was ignored because "
+                    + "encryption is disabled; PLAIN: reads are forced on so the service can "
+                    + "read its own writes. Set aussie.auth.encryption.key to enforce the flag.");
         }
     }
 

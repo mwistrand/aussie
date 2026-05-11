@@ -55,7 +55,14 @@ USER 185
 # so the first burst of traffic does not pay page-fault latency. Heap sizing
 # (-Xms/-Xmx) and Netty direct-memory tuning are deployment-specific and should
 # be set per environment via JAVA_OPTS.
-ENV JAVA_OPTS_APPEND="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager -XX:+UseZGC -XX:+ZGenerational -XX:+AlwaysPreTouch"
+#
+# GC_CONTAINER_OPTIONS overrides the base image's default `-XX:+UseParallelGC`
+# (plus its MinHeapFreeRatio/MaxHeapFreeRatio/GCTimeRatio/AdaptiveSizePolicyWeight
+# companions). Without this override, run-java.sh emits both UseParallelGC and
+# UseZGC on the command line and the JVM aborts with "Multiple garbage
+# collectors selected".
+ENV GC_CONTAINER_OPTIONS="-XX:+UseZGC -XX:+ZGenerational"
+ENV JAVA_OPTS_APPEND="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager -XX:+AlwaysPreTouch"
 ENV JAVA_APP_JAR="/deployments/quarkus-run.jar"
 
 ENTRYPOINT [ "/opt/jboss/container/java/run/run-java.sh" ]

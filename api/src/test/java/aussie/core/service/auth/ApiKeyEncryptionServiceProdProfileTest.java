@@ -1,7 +1,7 @@
 package aussie.core.service.auth;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -67,9 +67,9 @@ class ApiKeyEncryptionServiceProdProfileTest {
     class PlaintextReadGating {
 
         @Test
-        @DisplayName("refuses to decrypt PLAIN: records when allow-plaintext-reads=false")
-        void refusesPlaintextWhenFlagDisabled() {
-            var service = new ApiKeyEncryptionService(Optional.empty(), "v1", "dev", false);
+        @DisplayName("refuses to decrypt PLAIN: records when encryption is enabled and flag=false")
+        void refusesPlaintextWhenEncryptedAndFlagDisabled() {
+            var service = new ApiKeyEncryptionService(Optional.of(VALID_KEY), "v1", "prod", false);
             var ex = assertThrows(IllegalStateException.class, () -> service.decrypt("PLAIN:not-real"));
             assertTrue(
                     ex.getMessage().contains("allow-plaintext-reads"),
@@ -77,17 +77,28 @@ class ApiKeyEncryptionServiceProdProfileTest {
         }
 
         @Test
-        @DisplayName("decrypts PLAIN: records only when allow-plaintext-reads=true")
-        void decryptsPlaintextWhenFlagEnabled() {
-            var service = new ApiKeyEncryptionService(Optional.empty(), "v1", "dev", true);
+        @DisplayName("decrypts PLAIN: records when encryption is enabled and flag=true")
+        void decryptsPlaintextWhenEncryptedAndFlagEnabled() {
+            var service = new ApiKeyEncryptionService(Optional.of(VALID_KEY), "v1", "prod", true);
             // We don't decode a real record here — the round-trip is covered in
             // ApiKeyEncryptionServiceTest. We just need to confirm the gate lets us through
             // far enough to fail later (Base64 decode of garbage), not at the gate itself.
             var ex = assertThrows(RuntimeException.class, () -> service.decrypt("PLAIN:!!!"));
-            assertEquals(
-                    false,
+            assertFalse(
                     ex.getMessage().contains("allow-plaintext-reads"),
                     "decryption should fail past the gate when the flag is enabled");
+        }
+
+        @Test
+        @DisplayName("permits PLAIN: reads when encryption is disabled, even if flag=false")
+        void permitsPlaintextWhenEncryptionDisabled() {
+            // When encryption is off, the service writes PLAIN: records, so it must also be
+            // able to read them back regardless of the migration flag.
+            var service = new ApiKeyEncryptionService(Optional.empty(), "v1", "dev", false);
+            var ex = assertThrows(RuntimeException.class, () -> service.decrypt("PLAIN:!!!"));
+            assertFalse(
+                    ex.getMessage().contains("allow-plaintext-reads"),
+                    "gate must be inactive when encryption is disabled, got: " + ex.getMessage());
         }
     }
 }
