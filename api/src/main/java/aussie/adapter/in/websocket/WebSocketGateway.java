@@ -19,6 +19,8 @@ import io.vertx.core.http.WebSocketConnectOptions;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.in.problem.ProblemDetail;
+import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.core.config.WebSocketConfig;
@@ -55,6 +57,7 @@ public class WebSocketGateway {
     private final Vertx vertx;
     private final GatewayMetrics metrics;
     private final WebSocketRateLimitService rateLimitService;
+    private final ProxyErrorWriter errorWriter;
 
     @Inject
     public WebSocketGateway(
@@ -62,12 +65,14 @@ public class WebSocketGateway {
             WebSocketConfig config,
             Vertx vertx,
             GatewayMetrics metrics,
-            WebSocketRateLimitService rateLimitService) {
+            WebSocketRateLimitService rateLimitService,
+            ProxyErrorWriter errorWriter) {
         this.gatewayUseCase = gatewayUseCase;
         this.config = config;
         this.vertx = vertx;
         this.metrics = metrics;
         this.rateLimitService = rateLimitService;
+        this.errorWriter = errorWriter;
     }
 
     /**
@@ -94,10 +99,12 @@ public class WebSocketGateway {
     }
 
     private void handleUpgrade(RoutingContext ctx, Uni<WebSocketUpgradeResult> resultUni) {
-        // Check connection limit before processing
         if (activeSessions.size() >= config.maxConnections()) {
             LOG.warnv("WebSocket connection limit reached ({0})", config.maxConnections());
-            ctx.response().setStatusCode(503).end("Service temporarily unavailable: connection limit reached");
+            errorWriter.write(
+                    ctx,
+                    new ProblemDetail(
+                            "Service Unavailable", 503, "Service temporarily unavailable: connection limit reached"));
             return;
         }
 
@@ -108,21 +115,16 @@ public class WebSocketGateway {
                         result -> {
                             switch (result) {
                                 case WebSocketUpgradeResult.Authorized auth -> establishProxy(ctx, auth);
-                                case WebSocketUpgradeResult.Unauthorized u -> ctx.response()
-                                        .setStatusCode(401)
-                                        .end(u.reason());
-                                case WebSocketUpgradeResult.Forbidden f -> ctx.response()
-                                        .setStatusCode(403)
-                                        .end(f.reason());
-                                case WebSocketUpgradeResult.RouteNotFound r -> ctx.response()
-                                        .setStatusCode(404)
-                                        .end("Route not found: " + r.path());
-                                case WebSocketUpgradeResult.ServiceNotFound s -> ctx.response()
-                                        .setStatusCode(404)
-                                        .end("Service not found: " + s.serviceId());
-                                case WebSocketUpgradeResult.NotWebSocket n -> ctx.response()
-                                        .setStatusCode(400)
-                                        .end("Not a WebSocket endpoint: " + n.path());
+                                case WebSocketUpgradeResult.Unauthorized u -> errorWriter.write(
+                                        ctx, ProblemDetail.unauthorized(u.reason()));
+                                case WebSocketUpgradeResult.Forbidden f -> errorWriter.write(
+                                        ctx, ProblemDetail.forbidden(f.reason()));
+                                case WebSocketUpgradeResult.RouteNotFound r -> errorWriter.write(
+                                        ctx, ProblemDetail.routeNotFound(r.path()));
+                                case WebSocketUpgradeResult.ServiceNotFound s -> errorWriter.write(
+                                        ctx, ProblemDetail.serviceNotFound(s.serviceId()));
+                                case WebSocketUpgradeResult.NotWebSocket n -> errorWriter.write(
+                                        ctx, ProblemDetail.badRequest("Not a WebSocket endpoint: " + n.path()));
                                 case WebSocketUpgradeResult.RateLimited rl -> handleRateLimited(ctx, rl);
                             }
                         },
@@ -130,19 +132,27 @@ public class WebSocketGateway {
                             int statusCode = mapErrorToStatusCode(error);
                             String message = mapErrorToMessage(error, statusCode);
                             LOG.warnv(error, "WebSocket upgrade failed with status {0}: {1}", statusCode, message);
-                            ctx.response().setStatusCode(statusCode).end(message);
+                            errorWriter.write(ctx, problemFor(statusCode, message));
                         });
     }
 
     private void handleRateLimited(RoutingContext ctx, WebSocketUpgradeResult.RateLimited rl) {
         metrics.recordRateLimitExceeded("unknown", "ws_connection");
-        ctx.response()
-                .setStatusCode(429)
-                .putHeader("Retry-After", String.valueOf(rl.retryAfterSeconds()))
-                .putHeader("X-RateLimit-Limit", String.valueOf(rl.limit()))
-                .putHeader("X-RateLimit-Remaining", "0")
-                .putHeader("X-RateLimit-Reset", String.valueOf(rl.resetAtEpochSeconds()))
-                .end("Rate limit exceeded. Retry after " + rl.retryAfterSeconds() + " seconds.");
+        final var problem = ProblemDetail.tooManyRequests(
+                "Rate limit exceeded. Retry after " + rl.retryAfterSeconds() + " seconds.",
+                rl.retryAfterSeconds(),
+                rl.limit(),
+                0,
+                rl.resetAtEpochSeconds());
+        errorWriter.writeRateLimit(ctx, problem, null, rl.retryAfterSeconds(), rl.limit(), rl.resetAtEpochSeconds());
+    }
+
+    private ProblemDetail problemFor(int statusCode, String message) {
+        return switch (statusCode) {
+            case 400 -> ProblemDetail.badRequest(message);
+            case 502 -> ProblemDetail.badGateway(message);
+            default -> ProblemDetail.internalError(message);
+        };
     }
 
     @SuppressWarnings("deprecation")
@@ -221,13 +231,13 @@ public class WebSocketGateway {
                             .onFailure(err -> {
                                 LOG.warnv(err, "Client WebSocket upgrade failed for session {0}", sessionId);
                                 backendWs.close((short) 1001, "Client upgrade failed");
-                                ctx.response().setStatusCode(500).end("WebSocket upgrade failed");
+                                errorWriter.write(
+                                        ctx, ProblemDetail.internalError("WebSocket upgrade failed"), serviceId);
                             });
                 })
                 .onFailure(err -> {
                     LOG.warnv(err, "Backend WebSocket connection failed to {0}", backendUri);
-                    // Don't expose internal error details to clients for security reasons
-                    ctx.response().setStatusCode(502).end("Backend connection failed");
+                    errorWriter.write(ctx, ProblemDetail.badGateway("Backend connection failed"), serviceId);
                 });
     }
 

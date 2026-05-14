@@ -14,6 +14,8 @@ import io.vertx.core.http.HttpServerRequest;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.in.problem.ProblemDetail;
+import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.SpanAttributes;
@@ -52,6 +54,7 @@ public class WebSocketRateLimitFilter {
     private final ServiceRegistry serviceRegistry;
     private final GatewayMetrics metrics;
     private final SecurityEventDispatcher securityEventDispatcher;
+    private final ProxyErrorWriter errorWriter;
 
     @Inject
     public WebSocketRateLimitFilter(
@@ -60,13 +63,15 @@ public class WebSocketRateLimitFilter {
             RateLimitResolver rateLimitResolver,
             ServiceRegistry serviceRegistry,
             GatewayMetrics metrics,
-            SecurityEventDispatcher securityEventDispatcher) {
+            SecurityEventDispatcher securityEventDispatcher,
+            ProxyErrorWriter errorWriter) {
         this.rateLimiter = rateLimiter;
         this.config = config;
         this.rateLimitResolver = rateLimitResolver;
         this.serviceRegistry = serviceRegistry;
         this.metrics = metrics;
         this.securityEventDispatcher = securityEventDispatcher;
+        this.errorWriter = errorWriter;
     }
 
     /**
@@ -134,14 +139,19 @@ public class WebSocketRateLimitFilter {
                 "WebSocket connection rate limited: service={0}, client={1}, retryAfter={2}s",
                 serviceId, hashClientId(clientId), decision.retryAfterSeconds());
 
-        // Return HTTP 429 before the WebSocket upgrade
-        ctx.response()
-                .setStatusCode(429)
-                .putHeader("Retry-After", String.valueOf(decision.retryAfterSeconds()))
-                .putHeader("X-RateLimit-Limit", String.valueOf(decision.limit()))
-                .putHeader("X-RateLimit-Remaining", "0")
-                .putHeader("X-RateLimit-Reset", String.valueOf(decision.resetAtEpochSeconds()))
-                .end("Rate limit exceeded. Retry after " + decision.retryAfterSeconds() + " seconds.");
+        final var problem = ProblemDetail.tooManyRequests(
+                "Rate limit exceeded. Retry after " + decision.retryAfterSeconds() + " seconds.",
+                decision.retryAfterSeconds(),
+                decision.limit(),
+                0,
+                decision.resetAtEpochSeconds());
+        errorWriter.writeRateLimit(
+                ctx,
+                problem,
+                serviceId,
+                decision.retryAfterSeconds(),
+                decision.limit(),
+                decision.resetAtEpochSeconds());
     }
 
     private void recordMetrics(String serviceId, RateLimitDecision decision) {

@@ -4,7 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -30,6 +33,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.in.problem.ProblemDetail;
+import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.core.config.WebSocketConfig;
@@ -69,16 +74,23 @@ class WebSocketGatewayUnitTest {
     @Mock
     private HttpServerResponse response;
 
+    @Mock
+    private ProxyErrorWriter errorWriter;
+
     private WebSocketGateway gateway;
 
     @BeforeEach
     void setUp() {
-        gateway = new WebSocketGateway(gatewayUseCase, config, vertx, metrics, rateLimitService);
+        gateway = new WebSocketGateway(gatewayUseCase, config, vertx, metrics, rateLimitService, errorWriter);
 
         lenient().when(ctx.request()).thenReturn(request);
         lenient().when(ctx.response()).thenReturn(response);
         lenient().when(response.setStatusCode(anyInt())).thenReturn(response);
         lenient().when(response.putHeader(anyString(), anyString())).thenReturn(response);
+    }
+
+    private static org.mockito.ArgumentMatcher<ProblemDetail> problemWithStatus(int status) {
+        return p -> p != null && p.status() == status;
     }
 
     private void mockRequestPath(String path) {
@@ -463,11 +475,11 @@ class WebSocketGatewayUnitTest {
         @DisplayName("shouldReturn503WhenConnectionLimitReached")
         void shouldReturn503WhenConnectionLimitReached() {
             mockRequestPath("/gateway/ws");
-            when(config.maxConnections()).thenReturn(0); // limit of 0 means immediately full
+            when(config.maxConnections()).thenReturn(0);
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(503);
+            verify(errorWriter).write(eq(ctx), argThat(problemWithStatus(503)));
         }
     }
 
@@ -565,7 +577,7 @@ class WebSocketGatewayUnitTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(401);
+            verify(errorWriter).write(eq(ctx), argThat(problemWithStatus(401)));
         }
 
         @Test
@@ -578,7 +590,7 @@ class WebSocketGatewayUnitTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(403);
+            verify(errorWriter).write(eq(ctx), argThat(problemWithStatus(403)));
         }
 
         @Test
@@ -591,7 +603,7 @@ class WebSocketGatewayUnitTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(404);
+            verify(errorWriter).write(eq(ctx), argThat(problemWithStatus(404)));
         }
 
         @Test
@@ -604,7 +616,7 @@ class WebSocketGatewayUnitTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(400);
+            verify(errorWriter).write(eq(ctx), argThat(problemWithStatus(400)));
         }
 
         @Test
@@ -619,10 +631,8 @@ class WebSocketGatewayUnitTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(429);
-            verify(response).putHeader("Retry-After", "60");
-            verify(response).putHeader("X-RateLimit-Limit", "100");
-            verify(response).putHeader("X-RateLimit-Remaining", "0");
+            verify(errorWriter)
+                    .writeRateLimit(eq(ctx), argThat(problemWithStatus(429)), any(), eq(60L), eq(100L), anyLong());
         }
     }
 }

@@ -12,6 +12,7 @@ This guide is for developers onboarding their applications to the Aussie API Gat
 - [Endpoint Configuration](#endpoint-configuration)
 - [Request Timeouts](timeouts.md)
 - [WebSocket Endpoints](websocket-onboarding.md)
+- [Problem Details Error Bodies](problem-details.md)
 - [CLI Reference](#cli-reference)
 
 ## Getting Started

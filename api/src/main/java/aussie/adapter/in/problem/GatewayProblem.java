@@ -1,191 +1,115 @@
 package aussie.adapter.in.problem;
 
-import jakarta.ws.rs.core.Response.Status;
-
 import io.quarkiverse.resteasy.problem.HttpProblem;
 
 /**
- * RFC 7807 Problem Details factory for gateway errors.
+ * RFC 9457 Problem Details factory for gateway errors.
  *
  * <p>Provides static factory methods that create {@link HttpProblem} instances
  * from quarkus-resteasy-problem for consistent error responses across all
- * gateway endpoints.
- *
- * <p>All 4xx client errors are created with {@code logLevel=OFF} to prevent
- * unnecessary error logging for expected client behavior.
+ * gateway endpoints. The body shape is owned by {@link ProblemDetail}; both
+ * this class and the native Vert.x error path read from the same factories
+ * so the two paths emit identical responses.
  */
 public final class GatewayProblem {
 
-    private GatewayProblem() {
-        // Utility class - prevent instantiation
+    private GatewayProblem() {}
+
+    private static HttpProblem build(ProblemDetail problem) {
+        final var builder = HttpProblem.builder()
+                .withTitle(problem.title())
+                .withStatus(problem.status())
+                .withDetail(problem.detail());
+        problem.extras().forEach(builder::with);
+        return builder.build();
     }
 
     // ========== Not Found Errors ==========
 
     public static HttpProblem serviceNotFound(String serviceId) {
-        return HttpProblem.builder()
-                .withTitle("Service Not Found")
-                .withStatus(Status.NOT_FOUND)
-                .withDetail("Service '%s' is not registered".formatted(serviceId))
-                .build();
+        return build(ProblemDetail.serviceNotFound(serviceId));
     }
 
     public static HttpProblem routeNotFound(String path) {
-        return HttpProblem.builder()
-                .withTitle("Route Not Found")
-                .withStatus(Status.NOT_FOUND)
-                .withDetail("No route matches path '%s'".formatted(path))
-                .build();
+        return build(ProblemDetail.routeNotFound(path));
     }
 
     public static HttpProblem resourceNotFound(String resourceType, String resourceId) {
-        return HttpProblem.builder()
-                .withTitle("%s Not Found".formatted(resourceType))
-                .withStatus(Status.NOT_FOUND)
-                .withDetail("%s not found: %s".formatted(resourceType, resourceId))
-                .build();
+        return build(ProblemDetail.resourceNotFound(resourceType, resourceId));
     }
 
     public static HttpProblem notFound(String detail) {
-        return HttpProblem.builder()
-                .withTitle("Not Found")
-                .withStatus(Status.NOT_FOUND)
-                .withDetail(detail)
-                .build();
+        return build(ProblemDetail.notFound(detail));
     }
 
     // ========== Bad Request Errors ==========
 
     public static HttpProblem badRequest(String detail) {
-        return HttpProblem.builder()
-                .withTitle("Bad Request")
-                .withStatus(Status.BAD_REQUEST)
-                .withDetail(detail)
-                .build();
+        return build(ProblemDetail.badRequest(detail));
     }
 
     public static HttpProblem validationError(String detail) {
-        return HttpProblem.builder()
-                .withTitle("Validation Error")
-                .withStatus(Status.BAD_REQUEST)
-                .withDetail(detail)
-                .build();
+        return build(ProblemDetail.validationError(detail));
     }
 
     // ========== Authentication/Authorization Errors ==========
 
     public static HttpProblem unauthorized(String detail) {
-        return HttpProblem.builder()
-                .withTitle("Unauthorized")
-                .withStatus(Status.UNAUTHORIZED)
-                .withDetail(detail)
-                .build();
+        return build(ProblemDetail.unauthorized(detail));
     }
 
     public static HttpProblem forbidden(String detail) {
-        return HttpProblem.builder()
-                .withTitle("Forbidden")
-                .withStatus(Status.FORBIDDEN)
-                .withDetail(detail)
-                .build();
+        return build(ProblemDetail.forbidden(detail));
     }
 
     // ========== Gateway Errors ==========
 
     public static HttpProblem badGateway(String detail) {
-        return HttpProblem.builder()
-                .withTitle("Bad Gateway")
-                .withStatus(Status.BAD_GATEWAY)
-                .withDetail(detail)
-                .build();
+        return build(ProblemDetail.badGateway(detail));
     }
 
     // ========== Rate Limit Errors ==========
 
     /**
      * Create a 429 Too Many Requests problem with full rate limit details.
-     *
-     * @param detail the error detail message
-     * @param retryAfterSeconds seconds until client can retry
-     * @param limit the rate limit
-     * @param remaining remaining requests (typically 0)
-     * @param resetAt Unix timestamp when limit resets
-     * @return rate limit problem
      */
     public static HttpProblem tooManyRequests(
             String detail, long retryAfterSeconds, long limit, long remaining, long resetAt) {
-        return HttpProblem.builder()
-                .withTitle("Too Many Requests")
-                .withStatus(Status.fromStatusCode(429))
-                .withDetail(detail)
-                .with("retryAfter", retryAfterSeconds)
-                .with("limit", limit)
-                .with("remaining", remaining)
-                .with("resetAt", resetAt)
-                .build();
+        return build(ProblemDetail.tooManyRequests(detail, retryAfterSeconds, limit, remaining, resetAt));
     }
 
     /**
      * Create a 429 Too Many Requests problem with minimal details.
-     *
-     * @param detail the error detail message
-     * @param retryAfterSeconds seconds until client can retry
-     * @return rate limit problem
      */
     public static HttpProblem tooManyRequests(String detail, long retryAfterSeconds) {
-        return HttpProblem.builder()
-                .withTitle("Too Many Requests")
-                .withStatus(Status.fromStatusCode(429))
-                .withDetail(detail)
-                .with("retryAfter", retryAfterSeconds)
-                .build();
+        return build(ProblemDetail.tooManyRequests(detail, retryAfterSeconds));
     }
 
     // ========== Request Size Errors ==========
 
     public static HttpProblem payloadTooLarge(String detail) {
-        return HttpProblem.builder()
-                .withTitle("Payload Too Large")
-                .withStatus(Status.REQUEST_ENTITY_TOO_LARGE)
-                .withDetail(detail)
-                .build();
+        return build(ProblemDetail.payloadTooLarge(detail));
     }
 
     public static HttpProblem headerTooLarge(String detail) {
-        return HttpProblem.builder()
-                .withTitle("Request Header Fields Too Large")
-                .withStatus(Status.fromStatusCode(431))
-                .withDetail(detail)
-                .build();
+        return build(ProblemDetail.headerTooLarge(detail));
     }
 
     // ========== Conflict Errors ==========
 
     public static HttpProblem conflict(String detail) {
-        return HttpProblem.builder()
-                .withTitle("Conflict")
-                .withStatus(Status.CONFLICT)
-                .withDetail(detail)
-                .build();
+        return build(ProblemDetail.conflict(detail));
     }
 
     // ========== Server Errors ==========
 
     public static HttpProblem internalError(String detail) {
-        return HttpProblem.builder()
-                .withTitle("Internal Server Error")
-                .withStatus(Status.INTERNAL_SERVER_ERROR)
-                .withDetail(detail)
-                .build();
+        return build(ProblemDetail.internalError(detail));
     }
 
     // ========== Feature Disabled ==========
 
     public static HttpProblem featureDisabled(String feature) {
-        return HttpProblem.builder()
-                .withTitle("Feature Disabled")
-                .withStatus(Status.NOT_FOUND)
-                .withDetail("%s is disabled".formatted(feature))
-                .build();
+        return build(ProblemDetail.featureDisabled(feature));
     }
 }

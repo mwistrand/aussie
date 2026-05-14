@@ -10,7 +10,7 @@ import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 import aussie.core.service.auth.JwksCacheService.JwksFetchException;
 
 /**
- * Global exception mappers for converting exceptions to RFC 7807 Problem Details.
+ * Global exception mappers for converting exceptions to RFC 9457 Problem Details.
  *
  * <p>These mappers prevent internal exceptions from returning 500 Internal Server Error
  * when a more appropriate status code should be used.
@@ -19,7 +19,6 @@ import aussie.core.service.auth.JwksCacheService.JwksFetchException;
 public class GlobalExceptionMappers {
 
     private static final Logger LOG = Logger.getLogger(GlobalExceptionMappers.class);
-    private static final String PROBLEM_JSON = "application/problem+json";
 
     @ServerExceptionMapper
     public Response mapJwksFetchException(JwksFetchException e) {
@@ -41,7 +40,7 @@ public class GlobalExceptionMappers {
 
     private Response toResponse(HttpProblem problem) {
         return Response.status(problem.getStatusCode())
-                .type(PROBLEM_JSON)
+                .type(ProblemJson.CONTENT_TYPE)
                 .entity(problem)
                 .build();
     }

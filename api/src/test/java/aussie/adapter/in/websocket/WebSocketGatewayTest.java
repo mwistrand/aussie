@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -28,6 +30,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.in.problem.ProblemDetail;
+import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.core.config.WebSocketConfig;
@@ -64,16 +68,31 @@ class WebSocketGatewayTest {
     @Mock
     private HttpServerResponse response;
 
+    @Mock
+    private ProxyErrorWriter errorWriter;
+
     private WebSocketGateway gateway;
 
     @BeforeEach
     void setUp() {
-        gateway = new WebSocketGateway(gatewayUseCase, config, vertx, metrics, rateLimitService);
+        gateway = new WebSocketGateway(gatewayUseCase, config, vertx, metrics, rateLimitService, errorWriter);
 
         lenient().when(ctx.request()).thenReturn(request);
         lenient().when(ctx.response()).thenReturn(response);
         lenient().when(response.setStatusCode(anyInt())).thenReturn(response);
         lenient().when(response.putHeader(anyString(), anyString())).thenReturn(response);
+    }
+
+    private static org.mockito.ArgumentMatcher<ProblemDetail> problemWithStatus(int status) {
+        return p -> p != null && p.status() == status;
+    }
+
+    private static org.mockito.ArgumentMatcher<ProblemDetail> problemWithStatusAndTitle(int status, String title) {
+        return p -> p != null && p.status() == status && title.equals(p.title());
+    }
+
+    private static org.mockito.ArgumentMatcher<ProblemDetail> problemWithStatusAndDetail(int status, String detail) {
+        return p -> p != null && p.status() == status && detail.equals(p.detail());
     }
 
     private void mockRequestPath(String path) {
@@ -98,8 +117,7 @@ class WebSocketGatewayTest {
             gateway.handleGatewayUpgrade(ctx);
 
             verify(gatewayUseCase).upgradeGateway(any());
-            verify(response).setStatusCode(404);
-            verify(response).end("Route not found: /ws/echo");
+            verify(errorWriter).write(eq(ctx), argThat(problemWithStatusAndTitle(404, "Route Not Found")));
         }
 
         @Test
@@ -113,8 +131,7 @@ class WebSocketGatewayTest {
             gateway.handleGatewayUpgrade(ctx);
 
             verify(gatewayUseCase).upgradeGateway(any());
-            verify(response).setStatusCode(404);
-            verify(response).end("Route not found: /");
+            verify(errorWriter).write(eq(ctx), argThat(problemWithStatusAndTitle(404, "Route Not Found")));
         }
     }
 
@@ -133,7 +150,7 @@ class WebSocketGatewayTest {
             gateway.handlePassThroughUpgrade(ctx);
 
             verify(gatewayUseCase).upgradePassThrough(eq("my-service"), any());
-            verify(response).setStatusCode(404);
+            verify(errorWriter).write(eq(ctx), argThat(problemWithStatusAndTitle(404, "Service Not Found")));
         }
 
         @Test
@@ -165,8 +182,11 @@ class WebSocketGatewayTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(503);
-            verify(response).end("Service temporarily unavailable: connection limit reached");
+            verify(errorWriter)
+                    .write(
+                            eq(ctx),
+                            argThat(problemWithStatusAndDetail(
+                                    503, "Service temporarily unavailable: connection limit reached")));
         }
     }
 
@@ -184,8 +204,7 @@ class WebSocketGatewayTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(401);
-            verify(response).end("Invalid token");
+            verify(errorWriter).write(eq(ctx), argThat(problemWithStatusAndDetail(401, "Invalid token")));
         }
 
         @Test
@@ -198,8 +217,7 @@ class WebSocketGatewayTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(403);
-            verify(response).end("Access denied");
+            verify(errorWriter).write(eq(ctx), argThat(problemWithStatusAndDetail(403, "Access denied")));
         }
 
         @Test
@@ -212,8 +230,7 @@ class WebSocketGatewayTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(404);
-            verify(response).end("Route not found: /ws");
+            verify(errorWriter).write(eq(ctx), argThat(problemWithStatusAndTitle(404, "Route Not Found")));
         }
 
         @Test
@@ -226,8 +243,7 @@ class WebSocketGatewayTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(404);
-            verify(response).end("Service not found: unknown-svc");
+            verify(errorWriter).write(eq(ctx), argThat(problemWithStatusAndTitle(404, "Service Not Found")));
         }
 
         @Test
@@ -240,12 +256,12 @@ class WebSocketGatewayTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(400);
-            verify(response).end("Not a WebSocket endpoint: /api/rest");
+            verify(errorWriter)
+                    .write(eq(ctx), argThat(problemWithStatusAndDetail(400, "Not a WebSocket endpoint: /api/rest")));
         }
 
         @Test
-        @DisplayName("Should return 429 with headers for RateLimited result")
+        @DisplayName("Should delegate 429 RateLimited result to errorWriter.writeRateLimit")
         void shouldReturn429ForRateLimited() {
             mockRequestPath("/gateway/ws");
             when(config.maxConnections()).thenReturn(10000);
@@ -254,12 +270,9 @@ class WebSocketGatewayTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(429);
-            verify(response).putHeader("Retry-After", "30");
-            verify(response).putHeader("X-RateLimit-Limit", "100");
-            verify(response).putHeader("X-RateLimit-Remaining", "0");
-            verify(response).putHeader("X-RateLimit-Reset", "1709654400");
-            verify(response).end("Rate limit exceeded. Retry after 30 seconds.");
+            verify(errorWriter)
+                    .writeRateLimit(
+                            eq(ctx), argThat(problemWithStatus(429)), isNull(), eq(30L), eq(100L), eq(1709654400L));
             verify(metrics).recordRateLimitExceeded("unknown", "ws_connection");
         }
     }
@@ -278,8 +291,8 @@ class WebSocketGatewayTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(502);
-            verify(response).end("Identity provider unavailable");
+            verify(errorWriter)
+                    .write(eq(ctx), argThat(problemWithStatusAndDetail(502, "Identity provider unavailable")));
         }
 
         @Test
@@ -293,8 +306,8 @@ class WebSocketGatewayTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(502);
-            verify(response).end("Identity provider unavailable");
+            verify(errorWriter)
+                    .write(eq(ctx), argThat(problemWithStatusAndDetail(502, "Identity provider unavailable")));
         }
 
         @Test
@@ -308,8 +321,8 @@ class WebSocketGatewayTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(502);
-            verify(response).end("Identity provider unavailable");
+            verify(errorWriter)
+                    .write(eq(ctx), argThat(problemWithStatusAndDetail(502, "Identity provider unavailable")));
         }
 
         @Test
@@ -322,8 +335,8 @@ class WebSocketGatewayTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(400);
-            verify(response).end("Bad request: Invalid parameter");
+            verify(errorWriter)
+                    .write(eq(ctx), argThat(problemWithStatusAndDetail(400, "Bad request: Invalid parameter")));
         }
 
         @Test
@@ -336,8 +349,7 @@ class WebSocketGatewayTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(response).setStatusCode(500);
-            verify(response).end("Internal error");
+            verify(errorWriter).write(eq(ctx), argThat(problemWithStatusAndDetail(500, "Internal error")));
         }
     }
 

@@ -30,6 +30,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.in.problem.ProblemDetail;
+import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.core.config.RateLimitingConfig;
@@ -76,12 +78,15 @@ class WebSocketRateLimitFilterTest {
     @Mock
     private RateLimitingConfig.WebSocketRateLimitConfig.ConnectionConfig connectionConfig;
 
+    @Mock
+    private ProxyErrorWriter errorWriter;
+
     private WebSocketRateLimitFilter filter;
 
     @BeforeEach
     void setUp() {
         filter = new WebSocketRateLimitFilter(
-                rateLimiter, config, rateLimitResolver, serviceRegistry, metrics, securityEventDispatcher);
+                rateLimiter, config, rateLimitResolver, serviceRegistry, metrics, securityEventDispatcher, errorWriter);
 
         lenient().when(ctx.request()).thenReturn(request);
         lenient().when(ctx.response()).thenReturn(response);
@@ -494,8 +499,8 @@ class WebSocketRateLimitFilterTest {
     class RateLimitExceededTests {
 
         @Test
-        @DisplayName("Should return 429 with headers when rate limit is exceeded")
-        void shouldReturn429WhenExceeded() {
+        @DisplayName("delegates to ProxyErrorWriter with the 429 ProblemDetail + rate-limit headers")
+        void shouldDelegateToErrorWriterWhenExceeded() {
             mockWebSocketUpgrade();
             mockRateLimitingEnabled();
             when(request.path()).thenReturn("/my-service/ws");
@@ -512,12 +517,20 @@ class WebSocketRateLimitFilterTest {
             filter.checkWebSocketRateLimit(ctx);
 
             verify(ctx, never()).next();
-            verify(response).setStatusCode(429);
-            verify(response).putHeader("Retry-After", "30");
-            verify(response).putHeader("X-RateLimit-Limit", "100");
-            verify(response).putHeader("X-RateLimit-Remaining", "0");
-            verify(response).putHeader("X-RateLimit-Reset", String.valueOf(resetAt.getEpochSecond()));
-            verify(response).end("Rate limit exceeded. Retry after 30 seconds.");
+            final var problemCaptor = org.mockito.ArgumentCaptor.forClass(ProblemDetail.class);
+            verify(errorWriter)
+                    .writeRateLimit(
+                            eq(ctx),
+                            problemCaptor.capture(),
+                            eq("my-service"),
+                            eq(30L),
+                            eq(100L),
+                            eq(resetAt.getEpochSecond()));
+            final var captured = problemCaptor.getValue();
+            assertEquals(429, captured.status());
+            assertEquals("Too Many Requests", captured.title());
+            assertEquals(30L, captured.extras().get("retryAfter"));
+            assertEquals(100L, captured.extras().get("limit"));
             verify(metrics).recordRateLimitExceeded("my-service", "ws_connection");
             verify(securityEventDispatcher).dispatch(any());
         }
