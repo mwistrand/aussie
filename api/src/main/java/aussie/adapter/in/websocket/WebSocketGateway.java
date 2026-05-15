@@ -32,6 +32,7 @@ import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
 import aussie.core.service.auth.JwksCacheService.JwksFetchException;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
+import aussie.core.util.SecureHash;
 
 /**
  * Handle WebSocket proxy connections after authentication.
@@ -102,9 +103,7 @@ public class WebSocketGateway {
         if (activeSessions.size() >= config.maxConnections()) {
             LOG.warnv("WebSocket connection limit reached ({0})", config.maxConnections());
             errorWriter.write(
-                    ctx,
-                    new ProblemDetail(
-                            "Service Unavailable", 503, "Service temporarily unavailable: connection limit reached"));
+                    ctx, ProblemDetail.serviceUnavailable("Service temporarily unavailable: connection limit reached"));
             return;
         }
 
@@ -130,14 +129,14 @@ public class WebSocketGateway {
                         },
                         error -> {
                             int statusCode = mapErrorToStatusCode(error);
-                            String message = mapErrorToMessage(error, statusCode);
+                            String message = mapErrorToMessage(statusCode);
                             LOG.warnv(error, "WebSocket upgrade failed with status {0}: {1}", statusCode, message);
                             errorWriter.write(ctx, problemFor(statusCode, message));
                         });
     }
 
     private void handleRateLimited(RoutingContext ctx, WebSocketUpgradeResult.RateLimited rl) {
-        metrics.recordRateLimitExceeded("unknown", "ws_connection");
+        metrics.recordRateLimitExceeded(null, "ws_connection");
         final var problem = ProblemDetail.tooManyRequests(
                 "Rate limit exceeded. Retry after " + rl.retryAfterSeconds() + " seconds.",
                 rl.retryAfterSeconds(),
@@ -264,17 +263,17 @@ public class WebSocketGateway {
         // Priority: session cookie > auth header > API key header > IP
         final var sessionCookie = ctx.request().getCookie("aussie_session");
         if (sessionCookie != null) {
-            return "session:" + sessionCookie.getValue();
+            return "session:" + SecureHash.truncatedSha256(sessionCookie.getValue(), 16);
         }
 
         final var sessionHeader = ctx.request().getHeader("X-Session-ID");
         if (sessionHeader != null) {
-            return "session:" + sessionHeader;
+            return "session:" + SecureHash.truncatedSha256(sessionHeader, 16);
         }
 
         final var authHeader = ctx.request().getHeader("Authorization");
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            return "bearer:" + Integer.toHexString(authHeader.substring(7).hashCode());
+            return "bearer:" + SecureHash.truncatedSha256(authHeader.substring(7), 16);
         }
 
         final var apiKeyId = ctx.request().getHeader("X-API-Key-ID");
@@ -322,9 +321,9 @@ public class WebSocketGateway {
         return 500;
     }
 
-    private String mapErrorToMessage(Throwable error, int statusCode) {
+    private String mapErrorToMessage(int statusCode) {
         return switch (statusCode) {
-            case 400 -> "Bad request: " + error.getMessage();
+            case 400 -> "Bad request";
             case 502 -> "Identity provider unavailable";
             default -> "Internal error";
         };

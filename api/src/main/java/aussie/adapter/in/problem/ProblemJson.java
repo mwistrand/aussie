@@ -5,11 +5,14 @@ import io.vertx.core.json.JsonObject;
 /**
  * RFC 9457 JSON serializer for {@link ProblemDetail}. Used by the native
  * Vert.x error-write path; the JAX-RS path goes through
- * {@code quarkus-resteasy-problem}'s own Jackson serializer. The two paths
- * emit byte-comparable bodies for the same {@link ProblemDetail}: same field
- * set (no synthetic {@code type:"about:blank"}), same order
- * ({@code status, title, detail, extras}), and {@code detail} omitted when
- * null or empty to match {@code JacksonProblemSerializer}.
+ * {@code quarkus-resteasy-problem}'s own Jackson serializer (which conditionally
+ * omits {@code type} when not set).
+ *
+ * <p>Wire shape: {@code status, title, detail?, instance?, extras...}.
+ * {@code detail} is omitted when null or empty; {@code instance} is omitted
+ * when null. The JAX-RS path always emits {@code instance} because
+ * {@code ProblemDefaultsProvider} backfills it from the request path; callers
+ * on the Vert.x path should pass the request path for parity with that body.
  */
 public final class ProblemJson {
 
@@ -18,10 +21,17 @@ public final class ProblemJson {
     private ProblemJson() {}
 
     public static String serialize(ProblemDetail problem) {
+        return serialize(problem, null);
+    }
+
+    public static String serialize(ProblemDetail problem, String instance) {
         final var json = new JsonObject().put("status", problem.status()).put("title", problem.title());
         final var detail = problem.detail();
         if (detail != null && !detail.isEmpty()) {
             json.put("detail", detail);
+        }
+        if (instance != null && !instance.isEmpty()) {
+            json.put("instance", instance);
         }
         problem.extras().forEach(json::put);
         return json.encode();

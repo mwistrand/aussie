@@ -124,6 +124,11 @@ public record ProblemDetail(String title, int status, String detail, Map<String,
         return new ProblemDetail("Internal Server Error", 500, detail);
     }
 
+    public static ProblemDetail serviceUnavailable(String detail) {
+        return new ProblemDetail("Service Unavailable", 503, detail);
+    }
+
+    // Returns 404 (not 503) so the existence of the feature is not advertised to clients.
     public static ProblemDetail featureDisabled(String feature) {
         return new ProblemDetail("Feature Disabled", 404, "%s is disabled".formatted(feature));
     }

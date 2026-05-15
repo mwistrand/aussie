@@ -45,6 +45,7 @@ import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
 import aussie.core.service.auth.JwksCacheService.JwksFetchException;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
+import aussie.core.util.SecureHash;
 
 @DisplayName("WebSocketGateway (unit)")
 @ExtendWith(MockitoExtension.class)
@@ -322,7 +323,7 @@ class WebSocketGatewayUnitTest {
     class ExtractClientIdTests {
 
         @Test
-        @DisplayName("shouldReturnSessionCookieIdWhenPresent")
+        @DisplayName("shouldReturnHashedSessionCookieIdWhenPresent")
         void shouldReturnSessionCookieIdWhenPresent() throws Exception {
             final var method = WebSocketGateway.class.getDeclaredMethod("extractClientId", RoutingContext.class);
             method.setAccessible(true);
@@ -332,11 +333,11 @@ class WebSocketGatewayUnitTest {
             when(request.getCookie("aussie_session")).thenReturn(cookie);
 
             final var result = (String) method.invoke(gateway, ctx);
-            assertEquals("session:sess-abc-123", result);
+            assertEquals("session:" + SecureHash.truncatedSha256("sess-abc-123", 16), result);
         }
 
         @Test
-        @DisplayName("shouldReturnSessionHeaderWhenNoCookie")
+        @DisplayName("shouldReturnHashedSessionHeaderWhenNoCookie")
         void shouldReturnSessionHeaderWhenNoCookie() throws Exception {
             final var method = WebSocketGateway.class.getDeclaredMethod("extractClientId", RoutingContext.class);
             method.setAccessible(true);
@@ -345,7 +346,7 @@ class WebSocketGatewayUnitTest {
             when(request.getHeader("X-Session-ID")).thenReturn("session-header-value");
 
             final var result = (String) method.invoke(gateway, ctx);
-            assertEquals("session:session-header-value", result);
+            assertEquals("session:" + SecureHash.truncatedSha256("session-header-value", 16), result);
         }
 
         @Test
@@ -529,36 +530,30 @@ class WebSocketGatewayUnitTest {
         @Test
         @DisplayName("shouldReturnBadRequestMessageFor400")
         void shouldReturnBadRequestMessageFor400() throws Exception {
-            final var method =
-                    WebSocketGateway.class.getDeclaredMethod("mapErrorToMessage", Throwable.class, int.class);
+            final var method = WebSocketGateway.class.getDeclaredMethod("mapErrorToMessage", int.class);
             method.setAccessible(true);
 
-            final var error = new IllegalArgumentException("bad input");
-            final var result = (String) method.invoke(gateway, error, 400);
-            assertEquals("Bad request: bad input", result);
+            final var result = (String) method.invoke(gateway, 400);
+            assertEquals("Bad request", result);
         }
 
         @Test
         @DisplayName("shouldReturnIdpUnavailableMessageFor502")
         void shouldReturnIdpUnavailableMessageFor502() throws Exception {
-            final var method =
-                    WebSocketGateway.class.getDeclaredMethod("mapErrorToMessage", Throwable.class, int.class);
+            final var method = WebSocketGateway.class.getDeclaredMethod("mapErrorToMessage", int.class);
             method.setAccessible(true);
 
-            final var error = new JwksFetchException("timeout");
-            final var result = (String) method.invoke(gateway, error, 502);
+            final var result = (String) method.invoke(gateway, 502);
             assertEquals("Identity provider unavailable", result);
         }
 
         @Test
         @DisplayName("shouldReturnInternalErrorMessageForDefaultCode")
         void shouldReturnInternalErrorMessageForDefaultCode() throws Exception {
-            final var method =
-                    WebSocketGateway.class.getDeclaredMethod("mapErrorToMessage", Throwable.class, int.class);
+            final var method = WebSocketGateway.class.getDeclaredMethod("mapErrorToMessage", int.class);
             method.setAccessible(true);
 
-            final var error = new RuntimeException("something broke");
-            final var result = (String) method.invoke(gateway, error, 500);
+            final var result = (String) method.invoke(gateway, 500);
             assertEquals("Internal error", result);
         }
     }

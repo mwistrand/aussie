@@ -55,6 +55,8 @@ class ProxyErrorWriterTest {
 
     private void stubChain() {
         when(ctx.response()).thenReturn(response);
+        when(ctx.request()).thenReturn(request);
+        when(request.path()).thenReturn("/some/path");
         when(response.setStatusCode(anyInt())).thenReturn(response);
         when(response.putHeader(any(CharSequence.class), any(CharSequence.class)))
                 .thenReturn(response);
@@ -78,7 +80,7 @@ class ProxyErrorWriterTest {
             verify(metrics).recordError("my-service", "Service Not Found");
             var bodyCaptor = ArgumentCaptor.forClass(String.class);
             verify(response).end(bodyCaptor.capture());
-            assertEquals(ProblemJson.serialize(problem), bodyCaptor.getValue());
+            assertEquals(ProblemJson.serialize(problem, "/some/path"), bodyCaptor.getValue());
         }
 
         @Test
@@ -144,7 +146,7 @@ class ProxyErrorWriterTest {
             var bodyCaptor = ArgumentCaptor.forClass(String.class);
             verify(response).end(bodyCaptor.capture());
             assertNotNull(bodyCaptor.getValue());
-            assertEquals(ProblemJson.serialize(problem), bodyCaptor.getValue());
+            assertEquals(ProblemJson.serialize(problem, "/some/path"), bodyCaptor.getValue());
         }
     }
 }

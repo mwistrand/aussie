@@ -39,6 +39,7 @@ import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
 import aussie.core.service.auth.JwksCacheService.JwksFetchException;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
+import aussie.core.util.SecureHash;
 
 @DisplayName("WebSocketGateway")
 @ExtendWith(MockitoExtension.class)
@@ -273,7 +274,7 @@ class WebSocketGatewayTest {
             verify(errorWriter)
                     .writeRateLimit(
                             eq(ctx), argThat(problemWithStatus(429)), isNull(), eq(30L), eq(100L), eq(1709654400L));
-            verify(metrics).recordRateLimitExceeded("unknown", "ws_connection");
+            verify(metrics).recordRateLimitExceeded(isNull(), eq("ws_connection"));
         }
     }
 
@@ -335,8 +336,7 @@ class WebSocketGatewayTest {
 
             gateway.handleGatewayUpgrade(ctx);
 
-            verify(errorWriter)
-                    .write(eq(ctx), argThat(problemWithStatusAndDetail(400, "Bad request: Invalid parameter")));
+            verify(errorWriter).write(eq(ctx), argThat(problemWithStatusAndDetail(400, "Bad request")));
         }
 
         @Test
@@ -396,7 +396,7 @@ class WebSocketGatewayTest {
     class ExtractClientIdTests {
 
         @Test
-        @DisplayName("Should return session cookie value as highest priority")
+        @DisplayName("Should return hashed session cookie value as highest priority")
         void shouldReturnSessionCookie() throws Exception {
             final var cookie = mock(Cookie.class);
             when(cookie.getValue()).thenReturn("abc123");
@@ -406,11 +406,11 @@ class WebSocketGatewayTest {
             method.setAccessible(true);
             final var result = (String) method.invoke(gateway, ctx);
 
-            assertEquals("session:abc123", result);
+            assertEquals("session:" + SecureHash.truncatedSha256("abc123", 16), result);
         }
 
         @Test
-        @DisplayName("Should return session header when no cookie")
+        @DisplayName("Should return hashed session header when no cookie")
         void shouldReturnSessionHeader() throws Exception {
             when(request.getCookie("aussie_session")).thenReturn(null);
             when(request.getHeader("X-Session-ID")).thenReturn("sess-456");
@@ -419,7 +419,7 @@ class WebSocketGatewayTest {
             method.setAccessible(true);
             final var result = (String) method.invoke(gateway, ctx);
 
-            assertEquals("session:sess-456", result);
+            assertEquals("session:" + SecureHash.truncatedSha256("sess-456", 16), result);
         }
 
         @Test
@@ -433,8 +433,7 @@ class WebSocketGatewayTest {
             method.setAccessible(true);
             final var result = (String) method.invoke(gateway, ctx);
 
-            final var expectedHash = Integer.toHexString("my-token-value".hashCode());
-            assertEquals("bearer:" + expectedHash, result);
+            assertEquals("bearer:" + SecureHash.truncatedSha256("my-token-value", 16), result);
         }
 
         @Test
@@ -532,21 +531,19 @@ class WebSocketGatewayTest {
         @Test
         @DisplayName("Should return bad request message for status 400")
         void shouldReturnBadRequestMessage() throws Exception {
-            final var method =
-                    WebSocketGateway.class.getDeclaredMethod("mapErrorToMessage", Throwable.class, int.class);
+            final var method = WebSocketGateway.class.getDeclaredMethod("mapErrorToMessage", int.class);
             method.setAccessible(true);
-            final var result = (String) method.invoke(gateway, new IllegalArgumentException("bad param"), 400);
+            final var result = (String) method.invoke(gateway, 400);
 
-            assertEquals("Bad request: bad param", result);
+            assertEquals("Bad request", result);
         }
 
         @Test
         @DisplayName("Should return identity provider unavailable for status 502")
         void shouldReturnIdpUnavailableMessage() throws Exception {
-            final var method =
-                    WebSocketGateway.class.getDeclaredMethod("mapErrorToMessage", Throwable.class, int.class);
+            final var method = WebSocketGateway.class.getDeclaredMethod("mapErrorToMessage", int.class);
             method.setAccessible(true);
-            final var result = (String) method.invoke(gateway, new RuntimeException("fail"), 502);
+            final var result = (String) method.invoke(gateway, 502);
 
             assertEquals("Identity provider unavailable", result);
         }
@@ -554,10 +551,9 @@ class WebSocketGatewayTest {
         @Test
         @DisplayName("Should return internal error for other status codes")
         void shouldReturnInternalErrorMessage() throws Exception {
-            final var method =
-                    WebSocketGateway.class.getDeclaredMethod("mapErrorToMessage", Throwable.class, int.class);
+            final var method = WebSocketGateway.class.getDeclaredMethod("mapErrorToMessage", int.class);
             method.setAccessible(true);
-            final var result = (String) method.invoke(gateway, new RuntimeException("fail"), 500);
+            final var result = (String) method.invoke(gateway, 500);
 
             assertEquals("Internal error", result);
         }

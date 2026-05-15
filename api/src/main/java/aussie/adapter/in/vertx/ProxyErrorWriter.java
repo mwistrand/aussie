@@ -55,7 +55,7 @@ public class ProxyErrorWriter {
         logIfServerError(ctx, problem);
         response.setStatusCode(problem.status())
                 .putHeader(HttpHeaders.CONTENT_TYPE, (CharSequence) ProblemJson.CONTENT_TYPE)
-                .end(ProblemJson.serialize(problem));
+                .end(ProblemJson.serialize(problem, ctx.request().path()));
     }
 
     /**
@@ -81,7 +81,7 @@ public class ProxyErrorWriter {
                 .putHeader(HEADER_RATELIMIT_LIMIT, (CharSequence) Long.toString(limit))
                 .putHeader(HEADER_RATELIMIT_REMAINING, HEADER_VALUE_ZERO)
                 .putHeader(HEADER_RATELIMIT_RESET, (CharSequence) Long.toString(resetAtEpochSeconds))
-                .end(ProblemJson.serialize(problem));
+                .end(ProblemJson.serialize(problem, ctx.request().path()));
     }
 
     private boolean canWrite(HttpServerResponse response, RoutingContext ctx, ProblemDetail problem) {

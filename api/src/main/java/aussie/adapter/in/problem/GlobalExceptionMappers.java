@@ -23,19 +23,19 @@ public class GlobalExceptionMappers {
     @ServerExceptionMapper
     public Response mapJwksFetchException(JwksFetchException e) {
         LOG.warnv("JWKS fetch failed: {0}", e.getMessage());
-        return toResponse(GatewayProblem.badGateway("Identity provider unavailable: " + e.getMessage()));
+        return toResponse(GatewayProblem.badGateway("Identity provider unavailable"));
     }
 
     @ServerExceptionMapper
     public Response mapIllegalArgumentException(IllegalArgumentException e) {
-        LOG.debugv("Validation error: {0}", e.getMessage());
-        return toResponse(GatewayProblem.validationError(e.getMessage()));
+        LOG.infov("Validation error: {0}", e.getMessage());
+        return toResponse(GatewayProblem.validationError("Invalid request"));
     }
 
     @ServerExceptionMapper
     public Response mapIllegalStateException(IllegalStateException e) {
-        LOG.debugv("State error: {0}", e.getMessage());
-        return toResponse(GatewayProblem.badRequest(e.getMessage()));
+        LOG.infov("State error: {0}", e.getMessage());
+        return toResponse(GatewayProblem.badRequest("Invalid request"));
     }
 
     private Response toResponse(HttpProblem problem) {

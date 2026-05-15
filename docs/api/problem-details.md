@@ -17,6 +17,7 @@ Content-Type for every error body is `application/problem+json`.
   "status": 429,
   "title": "Too Many Requests",
   "detail": "Rate limit exceeded. Retry after 30 seconds.",
+  "instance": "/some/service/endpoint",
   "retryAfter": 30,
   "limit": 100,
   "remaining": 0,
@@ -26,22 +27,22 @@ Content-Type for every error body is `application/problem+json`.
 
 ### Fields
 
-| Field     | Type    | Always present | Notes |
-| --------- | ------- | -------------- | ----- |
-| `status`  | number  | yes            | Matches the HTTP status code on the response. |
-| `title`   | string  | yes            | Short, human-readable summary. Stable across patch releases. |
-| `detail`  | string  | no             | Per-occurrence explanation. Omitted when null or empty. |
-| extras    | varies  | no             | Status-specific extension members listed below. |
+| Field      | Type    | Always present | Notes |
+| ---------- | ------- | -------------- | ----- |
+| `status`   | number  | yes            | Matches the HTTP status code on the response. |
+| `title`    | string  | yes            | Short, human-readable summary. Stable across patch releases. |
+| `detail`   | string  | no             | Per-occurrence explanation. Omitted when null or empty. |
+| `instance` | string  | yes            | Request path that produced the error. |
+| extras     | varies  | no             | Status-specific extension members listed below. |
 
-The standard RFC 9457 `type` and `instance` fields are not emitted by default.
-If you need machine-readable error categorization beyond `title`, treat `title`
-as the discriminator (it is part of the contract).
+The RFC 9457 `type` field is not emitted; treat `title` as the discriminator
+(it is part of the contract).
 
 ### Field order
 
-Base fields appear in the order shown above (`status`, `title`, `detail`),
-followed by extension members in caller-defined insertion order. Order is
-stable across releases on both the JAX-RS and Vert.x paths.
+Base fields appear in the order shown above (`status`, `title`, `detail`,
+`instance`), followed by extension members in caller-defined insertion order.
+Order is stable across releases on both the JAX-RS and Vert.x paths.
 
 ## Extension members on `429 Too Many Requests`
 

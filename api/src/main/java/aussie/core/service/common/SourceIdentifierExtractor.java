@@ -1,10 +1,14 @@
 package aussie.core.service.common;
 
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.container.ContainerRequestContext;
+
+import io.vertx.core.http.HttpServerRequest;
 
 import aussie.core.model.common.SourceIdentifier;
 
@@ -22,6 +26,10 @@ import aussie.core.model.common.SourceIdentifier;
  *
  * <p>Delegates to {@link TrustedProxyValidator} to determine whether
  * forwarding headers should be trusted for a given connection.
+ *
+ * <p>Both JAX-RS ({@link ContainerRequestContext}) and Vert.x
+ * ({@link HttpServerRequest}) call sites are supported through
+ * overloads that share the same parsing logic.
  */
 @ApplicationScoped
 public class SourceIdentifierExtractor {
@@ -42,17 +50,7 @@ public class SourceIdentifierExtractor {
      * @return source identifier containing IP address, host, and forwarded chain
      */
     public SourceIdentifier extract(ContainerRequestContext request, String socketIp) {
-        final var trustHeaders = trustedProxyValidator.shouldTrustForwardingHeaders(socketIp);
-
-        var ipAddress = trustHeaders ? extractIpFromHeaders(request) : null;
-        if (ipAddress == null || ipAddress.isEmpty()) {
-            ipAddress = socketIp != null ? socketIp : extractFallbackIp(request);
-        }
-
-        var host = trustHeaders ? extractHost(request) : Optional.<String>empty();
-        var forwardedFor = trustHeaders ? extractForwardedFor(request) : Optional.<String>empty();
-
-        return new SourceIdentifier(ipAddress, host, forwardedFor);
+        return extractInternal(request::getHeaderString, () -> extractFallbackFromJaxRs(request), socketIp);
     }
 
     /**
@@ -67,24 +65,51 @@ public class SourceIdentifierExtractor {
         return extract(request, null);
     }
 
-    private String extractIpFromHeaders(ContainerRequestContext request) {
+    /**
+     * Extract source identification from a Vert.x request using the socket
+     * IP for trusted proxy validation.
+     *
+     * @param request  the Vert.x server request
+     * @param socketIp the direct connection's remote IP address
+     * @return source identifier containing IP address, host, and forwarded chain
+     */
+    public SourceIdentifier extract(HttpServerRequest request, String socketIp) {
+        return extractInternal(request::getHeader, () -> extractFallbackFromVertx(request), socketIp);
+    }
+
+    private SourceIdentifier extractInternal(
+            Function<String, String> headers, Supplier<String> fallbackIp, String socketIp) {
+        final var trustHeaders = trustedProxyValidator.shouldTrustForwardingHeaders(socketIp);
+
+        var ipAddress = trustHeaders ? extractIpFromHeaders(headers) : null;
+        if (ipAddress == null || ipAddress.isEmpty()) {
+            ipAddress = socketIp != null ? socketIp : fallbackIp.get();
+        }
+
+        final var host = trustHeaders ? extractHost(headers) : Optional.<String>empty();
+        final var forwardedFor = trustHeaders ? extractForwardedFor(headers) : Optional.<String>empty();
+
+        return new SourceIdentifier(ipAddress, host, forwardedFor);
+    }
+
+    private static String extractIpFromHeaders(Function<String, String> headers) {
         // Check X-Forwarded-For first (first IP in chain is original client)
-        var xForwardedFor = request.getHeaderString("X-Forwarded-For");
+        final var xForwardedFor = headers.apply("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
             return xForwardedFor.split(",")[0].trim();
         }
 
         // Check RFC 7239 Forwarded header
-        var forwarded = request.getHeaderString("Forwarded");
+        final var forwarded = headers.apply("Forwarded");
         if (forwarded != null && !forwarded.isEmpty()) {
-            var forParam = extractForwardedParam(forwarded, "for");
+            final var forParam = extractForwardedParam(forwarded, "for");
             if (forParam != null) {
                 return forParam;
             }
         }
 
         // Fall back to X-Real-IP
-        var xRealIp = request.getHeaderString("X-Real-IP");
+        final var xRealIp = headers.apply("X-Real-IP");
         if (xRealIp != null && !xRealIp.isEmpty()) {
             return xRealIp.trim();
         }
@@ -92,38 +117,27 @@ public class SourceIdentifierExtractor {
         return null;
     }
 
-    private String extractFallbackIp(ContainerRequestContext request) {
-        var uriInfo = request.getUriInfo();
-        if (uriInfo != null && uriInfo.getRequestUri() != null) {
-            var host = uriInfo.getRequestUri().getHost();
-            if (host != null) {
-                return host;
-            }
-        }
-        return "unknown";
-    }
-
-    private Optional<String> extractHost(ContainerRequestContext request) {
+    private static Optional<String> extractHost(Function<String, String> headers) {
         // Check X-Forwarded-Host first
-        var xForwardedHost = request.getHeaderString("X-Forwarded-Host");
+        final var xForwardedHost = headers.apply("X-Forwarded-Host");
         if (xForwardedHost != null && !xForwardedHost.isEmpty()) {
             return Optional.of(xForwardedHost.split(",")[0].trim());
         }
 
         // Check RFC 7239 Forwarded header
-        var forwarded = request.getHeaderString("Forwarded");
+        final var forwarded = headers.apply("Forwarded");
         if (forwarded != null && !forwarded.isEmpty()) {
-            var hostParam = extractForwardedParam(forwarded, "host");
+            final var hostParam = extractForwardedParam(forwarded, "host");
             if (hostParam != null) {
                 return Optional.of(hostParam);
             }
         }
 
         // Fall back to Host header
-        var host = request.getHeaderString("Host");
+        var host = headers.apply("Host");
         if (host != null && !host.isEmpty()) {
             // Remove port if present
-            var colonIdx = host.lastIndexOf(':');
+            final var colonIdx = host.lastIndexOf(':');
             if (colonIdx > 0) {
                 host = host.substring(0, colonIdx);
             }
@@ -133,26 +147,50 @@ public class SourceIdentifierExtractor {
         return Optional.empty();
     }
 
-    private Optional<String> extractForwardedFor(ContainerRequestContext request) {
-        var xForwardedFor = request.getHeaderString("X-Forwarded-For");
+    private static Optional<String> extractForwardedFor(Function<String, String> headers) {
+        final var xForwardedFor = headers.apply("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
             return Optional.of(xForwardedFor);
         }
         return Optional.empty();
     }
 
-    private String extractForwardedParam(String forwarded, String param) {
+    private static String extractFallbackFromJaxRs(ContainerRequestContext request) {
+        final var uriInfo = request.getUriInfo();
+        if (uriInfo != null && uriInfo.getRequestUri() != null) {
+            final var host = uriInfo.getRequestUri().getHost();
+            if (host != null) {
+                return host;
+            }
+        }
+        return "unknown";
+    }
+
+    private static String extractFallbackFromVertx(HttpServerRequest request) {
+        // authority() returns the parsed Host header without trailing port — parity
+        // with JAX-RS UriInfo.getRequestUri().getHost().
+        final var authority = request.authority();
+        if (authority != null) {
+            final var host = authority.host();
+            if (host != null && !host.isEmpty()) {
+                return host;
+            }
+        }
+        return "unknown";
+    }
+
+    private static String extractForwardedParam(String forwarded, String param) {
         // Parse first entry in Forwarded header (original client)
-        var entries = forwarded.split(",");
+        final var entries = forwarded.split(",");
         if (entries.length == 0) {
             return null;
         }
 
-        var firstEntry = entries[0].trim();
-        var parts = firstEntry.split(";");
+        final var firstEntry = entries[0].trim();
+        final var parts = firstEntry.split(";");
 
         for (var part : parts) {
-            var keyValue = part.trim().split("=", 2);
+            final var keyValue = part.trim().split("=", 2);
             if (keyValue.length == 2 && keyValue[0].equalsIgnoreCase(param)) {
                 var value = keyValue[1];
                 // Remove quotes if present

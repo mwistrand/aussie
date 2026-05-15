@@ -1,6 +1,7 @@
 package aussie.adapter.in.websocket;
 
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 
@@ -188,7 +189,7 @@ public class WebSocketRateLimitFilter {
 
         return "websocket".equalsIgnoreCase(upgrade)
                 && connection != null
-                && connection.toLowerCase().contains("upgrade");
+                && connection.toLowerCase(Locale.ROOT).contains("upgrade");
     }
 
     private boolean isRateLimitingEnabled() {
@@ -201,11 +202,11 @@ public class WebSocketRateLimitFilter {
         final var normalized = path.startsWith("/") ? path.substring(1) : path;
         final var slashIndex = normalized.indexOf('/');
         final var firstSegment = slashIndex > 0 ? normalized.substring(0, slashIndex) : normalized;
-        return RESERVED_PATHS.contains(firstSegment.toLowerCase());
+        return RESERVED_PATHS.contains(firstSegment.toLowerCase(Locale.ROOT));
     }
 
     private String extractServiceId(String path) {
-        if (path.toLowerCase().startsWith("/gateway/")) {
+        if (path.toLowerCase(Locale.ROOT).startsWith("/gateway/")) {
             return "gateway";
         }
         // Extract service ID from pass-through path: /{serviceId}/...
@@ -224,10 +225,10 @@ public class WebSocketRateLimitFilter {
     private Optional<String> extractSessionId(RoutingContext ctx) {
         final var sessionCookie = ctx.request().getCookie("aussie_session");
         if (sessionCookie != null) {
-            return Optional.of("session:" + sessionCookie.getValue());
+            return Optional.of("session:" + SecureHash.truncatedSha256(sessionCookie.getValue(), 16));
         }
         final var sessionHeader = ctx.request().getHeader("X-Session-ID");
-        return Optional.ofNullable(sessionHeader).map(h -> "session:" + h);
+        return Optional.ofNullable(sessionHeader).map(h -> "session:" + SecureHash.truncatedSha256(h, 16));
     }
 
     private Optional<String> extractAuthHeaderHash(RoutingContext ctx) {

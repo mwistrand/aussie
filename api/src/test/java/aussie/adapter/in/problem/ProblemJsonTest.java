@@ -48,6 +48,20 @@ class ProblemJsonTest {
             var serialized = ProblemJson.serialize(new ProblemDetail("X", 502, "bad"));
             assertTrue(serialized.contains("\"status\":502"), serialized);
         }
+
+        @Test
+        @DisplayName("includes instance when provided, omits it when null or empty")
+        void instanceField() {
+            var problem = new ProblemDetail("Not Found", 404, "missing");
+            var withInstance = ProblemJson.serialize(problem, "/api/things/42");
+            assertEquals("/api/things/42", new JsonObject(withInstance).getString("instance"));
+
+            var nullInstance = ProblemJson.serialize(problem, null);
+            assertFalse(new JsonObject(nullInstance).containsKey("instance"));
+
+            var emptyInstance = ProblemJson.serialize(problem, "");
+            assertFalse(new JsonObject(emptyInstance).containsKey("instance"));
+        }
     }
 
     @Nested
