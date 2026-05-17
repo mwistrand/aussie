@@ -1,6 +1,6 @@
 COMPOSE=docker compose
 
-.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage reset
+.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage reset demo-deps e2e e2e-logs
 
 up:
 	# Bring up cassandra/redis and force-rerun the migration sidecar first so
@@ -74,6 +74,40 @@ migrate:
 		docker exec -i aussie-cassandra cqlsh < "$$script" || true; \
 	done
 	@echo "Migrations complete"
+
+# Install demo dependencies. Prefer `npm ci` when a lockfile is present so
+# repeated runs match the committed lockfile exactly; fall back to `npm install`
+# for first-time setup on a fresh clone without one.
+demo-deps:
+	@if [ -d demo/node_modules ]; then \
+		exit 0; \
+	fi; \
+	if [ -f demo/package-lock.json ]; then \
+		echo "Installing demo deps via npm ci..."; \
+		cd demo && npm ci; \
+	else \
+		echo "demo/package-lock.json absent - falling back to npm install..."; \
+		cd demo && npm install; \
+	fi
+
+# Run the e2e suite (Aussie + demo + Cassandra + Redis in Testcontainers).
+# Requires Docker. Standalone from :check; this is intentionally opt-in because
+# container boot is slow. See docs/platform/e2e-tests.md.
+e2e: demo-deps
+	cd api && ./gradlew e2eTest
+
+# Print the most recent e2e run's container logs.
+e2e-logs:
+	@latest=$$(ls -1dt api/build/e2e-logs/* 2>/dev/null | head -n1); \
+	if [ -z "$$latest" ]; then \
+		echo "No e2e logs found under api/build/e2e-logs/"; \
+		exit 1; \
+	fi; \
+	echo "Logs from $$latest:"; \
+	for f in api.log demo.log redis.log cassandra.log; do \
+		echo; echo "===== $$f ====="; \
+		cat "$$latest/$$f" 2>/dev/null || echo "(missing)"; \
+	done
 
 reset:
 	@echo "Checking Redis and Cassandra are running..."

@@ -78,10 +78,60 @@ java {
     targetCompatibility = JavaVersion.VERSION_21
 }
 
+sourceSets {
+    e2eTest {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+configurations {
+    e2eTestImplementation.extendsFrom implementation
+    e2eTestRuntimeOnly.extendsFrom runtimeOnly
+}
+
+dependencies {
+    e2eTestImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    e2eTestImplementation 'org.junit.platform:junit-platform-launcher:1.10.2'
+    e2eTestImplementation 'io.rest-assured:rest-assured:5.4.0'
+    e2eTestImplementation 'org.testcontainers:testcontainers:1.19.8'
+    e2eTestImplementation 'org.testcontainers:cassandra:1.19.8'
+    e2eTestImplementation 'org.testcontainers:junit-jupiter:1.19.8'
+    e2eTestImplementation 'org.awaitility:awaitility:4.2.0'
+    e2eTestImplementation 'org.assertj:assertj-core:3.25.3'
+    e2eTestImplementation 'com.fasterxml.jackson.core:jackson-databind:2.17.0'
+    e2eTestImplementation 'org.slf4j:slf4j-simple:2.0.13'
+}
+
 test {
     systemProperty "java.util.logging.manager", "org.jboss.logmanager.LogManager"
     jvmArgs "--add-opens", "java.base/java.lang=ALL-UNNAMED"
     finalizedBy jacocoTestReport
+}
+
+tasks.register('e2eTest', Test) {
+    description = 'Runs end-to-end tests against a containerized gateway + demo.'
+    group = 'verification'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.e2eTest.output.classesDirs
+    classpath = sourceSets.e2eTest.runtimeClasspath
+    shouldRunAfter test
+    dependsOn 'quarkusBuild'
+    // SuiteBootstrapListener owns a singleton harness; running parallel forks
+    // would race the lone Docker network.
+    maxParallelForks = 1
+    forkEvery = 0
+    // Surface the API project root so the harness can locate Dockerfile.e2e
+    // and the assembled quarkus-app artifact independently of the launcher CWD.
+    systemProperty 'aussie.e2e.apiProjectDir', project.projectDir.absolutePath
+    // This repo's Gradle root project is api/, so project.rootDir == project.projectDir.
+    // The harness needs the actual repo root (one level up) to locate demo/.
+    systemProperty 'aussie.e2e.repoRootDir', project.rootDir.parentFile.absolutePath
+    testLogging {
+        showStandardStreams = true
+        exceptionFormat = 'FULL'
+        events 'started', 'passed', 'skipped', 'failed', 'standard_out', 'standard_error'
+    }
 }
 
 jacocoTestReport {
