@@ -1,32 +1,68 @@
-**AGENTS.md — Repo guidelines for automated agents
+# AGENTS.md
 
-- **Build / Run**
-  - Build: `./gradlew build`
-  - Dev mode (live coding): `./gradlew quarkusDev`
-  - Native build: `./gradlew build -Dquarkus.native.enabled=true`
-  - Package uber-jar: `./gradlew build -Dquarkus.package.jar.type=uber-jar`
+This file provides guidance to automated coding agents when working with code in this repository.
 
-- **Test / Lint**
-  - All tests: `./gradlew test`
-  - Single test class: `./gradlew test --tests "aussie.AdminResourceTest"`
-  - Single test method: `./gradlew test --tests "aussie.AdminResourceTest.testMethodName"`
-  - Quick health check: `./gradlew check` (runs basic verification tasks)
+## Build & Run Commands
 
-- **Code style / conventions**
-  - Java version: target Java 21 (see `build.gradle:22`).
-  - Formatting: follow standard Java formatting (4-space indent, brace on same line). Use a formatter (e.g., Google Java Format or Spotless) when available.
-  - Imports: no wildcard imports; group and sort imports (java.*, javax.*, third-party, project); remove unused imports.
-  - Naming: classes/interfaces PascalCase, methods/variables camelCase, constants UPPER_SNAKE_CASE, packages lower.case.
-  - Types: prefer explicit types for public APIs; use var only for local variables with obvious types.
-  - Annotations: always use `@Override` where appropriate.
-  - Error handling: don't swallow exceptions; log with context and rethrow or wrap in a meaningful exception; prefer specific exceptions over generic `Exception`.
-  - Nulls: avoid returning null where Optional is appropriate for API-level code.
+- **Build:** `./gradlew build`
+- **Dev mode (live reload):** `./gradlew quarkusDev` (Dev UI at http://localhost:8080/q/dev/)
+- **Run tests:** `./gradlew test`
+- **Single test class:** `./gradlew test --tests "aussie.AdminResourceTest"`
+- **Single test method:** `./gradlew test --tests "aussie.AdminResourceTest.testMethodName"`
+- **Native build:** `./gradlew build -Dquarkus.native.enabled=true`
+- **Uber-jar:** `./gradlew build -Dquarkus.package.jar.type=uber-jar`
+- **Coverage report:** `make coverage` (generates JaCoCo HTML + CLI coverage)
+- **Run benchmarks:** `cd api && ./gradlew jmh` (JMH results in `api/build/results/jmh/`)
+- **Single benchmark:** `cd api && ./gradlew jmh -Pjmh.includes='RouteMatchingBenchmark'`
 
-- **Testing & API**
-  - Use JUnit5 and RestAssured for tests (configured in `build.gradle:15-16`).
-  - Keep unit tests fast and deterministic; integration tests may live under `src/native-test/` per project layout.
+## Architecture
 
-- **Repo rules**
-  - No `.cursor` or Copilot instructions were found in the repo. If added, include their path here for agents to respect.
+This is a Quarkus REST application using Gradle. Key dependencies:
+- **quarkus-arc** - CDI dependency injection
+- **quarkus-rest** - JAX-RS REST endpoints
+- **quarkus-junit5** + **rest-assured** - Testing
 
-Keep changes minimal and focused; when in doubt prefer small, reviewable commits and call out required infra changes in the PR description.
+Project layout:
+- `src/main/java/aussie/` - Application code (REST resources)
+- `src/test/java/aussie/` - Unit/integration tests with `@QuarkusTest`
+- `src/jmh/java/aussie/benchmark/` - JMH performance benchmarks
+- `src/native-test/java/aussie/` - Native image integration tests
+
+## Code Style
+
+- Java 21
+- 4-space indent, braces on same line
+- No wildcard imports; group: java.*, jakarta.*, third-party, project
+- PascalCase for classes, camelCase for methods/variables, UPPER_SNAKE_CASE for constants
+- Prefer `var` over explicit types, except when explicit types are required for understandability
+- Use `final` for variables that will not be reassigned.
+- Use `sealed` for interfaces where it makes sense.
+- Never block threads unless absolutely required, instead preferring reactive interfaces
+- Always use `@Override`
+- Prefer `Optional` over null for API return types
+- Always use constructor injection
+
+## Testing
+
+- For Java tests, always use JUnit5 assertions
+
+## Benchmarks
+
+- JMH benchmarks live in `src/jmh/java/aussie/benchmark/`
+- When adding new hot-path logic (request filters, routing, caching, rate limiting), add a corresponding JMH benchmark
+- Benchmarks should target pure domain logic that does not require a running Quarkus container
+- Use `@State(Scope.Thread)` for mutable state, `@State(Scope.Benchmark)` for read-only shared fixtures
+- Use `Blackhole.consume()` for results and `@Param` for scaling benchmarks
+
+## Database
+
+- Cassandra and Redis by default
+- Always include migration scripts when necessary
+
+## Documentation
+
+All documentation should be added to the top-level docs/ directory:
+- Documentation for platform teams running Aussie is at docs/platform
+- Documentation for API teams is at docs/api
+
+Changes may also require updates to the guidebook in `guidebook/`.
