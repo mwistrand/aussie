@@ -40,20 +40,6 @@ public interface TokenRevocationConfig {
     boolean checkUserRevocation();
 
     /**
-     * Skip revocation check for tokens expiring within this threshold.
-     *
-     * <p>Tokens with remaining TTL below this value skip revocation checks
-     * entirely, as they will expire soon anyway. This optimization reduces
-     * load on the revocation infrastructure.
-     *
-     * <p>Set to PT0S to always check (not recommended for high-traffic).
-     *
-     * @return threshold duration (default: 30 seconds)
-     */
-    @WithDefault("PT30S")
-    Duration checkThreshold();
-
-    /**
      * Bloom filter configuration.
      */
     BloomFilterConfig bloomFilter();

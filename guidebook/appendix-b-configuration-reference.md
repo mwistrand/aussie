@@ -381,7 +381,6 @@ Token providers are configured as a named map. Each provider entry supports:
 |----------|------|---------|--------------|-------------|
 | `aussie.auth.revocation.enabled` | `boolean` | `true` | `AUSSIE_AUTH_REVOCATION_ENABLED` | Enable token revocation checks. |
 | `aussie.auth.revocation.check-user-revocation` | `boolean` | `true` | `AUSSIE_AUTH_REVOCATION_CHECK_USER_REVOCATION` | Enable user-level revocation (logout everywhere). |
-| `aussie.auth.revocation.check-threshold` | `Duration` | `PT30S` | `AUSSIE_AUTH_REVOCATION_CHECK_THRESHOLD` | Skip revocation check for tokens expiring within this threshold. Set to `PT0S` to always check (not recommended for high traffic). |
 
 ### 9.2 Bloom Filter
 
@@ -415,7 +414,7 @@ Token providers are configured as a named map. Each provider entry supports:
 
 **Profile overrides:** None.
 
-**Security considerations:** Token revocation is fail-closed; when Redis times out during a revocation check, the request is denied. Disabling revocation (`enabled=false`) means compromised or stolen tokens cannot be invalidated before their natural expiry. The `check-threshold` optimization trades a small security window (tokens within 30 seconds of expiry skip revocation checks) for reduced load on the revocation infrastructure.
+**Security considerations:** Token revocation is fail-closed; when Redis times out during a revocation check, the request is denied. Disabling revocation (`enabled=false`) means compromised or stolen tokens cannot be invalidated before their natural expiry.
 
 ## 10. Authentication Rate Limiting
 

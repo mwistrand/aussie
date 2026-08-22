@@ -1,7 +1,9 @@
 package aussie.adapter.out.auth;
 
 import java.security.PrivateKey;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Optional;
 
@@ -12,6 +14,7 @@ import org.jboss.logging.Logger;
 import org.jose4j.jws.AlgorithmIdentifiers;
 import org.jose4j.jws.JsonWebSignature;
 import org.jose4j.jwt.JwtClaims;
+import org.jose4j.jwt.NumericDate;
 import org.jose4j.lang.JoseException;
 
 import aussie.core.config.KeyRotationConfig;
@@ -95,9 +98,18 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
 
         try {
             final var signingContext = getSigningContext();
-            final var claims = buildClaims(validated, config, audience);
+            final var issuedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+            if (validated.expiresAt() == null) {
+                throw new TokenIssuanceException("Validated identity has no expiration");
+            }
+            final var expiresAt = issuedAt.plus(config.effectiveTtl(Duration.between(issuedAt, validated.expiresAt())))
+                    .truncatedTo(ChronoUnit.SECONDS);
+            if (!expiresAt.isAfter(issuedAt)) {
+                throw new TokenIssuanceException("Validated identity has expired");
+            }
+
+            final var claims = buildClaims(validated, config, audience, issuedAt, expiresAt);
             final var jws = signToken(claims, signingContext.privateKey(), signingContext.keyId());
-            final var expiresAt = Instant.now().plus(config.tokenTtl());
 
             final var forwardedClaims = new HashMap<String, Object>();
             for (String claimName : config.forwardedClaims()) {
@@ -125,14 +137,19 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
 
     private record SigningContext(PrivateKey privateKey, String keyId) {}
 
-    private JwtClaims buildClaims(TokenValidationResult.Valid validated, JwsConfig config, Optional<String> audience) {
+    private JwtClaims buildClaims(
+            TokenValidationResult.Valid validated,
+            JwsConfig config,
+            Optional<String> audience,
+            Instant issuedAt,
+            Instant expiresAt) {
         JwtClaims claims = new JwtClaims();
 
         // Standard claims
         claims.setIssuer(config.issuer());
         claims.setSubject(validated.subject());
-        claims.setIssuedAtToNow();
-        claims.setExpirationTimeMinutesInTheFuture((float) config.tokenTtl().toMinutes());
+        claims.setIssuedAt(NumericDate.fromSeconds(issuedAt.getEpochSecond()));
+        claims.setExpirationTime(NumericDate.fromSeconds(expiresAt.getEpochSecond()));
         claims.setGeneratedJwtId();
 
         // Set audience claim if provided

@@ -67,6 +67,17 @@ class JwsConfigTest {
         }
 
         @Test
+        @DisplayName("should reject non-positive TTLs")
+        void shouldRejectNonPositiveTtls() {
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> new JwsConfig("issuer", "keyId", Duration.ZERO, Duration.ofHours(1), Set.of()));
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> new JwsConfig("issuer", "keyId", Duration.ofMinutes(5), Duration.ofSeconds(-1), Set.of()));
+        }
+
+        @Test
         @DisplayName("should default forwardedClaims when null")
         void shouldDefaultForwardedClaims() {
             final var config = new JwsConfig("issuer", "keyId", Duration.ofMinutes(5), Set.of("sub", "email", "name"));
@@ -88,24 +99,17 @@ class JwsConfigTest {
         }
 
         @Test
-        @DisplayName("should return requested TTL when less than max")
-        void shouldReturnRequestedWhenLessThanMax() {
+        @DisplayName("should clamp source TTL to configured TTL")
+        void shouldClampSourceTtlToConfiguredTtl() {
             final var requested = Duration.ofMinutes(30);
-            assertEquals(requested, config.effectiveTtl(requested));
+            assertEquals(Duration.ofMinutes(5), config.effectiveTtl(requested));
         }
 
         @Test
-        @DisplayName("should clamp to max TTL when requested exceeds max")
-        void shouldClampToMaxWhenExceedsMax() {
-            final var requested = Duration.ofHours(2);
-            assertEquals(Duration.ofHours(1), config.effectiveTtl(requested));
-        }
-
-        @Test
-        @DisplayName("should return max TTL when requested equals max")
-        void shouldReturnRequestedWhenEqualsMax() {
-            final var requested = Duration.ofHours(1);
-            assertEquals(requested, config.effectiveTtl(requested));
+        @DisplayName("should clamp configured TTL to platform maximum")
+        void shouldClampConfiguredTtlToMaximum() {
+            final var longConfig = new JwsConfig("issuer", "keyId", Duration.ofHours(2), Duration.ofHours(1), Set.of());
+            assertEquals(Duration.ofHours(1), longConfig.effectiveTtl(Duration.ofHours(3)));
         }
 
         @Test

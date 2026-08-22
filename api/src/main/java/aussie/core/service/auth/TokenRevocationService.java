@@ -18,7 +18,6 @@ import aussie.spi.TokenRevocationRepository;
  *
  * <p>Implements a tiered caching strategy for high-performance revocation checks:
  * <ol>
- *   <li><b>TTL shortcut</b> - Skip check for tokens expiring within threshold</li>
  *   <li><b>Bloom filter</b> - O(1) "definitely not revoked" check (~100ns)</li>
  *   <li><b>Local cache</b> - LRU cache for confirmed revocations (~1μs)</li>
  *   <li><b>Remote store</b> - Authoritative source via SPI (~1-5ms)</li>
@@ -69,13 +68,6 @@ public class TokenRevocationService {
      */
     public Uni<Boolean> isRevoked(String jti, String userId, Instant issuedAt, Instant expiresAt) {
         if (!config.enabled()) {
-            return Uni.createFrom().item(false);
-        }
-
-        // Tier 0: TTL shortcut - skip check for soon-expiring tokens
-        var remainingTtl = Duration.between(Instant.now(), expiresAt);
-        if (remainingTtl.compareTo(config.checkThreshold()) < 0) {
-            LOG.debugf("Skipping revocation check for token expiring in %s", remainingTtl);
             return Uni.createFrom().item(false);
         }
 

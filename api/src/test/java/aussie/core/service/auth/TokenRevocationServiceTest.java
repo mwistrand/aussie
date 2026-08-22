@@ -59,7 +59,6 @@ class TokenRevocationServiceTest {
     void setUp() {
         // Setup default config mocks with lenient to avoid unnecessary stubbing errors
         lenient().when(config.enabled()).thenReturn(true);
-        lenient().when(config.checkThreshold()).thenReturn(Duration.ofSeconds(30));
         lenient().when(config.checkUserRevocation()).thenReturn(true);
         lenient().when(config.bloomFilter()).thenReturn(bloomFilterConfig);
         lenient().when(config.cache()).thenReturn(cacheConfig);
@@ -92,20 +91,19 @@ class TokenRevocationServiceTest {
         }
 
         @Test
-        @DisplayName("should skip check for tokens expiring within threshold")
-        void shouldSkipCheckForExpiringTokens() {
-            when(config.checkThreshold()).thenReturn(Duration.ofMinutes(1));
-
+        @DisplayName("should enforce revocation for tokens near expiry")
+        void shouldCheckExpiringTokens() {
             final var jti = "test-jti";
             final var userId = "user-123";
             final var issuedAt = Instant.now().minus(Duration.ofHours(1));
-            final var expiresAt = Instant.now().plus(Duration.ofSeconds(30)); // Expires within threshold
+            final var expiresAt = Instant.now().plus(Duration.ofSeconds(30));
+            when(repository.isRevoked(jti)).thenReturn(Uni.createFrom().item(true));
 
             final var result =
                     service.isRevoked(jti, userId, issuedAt, expiresAt).await().atMost(Duration.ofSeconds(1));
 
-            assertFalse(result);
-            verify(bloomFilter, never()).definitelyNotRevoked(anyString());
+            assertTrue(result);
+            verify(repository).isRevoked(jti);
         }
 
         @Test

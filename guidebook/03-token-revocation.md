@@ -18,50 +18,40 @@ This is harder than it sounds for three reasons:
 
 The solution in Aussie is a tiered caching hierarchy that eliminates remote lookups for the overwhelming majority of requests, uses a probabilistic data structure (bloom filter) for the fast path, and falls back to an authoritative remote store only when necessary.
 
+When revocation is enabled, incoming tokens must provide a non-blank string `jti` and a valid `iat`. Tokens
+whose `iat` is more than 30 seconds in the future are rejected so they cannot bypass user-level revocation cutoffs.
+
 ## Tiered Caching Architecture
 
-The revocation check in `TokenRevocationService` implements a four-tier hierarchy. Each tier is cheaper and faster than the next, and the system short-circuits as early as possible.
+The revocation check in `TokenRevocationService` implements a three-tier hierarchy. Each tier is cheaper and faster than the next, and the system short-circuits as early as possible.
 
 ```
 Request
    |
    v
 +-----------------------------------------------------------+
-| Tier 0: TTL Shortcut                                      |
-| Skip check for tokens expiring within threshold (30s)     |
-+---------------------------+-------------------------------+
-                            | Token has sufficient TTL
-                            v
-+-----------------------------------------------------------+
-| Tier 1: Bloom Filter (~100ns)                             |
+| Bloom Filter (~100ns)                                     |
 | "Definitely not revoked" check - no network I/O           |
 +---------------------------+-------------------------------+
                             | Maybe revoked (positive)
                             v
 +-----------------------------------------------------------+
-| Tier 2: Local Cache (~1us)                                |
+| Local Cache (~1us)                                        |
 | LRU cache for confirmed revocations                       |
 +---------------------------+-------------------------------+
                             | Not in cache
                             v
 +-----------------------------------------------------------+
-| Tier 3: Remote Store (~1-5ms)                             |
+| Remote Store (~1-5ms)                                     |
 | Redis/SPI backend - authoritative source                  |
 +-----------------------------------------------------------+
 ```
 
-The implementation lives in `TokenRevocationService.isRevoked()` (`api/src/main/java/aussie/core/service/auth/TokenRevocationService.java`, lines 70-116):
+The implementation lives in `TokenRevocationService.isRevoked()`:
 
 ```java
 public Uni<Boolean> isRevoked(String jti, String userId, Instant issuedAt, Instant expiresAt) {
     if (!config.enabled()) {
-        return Uni.createFrom().item(false);
-    }
-
-    // Tier 0: TTL shortcut - skip check for soon-expiring tokens
-    var remainingTtl = Duration.between(Instant.now(), expiresAt);
-    if (remainingTtl.compareTo(config.checkThreshold()) < 0) {
-        LOG.debugf("Skipping revocation check for token expiring in %s", remainingTtl);
         return Uni.createFrom().item(false);
     }
 
@@ -101,39 +91,6 @@ public Uni<Boolean> isRevoked(String jti, String userId, Instant issuedAt, Insta
     return checkRemoteStore(jti, userId, issuedAt);
 }
 ```
-
-### Tier 0: TTL Shortcut
-
-The cheapest check is no check at all. If a token will expire within the configurable `checkThreshold` (default: 30 seconds), the system skips revocation entirely:
-
-```java
-var remainingTtl = Duration.between(Instant.now(), expiresAt);
-if (remainingTtl.compareTo(config.checkThreshold()) < 0) {
-    return Uni.createFrom().item(false);
-}
-```
-
-This is defined in `TokenRevocationConfig` (`api/src/main/java/aussie/core/config/TokenRevocationConfig.java`, lines 42-54):
-
-```java
-/**
- * Skip revocation check for tokens expiring within this threshold.
- *
- * <p>Tokens with remaining TTL below this value skip revocation checks
- * entirely, as they will expire soon anyway. This optimization reduces
- * load on the revocation infrastructure.
- *
- * <p>Set to PT0S to always check (not recommended for high-traffic).
- */
-@WithDefault("PT30S")
-Duration checkThreshold();
-```
-
-**Why this matters.** At high traffic volumes, a significant fraction of tokens in flight are near expiry. If your tokens have a 15-minute TTL, a 30-second threshold skips checks for roughly 3.3% of requests. That sounds small, but at 10K RPS, that is 330 fewer checks per second. And critically, these are tokens that will self-revoke in seconds anyway.
-
-**What a junior or mid-level engineer might do instead.** Check every token, every time. The cost is negligible per request, so it seems unnecessary to optimize. A more experienced engineer will recognize the failure scenario immediately: if the remote store goes down, Tier 0 still protects near-expiry tokens from hitting the dead store, reducing the blast radius. Seniors who have operated high-traffic services think about what happens when dependencies are unavailable, not just about per-request cost.
-
-**Trade-off.** The threshold creates a window where a revoked token might still be accepted. For a 30-second threshold, a just-revoked token could be honored for up to 30 more seconds if its expiry was close. For security-critical revocations (compromised credentials), the caller can set token expiry far in the future, which bypasses this optimization naturally.
 
 ### Tier 1: Bloom Filter
 
@@ -810,7 +767,7 @@ The service's Javadoc declares explicit performance targets (`TokenRevocationSer
 
 | Metric | Target | Tier |
 |--------|--------|------|
-| P50 latency | < 100us | Bloom filter hit (Tier 0/1) |
+| P50 latency | < 100us | Bloom filter hit (Tier 1) |
 | P99 latency | < 500us | Local cache hit (Tier 2) |
 | P99.9 latency | < 5ms | Remote lookup (Tier 3) |
 
@@ -820,8 +777,7 @@ These targets assume that the vast majority of requests are for non-revoked toke
 
 | Tier | Operation | Expected Latency | Expected Hit Rate |
 |------|-----------|------------------|--------------------|
-| 0 | TTL comparison | <10ns | 1-5% of requests (near-expiry tokens) |
-| 1 | Bloom filter lookup | ~100ns | ~99.9% of remaining requests (not revoked) |
+| 1 | Bloom filter lookup | ~100ns | ~99.9% of requests (not revoked) |
 | 2 | Caffeine cache lookup | ~1us | Variable (previously confirmed revocations) |
 | 3 | Redis round-trip | 1-5ms | <0.1% of requests (bloom filter false positives + first-time revoked tokens) |
 

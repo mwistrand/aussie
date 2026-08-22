@@ -123,7 +123,6 @@ class TokenRevocationServiceIntegrationTest {
     void setUp() throws Exception {
         // Configure revocation as enabled
         lenient().when(config.enabled()).thenReturn(true);
-        lenient().when(config.checkThreshold()).thenReturn(Duration.ofSeconds(30));
         // ... additional config setup ...
 
         // Configure bloom filter
@@ -190,25 +189,25 @@ void shouldDetectRevokedTokenAfterRevocation() {
 
 **Why this catches bugs that full-mock tests miss.** Consider what happens if the bloom filter's `addRevokedJti` method updates a filter that `definitelyNotRevoked` does not consult. A fully mocked test cannot detect this because you mocked both methods. The real bloom filter in this test actually maintains internal state, so the assertion on line 147 (`assertFalse(bloomFilter.definitelyNotRevoked(jti))`) validates the interaction between two real methods on a real object.
 
-The test on lines 307-320 demonstrates another benefit: testing the TTL threshold optimization with real components:
+The near-expiry test demonstrates another benefit: proving revocation remains effective until expiration with real components:
 
 ```java
 @Test
-@DisplayName("should skip revocation check for tokens expiring within threshold")
-void shouldSkipCheckForSoonExpiringTokens() {
+@DisplayName("should still reject a revoked token near expiry")
+void shouldCheckSoonExpiringTokens() {
     final var jti = "expiring-soon";
-    final var expiresAt = Instant.now().plus(Duration.ofSeconds(15)); // Within 30s threshold
+    final var expiresAt = Instant.now().plus(Duration.ofSeconds(15));
 
-    // Even if we add to bloom filter, should skip check
-    bloomFilter.addRevokedJti(jti);
+    when(repository.revoke(jti, expiresAt)).thenReturn(Uni.createFrom().voidItem());
+    service.revokeToken(jti, expiresAt).await().atMost(Duration.ofSeconds(1));
 
     final var isRevoked = service.isRevoked(jti, userId, issuedAt, expiresAt)
             .await().atMost(Duration.ofSeconds(1));
-    assertFalse(isRevoked, "Should skip check for soon-expiring token");
+    assertTrue(isRevoked, "Revocation must remain effective until token expiry");
 }
 ```
 
-The config's `checkThreshold` is set to 30 seconds (line 72). When the token expires in 15 seconds, the service short-circuits. This optimization interacts with bloom filter state. The bloom filter says "might be revoked," but the TTL check preempts it. A mocked bloom filter would not exercise this interaction.
+This guards against performance shortcuts accidentally creating a final window in which a revoked credential becomes valid again.
 
 **Trade-offs.** The `invokePostConstruct` reflection hack on lines 112-120 is ugly. It simulates container lifecycle behavior manually. If the `@PostConstruct` method signature changes, the reflection silently does nothing. This is the cost of testing outside the container. The alternative is a `@QuarkusTest` that takes 10x longer to start.
 

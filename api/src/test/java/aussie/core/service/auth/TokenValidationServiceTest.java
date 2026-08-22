@@ -16,6 +16,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -218,6 +219,51 @@ class TokenValidationServiceTest {
 
             assertInstanceOf(TokenValidationResult.Invalid.class, result);
             verify(revocationService).isRevoked(anyString(), anyString(), any(Instant.class), any(Instant.class));
+        }
+
+        @Test
+        @DisplayName("should reject tokens without trustworthy revocation claims")
+        void shouldRejectInvalidRevocationClaims() {
+            final var validator = createValidator("oidc", 100);
+            final var providerProps = mock(RouteAuthConfig.TokenProviderProperties.class);
+            when(providerProps.issuer()).thenReturn("https://issuer.example.com");
+            when(providerProps.jwksUri()).thenReturn("https://issuer.example.com/.well-known/jwks.json");
+            when(providerProps.discoveryUri()).thenReturn(Optional.empty());
+            when(providerProps.audiences()).thenReturn(Set.of("aussie-gateway"));
+            when(providerProps.allowedAlgorithms()).thenReturn(Set.of("RS256"));
+            when(providerProps.keyRefreshInterval()).thenReturn(Duration.ofHours(1));
+            when(providerProps.claimsMapping()).thenReturn(Map.of());
+            when(config.providers()).thenReturn(Map.of("provider1", providerProps));
+            when(revocationService.isEnabled()).thenReturn(true);
+
+            final var service = createService(true, validator);
+            final var invalidClaims = List.<Map<String, Object>>of(
+                    Map.of("iat", Instant.now().getEpochSecond()),
+                    Map.of("jti", "token-123"),
+                    Map.of("jti", "   ", "iat", Instant.now().getEpochSecond()),
+                    Map.of("jti", 123, "iat", Instant.now().getEpochSecond()),
+                    Map.of("jti", "token-123", "iat", "not-a-timestamp"),
+                    Map.of("jti", "token-123", "iat", Long.MAX_VALUE),
+                    Map.of(
+                            "jti",
+                            "token-123",
+                            "iat",
+                            Instant.now().plusSeconds(60).getEpochSecond()));
+
+            for (final var claims : invalidClaims) {
+                final var valid = new TokenValidationResult.Valid(
+                        "user-1",
+                        "https://issuer.example.com",
+                        claims,
+                        Instant.now().plusSeconds(3600));
+                when(validator.validate(anyString(), any(TokenProviderConfig.class)))
+                        .thenReturn(Uni.createFrom().item(valid));
+
+                assertInstanceOf(
+                        TokenValidationResult.Invalid.class,
+                        service.validate("token").await().atMost(Duration.ofSeconds(1)));
+            }
+            verify(revocationService, never()).isRevoked(any(), any(), any(), any());
         }
 
         @Test

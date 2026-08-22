@@ -19,26 +19,20 @@ Request
    │
    ▼
 ┌─────────────────────────────────────────────────────────┐
-│ Tier 0: TTL Shortcut                                    │
-│ Skip check for tokens expiring within threshold (30s)  │
-└───────────────────────────┬─────────────────────────────┘
-                            │ Token has sufficient TTL
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│ Tier 1: Bloom Filter (~100ns)                           │
-│ "Definitely not revoked" check - no network I/O        │
+│ Bloom Filter (~100ns)                                   │
+│ "Definitely not revoked" check - no network I/O         │
 └───────────────────────────┬─────────────────────────────┘
                             │ Maybe revoked (positive)
                             ▼
 ┌─────────────────────────────────────────────────────────┐
-│ Tier 2: Local Cache (~1μs)                              │
-│ LRU cache for confirmed revocations                    │
+│ Local Cache (~1μs)                                      │
+│ LRU cache for confirmed revocations                     │
 └───────────────────────────┬─────────────────────────────┘
                             │ Not in cache
                             ▼
 ┌─────────────────────────────────────────────────────────┐
-│ Tier 3: Remote Store (~1-5ms)                           │
-│ Redis/SPI backend - authoritative source               │
+│ Remote Store (~1-5ms)                                   │
+│ Redis/SPI backend - authoritative source                │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -52,15 +46,15 @@ Request
 
 ## Configuration
 
+When revocation is enabled, incoming tokens must contain a non-blank string `jti` claim and a valid `iat` claim.
+Aussie accepts up to 30 seconds of clock skew for `iat`; tokens issued further in the future are rejected.
+
 ```properties
 # Enable/disable token revocation
 aussie.auth.revocation.enabled=true
 
 # Enable user-level revocation checks (logout-everywhere)
 aussie.auth.revocation.check-user-revocation=true
-
-# Skip check for tokens expiring within this threshold
-aussie.auth.revocation.check-threshold=PT30S
 
 # Bloom filter configuration
 aussie.auth.revocation.bloom-filter.enabled=true

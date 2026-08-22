@@ -118,7 +118,7 @@ These are not hypothetical decisions. Every one of them is enforced by running c
 - The hot path (token is not revoked) costs approximately 100ns and zero network I/O. This is critical for a gateway where every millisecond of latency multiplies across all downstream consumers.
 - The bloom filter has a configurable false positive rate (default 0.1%). False positives cause unnecessary remote lookups but never cause incorrect results. There are no false negatives; if the bloom filter says "definitely not," the token is definitely not revoked.
 - The filter must be rebuilt periodically from the remote store to handle instance restarts and cross-instance consistency. This is scheduled on a configurable interval using Vert.x periodic timers.
-- The tiered approach (TTL shortcut, bloom filter, local cache, remote store) means four code paths to test and monitor. The `TokenRevocationService` javadoc explicitly documents the performance targets: P50 under 100 microseconds, P99 under 500 microseconds, P99.9 under 5 milliseconds.
+- The tiered approach (bloom filter, local cache, remote store) means three code paths to test and monitor. The `TokenRevocationService` javadoc explicitly documents the performance targets: P50 under 100 microseconds, P99 under 500 microseconds, P99.9 under 5 milliseconds.
 - Separate bloom filters are maintained for JTI-level and user-level revocations, since user-level revocations are expected to be an order of magnitude less frequent.
 
 **Evidence in code:**
@@ -130,10 +130,9 @@ These are not hypothetical decisions. Every one of them is enforced by running c
   - Periodic rebuild scheduling via `vertx.setPeriodic()` (lines 97-105)
   - Pub/sub subscription for real-time bloom filter updates from other instances (lines 107-130)
 - `api/src/main/java/aussie/core/service/auth/TokenRevocationService.java`: Tiered lookup orchestration:
-  - Tier 0: TTL shortcut for soon-expiring tokens (lines 76-80)
-  - Tier 1: Bloom filter check (lines 85-93)
-  - Tier 2: Local cache check (lines 96-112)
-  - Tier 3: Remote store lookup (line 115)
+  - Tier 1: Bloom filter check
+  - Tier 2: Local cache check
+  - Tier 3: Remote store lookup
   - Performance target documentation in javadoc (lines 28-32)
 - `api/src/main/java/aussie/core/service/auth/RevocationCache.java`: Tier 2 local LRU cache for confirmed revocations, using Caffeine with configurable max size and TTL (lines 36-213)
 

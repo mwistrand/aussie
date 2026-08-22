@@ -473,11 +473,6 @@ class SessionServiceTest {
         }
 
         @Override
-        public Duration checkThreshold() {
-            return Duration.ofSeconds(30);
-        }
-
-        @Override
         public BloomFilterConfig bloomFilter() {
             return new BloomFilterConfig() {
                 @Override

@@ -745,7 +745,6 @@ The platform README tables (described in Section 5) provide the operator-facing 
 |--------------------------------------------------------------|---------------------------|--------------------------------------|
 | AUSSIE_AUTH_REVOCATION_ENABLED                               | true                      | Enable token revocation checks       |
 | AUSSIE_AUTH_REVOCATION_CHECK_USER_REVOCATION                 | true                      | Enable user-level revocation         |
-| AUSSIE_AUTH_REVOCATION_CHECK_THRESHOLD                       | PT30S                     | Skip check for near-expiry tokens    |
 | AUSSIE_AUTH_REVOCATION_BLOOM_FILTER_ENABLED                  | true                      | Enable bloom filter optimization     |
 | AUSSIE_AUTH_REVOCATION_BLOOM_FILTER_EXPECTED_INSERTIONS      | 100000                    | Expected number of revoked tokens    |
 | AUSSIE_AUTH_REVOCATION_BLOOM_FILTER_FALSE_POSITIVE_PROBABILITY| 0.001                    | Bloom filter false positive rate     |

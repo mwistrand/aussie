@@ -171,6 +171,9 @@ class RsaTokenIssuerTest {
             assertEquals("aussie-gateway", claims.getIssuer());
             assertEquals("https://idp.example.com", claims.getStringClaimValue("original_iss"));
             assertEquals("user@test.com", claims.getStringClaimValue("email"));
+            assertEquals(
+                    token.expiresAt().getEpochSecond(),
+                    claims.getExpirationTime().getValue());
         }
 
         @Test
@@ -262,6 +265,40 @@ class RsaTokenIssuerTest {
             var claims = consumer.processToClaims(token.jws());
             assertEquals("aussie-gateway", claims.getIssuer());
             assertEquals("test@test.com", claims.getStringClaimValue("email"));
+        }
+
+        @Test
+        @DisplayName("should not outlive the validated upstream token")
+        void shouldCapExpirationAtUpstreamExpiration() throws Exception {
+            final var upstreamExpiration =
+                    Instant.now().plusSeconds(30).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+            final var validated =
+                    new TokenValidationResult.Valid("user-1", "issuer", Map.of("sub", "user-1"), upstreamExpiration);
+
+            final var token = createIssuer().issue(validated, jwsConfig());
+            final var claims = new JwtConsumerBuilder()
+                    .setVerificationKey(testKeyPair.getPublic())
+                    .setSkipDefaultAudienceValidation()
+                    .build()
+                    .processToClaims(token.jws());
+
+            assertEquals(upstreamExpiration, token.expiresAt());
+            assertEquals(
+                    upstreamExpiration.getEpochSecond(),
+                    claims.getExpirationTime().getValue());
+        }
+
+        @Test
+        @DisplayName("should reject issuance without a valid upstream expiration")
+        void shouldRejectInvalidUpstreamExpiration() {
+            final var expired = new TokenValidationResult.Valid(
+                    "user-1", "issuer", Map.of("sub", "user-1"), Instant.now().minusSeconds(1));
+            final var missing = new TokenValidationResult.Valid("user-1", "issuer", Map.of("sub", "user-1"), null);
+
+            assertThrows(RsaTokenIssuer.TokenIssuanceException.class, () -> createIssuer()
+                    .issue(expired, jwsConfig()));
+            assertThrows(RsaTokenIssuer.TokenIssuanceException.class, () -> createIssuer()
+                    .issue(missing, jwsConfig()));
         }
     }
 

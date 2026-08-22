@@ -69,7 +69,6 @@ class TokenRevocationServiceIntegrationTest {
     void setUp() throws Exception {
         // Configure revocation as enabled
         lenient().when(config.enabled()).thenReturn(true);
-        lenient().when(config.checkThreshold()).thenReturn(Duration.ofSeconds(30));
         lenient().when(config.checkUserRevocation()).thenReturn(true);
         lenient().when(config.bloomFilter()).thenReturn(bloomFilterConfig);
         lenient().when(config.cache()).thenReturn(cacheConfig);
@@ -299,24 +298,24 @@ class TokenRevocationServiceIntegrationTest {
     }
 
     @Nested
-    @DisplayName("TTL threshold optimization")
-    class TtlThresholdTests {
+    @DisplayName("Near-expiry revocation")
+    class NearExpiryRevocationTests {
 
         @Test
-        @DisplayName("should skip revocation check for tokens expiring within threshold")
-        void shouldSkipCheckForSoonExpiringTokens() {
+        @DisplayName("should still reject a revoked token near expiry")
+        void shouldCheckSoonExpiringTokens() {
             final var jti = "expiring-soon";
             final var userId = "user-123";
             final var issuedAt = Instant.now().minus(Duration.ofHours(1));
-            final var expiresAt = Instant.now().plus(Duration.ofSeconds(15)); // Within 30s threshold
+            final var expiresAt = Instant.now().plus(Duration.ofSeconds(15));
+            when(repository.revoke(jti, expiresAt)).thenReturn(Uni.createFrom().voidItem());
 
-            // Even if we add to bloom filter, should skip check
-            bloomFilter.addRevokedJti(jti);
+            service.revokeToken(jti, expiresAt).await().atMost(Duration.ofSeconds(1));
 
             final var isRevoked =
                     service.isRevoked(jti, userId, issuedAt, expiresAt).await().atMost(Duration.ofSeconds(1));
 
-            assertFalse(isRevoked, "Should skip check and return not-revoked for soon-expiring token");
+            assertTrue(isRevoked, "Revocation must remain effective until token expiry");
         }
     }
 }

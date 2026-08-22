@@ -40,6 +40,12 @@ public record JwsConfig(
         if (maxTokenTtl == null) {
             maxTokenTtl = DEFAULT_MAX_TTL;
         }
+        if (tokenTtl.isZero() || tokenTtl.isNegative()) {
+            throw new IllegalArgumentException("Token TTL must be positive");
+        }
+        if (maxTokenTtl.isZero() || maxTokenTtl.isNegative()) {
+            throw new IllegalArgumentException("Maximum token TTL must be positive");
+        }
         if (forwardedClaims == null) {
             forwardedClaims = Set.of("sub", "email", "name");
         }
@@ -63,21 +69,10 @@ public record JwsConfig(
         this(issuer, keyId, tokenTtl, DEFAULT_MAX_TTL, forwardedClaims, Optional.empty(), false);
     }
 
-    /**
-     * Calculate the effective TTL, clamping to the maximum allowed.
-     *
-     * @param requestedTtl the requested TTL (e.g., from incoming token)
-     * @return the effective TTL (minimum of requested and max)
-     */
+    /** Calculate the effective TTL without exceeding the configured or source lifetime. */
     public Duration effectiveTtl(Duration requestedTtl) {
-        if (requestedTtl == null) {
-            return tokenTtl;
-        }
-        // Use the minimum of requested TTL and max TTL
-        if (requestedTtl.compareTo(maxTokenTtl) > 0) {
-            return maxTokenTtl;
-        }
-        return requestedTtl;
+        final var effective = tokenTtl.compareTo(maxTokenTtl) <= 0 ? tokenTtl : maxTokenTtl;
+        return requestedTtl != null && requestedTtl.compareTo(effective) < 0 ? requestedTtl : effective;
     }
 
     /**

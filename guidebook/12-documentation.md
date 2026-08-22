@@ -190,7 +190,7 @@ Writing failure scenario tables forces the author to think through every failure
 
 ## 4. Configuration Reference Tables
 
-Aussie's platform guide ends with a comprehensive environment variables reference, organized by category. The token revocation section alone includes 12 variables:
+Aussie's platform guide ends with a comprehensive environment variables reference, organized by category. The token revocation section alone includes 11 variables:
 
 ```
 ### Token Revocation
@@ -199,7 +199,6 @@ Aussie's platform guide ends with a comprehensive environment variables referenc
 |----------|---------|-------------|
 | `AUSSIE_AUTH_REVOCATION_ENABLED` | `true` | Enable token revocation checks |
 | `AUSSIE_AUTH_REVOCATION_CHECK_USER_REVOCATION` | `true` | Enable user-level revocation |
-| `AUSSIE_AUTH_REVOCATION_CHECK_THRESHOLD` | `PT30S` | Skip check for tokens expiring within this threshold |
 | `AUSSIE_AUTH_REVOCATION_BLOOM_FILTER_ENABLED` | `true` | Enable bloom filter optimization |
 | `AUSSIE_AUTH_REVOCATION_BLOOM_FILTER_EXPECTED_INSERTIONS` | `100000` | Expected number of revoked tokens |
 | `AUSSIE_AUTH_REVOCATION_BLOOM_FILTER_FALSE_POSITIVE_PROBABILITY` | `0.001` | Bloom filter false positive rate |
@@ -324,7 +323,6 @@ The `TokenRevocationService` Javadoc embeds performance targets:
  *
  * <p>Implements a tiered caching strategy for high-performance revocation checks:
  * <ol>
- *   <li><b>TTL shortcut</b> - Skip check for tokens expiring within threshold</li>
  *   <li><b>Bloom filter</b> - O(1) "definitely not revoked" check (~100ns)</li>
  *   <li><b>Local cache</b> - LRU cache for confirmed revocations (~1us)</li>
  *   <li><b>Remote store</b> - Authoritative source via SPI (~1-5ms)</li>

@@ -1,6 +1,7 @@
 package aussie.core.service.auth;
 
 import java.net.URI;
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,7 @@ import aussie.spi.TokenValidatorProvider;
 public class TokenValidationService {
 
     private static final Logger LOG = Logger.getLogger(TokenValidationService.class);
+    private static final long ALLOWED_ISSUED_AT_SKEW_SECONDS = 30;
 
     private final List<TokenValidatorProvider> validators;
     private final Map<String, TokenProviderConfig> providerConfigs;
@@ -165,54 +167,51 @@ public class TokenValidationService {
             return Uni.createFrom().item(valid);
         }
 
-        // Extract JTI (JWT ID) claim - may be null if not present
-        var jti = extractStringClaim(valid.claims(), "jti");
-        if (jti == null) {
-            LOG.debug("Token has no jti claim, skipping JTI revocation check");
+        final var jti = extractStringClaim(valid.claims(), "jti");
+        if (jti == null || jti.isBlank()) {
+            return Uni.createFrom().item(new TokenValidationResult.Invalid("Token missing required jti claim"));
         }
 
-        // Extract issued-at claim for user-level revocation
-        var issuedAt = extractInstantClaim(valid.claims(), "iat");
+        final var issuedAt = extractInstantClaim(valid.claims(), "iat");
         if (issuedAt == null) {
-            issuedAt = Instant.now(); // Fallback to now if no iat
+            return Uni.createFrom()
+                    .item(new TokenValidationResult.Invalid("Token missing or malformed required iat claim"));
+        }
+        if (issuedAt.isAfter(Instant.now().plusSeconds(ALLOWED_ISSUED_AT_SKEW_SECONDS))) {
+            return Uni.createFrom().item(new TokenValidationResult.Invalid("Token issued-at time is in the future"));
         }
 
         // Use subject as user ID
-        var userId = valid.subject();
-        var expiresAt = valid.expiresAt();
-        final var effectiveIssuedAt = issuedAt;
-
-        return revocationService
-                .isRevoked(jti, userId, effectiveIssuedAt, expiresAt)
-                .map(revoked -> {
-                    if (revoked) {
-                        LOG.infov("Token revoked: jti={0}, subject={1}", jti, userId);
-                        return new TokenValidationResult.Invalid("Token has been revoked");
-                    }
-                    return valid;
-                });
+        final var userId = valid.subject();
+        final var expiresAt = valid.expiresAt();
+        return revocationService.isRevoked(jti, userId, issuedAt, expiresAt).map(revoked -> {
+            if (revoked) {
+                LOG.infov("Token revoked: jti={0}, subject={1}", jti, userId);
+                return new TokenValidationResult.Invalid("Token has been revoked");
+            }
+            return valid;
+        });
     }
 
     private String extractStringClaim(Map<String, Object> claims, String name) {
-        var value = claims.get(name);
-        return value != null ? value.toString() : null;
+        return claims.get(name) instanceof String value ? value : null;
     }
 
     private Instant extractInstantClaim(Map<String, Object> claims, String name) {
-        var value = claims.get(name);
+        final var value = claims.get(name);
         if (value == null) {
             return null;
         }
-        if (value instanceof Number num) {
-            // JWT iat/exp are typically seconds since epoch
-            return Instant.ofEpochSecond(num.longValue());
-        }
-        if (value instanceof Instant instant) {
-            return instant;
-        }
         try {
+            if (value instanceof Number num) {
+                // JWT iat/exp are typically seconds since epoch
+                return Instant.ofEpochSecond(num.longValue());
+            }
+            if (value instanceof Instant instant) {
+                return instant;
+            }
             return Instant.ofEpochSecond(Long.parseLong(value.toString()));
-        } catch (NumberFormatException e) {
+        } catch (DateTimeException | NumberFormatException e) {
             LOG.warnv("Failed to parse {0} claim as Instant: {1}", name, value);
             return null;
         }
