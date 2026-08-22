@@ -2,7 +2,7 @@
 
 The OIDC Token Exchange feature enables Aussie to complete the OAuth 2.0 authorization code flow by exchanging authorization codes for tokens with identity providers.
 
-> **Containment status:** The current browser-facing `/auth/oidc/authorize` and `/auth/oidc/token` helpers are disabled in normal mode because the legacy flow does not yet bind the complete authorization transaction or validate ID tokens before session creation. They are available only in the local development profile while the production OIDC flow is rebuilt.
+> **Containment status:** The current browser-facing `/auth/oidc/authorize` and `/auth/oidc/token` helpers are disabled in normal mode because the legacy flow does not yet bind the complete authorization transaction. ID tokens are cryptographically validated before session creation, but state, nonce, provider, and redirect binding still require the production OIDC transaction flow.
 
 ## Overview
 
@@ -63,6 +63,8 @@ aussie.auth.oidc.token-exchange.create-session=true
 Session creation requires:
 - Session management enabled (`aussie.session.enabled=true`)
 - An ID token in the token response
+- A matching provider under `aussie.auth.route-auth.providers.*`
+- Route-auth token validation enabled (`aussie.auth.route-auth.enabled=true`)
 
 ### Refresh Token Storage
 
@@ -243,3 +245,4 @@ Check:
 1. Session management is enabled: `aussie.session.enabled=true`
 2. Session creation is enabled: `aussie.auth.oidc.token-exchange.create-session=true`
 3. The IdP returns an ID token
+4. Route-auth validation is enabled with a provider matching the ID token issuer and audience

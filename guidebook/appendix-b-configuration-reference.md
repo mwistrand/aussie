@@ -493,7 +493,7 @@ The test profile disables auth rate limiting because test suites exercising auth
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
 | `aussie.session.enabled` | `boolean` | `true` | `AUSSIE_SESSION_ENABLED` | Enable session management. When disabled, uses Authorization header flow. |
-| `aussie.session.public-creation-enabled` | `boolean` | `false` | `AUSSIE_SESSION_PUBLIC_CREATION_ENABLED` | Enable unsafe legacy `POST /auth/session` and `GET /auth/callback` endpoints. Development only. |
+| `aussie.session.public-creation-enabled` | `boolean` | `false` | `AUSSIE_SESSION_PUBLIC_CREATION_ENABLED` | Enable legacy validated-token `POST /auth/session` and `GET /auth/callback` endpoints. Development only. |
 | `aussie.session.ttl` | `Duration` | `PT8H` | `AUSSIE_SESSION_TTL` | Session time-to-live. |
 | `aussie.session.idle-timeout` | `Duration` | `PT30M` | `AUSSIE_SESSION_IDLE_TIMEOUT` | Invalidate session after inactivity. |
 | `aussie.session.sliding-expiration` | `boolean` | `true` | `AUSSIE_SESSION_SLIDING_EXPIRATION` | Refresh session TTL on each request. |

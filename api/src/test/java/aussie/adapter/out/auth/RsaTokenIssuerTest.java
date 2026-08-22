@@ -293,12 +293,12 @@ class RsaTokenIssuerTest {
         void shouldRejectInvalidUpstreamExpiration() {
             final var expired = new TokenValidationResult.Valid(
                     "user-1", "issuer", Map.of("sub", "user-1"), Instant.now().minusSeconds(1));
-            final var missing = new TokenValidationResult.Valid("user-1", "issuer", Map.of("sub", "user-1"), null);
 
             assertThrows(RsaTokenIssuer.TokenIssuanceException.class, () -> createIssuer()
                     .issue(expired, jwsConfig()));
-            assertThrows(RsaTokenIssuer.TokenIssuanceException.class, () -> createIssuer()
-                    .issue(missing, jwsConfig()));
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> new TokenValidationResult.Valid("user-1", "issuer", Map.of("sub", "user-1"), null));
         }
     }
 

@@ -1,8 +1,5 @@
 package aussie.core.model.auth;
 
-import java.time.Instant;
-import java.util.Map;
-
 /**
  * Result of validating an incoming bearer token.
  */
@@ -11,23 +8,46 @@ public sealed interface TokenValidationResult {
     /**
      * Token was successfully validated.
      *
-     * @param subject   the token subject (sub claim)
-     * @param issuer    the token issuer (iss claim)
-     * @param claims    all claims from the token
-     * @param expiresAt when the token expires
+     * @param identity immutable identity and validation provenance
      */
-    record Valid(String subject, String issuer, Map<String, Object> claims, Instant expiresAt)
-            implements TokenValidationResult {
+    record Valid(ValidatedIdentity identity) implements TokenValidationResult {
+        /**
+         * Compatibility constructor for validator providers compiled against the original result shape.
+         */
+        public Valid(String subject, String issuer, java.util.Map<String, Object> claims, java.time.Instant expiresAt) {
+            this(new ValidatedIdentity(
+                    "legacy",
+                    subject,
+                    issuer,
+                    java.util.Set.of(),
+                    java.util.Optional.empty(),
+                    java.util.Optional.ofNullable(claims == null ? null : claims.get("jti"))
+                            .map(Object::toString),
+                    claims,
+                    java.util.Optional.empty(),
+                    expiresAt));
+        }
+
         public Valid {
-            if (subject == null || subject.isBlank()) {
-                throw new IllegalArgumentException("Subject cannot be null or blank");
+            if (identity == null) {
+                throw new IllegalArgumentException("Validated identity cannot be null");
             }
-            if (issuer == null || issuer.isBlank()) {
-                throw new IllegalArgumentException("Issuer cannot be null or blank");
-            }
-            if (claims == null) {
-                claims = Map.of();
-            }
+        }
+
+        public String subject() {
+            return identity.subject();
+        }
+
+        public String issuer() {
+            return identity.issuer();
+        }
+
+        public java.util.Map<String, Object> claims() {
+            return identity.claims();
+        }
+
+        public java.time.Instant expiresAt() {
+            return identity.expiresAt();
         }
     }
 

@@ -148,6 +148,9 @@ class OidcTokenValidatorTest {
             final var valid = (TokenValidationResult.Valid) result;
             assertEquals(TEST_SUBJECT, valid.subject());
             assertEquals(TEST_ISSUER, valid.issuer());
+            assertEquals("test-provider", valid.identity().providerId());
+            assertEquals(Set.of(TEST_AUDIENCE), valid.identity().audiences());
+            assertTrue(valid.identity().tokenId().isPresent());
             assertNotNull(valid.expiresAt());
             assertTrue(valid.expiresAt().isAfter(Instant.now()));
         }

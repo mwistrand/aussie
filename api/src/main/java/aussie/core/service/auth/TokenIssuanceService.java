@@ -225,8 +225,7 @@ public class TokenIssuanceService {
         final var enrichedClaims = new HashMap<>(original.claims());
         enrichedClaims.put(EFFECTIVE_PERMISSIONS_CLAIM, List.copyOf(expandedPermissions));
 
-        return new TokenValidationResult.Valid(
-                original.subject(), original.issuer(), enrichedClaims, original.expiresAt());
+        return new TokenValidationResult.Valid(original.identity().withClaims(enrichedClaims));
     }
 
     /**

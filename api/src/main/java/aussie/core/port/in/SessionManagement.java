@@ -1,11 +1,10 @@
 package aussie.core.port.in;
 
-import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 import io.smallrye.mutiny.Uni;
 
+import aussie.core.model.auth.ValidatedIdentity;
 import aussie.core.model.session.Session;
 
 /**
@@ -24,22 +23,13 @@ public interface SessionManagement {
      * and retry logic. If a collision is detected, it will retry up to the
      * configured maximum attempts.
      *
-     * @param userId User identifier from the auth provider
-     * @param issuer Auth provider issuer
-     * @param claims Additional claims from the auth token
-     * @param permissions User permissions/roles
+     * @param identity identity produced by a configured token validator
      * @param userAgent Client user agent (optional)
      * @param ipAddress Client IP address (optional)
      * @return The created session
      * @throws SessionCreationException if session creation fails after max retries
      */
-    Uni<Session> createSession(
-            String userId,
-            String issuer,
-            Map<String, Object> claims,
-            Set<String> permissions,
-            String userAgent,
-            String ipAddress);
+    Uni<Session> createSession(ValidatedIdentity identity, String userAgent, String ipAddress);
 
     /**
      * Retrieve and validates a session by ID.

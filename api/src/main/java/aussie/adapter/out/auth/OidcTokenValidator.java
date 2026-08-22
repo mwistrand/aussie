@@ -1,8 +1,10 @@
 package aussie.adapter.out.auth;
 
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -27,6 +29,7 @@ import org.jose4j.lang.JoseException;
 import aussie.core.config.ResiliencyConfig;
 import aussie.core.model.auth.TokenProviderConfig;
 import aussie.core.model.auth.TokenValidationResult;
+import aussie.core.model.auth.ValidatedIdentity;
 import aussie.core.port.out.JwksCache;
 import aussie.spi.TokenValidatorProvider;
 
@@ -189,11 +192,38 @@ public class OidcTokenValidator implements TokenValidatorProvider {
             final var expiration = claims.getExpirationTime();
 
             final var claimsMap = applyClaimsMapping(claims, state.claimsMapping());
+            final var authenticatedAt = instantClaim(claimsMap.get("auth_time"));
+            final var tokenId = Optional.ofNullable(claims.getJwtId()).filter(value -> !value.isBlank());
+            final var assuranceLevel = Optional.ofNullable(claimsMap.get("acr"))
+                    .filter(String.class::isInstance)
+                    .map(String.class::cast)
+                    .filter(value -> !value.isBlank());
 
-            return new TokenValidationResult.Valid(
-                    subject, issuer, claimsMap, Instant.ofEpochSecond(expiration.getValue()));
+            return new TokenValidationResult.Valid(new ValidatedIdentity(
+                    state.providerId(),
+                    subject,
+                    issuer,
+                    Set.copyOf(claims.getAudience()),
+                    authenticatedAt,
+                    tokenId,
+                    claimsMap,
+                    assuranceLevel,
+                    Instant.ofEpochSecond(expiration.getValue())));
         } catch (MalformedClaimException e) {
             return new TokenValidationResult.Invalid("Malformed claims: " + e.getMessage());
+        }
+    }
+
+    private Optional<Instant> instantClaim(Object value) {
+        try {
+            if (value instanceof Number number) {
+                return Optional.of(Instant.ofEpochSecond(number.longValue()));
+            }
+            return value == null
+                    ? Optional.empty()
+                    : Optional.of(Instant.ofEpochSecond(Long.parseLong(value.toString())));
+        } catch (DateTimeException | NumberFormatException e) {
+            return Optional.empty();
         }
     }
 
@@ -245,6 +275,7 @@ public class OidcTokenValidator implements TokenValidatorProvider {
      * path can skip {@code Set.copyOf} + {@code toArray} on every authenticated call.
      */
     private record IssuerState(
+            String providerId,
             String issuer,
             Set<String> audiences,
             String[] expectedAudience,
@@ -264,7 +295,12 @@ public class OidcTokenValidator implements TokenValidatorProvider {
             final var expectedAudience = canonicalAudiences.toArray(new String[0]);
             final var canonicalAlgorithms = Set.copyOf(config.allowedAlgorithms());
             return new IssuerState(
-                    config.issuer(), canonicalAudiences, expectedAudience, canonicalAlgorithms, config.claimsMapping());
+                    config.id(),
+                    config.issuer(),
+                    canonicalAudiences,
+                    expectedAudience,
+                    canonicalAlgorithms,
+                    config.claimsMapping());
         }
     }
 

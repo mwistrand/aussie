@@ -1,8 +1,6 @@
 package aussie.adapter.in.http;
 
 import java.net.URI;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -28,8 +26,10 @@ import aussie.adapter.in.auth.SessionAuthenticationMechanism.SessionPrincipal;
 import aussie.adapter.in.auth.SessionCookieManager;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.config.SessionConfig;
+import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.model.session.Session;
 import aussie.core.port.in.SessionManagement;
+import aussie.core.service.auth.TokenValidationService;
 import aussie.core.util.SecureHash;
 
 /**
@@ -45,6 +45,7 @@ public class SessionResource {
     private final SessionCookieManager cookieManager;
     private final SessionConfig config;
     private final SecurityIdentity securityIdentity;
+    private final TokenValidationService tokenValidationService;
 
     @Context
     HttpServerRequest request;
@@ -54,11 +55,13 @@ public class SessionResource {
             SessionManagement sessionManagement,
             SessionCookieManager cookieManager,
             SessionConfig config,
-            SecurityIdentity securityIdentity) {
+            SecurityIdentity securityIdentity,
+            TokenValidationService tokenValidationService) {
         this.sessionManagement = sessionManagement;
         this.cookieManager = cookieManager;
         this.config = config;
         this.securityIdentity = securityIdentity;
+        this.tokenValidationService = tokenValidationService;
     }
 
     /**
@@ -72,45 +75,33 @@ public class SessionResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public Uni<Response> createSession(CreateSessionRequest createRequest) {
         requirePublicCreationEnabled();
+        if (createRequest == null
+                || createRequest.token() == null
+                || createRequest.token().isBlank()) {
+            throw GatewayProblem.badRequest("Token is required");
+        }
 
-        String userAgent = request.getHeader("User-Agent");
-        String ipAddress =
-                request.remoteAddress() != null ? request.remoteAddress().host() : null;
+        return createValidatedSession(createRequest.token()).map(session -> {
+            LOG.infof("Session created for user: %s", session.userId());
 
-        Set<String> permissions =
-                createRequest.permissions() != null ? new HashSet<>(createRequest.permissions()) : Set.of();
+            io.vertx.core.http.Cookie vertxCookie = cookieManager.createCookie(session);
+            NewCookie jaxrsCookie = convertToJaxRsCookie(vertxCookie, session);
 
-        Map<String, Object> claims = createRequest.claims() != null ? new HashMap<>(createRequest.claims()) : Map.of();
+            // Check for redirect
+            String redirectUrl = createRequest.redirectUrl();
+            if (redirectUrl != null && !redirectUrl.isBlank()) {
+                return Response.seeOther(URI.create(sanitizeRedirectUrl(redirectUrl)))
+                        .cookie(jaxrsCookie)
+                        .build();
+            }
 
-        return sessionManagement
-                .createSession(
-                        createRequest.userId(), createRequest.issuer(), claims, permissions, userAgent, ipAddress)
-                .map(session -> {
-                    LOG.infof("Session created for user: %s", createRequest.userId());
-
-                    io.vertx.core.http.Cookie vertxCookie = cookieManager.createCookie(session);
-                    NewCookie jaxrsCookie = convertToJaxRsCookie(vertxCookie, session);
-
-                    // Check for redirect
-                    String redirectUrl = createRequest.redirectUrl();
-                    if (redirectUrl != null && !redirectUrl.isBlank()) {
-                        return Response.seeOther(URI.create(redirectUrl))
-                                .cookie(jaxrsCookie)
-                                .build();
-                    }
-
-                    return Response.ok(Map.of(
-                                    "sessionId", session.id(),
-                                    "userId", session.userId(),
-                                    "expiresAt", session.expiresAt().toString()))
-                            .cookie(jaxrsCookie)
-                            .build();
-                })
-                .onFailure()
-                .transform(error -> {
-                    LOG.errorf("Failed to create session: %s", error.getMessage());
-                    return GatewayProblem.internalError("Failed to create session");
-                });
+            return Response.ok(Map.of(
+                            "sessionId", session.id(),
+                            "userId", session.userId(),
+                            "expiresAt", session.expiresAt().toString()))
+                    .cookie(jaxrsCookie)
+                    .build();
+        });
     }
 
     /**
@@ -273,81 +264,32 @@ public class SessionResource {
             throw GatewayProblem.badRequest("Token is required");
         }
 
-        // Decode JWT claims (for demo mode, we trust the token without signature validation)
-        // In production, this should validate the token signature against JWKS
-        Map<String, Object> claims;
-        try {
-            claims = decodeJwtClaims(token);
-        } catch (Exception e) {
-            LOG.warnf("Failed to decode token: %s", e.getMessage());
-            throw GatewayProblem.badRequest("Invalid token format");
-        }
-
-        String userId = (String) claims.get("sub");
-        if (userId == null || userId.isBlank()) {
-            throw GatewayProblem.badRequest("Token missing subject claim");
-        }
-
-        String issuer = (String) claims.getOrDefault("iss", "unknown");
-
-        @SuppressWarnings("unchecked")
-        var permissionsList = (java.util.List<String>) claims.get("permissions");
-        Set<String> permissions = permissionsList != null ? new HashSet<>(permissionsList) : Set.of();
-
-        String userAgent = request.getHeader("User-Agent");
-        String ipAddress =
-                request.remoteAddress() != null ? request.remoteAddress().host() : null;
-
         // Sanitize redirect URL to prevent open redirect attacks
         String safeRedirectUrl = sanitizeRedirectUrl(redirectUrl);
 
-        return sessionManagement
-                .createSession(userId, issuer, claims, permissions, userAgent, ipAddress)
-                .map(session -> {
-                    LOG.infof("Session created via callback for user: %s", userId);
+        return createValidatedSession(token).map(session -> {
+            LOG.infof("Session created via callback for user: %s", session.userId());
 
-                    io.vertx.core.http.Cookie vertxCookie = cookieManager.createCookie(session);
-                    NewCookie jaxrsCookie = convertToJaxRsCookie(vertxCookie, session);
+            io.vertx.core.http.Cookie vertxCookie = cookieManager.createCookie(session);
+            NewCookie jaxrsCookie = convertToJaxRsCookie(vertxCookie, session);
 
-                    // Redirect to the original page
-                    return Response.seeOther(URI.create(safeRedirectUrl))
-                            .cookie(jaxrsCookie)
-                            .build();
-                })
-                .onFailure()
-                .transform(error -> {
-                    LOG.errorf("Failed to create session from callback: %s", error.getMessage());
-                    return GatewayProblem.internalError("Failed to create session");
-                });
+            // Redirect to the original page
+            return Response.seeOther(URI.create(safeRedirectUrl))
+                    .cookie(jaxrsCookie)
+                    .build();
+        });
     }
 
-    /**
-     * Decode JWT claims without signature validation (demo mode).
-     * In production, use proper JWT validation with JWKS.
-     */
-    private Map<String, Object> decodeJwtClaims(String token) {
-        String[] parts = token.split("\\.");
-        if (parts.length != 3) {
-            throw new IllegalArgumentException("Invalid JWT format");
-        }
-
-        String payload = parts[1];
-        // Add padding if needed
-        int padding = 4 - (payload.length() % 4);
-        if (padding != 4) {
-            payload = payload + "=".repeat(padding);
-        }
-
-        byte[] decoded = java.util.Base64.getUrlDecoder().decode(payload);
-        String json = new String(decoded, java.nio.charset.StandardCharsets.UTF_8);
-
-        try {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> claims = new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, Map.class);
-            return claims;
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Failed to parse JWT payload", e);
-        }
+    private Uni<Session> createValidatedSession(String token) {
+        return tokenValidationService.validate(token).flatMap(result -> {
+            if (!(result instanceof TokenValidationResult.Valid valid)) {
+                throw GatewayProblem.unauthorized("Invalid token");
+            }
+            final var userAgent = request.getHeader("User-Agent");
+            final var ipAddress =
+                    request.remoteAddress() != null ? request.remoteAddress().host() : null;
+            return sessionManagement.createSession(valid.identity(), userAgent, ipAddress);
+        });
     }
 
     private void requirePublicCreationEnabled() {
@@ -434,6 +376,5 @@ public class SessionResource {
     /**
      * Request body for creating a session.
      */
-    public record CreateSessionRequest(
-            String userId, String issuer, Map<String, Object> claims, Set<String> permissions, String redirectUrl) {}
+    public record CreateSessionRequest(String token, String redirectUrl) {}
 }

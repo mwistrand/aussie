@@ -1,6 +1,8 @@
 package aussie.core.service.session;
 
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -12,11 +14,14 @@ import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
 import aussie.core.config.SessionConfig;
+import aussie.core.model.auth.ValidatedIdentity;
 import aussie.core.model.session.Session;
 import aussie.core.model.session.SessionInvalidatedEvent;
+import aussie.core.port.in.RoleManagement;
 import aussie.core.port.in.SessionManagement;
 import aussie.core.port.out.SessionRepository;
 import aussie.core.service.auth.TokenRevocationService;
+import aussie.core.service.auth.TokenTranslationService;
 import aussie.core.util.SecureHash;
 
 /**
@@ -32,39 +37,66 @@ import aussie.core.util.SecureHash;
 public class SessionService implements SessionManagement {
 
     private static final Logger LOG = Logger.getLogger(SessionService.class);
+    private static final String UPSTREAM_EXPIRATION_CLAIM = "aussie.identity.upstream_exp";
 
     private final SessionStorageProviderRegistry storageRegistry;
     private final SessionIdGenerator idGenerator;
     private final SessionConfig config;
     private final Event<SessionInvalidatedEvent> sessionInvalidatedEvent;
     private final TokenRevocationService tokenRevocationService;
+    private final TokenTranslationService tokenTranslationService;
+    private final RoleManagement roleManagement;
 
     public SessionService(
             SessionStorageProviderRegistry storageRegistry,
             SessionIdGenerator idGenerator,
             SessionConfig config,
             Event<SessionInvalidatedEvent> sessionInvalidatedEvent,
-            TokenRevocationService tokenRevocationService) {
+            TokenRevocationService tokenRevocationService,
+            TokenTranslationService tokenTranslationService,
+            RoleManagement roleManagement) {
         this.storageRegistry = storageRegistry;
         this.idGenerator = idGenerator;
         this.config = config;
         this.sessionInvalidatedEvent = sessionInvalidatedEvent;
         this.tokenRevocationService = tokenRevocationService;
+        this.tokenTranslationService = tokenTranslationService;
+        this.roleManagement = roleManagement;
     }
 
     @Override
-    public Uni<Session> createSession(
-            String userId,
-            String issuer,
-            Map<String, Object> claims,
-            Set<String> permissions,
-            String userAgent,
-            String ipAddress) {
-
-        Instant now = Instant.now();
-        Instant expiresAt = now.plus(config.ttl());
-
-        return createSessionWithRetry(userId, issuer, claims, permissions, userAgent, ipAddress, now, expiresAt, 0);
+    public Uni<Session> createSession(ValidatedIdentity identity, String userAgent, String ipAddress) {
+        if (!identity.expiresAt().isAfter(Instant.now())) {
+            return Uni.createFrom().failure(new SessionCreationException("Validated identity has expired"));
+        }
+        return tokenTranslationService
+                .translate(identity.issuer(), identity.subject(), identity.claims())
+                .flatMap(translated -> roleManagement
+                        .expandRoles(translated.roles())
+                        .flatMap(rolePermissions -> {
+                            final var now = Instant.now();
+                            if (!identity.expiresAt().isAfter(now)) {
+                                return Uni.createFrom()
+                                        .failure(new SessionCreationException("Validated identity has expired"));
+                            }
+                            final var expiresAt = earlier(now.plus(config.ttl()), identity.expiresAt());
+                            final var claims = new HashMap<>(identity.claims());
+                            claims.put(
+                                    UPSTREAM_EXPIRATION_CLAIM,
+                                    identity.expiresAt().getEpochSecond());
+                            final var permissions = new HashSet<>(translated.permissions());
+                            permissions.addAll(rolePermissions);
+                            return createSessionWithRetry(
+                                    identity.subject(),
+                                    identity.issuer(),
+                                    claims,
+                                    Set.copyOf(permissions),
+                                    userAgent,
+                                    ipAddress,
+                                    now,
+                                    expiresAt,
+                                    0);
+                        }));
     }
 
     private Uni<Session> createSessionWithRetry(
@@ -162,7 +194,12 @@ public class SessionService implements SessionManagement {
 
             // If sliding expiration is enabled, also update expiresAt
             if (config.slidingExpiration()) {
-                updatedSession = updatedSession.withExpiresAt(now.plus(config.ttl()));
+                final var upstreamExpiration = session.claims().get(UPSTREAM_EXPIRATION_CLAIM) instanceof Number value
+                        ? Instant.ofEpochSecond(value.longValue())
+                        : session.expiresAt();
+                if (upstreamExpiration != null) {
+                    updatedSession = updatedSession.withExpiresAt(earlier(now.plus(config.ttl()), upstreamExpiration));
+                }
             }
 
             return getRepository().update(updatedSession).map(Optional::of);
@@ -199,5 +236,9 @@ public class SessionService implements SessionManagement {
 
     private SessionRepository getRepository() {
         return storageRegistry.getRepository();
+    }
+
+    private Instant earlier(Instant first, Instant second) {
+        return first.isBefore(second) ? first : second;
     }
 }

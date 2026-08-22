@@ -6,7 +6,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -29,10 +28,12 @@ import aussie.core.config.SessionConfig;
 import aussie.core.model.auth.OidcTokenExchangeRequest;
 import aussie.core.model.auth.OidcTokenExchangeRequest.ClientAuthMethod;
 import aussie.core.model.auth.OidcTokenExchangeResponse;
+import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.port.in.SessionManagement;
 import aussie.core.port.out.OidcRefreshTokenRepository;
 import aussie.core.service.auth.OidcTokenExchangeProviderRegistry;
 import aussie.core.service.auth.PkceService;
+import aussie.core.service.auth.TokenValidationService;
 
 /**
  * REST endpoints for OIDC authorization flows with PKCE support.
@@ -56,6 +57,7 @@ public class OidcResource {
     private final OidcTokenExchangeProviderRegistry tokenExchangeRegistry;
     private final SessionManagement sessionManagement;
     private final OidcRefreshTokenRepository refreshTokenRepository;
+    private final TokenValidationService tokenValidationService;
 
     @Inject
     public OidcResource(
@@ -65,7 +67,8 @@ public class OidcResource {
             SessionConfig sessionConfig,
             OidcTokenExchangeProviderRegistry tokenExchangeRegistry,
             SessionManagement sessionManagement,
-            OidcRefreshTokenRepository refreshTokenRepository) {
+            OidcRefreshTokenRepository refreshTokenRepository,
+            TokenValidationService tokenValidationService) {
         this.pkceService = pkceService;
         this.pkceConfig = pkceConfig;
         this.oidcConfig = oidcConfig;
@@ -73,6 +76,7 @@ public class OidcResource {
         this.tokenExchangeRegistry = tokenExchangeRegistry;
         this.sessionManagement = sessionManagement;
         this.refreshTokenRepository = refreshTokenRepository;
+        this.tokenValidationService = tokenValidationService;
     }
 
     /**
@@ -288,19 +292,15 @@ public class OidcResource {
      * Create a session from the ID token claims.
      */
     private Uni<Response> createSessionFromToken(OidcTokenExchangeResponse tokenResponse) {
-        // Extract claims from ID token (simple JWT parsing - no validation here)
-        // Full validation should happen via TokenValidationService if configured
         final var idToken = tokenResponse.idToken().orElseThrow();
-        final var claims = parseIdTokenClaims(idToken);
-
-        final var userId = claims.getOrDefault("sub", "unknown").toString();
-        final var issuer = claims.getOrDefault("iss", "unknown").toString();
-
-        // Extract permissions/roles from claims
-        final var permissions = extractPermissions(claims);
-
-        return sessionManagement
-                .createSession(userId, issuer, claims, permissions, null, null)
+        return tokenValidationService
+                .validate(idToken)
+                .flatMap(result -> {
+                    if (result instanceof TokenValidationResult.Valid valid) {
+                        return sessionManagement.createSession(valid.identity(), null, null);
+                    }
+                    throw GatewayProblem.unauthorized("Invalid ID token");
+                })
                 .flatMap(session -> {
                     // Store refresh token with session ID
                     Uni<Void> storeRefresh = Uni.createFrom().voidItem();
@@ -340,51 +340,6 @@ public class OidcResource {
                 tokenResponse.expiresIn(), sessionId.orElse("none"));
 
         return Uni.createFrom().item(Response.ok(responseBody).build());
-    }
-
-    /**
-     * Parse ID token claims from a JWT.
-     *
-     * <p>This is a simple parser that extracts the payload without validation.
-     * For production use with untrusted tokens, validation via JWKS should be performed.
-     */
-    private Map<String, Object> parseIdTokenClaims(String idToken) {
-        try {
-            final var parts = idToken.split("\\.");
-            if (parts.length != 3) {
-                LOG.warn("Invalid ID token format");
-                return Map.of();
-            }
-
-            final var payload = new String(java.util.Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
-
-            return new io.vertx.core.json.JsonObject(payload).getMap();
-        } catch (Exception e) {
-            LOG.warnf(e, "Failed to parse ID token claims");
-            return Map.of();
-        }
-    }
-
-    /**
-     * Extract permissions/roles from token claims.
-     */
-    private Set<String> extractPermissions(Map<String, Object> claims) {
-        // Common claim names for roles/permissions
-        final var roleClaimNames = Set.of("roles", "groups", "permissions", "scope");
-
-        for (String claimName : roleClaimNames) {
-            final var value = claims.get(claimName);
-            if (value instanceof java.util.Collection<?> collection) {
-                return collection.stream()
-                        .filter(String.class::isInstance)
-                        .map(String.class::cast)
-                        .collect(java.util.stream.Collectors.toSet());
-            } else if (value instanceof String str) {
-                return Set.of(str.split("[\\s,]+"));
-            }
-        }
-
-        return Set.of();
     }
 
     /**

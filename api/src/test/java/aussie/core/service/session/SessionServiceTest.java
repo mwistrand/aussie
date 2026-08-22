@@ -3,12 +3,18 @@ package aussie.core.service.session;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletionStage;
 
@@ -21,13 +27,18 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import aussie.adapter.out.auth.DefaultTokenTranslatorProvider;
 import aussie.adapter.out.storage.memory.InMemoryRevocationEventPublisher;
 import aussie.adapter.out.storage.memory.InMemorySessionRepository;
 import aussie.adapter.out.storage.memory.InMemoryTokenRevocationRepository;
+import aussie.core.model.auth.ValidatedIdentity;
 import aussie.core.model.session.Session;
+import aussie.core.port.in.RoleManagement;
+import aussie.core.port.in.SessionManagement.SessionCreationException;
 import aussie.core.service.auth.RevocationBloomFilter;
 import aussie.core.service.auth.RevocationCache;
 import aussie.core.service.auth.TokenRevocationService;
+import aussie.core.service.auth.TokenTranslationService;
 
 @DisplayName("SessionService")
 class SessionServiceTest {
@@ -35,6 +46,7 @@ class SessionServiceTest {
     private SessionService sessionService;
     private InMemorySessionRepository repository;
     private TestSessionConfig config;
+    private RoleManagement roleManagement;
 
     @BeforeEach
     void setUp() {
@@ -54,9 +66,36 @@ class SessionServiceTest {
         var revocationCache = mock(RevocationCache.class);
         var tokenRevocationService = new TokenRevocationService(
                 revocationConfig, revocationRepository, revocationEventPublisher, bloomFilter, revocationCache);
+        var tokenTranslationService = mock(TokenTranslationService.class);
+        roleManagement = mock(RoleManagement.class);
+        var defaultTranslator = new DefaultTokenTranslatorProvider();
+        when(tokenTranslationService.translate(anyString(), anyString(), any()))
+                .thenAnswer(invocation -> defaultTranslator.translate(
+                        invocation.getArgument(0), invocation.getArgument(1), invocation.getArgument(2)));
+        when(roleManagement.expandRoles(any()))
+                .thenReturn(io.smallrye.mutiny.Uni.createFrom().item(Set.of()));
 
-        sessionService =
-                new SessionService(registry, idGenerator, config, sessionInvalidatedEvent, tokenRevocationService);
+        sessionService = new SessionService(
+                registry,
+                idGenerator,
+                config,
+                sessionInvalidatedEvent,
+                tokenRevocationService,
+                tokenTranslationService,
+                roleManagement);
+    }
+
+    private ValidatedIdentity identity(String subject, String issuer, Map<String, Object> claims) {
+        return new ValidatedIdentity(
+                "test-provider",
+                subject,
+                issuer,
+                Set.of("test-audience"),
+                Optional.empty(),
+                Optional.of(subject + "-token"),
+                claims,
+                Optional.empty(),
+                Instant.now().plus(Duration.ofDays(1)));
     }
 
     @Nested
@@ -68,10 +107,10 @@ class SessionServiceTest {
         void shouldCreateSessionWithAllProperties() {
             var session = sessionService
                     .createSession(
-                            "user123",
-                            "https://auth.example.com",
-                            Map.of("email", "user@example.com"),
-                            Set.of("admin:read"),
+                            identity(
+                                    "user123",
+                                    "https://auth.example.com",
+                                    Map.of("email", "user@example.com", "permissions", List.of("admin:read"))),
                             "Mozilla/5.0",
                             "192.168.1.1")
                     .await()
@@ -81,7 +120,7 @@ class SessionServiceTest {
             assertEquals("user123", session.userId());
             assertEquals("https://auth.example.com", session.issuer());
             assertEquals("user@example.com", session.claims().get("email"));
-            assertTrue(session.permissions().contains("admin:read"));
+            assertEquals(Set.of("admin:read"), session.permissions());
             assertEquals("Mozilla/5.0", session.userAgent());
             assertEquals("192.168.1.1", session.ipAddress());
             assertNotNull(session.createdAt());
@@ -90,10 +129,24 @@ class SessionServiceTest {
         }
 
         @Test
+        @DisplayName("should expand translated roles into session permissions")
+        void shouldExpandTranslatedRoles() {
+            when(roleManagement.expandRoles(Set.of("admin")))
+                    .thenReturn(io.smallrye.mutiny.Uni.createFrom().item(Set.of("admin:read")));
+
+            final var session = sessionService
+                    .createSession(identity("user123", "issuer", Map.of("roles", List.of("admin"))), null, null)
+                    .await()
+                    .atMost(Duration.ofSeconds(5));
+
+            assertEquals(Set.of("admin:read"), session.permissions());
+        }
+
+        @Test
         @DisplayName("should create session with TTL from config")
         void shouldCreateSessionWithTtlFromConfig() {
             var session = sessionService
-                    .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
+                    .createSession(identity("user123", "issuer", Map.of()), null, null)
                     .await()
                     .atMost(Duration.ofSeconds(5));
 
@@ -102,15 +155,56 @@ class SessionServiceTest {
         }
 
         @Test
+        @DisplayName("should not outlive validated identity")
+        void shouldNotOutliveValidatedIdentity() {
+            final var identityExpiration = Instant.now().plus(Duration.ofMinutes(5));
+            final var identity = new ValidatedIdentity(
+                    "test-provider",
+                    "user123",
+                    "issuer",
+                    Set.of("test-audience"),
+                    Optional.empty(),
+                    Optional.of("token-1"),
+                    Map.of(),
+                    Optional.empty(),
+                    identityExpiration);
+
+            final var session =
+                    sessionService.createSession(identity, null, null).await().atMost(Duration.ofSeconds(5));
+
+            assertEquals(identityExpiration, session.expiresAt());
+        }
+
+        @Test
+        @DisplayName("should reject an expired validated identity")
+        void shouldRejectExpiredIdentity() {
+            final var expiredIdentity = new ValidatedIdentity(
+                    "test-provider",
+                    "user123",
+                    "issuer",
+                    Set.of("test-audience"),
+                    Optional.empty(),
+                    Optional.of("token-1"),
+                    Map.of(),
+                    Optional.empty(),
+                    Instant.now().minusSeconds(1));
+
+            assertThrows(SessionCreationException.class, () -> sessionService
+                    .createSession(expiredIdentity, null, null)
+                    .await()
+                    .atMost(Duration.ofSeconds(5)));
+        }
+
+        @Test
         @DisplayName("should generate unique session IDs")
         void shouldGenerateUniqueSessionIds() {
             var session1 = sessionService
-                    .createSession("user1", "issuer", Map.of(), Set.of(), null, null)
+                    .createSession(identity("user1", "issuer", Map.of()), null, null)
                     .await()
                     .atMost(Duration.ofSeconds(5));
 
             var session2 = sessionService
-                    .createSession("user2", "issuer", Map.of(), Set.of(), null, null)
+                    .createSession(identity("user2", "issuer", Map.of()), null, null)
                     .await()
                     .atMost(Duration.ofSeconds(5));
 
@@ -121,7 +215,7 @@ class SessionServiceTest {
         @DisplayName("should save session in repository")
         void shouldSaveSessionInRepository() {
             var session = sessionService
-                    .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
+                    .createSession(identity("user123", "issuer", Map.of()), null, null)
                     .await()
                     .atMost(Duration.ofSeconds(5));
 
@@ -139,7 +233,7 @@ class SessionServiceTest {
         @DisplayName("should return session when valid")
         void shouldReturnSessionWhenValid() {
             var created = sessionService
-                    .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
+                    .createSession(identity("user123", "issuer", Map.of()), null, null)
                     .await()
                     .atMost(Duration.ofSeconds(5));
 
@@ -211,7 +305,7 @@ class SessionServiceTest {
         @DisplayName("should update lastAccessedAt")
         void shouldUpdateLastAccessedAt() {
             var created = sessionService
-                    .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
+                    .createSession(identity("user123", "issuer", Map.of()), null, null)
                     .await()
                     .atMost(Duration.ofSeconds(5));
 
@@ -236,7 +330,7 @@ class SessionServiceTest {
             config.setSlidingExpiration(true);
 
             var created = sessionService
-                    .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
+                    .createSession(identity("user123", "issuer", Map.of()), null, null)
                     .await()
                     .atMost(Duration.ofSeconds(5));
 
@@ -253,6 +347,30 @@ class SessionServiceTest {
 
             assertTrue(refreshed.isPresent());
             assertTrue(refreshed.get().expiresAt().isAfter(originalExpiration));
+        }
+
+        @Test
+        @DisplayName("should not refresh beyond validated identity expiration")
+        void shouldNotRefreshBeyondValidatedIdentityExpiration() {
+            final var identityExpiration = Instant.now().plus(Duration.ofMinutes(5));
+            final var identity = new ValidatedIdentity(
+                    "test-provider",
+                    "user123",
+                    "issuer",
+                    Set.of("test-audience"),
+                    Optional.empty(),
+                    Optional.of("token-1"),
+                    Map.of(),
+                    Optional.empty(),
+                    identityExpiration);
+            final var created =
+                    sessionService.createSession(identity, null, null).await().atMost(Duration.ofSeconds(5));
+
+            final var refreshed =
+                    sessionService.refreshSession(created.id()).await().atMost(Duration.ofSeconds(5));
+
+            assertTrue(refreshed.isPresent());
+            assertFalse(refreshed.get().expiresAt().isAfter(identityExpiration));
         }
 
         @Test
@@ -273,7 +391,7 @@ class SessionServiceTest {
         @DisplayName("should delete session from repository")
         void shouldDeleteSessionFromRepository() {
             var created = sessionService
-                    .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
+                    .createSession(identity("user123", "issuer", Map.of()), null, null)
                     .await()
                     .atMost(Duration.ofSeconds(5));
 
@@ -293,17 +411,17 @@ class SessionServiceTest {
         void shouldDeleteAllSessionsForUser() {
             // Create multiple sessions for the same user
             sessionService
-                    .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
+                    .createSession(identity("user123", "issuer", Map.of()), null, null)
                     .await()
                     .atMost(Duration.ofSeconds(5));
             sessionService
-                    .createSession("user123", "issuer", Map.of(), Set.of(), null, null)
+                    .createSession(identity("user123", "issuer", Map.of()), null, null)
                     .await()
                     .atMost(Duration.ofSeconds(5));
 
             // Create a session for a different user
             var otherSession = sessionService
-                    .createSession("other-user", "issuer", Map.of(), Set.of(), null, null)
+                    .createSession(identity("other-user", "issuer", Map.of()), null, null)
                     .await()
                     .atMost(Duration.ofSeconds(5));
 
