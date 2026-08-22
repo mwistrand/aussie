@@ -139,33 +139,31 @@ class AccessControlIntegrationTest {
         }
 
         @Test
-        @DisplayName("Should allow private endpoint access from allowed domain")
-        void shouldAllowPrivateEndpointFromAllowedDomain() {
+        @DisplayName("Should not authorize an untrusted source using X-Forwarded-Host")
+        void shouldNotAuthorizeUsingForwardedHost() {
             registerServiceWithEndpoints(
                     new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty()));
 
-            // Test config allows internal.test.com
             given().header("X-Forwarded-Host", "internal.test.com")
-                    .header("X-Forwarded-For", "127.0.0.1")
+                    .header("X-Forwarded-For", "203.0.113.50")
                     .when()
                     .get("/gateway/api/private")
                     .then()
-                    .statusCode(200);
+                    .statusCode(404);
         }
 
         @Test
-        @DisplayName("Should allow private endpoint access from allowed subdomain")
-        void shouldAllowPrivateEndpointFromAllowedSubdomain() {
+        @DisplayName("Should not authorize an untrusted source using Host")
+        void shouldNotAuthorizeUsingHost() {
             registerServiceWithEndpoints(
                     new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty()));
 
-            // Test config allows *.internal.test.com
-            given().header("X-Forwarded-Host", "api.internal.test.com")
-                    .header("X-Forwarded-For", "127.0.0.1")
+            given().header("Host", "internal.test.com")
+                    .header("X-Forwarded-For", "203.0.113.50")
                     .when()
                     .get("/gateway/api/private")
                     .then()
-                    .statusCode(200);
+                    .statusCode(404);
         }
     }
 
@@ -176,9 +174,9 @@ class AccessControlIntegrationTest {
         @Test
         @DisplayName("Should use service-specific access config when provided")
         void shouldUseServiceSpecificAccessConfig() {
-            // Register service with specific access config that allows only 172.16.0.0/12
+            // Service policy narrows the global 10.0.0.0/8 boundary.
             var accessConfig =
-                    new ServiceAccessConfig(Optional.of(List.of("172.16.0.0/12")), Optional.empty(), Optional.empty());
+                    new ServiceAccessConfig(Optional.of(List.of("10.10.0.0/16")), Optional.empty(), Optional.empty());
 
             var endpoint =
                     new EndpointConfig("/api/private", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty());
@@ -190,14 +188,12 @@ class AccessControlIntegrationTest {
                     .build();
             serviceRegistry.register(service).await().atMost(java.time.Duration.ofSeconds(5));
 
-            // Should allow 172.16.x.x (in the service's allowed range)
-            given().header("X-Forwarded-For", "172.16.1.1")
+            given().header("X-Forwarded-For", "10.10.1.1")
                     .when()
                     .get("/gateway/api/private")
                     .then()
                     .statusCode(200);
 
-            // Should deny 10.0.0.1 (in global allowed range but not in service's range)
             given().header("X-Forwarded-For", "10.0.0.1")
                     .when()
                     .get("/gateway/api/private")

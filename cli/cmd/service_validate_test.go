@@ -336,9 +336,7 @@ func TestValidateServiceConfig_WithAccessConfig(t *testing.T) {
 		"displayName": "My Service",
 		"baseUrl": "http://localhost:8080",
 		"accessConfig": {
-			"allowedIps": ["10.0.0.0/8", "192.168.0.1"],
-			"allowedDomains": ["example.com"],
-			"allowedSubdomains": ["*.internal.example.com"]
+			"allowedIps": ["10.0.0.0/8", "192.168.0.1"]
 		}
 	}`
 
@@ -346,6 +344,30 @@ func TestValidateServiceConfig_WithAccessConfig(t *testing.T) {
 
 	if !result.IsValid() {
 		t.Errorf("Expected valid config with accessConfig, got errors: %v", result.Errors)
+	}
+}
+
+func TestValidateServiceConfig_RejectsDomainAccessConfig(t *testing.T) {
+	json := `{
+		"serviceId": "my-service",
+		"displayName": "My Service",
+		"baseUrl": "http://localhost:8080",
+		"accessConfig": {
+			"allowedDomains": ["example.com"],
+			"allowedSubdomains": ["*.internal.example.com"]
+		}
+	}`
+
+	result := ValidateServiceConfig([]byte(json))
+
+	if result.IsValid() {
+		t.Fatal("Expected domain-based access config to be rejected")
+	}
+	if !hasErrorWithPath(result, "accessConfig.allowedDomains") {
+		t.Error("Expected error for accessConfig.allowedDomains")
+	}
+	if !hasErrorWithPath(result, "accessConfig.allowedSubdomains") {
+		t.Error("Expected error for accessConfig.allowedSubdomains")
 	}
 }
 

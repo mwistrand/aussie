@@ -29,9 +29,7 @@ var (
 	defaultAuthRequired string // "true", "false", or "" for not set
 
 	// Access config options
-	allowedIPs        []string
-	allowedDomains    []string
-	allowedSubdomains []string
+	allowedIPs []string
 
 	// CORS options
 	corsOrigins        []string
@@ -76,8 +74,6 @@ Optional fields:
 
 Access Control:
   --allowed-ips           IP addresses/CIDR ranges allowed to access
-  --allowed-domains       Domains allowed to access
-  --allowed-subdomains    Subdomains allowed to access
 
 CORS Configuration:
   --cors-origins          Allowed origins for CORS
@@ -131,8 +127,6 @@ func init() {
 
 	// Access config options
 	serviceRegisterCmd.Flags().StringSliceVar(&allowedIPs, "allowed-ips", nil, "IP addresses/CIDR ranges allowed to access (comma-separated or repeated)")
-	serviceRegisterCmd.Flags().StringSliceVar(&allowedDomains, "allowed-domains", nil, "Domains allowed to access (comma-separated or repeated)")
-	serviceRegisterCmd.Flags().StringSliceVar(&allowedSubdomains, "allowed-subdomains", nil, "Subdomains allowed to access (comma-separated or repeated)")
 
 	// CORS options
 	serviceRegisterCmd.Flags().StringSliceVar(&corsOrigins, "cors-origins", nil, "Allowed origins for CORS (comma-separated or repeated)")
@@ -277,20 +271,12 @@ func buildServiceRegistration(cmd *cobra.Command) (*ServiceRegistration, error) 
 		registration.DefaultAuthRequired = &val
 	}
 
-	// Access config - build if any access flags are set
-	if cmd.Flags().Changed("allowed-ips") || cmd.Flags().Changed("allowed-domains") || cmd.Flags().Changed("allowed-subdomains") {
+	// Access config - build if the access flag is set
+	if cmd.Flags().Changed("allowed-ips") {
 		if registration.AccessConfig == nil {
 			registration.AccessConfig = &ServiceAccessConfig{}
 		}
-		if cmd.Flags().Changed("allowed-ips") {
-			registration.AccessConfig.AllowedIPs = allowedIPs
-		}
-		if cmd.Flags().Changed("allowed-domains") {
-			registration.AccessConfig.AllowedDomains = allowedDomains
-		}
-		if cmd.Flags().Changed("allowed-subdomains") {
-			registration.AccessConfig.AllowedSubdomains = allowedSubdomains
-		}
+		registration.AccessConfig.AllowedIPs = allowedIPs
 	}
 
 	// CORS config - build if any CORS flags are set

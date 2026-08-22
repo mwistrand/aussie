@@ -260,18 +260,12 @@ func validateAccessConfig(config *ServiceAccessConfig, path string, result *Vali
 		}
 	}
 
-	// Validate domains
-	for i, domain := range config.AllowedDomains {
-		if domain == "" {
-			result.AddError(fmt.Sprintf("%s.allowedDomains[%d]", path, i), "empty value")
-		}
+	if len(config.AllowedDomains) > 0 {
+		result.AddError(path+".allowedDomains", "domain-based caller access control is not supported; use allowedIps")
 	}
 
-	// Validate subdomain patterns
-	for i, subdomain := range config.AllowedSubdomains {
-		if subdomain == "" {
-			result.AddError(fmt.Sprintf("%s.allowedSubdomains[%d]", path, i), "empty value")
-		}
+	if len(config.AllowedSubdomains) > 0 {
+		result.AddError(path+".allowedSubdomains", "domain-based caller access control is not supported; use allowedIps")
 	}
 }
 

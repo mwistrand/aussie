@@ -311,6 +311,13 @@ Control which endpoints are public vs private.
 
 ### Setup
 
+Start Aussie with a global boundary that contains the service ranges:
+
+```bash
+export AUSSIE_GATEWAY_ACCESS_CONTROL_ALLOWED_IPS=10.0.0.0/8,192.168.0.0/16
+cd ../api && ./gradlew quarkusDev
+```
+
 ```bash
 curl -X POST http://localhost:1234/admin/services \
   -H "Content-Type: application/json" \
@@ -324,8 +331,7 @@ curl -X POST http://localhost:1234/admin/services \
       {"path": "/api/admin/**", "methods": ["*"], "visibility": "PRIVATE"}
     ],
     "accessConfig": {
-      "allowedIps": ["10.0.0.0/8", "192.168.1.0/24"],
-      "allowedDomains": ["admin.internal.example.com"]
+      "allowedIps": ["10.0.0.0/8", "192.168.1.0/24"]
     }
   }'
 ```
@@ -336,7 +342,7 @@ curl -X POST http://localhost:1234/admin/services \
 # Public endpoint - accessible from anywhere
 curl http://localhost:1234/admin-service/api/health  # 200 OK
 
-# Private endpoint - blocked unless from allowed IP/domain
+# Private endpoint - blocked unless from an allowed IP
 curl http://localhost:1234/admin-service/api/admin/users  # 404 (blocked)
 
 # From allowed IP (e.g., 10.0.0.50)

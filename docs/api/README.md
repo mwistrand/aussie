@@ -245,7 +245,7 @@ Aussie supports two visibility levels:
 | Visibility | Description |
 |------------|-------------|
 | `PUBLIC` | Accessible by anyone |
-| `PRIVATE` | Restricted to configured IP addresses, domains, or subdomains |
+| `PRIVATE` | Restricted to configured IP addresses or CIDR ranges |
 
 ### Restricting Access to Private Endpoints
 You can restrict per-service by including `accessConfig` in your registration:
@@ -259,11 +259,13 @@ You can restrict per-service by including `accessConfig` in your registration:
     { "pattern": "/api/admin/**", "visibility": "PRIVATE" }
   ],
   "accessConfig": {
-    "allowedIps": ["10.0.0.0/8"],
-    "allowedDomains": ["admin.internal.example.com"]
+    "allowedIps": ["10.20.0.0/16"]
   }
 }
 ```
+
+The service ranges must be contained by the platform's global allowed-IP boundary.
+Host and forwarded-host headers are routing metadata and cannot authorize callers.
 
 ## Routing Strategies
 
@@ -404,8 +406,7 @@ When registering a service, you can configure endpoints for gateway routing:
     }
   ],
   "accessConfig": {
-    "allowedIps": ["10.0.0.0/8"],
-    "allowedDomains": ["internal.example.com"]
+    "allowedIps": ["10.20.0.0/16"]
   }
 }
 ```

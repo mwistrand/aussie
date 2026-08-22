@@ -43,12 +43,10 @@ All durations use ISO-8601 format (e.g., `PT30S` for 30 seconds, `PT1H` for 1 ho
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
 | `aussie.gateway.access-control.allowed-ips` | `Optional<List<String>>` | _(not set)_ | `AUSSIE_GATEWAY_ACCESS_CONTROL_ALLOWED_IPS` | Allowed IP addresses or CIDR ranges for private endpoint access. Example: `10.0.0.0/8,192.168.0.0/16,127.0.0.1`. |
-| `aussie.gateway.access-control.allowed-domains` | `Optional<List<String>>` | _(not set)_ | `AUSSIE_GATEWAY_ACCESS_CONTROL_ALLOWED_DOMAINS` | Allowed domains for private endpoint access. |
-| `aussie.gateway.access-control.allowed-subdomains` | `Optional<List<String>>` | _(not set)_ | `AUSSIE_GATEWAY_ACCESS_CONTROL_ALLOWED_SUBDOMAINS` | Wildcard subdomain patterns, e.g., `*.internal.example.com`. |
 
 **Profile overrides:** None.
 
-**Security considerations:** These properties control network-level access restrictions. In production, configure `allowed-ips` to restrict admin endpoint access to internal network ranges. Leaving all three unset means no IP-based restriction is enforced.
+**Security considerations:** This property controls the mandatory network boundary for private endpoints. Service ranges can only narrow it. Host and forwarding-host metadata never participate in authorization. Leaving `allowed-ips` unset denies access to private endpoints.
 
 ### 1.4 Trusted Proxy
 

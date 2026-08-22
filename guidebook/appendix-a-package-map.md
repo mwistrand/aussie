@@ -363,10 +363,9 @@ Domain services implementing inbound ports and composing outbound ports. All are
 | Class | Description |
 |---|---|
 | `BootstrapService` | Implements `BootstrapManagement`. Creates time-limited admin keys on first startup. |
-| `ClientIpExtractor` | Extracts real client IP from `X-Forwarded-For` or socket address, respecting trusted proxies. |
+| `IpNetwork` | Parses and matches exact IP/CIDR policies without DNS resolution. Shared by proxy trust and access control. |
 | `RequestSizeValidator` | Validates request body size and header sizes against `LimitsConfig`. |
-| `SourceIdentifierExtractor` | Composes a `SourceIdentifier` from client IP and optional API key prefix for rate limit keying. |
-| `TrustedProxyValidator` | Validates whether a source IP falls within configured trusted proxy CIDR ranges. |
+| `TrustedProxyValidator` | Matches direct peers and forwarding hops against pre-parsed trusted proxy networks. |
 
 **Allowed dependencies:** `core/model`, `core/config`.
 

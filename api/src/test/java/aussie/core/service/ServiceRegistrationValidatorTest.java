@@ -15,7 +15,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.core.config.RateLimitingConfig;
+import aussie.core.model.auth.AccessControlConfig;
 import aussie.core.model.auth.GatewaySecurityConfig;
+import aussie.core.model.auth.ServiceAccessConfig;
 import aussie.core.model.auth.VisibilityRule;
 import aussie.core.model.common.ValidationResult;
 import aussie.core.model.ratelimit.EndpointRateLimitConfig;
@@ -806,6 +808,89 @@ class ServiceRegistrationValidatorTest {
             assertEquals(
                     "Endpoint '/api/users' requestsPerWindow 500 exceeds the platform maximum of 100.",
                     invalid.reason());
+        }
+    }
+
+    @Nested
+    @DisplayName("Access Control Policy")
+    class AccessControlPolicyTests {
+
+        @Test
+        @DisplayName("Should accept a service IP range contained by the global boundary")
+        void shouldAcceptNarrowerServiceRange() {
+            var validator = createAccessValidator(List.of("10.0.0.0/8"));
+            var service = createServiceBuilder()
+                    .accessConfig(new ServiceAccessConfig(
+                            Optional.of(List.of("10.20.0.0/16")), Optional.empty(), Optional.empty()))
+                    .build();
+
+            assertInstanceOf(ValidationResult.Valid.class, validator.validate(service));
+        }
+
+        @Test
+        @DisplayName("Should reject a service IP range that broadens the global boundary")
+        void shouldRejectBroaderServiceRange() {
+            var validator = createAccessValidator(List.of("10.0.0.0/8"));
+            var service = createServiceBuilder()
+                    .accessConfig(new ServiceAccessConfig(
+                            Optional.of(List.of("0.0.0.0/0")), Optional.empty(), Optional.empty()))
+                    .build();
+
+            var result = validator.validate(service);
+
+            assertInstanceOf(ValidationResult.Invalid.class, result);
+            assertTrue(((ValidationResult.Invalid) result).reason().contains("global allowed IP boundary"));
+        }
+
+        @Test
+        @DisplayName("Should reject invalid service IP ranges")
+        void shouldRejectInvalidServiceRange() {
+            var validator = createAccessValidator(List.of("10.0.0.0/8"));
+            var service = createServiceBuilder()
+                    .accessConfig(new ServiceAccessConfig(
+                            Optional.of(List.of("10.0.0.0/33")), Optional.empty(), Optional.empty()))
+                    .build();
+
+            assertInstanceOf(ValidationResult.Invalid.class, validator.validate(service));
+        }
+
+        @Test
+        @DisplayName("Should reject domain-based caller policies")
+        void shouldRejectDomainPolicy() {
+            var validator = createAccessValidator(List.of("10.0.0.0/8"));
+            var service = createServiceBuilder()
+                    .accessConfig(new ServiceAccessConfig(
+                            Optional.empty(), Optional.of(List.of("internal.example")), Optional.empty()))
+                    .build();
+
+            var result = validator.validate(service);
+
+            assertInstanceOf(ValidationResult.Invalid.class, result);
+            assertTrue(((ValidationResult.Invalid) result).reason().contains("Domain-based caller access control"));
+        }
+
+        private ServiceRegistrationValidator createAccessValidator(List<String> globalAllowedIps) {
+            AccessControlConfig accessConfig = new AccessControlConfig() {
+                @Override
+                public Optional<List<String>> allowedIps() {
+                    return Optional.of(globalAllowedIps);
+                }
+
+                @Override
+                public Optional<List<String>> allowedDomains() {
+                    return Optional.empty();
+                }
+
+                @Override
+                public Optional<List<String>> allowedSubdomains() {
+                    return Optional.empty();
+                }
+            };
+            return new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.permissive(),
+                    PERMISSIVE_RATE_LIMIT_CONFIG,
+                    PERMISSIVE_RESILIENCY_CONFIG,
+                    accessConfig);
         }
     }
 

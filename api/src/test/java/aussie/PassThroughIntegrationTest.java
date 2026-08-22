@@ -345,7 +345,7 @@ class PassThroughIntegrationTest {
                     .willReturn(aResponse().withStatus(200).withBody("secret data")));
 
             var accessConfig =
-                    new ServiceAccessConfig(Optional.of(List.of("172.16.0.0/12")), Optional.empty(), Optional.empty());
+                    new ServiceAccessConfig(Optional.of(List.of("10.10.0.0/16")), Optional.empty(), Optional.empty());
 
             var service = ServiceRegistration.builder("restricted-service")
                     .displayName("Restricted Service")
@@ -371,7 +371,7 @@ class PassThroughIntegrationTest {
                     .willReturn(aResponse().withStatus(200).withBody("secret data")));
 
             var accessConfig =
-                    new ServiceAccessConfig(Optional.of(List.of("172.16.0.0/12")), Optional.empty(), Optional.empty());
+                    new ServiceAccessConfig(Optional.of(List.of("10.10.0.0/16")), Optional.empty(), Optional.empty());
 
             var service = ServiceRegistration.builder("restricted-service")
                     .displayName("Restricted Service")
@@ -382,7 +382,7 @@ class PassThroughIntegrationTest {
                     .build();
             serviceRegistry.register(service).await().atMost(java.time.Duration.ofSeconds(5));
 
-            given().header("X-Forwarded-For", "172.16.1.1")
+            given().header("X-Forwarded-For", "10.10.1.1")
                     .when()
                     .get("/restricted-service/api/secret")
                     .then()

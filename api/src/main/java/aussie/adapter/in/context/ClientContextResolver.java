@@ -1,7 +1,5 @@
 package aussie.adapter.in.context;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -14,6 +12,7 @@ import io.vertx.core.http.HttpServerRequest;
 import io.vertx.ext.web.RoutingContext;
 
 import aussie.common.context.ClientContext;
+import aussie.core.service.common.IpNetwork;
 import aussie.core.service.common.TrustedProxyValidator;
 
 /**
@@ -285,22 +284,10 @@ public class ClientContextResolver {
     }
 
     private String normalizeIpLiteral(String value) {
-        if (value.isEmpty() || value.indexOf('%') >= 0 || !isIpLiteral(value)) {
-            return null;
-        }
-        try {
-            InetAddress.getByName(value);
-            return value.toLowerCase(Locale.ROOT);
-        } catch (UnknownHostException e) {
-            return null;
-        }
-    }
-
-    private boolean isIpLiteral(String value) {
-        if (value.indexOf(':') >= 0) {
-            return value.matches("[0-9A-Fa-f:.]+");
-        }
-        return value.matches("\\d{1,3}(?:\\.\\d{1,3}){3}");
+        return IpNetwork.parse(value)
+                .filter(IpNetwork::isExactAddress)
+                .map(ignored -> value.toLowerCase(Locale.ROOT))
+                .orElse(null);
     }
 
     private boolean isValidPort(String value) {

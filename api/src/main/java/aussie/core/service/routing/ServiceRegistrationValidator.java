@@ -1,6 +1,7 @@
 package aussie.core.service.routing;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -9,11 +10,13 @@ import jakarta.inject.Inject;
 
 import aussie.core.config.RateLimitingConfig;
 import aussie.core.config.ResiliencyConfig;
+import aussie.core.model.auth.AccessControlConfig;
 import aussie.core.model.auth.GatewaySecurityConfig;
 import aussie.core.model.common.ValidationResult;
 import aussie.core.model.ratelimit.ServiceWebSocketRateLimitConfig.RateLimitValues;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.service.ServiceRegistration;
+import aussie.core.service.common.IpNetwork;
 
 /**
  * Validate service registrations against gateway policies.
@@ -24,15 +27,32 @@ public class ServiceRegistrationValidator {
     private final GatewaySecurityConfig securityConfig;
     private final RateLimitingConfig rateLimitingConfig;
     private final ResiliencyConfig.HttpConfig httpConfig;
+    private final List<IpNetwork> globalAllowedNetworks;
 
     @Inject
     public ServiceRegistrationValidator(
             GatewaySecurityConfig securityConfig,
             RateLimitingConfig rateLimitingConfig,
-            ResiliencyConfig resiliencyConfig) {
+            ResiliencyConfig resiliencyConfig,
+            AccessControlConfig accessControlConfig) {
         this.securityConfig = securityConfig;
         this.rateLimitingConfig = rateLimitingConfig;
         this.httpConfig = resiliencyConfig.http();
+        this.globalAllowedNetworks = accessControlConfig.allowedIps().orElse(List.of()).stream()
+                .map(IpNetwork::parse)
+                .flatMap(Optional::stream)
+                .toList();
+    }
+
+    /**
+     * Convenience constructor for isolated tests whose focus is unrelated to access policy.
+     * Production CDI always uses the injected constructor with the real global policy.
+     */
+    public ServiceRegistrationValidator(
+            GatewaySecurityConfig securityConfig,
+            RateLimitingConfig rateLimitingConfig,
+            ResiliencyConfig resiliencyConfig) {
+        this(securityConfig, rateLimitingConfig, resiliencyConfig, unrestrictedAccessConfig());
     }
 
     /**
@@ -48,6 +68,11 @@ public class ServiceRegistrationValidator {
         final var upstreamResult = validateUpstreamHost(registration);
         if (upstreamResult.isInvalid()) {
             return upstreamResult;
+        }
+
+        final var accessResult = validateAccessControl(registration);
+        if (accessResult.isInvalid()) {
+            return accessResult;
         }
 
         // Check gateway guardrail for public default visibility
@@ -84,6 +109,55 @@ public class ServiceRegistrationValidator {
         }
 
         return ValidationResult.valid();
+    }
+
+    private ValidationResult validateAccessControl(ServiceRegistration registration) {
+        if (registration.accessConfig().isEmpty()) {
+            return ValidationResult.valid();
+        }
+
+        final var servicePolicy = registration.accessConfig().get();
+        if (servicePolicy.allowedDomains().filter(values -> !values.isEmpty()).isPresent()
+                || servicePolicy
+                        .allowedSubdomains()
+                        .filter(values -> !values.isEmpty())
+                        .isPresent()) {
+            return ValidationResult.invalid(
+                    "Domain-based caller access control is not supported; use allowedIps with trusted client IPs.",
+                    400);
+        }
+
+        final var patterns = servicePolicy.allowedIps().orElse(List.of());
+        for (final var pattern : patterns) {
+            final var parsed = IpNetwork.parse(pattern);
+            if (parsed.isEmpty()) {
+                return ValidationResult.invalid("Invalid service access-control IP/CIDR: " + pattern, 400);
+            }
+            if (globalAllowedNetworks.stream().noneMatch(global -> global.contains(parsed.get()))) {
+                return ValidationResult.invalid(
+                        "Service access-control range is outside the global allowed IP boundary: " + pattern, 400);
+            }
+        }
+        return ValidationResult.valid();
+    }
+
+    private static AccessControlConfig unrestrictedAccessConfig() {
+        return new AccessControlConfig() {
+            @Override
+            public Optional<List<String>> allowedIps() {
+                return Optional.of(List.of("0.0.0.0/0", "::/0"));
+            }
+
+            @Override
+            public Optional<List<String>> allowedDomains() {
+                return Optional.empty();
+            }
+
+            @Override
+            public Optional<List<String>> allowedSubdomains() {
+                return Optional.empty();
+            }
+        };
     }
 
     private ValidationResult validateUpstreamHost(ServiceRegistration registration) {

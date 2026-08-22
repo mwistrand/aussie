@@ -148,82 +148,30 @@ class AccessControlEvaluatorTest {
     }
 
     @Nested
-    @DisplayName("Private Endpoints - Domain Matching")
-    class PrivateEndpointDomainTests {
+    @DisplayName("Caller Host Metadata")
+    class CallerHostMetadataTests {
 
         @Test
-        @DisplayName("Should allow private endpoint for exact domain match")
-        void shouldAllowExactDomainMatch() {
+        @DisplayName("Should not authorize a denied IP using an allowed Host value")
+        void shouldIgnoreHostForAuthorization() {
+            config.setAllowedIps(List.of("10.0.0.0/8"));
             config.setAllowedDomains(List.of("internal.example.com"));
-            var source = SourceIdentifier.of("192.168.1.1", "internal.example.com");
             var route = createPrivateRoute("/api/private");
 
-            assertTrue(evaluator.isAllowed(source, route, Optional.empty()));
+            assertFalse(evaluator.isAllowed(
+                    SourceIdentifier.of("203.0.113.10", "internal.example.com"), route, Optional.empty()));
         }
 
         @Test
-        @DisplayName("Should deny private endpoint for non-matching domain")
-        void shouldDenyNonMatchingDomain() {
-            config.setAllowedDomains(List.of("internal.example.com"));
-            var source = SourceIdentifier.of("192.168.1.1", "external.example.com");
+        @DisplayName("Should not change an IP decision when Host changes")
+        void shouldKeepDecisionIndependentOfHost() {
+            config.setAllowedIps(List.of("10.0.0.0/8"));
             var route = createPrivateRoute("/api/private");
 
-            assertFalse(evaluator.isAllowed(source, route, Optional.empty()));
-        }
-
-        @Test
-        @DisplayName("Should match domains case-insensitively")
-        void shouldMatchDomainsCaseInsensitively() {
-            config.setAllowedDomains(List.of("Internal.Example.COM"));
-            var source = SourceIdentifier.of("192.168.1.1", "internal.example.com");
-            var route = createPrivateRoute("/api/private");
-
-            assertTrue(evaluator.isAllowed(source, route, Optional.empty()));
-        }
-    }
-
-    @Nested
-    @DisplayName("Private Endpoints - Subdomain Matching")
-    class PrivateEndpointSubdomainTests {
-
-        @Test
-        @DisplayName("Should allow private endpoint for wildcard subdomain match")
-        void shouldAllowWildcardSubdomainMatch() {
-            config.setAllowedSubdomains(List.of("*.internal.example.com"));
-            var source = SourceIdentifier.of("192.168.1.1", "api.internal.example.com");
-            var route = createPrivateRoute("/api/private");
-
-            assertTrue(evaluator.isAllowed(source, route, Optional.empty()));
-        }
-
-        @Test
-        @DisplayName("Should allow nested subdomains with wildcard")
-        void shouldAllowNestedSubdomains() {
-            config.setAllowedSubdomains(List.of("*.internal.example.com"));
-            var source = SourceIdentifier.of("192.168.1.1", "deep.nested.internal.example.com");
-            var route = createPrivateRoute("/api/private");
-
-            assertTrue(evaluator.isAllowed(source, route, Optional.empty()));
-        }
-
-        @Test
-        @DisplayName("Should not match root domain with wildcard subdomain pattern")
-        void shouldNotMatchRootDomainWithWildcard() {
-            config.setAllowedSubdomains(List.of("*.internal.example.com"));
-            var source = SourceIdentifier.of("192.168.1.1", "internal.example.com");
-            var route = createPrivateRoute("/api/private");
-
-            assertFalse(evaluator.isAllowed(source, route, Optional.empty()));
-        }
-
-        @Test
-        @DisplayName("Should match subdomains case-insensitively")
-        void shouldMatchSubdomainsCaseInsensitively() {
-            config.setAllowedSubdomains(List.of("*.Internal.Example.COM"));
-            var source = SourceIdentifier.of("192.168.1.1", "api.internal.example.com");
-            var route = createPrivateRoute("/api/private");
-
-            assertTrue(evaluator.isAllowed(source, route, Optional.empty()));
+            assertTrue(
+                    evaluator.isAllowed(SourceIdentifier.of("10.1.2.3", "attacker.example"), route, Optional.empty()));
+            assertTrue(evaluator.isAllowed(
+                    SourceIdentifier.of("10.1.2.3", "internal.example.com"), route, Optional.empty()));
         }
     }
 
@@ -232,22 +180,31 @@ class AccessControlEvaluatorTest {
     class ServiceSpecificAccessTests {
 
         @Test
-        @DisplayName("Should use service-specific config when provided")
-        void shouldUseServiceSpecificConfig() {
-            // Global config allows 10.0.0.0/8
+        @DisplayName("Should intersect service-specific config with the global policy")
+        void shouldIntersectServiceSpecificConfig() {
             config.setAllowedIps(List.of("10.0.0.0/8"));
 
-            // Service config only allows 172.16.0.0/12
             var serviceConfig =
-                    new ServiceAccessConfig(Optional.of(List.of("172.16.0.0/12")), Optional.empty(), Optional.empty());
+                    new ServiceAccessConfig(Optional.of(List.of("10.10.0.0/16")), Optional.empty(), Optional.empty());
 
             var route = createPrivateRoute("/api/private");
 
-            // Should deny 10.x.x.x (allowed by global but not by service)
             assertFalse(evaluator.isAllowed(SourceIdentifier.of("10.0.0.1"), route, Optional.of(serviceConfig)));
+            assertTrue(evaluator.isAllowed(SourceIdentifier.of("10.10.1.1"), route, Optional.of(serviceConfig)));
+        }
 
-            // Should allow 172.16.x.x (allowed by service)
-            assertTrue(evaluator.isAllowed(SourceIdentifier.of("172.16.1.1"), route, Optional.of(serviceConfig)));
+        @Test
+        @DisplayName("Should deny a source allowed only by a broader service policy")
+        void shouldNeverBroadenGlobalPolicy() {
+            config.setAllowedIps(List.of("10.0.0.0/8"));
+            var serviceConfig =
+                    new ServiceAccessConfig(Optional.of(List.of("0.0.0.0/0")), Optional.empty(), Optional.empty());
+            var route = createPrivateRoute("/api/private");
+
+            for (var secondOctet = 0; secondOctet < 256; secondOctet++) {
+                var sourceIp = "203." + secondOctet + ".113.10";
+                assertFalse(evaluator.isAllowed(SourceIdentifier.of(sourceIp), route, Optional.of(serviceConfig)));
+            }
         }
 
         @Test
@@ -261,80 +218,6 @@ class AccessControlEvaluatorTest {
             var route = createPrivateRoute("/api/private");
 
             assertTrue(evaluator.isAllowed(SourceIdentifier.of("10.0.0.1"), route, Optional.of(serviceConfig)));
-        }
-    }
-
-    @Nested
-    @DisplayName("Service-Specific Domain/Subdomain Access")
-    class ServiceSpecificDomainTests {
-
-        @Test
-        @DisplayName("Should allow service-specific domain match")
-        void shouldAllowServiceDomainMatch() {
-            var serviceConfig = new ServiceAccessConfig(
-                    Optional.empty(), Optional.of(List.of("service.internal.com")), Optional.empty());
-            var source = SourceIdentifier.of("192.168.1.1", "service.internal.com");
-            var route = createPrivateRoute("/api/private");
-
-            assertTrue(evaluator.isAllowed(source, route, Optional.of(serviceConfig)));
-        }
-
-        @Test
-        @DisplayName("Should deny non-matching service-specific domain")
-        void shouldDenyNonMatchingServiceDomain() {
-            var serviceConfig = new ServiceAccessConfig(
-                    Optional.empty(), Optional.of(List.of("service.internal.com")), Optional.empty());
-            var source = SourceIdentifier.of("192.168.1.1", "other.internal.com");
-            var route = createPrivateRoute("/api/private");
-
-            assertFalse(evaluator.isAllowed(source, route, Optional.of(serviceConfig)));
-        }
-
-        @Test
-        @DisplayName("Should allow service-specific subdomain match")
-        void shouldAllowServiceSubdomainMatch() {
-            var serviceConfig = new ServiceAccessConfig(
-                    Optional.empty(), Optional.empty(), Optional.of(List.of("*.service.internal.com")));
-            var source = SourceIdentifier.of("192.168.1.1", "api.service.internal.com");
-            var route = createPrivateRoute("/api/private");
-
-            assertTrue(evaluator.isAllowed(source, route, Optional.of(serviceConfig)));
-        }
-
-        @Test
-        @DisplayName("Should deny non-matching service-specific subdomain")
-        void shouldDenyNonMatchingServiceSubdomain() {
-            var serviceConfig = new ServiceAccessConfig(
-                    Optional.empty(), Optional.empty(), Optional.of(List.of("*.service.internal.com")));
-            var source = SourceIdentifier.of("192.168.1.1", "api.other.internal.com");
-            var route = createPrivateRoute("/api/private");
-
-            assertFalse(evaluator.isAllowed(source, route, Optional.of(serviceConfig)));
-        }
-    }
-
-    @Nested
-    @DisplayName("Subdomain Matching Edge Cases")
-    class SubdomainEdgeCaseTests {
-
-        @Test
-        @DisplayName("Should match non-wildcard subdomain pattern exactly")
-        void shouldMatchNonWildcardSubdomainExactly() {
-            config.setAllowedSubdomains(List.of("exact.internal.com"));
-            var source = SourceIdentifier.of("192.168.1.1", "exact.internal.com");
-            var route = createPrivateRoute("/api/private");
-
-            assertTrue(evaluator.isAllowed(source, route, Optional.empty()));
-        }
-
-        @Test
-        @DisplayName("Should not match different host for non-wildcard subdomain")
-        void shouldNotMatchDifferentHostForNonWildcardSubdomain() {
-            config.setAllowedSubdomains(List.of("exact.internal.com"));
-            var source = SourceIdentifier.of("192.168.1.1", "other.internal.com");
-            var route = createPrivateRoute("/api/private");
-
-            assertFalse(evaluator.isAllowed(source, route, Optional.empty()));
         }
     }
 
@@ -397,21 +280,19 @@ class AccessControlEvaluatorTest {
     /**
      * Simple test implementation of AccessControlConfig for unit testing.
      */
-    private static class TestAccessControlConfig implements AccessControlConfig {
+    private class TestAccessControlConfig implements AccessControlConfig {
         private List<String> allowedIps = List.of();
         private List<String> allowedDomains = List.of();
         private List<String> allowedSubdomains = List.of();
 
         void setAllowedIps(List<String> ips) {
             this.allowedIps = ips;
+            evaluator = new AccessControlEvaluator(this);
         }
 
         void setAllowedDomains(List<String> domains) {
             this.allowedDomains = domains;
-        }
-
-        void setAllowedSubdomains(List<String> subdomains) {
-            this.allowedSubdomains = subdomains;
+            evaluator = new AccessControlEvaluator(this);
         }
 
         @Override

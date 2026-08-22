@@ -34,8 +34,8 @@ import aussie.core.service.common.TrustedProxyValidator;
 
 /**
  * Benchmarks for CIDR matching used by trusted proxy validation and access control evaluation.
- * Covers IPv4 prefix lengths, IPv6, scaling with CIDR list size, and the full access-control
- * evaluator path that combines IP, domain, and subdomain checks.
+ * Covers IPv4 prefix lengths, IPv6, scaling with CIDR list size, and global/service
+ * access-control intersection.
  */
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
@@ -149,8 +149,6 @@ public class CidrMatchingBenchmark {
         RouteLookupResult privateRoute;
         SourceIdentifier allowedIpSource;
         SourceIdentifier deniedSource;
-        SourceIdentifier domainSource;
-        SourceIdentifier subdomainSource;
         Optional<ServiceAccessConfig> serviceConfig;
 
         @Setup
@@ -163,12 +161,12 @@ public class CidrMatchingBenchmark {
 
                 @Override
                 public Optional<List<String>> allowedDomains() {
-                    return Optional.of(List.of("internal.example.com", "admin.example.com"));
+                    return Optional.empty();
                 }
 
                 @Override
                 public Optional<List<String>> allowedSubdomains() {
-                    return Optional.of(List.of("*.internal.example.com"));
+                    return Optional.empty();
                 }
             };
             evaluator = new AccessControlEvaluator(config);
@@ -180,11 +178,10 @@ public class CidrMatchingBenchmark {
 
             var endpoint = EndpointConfig.privateEndpoint("/test", Set.of("GET"));
             privateRoute = new RouteMatch(service, endpoint, "/test", Map.of());
-            allowedIpSource = SourceIdentifier.of("10.1.2.3");
+            allowedIpSource = SourceIdentifier.of("10.10.2.3");
             deniedSource = SourceIdentifier.of("203.0.113.1", "external.example.com");
-            domainSource = SourceIdentifier.of("10.1.2.3", "internal.example.com");
-            subdomainSource = SourceIdentifier.of("10.1.2.3", "api.internal.example.com");
-            serviceConfig = Optional.empty();
+            serviceConfig = Optional.of(
+                    new ServiceAccessConfig(Optional.of(List.of("10.10.0.0/16")), Optional.empty(), Optional.empty()));
         }
     }
 
@@ -231,7 +228,7 @@ public class CidrMatchingBenchmark {
 
     @Benchmark
     public void accessControl_allowed(AccessControlState state, Blackhole bh) {
-        bh.consume(state.evaluator.isAllowed(state.allowedIpSource, state.privateRoute, state.serviceConfig));
+        bh.consume(state.evaluator.isAllowed(state.allowedIpSource, state.privateRoute, Optional.empty()));
     }
 
     @Benchmark
@@ -240,7 +237,7 @@ public class CidrMatchingBenchmark {
     }
 
     @Benchmark
-    public void accessControl_domainMatch(AccessControlState state, Blackhole bh) {
-        bh.consume(state.evaluator.isAllowed(state.domainSource, state.privateRoute, state.serviceConfig));
+    public void accessControl_globalAndServiceIntersection(AccessControlState state, Blackhole bh) {
+        bh.consume(state.evaluator.isAllowed(state.allowedIpSource, state.privateRoute, state.serviceConfig));
     }
 }

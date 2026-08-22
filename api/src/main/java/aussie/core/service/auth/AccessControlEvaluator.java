@@ -1,252 +1,83 @@
 package aussie.core.service.auth;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+
+import org.jboss.logging.Logger;
 
 import aussie.core.model.auth.AccessControlConfig;
 import aussie.core.model.auth.ServiceAccessConfig;
 import aussie.core.model.common.SourceIdentifier;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteLookupResult;
+import aussie.core.service.common.IpNetwork;
 
 /**
- * Evaluate access control rules for incoming requests.
+ * Evaluates the network boundary for private endpoints.
  *
- * <p>Supports IP-based access control with:
- * <ul>
- *   <li>CIDR range matching (e.g., 192.168.1.0/24)</li>
- *   <li>Exact IP matching</li>
- *   <li>Allowlist/blocklist configuration</li>
- *   <li>Service-specific access overrides</li>
- * </ul>
- *
- * <p>Caches parsed CIDR networks and IP addresses for efficient repeated lookups.
+ * <p>The global IP policy is mandatory. A service policy is an additional intersection
+ * and can only narrow the global result. Request Host and forwarding host metadata are
+ * deliberately excluded: they describe the requested authority, not caller identity.
  */
 @ApplicationScoped
 public class AccessControlEvaluator {
 
-    private final AccessControlConfig config;
+    private static final Logger LOG = Logger.getLogger(AccessControlEvaluator.class);
 
-    // Cache for parsed CIDR network addresses - computed once per unique CIDR
-    // pattern
-    private final Map<String, ParsedCidr> cidrCache = new ConcurrentHashMap<>();
-
-    // Cache for parsed source IP addresses - computed once per unique IP string
-    private final Map<String, byte[]> ipAddressCache = new ConcurrentHashMap<>();
+    private final List<IpNetwork> globalAllowedNetworks;
 
     @Inject
     public AccessControlEvaluator(AccessControlConfig config) {
-        this.config = config;
+        this.globalAllowedNetworks = parseConfiguredNetworks(config.allowedIps().orElse(List.of()), "global");
+        if (config.allowedDomains().filter(values -> !values.isEmpty()).isPresent()
+                || config.allowedSubdomains()
+                        .filter(values -> !values.isEmpty())
+                        .isPresent()) {
+            LOG.warn("Domain-based access-control settings are ignored; configure allowed-ips with trusted client IPs");
+        }
     }
-
-    /**
-     * Pre-parsed CIDR network for fast matching.
-     */
-    private record ParsedCidr(byte[] networkBytes, int prefixLength) {}
 
     public boolean isAllowed(
             SourceIdentifier source, RouteLookupResult route, Optional<ServiceAccessConfig> serviceConfig) {
 
-        // Public endpoints are always accessible
         if (EndpointVisibility.PUBLIC.equals(route.visibility())) {
             return true;
         }
 
-        // For private endpoints, check if source is in allowed list
-        return isSourceAllowed(source, serviceConfig);
-    }
-
-    private boolean isSourceAllowed(SourceIdentifier source, Optional<ServiceAccessConfig> serviceConfig) {
-        // If service has specific restrictions, use those (subset of global)
-        if (serviceConfig.isPresent() && serviceConfig.get().hasRestrictions()) {
-            return isSourceInAllowedList(source, serviceConfig.get());
+        if (!matches(source.ipAddress(), globalAllowedNetworks)) {
+            return false;
         }
 
-        // Otherwise, use global access control configuration
-        return isSourceInGlobalAllowedList(source);
-    }
-
-    private boolean isSourceInAllowedList(SourceIdentifier source, ServiceAccessConfig accessConfig) {
-        // Check IPs
-        if (accessConfig.allowedIps().isPresent()) {
-            if (matchesIp(source.ipAddress(), accessConfig.allowedIps().get())) {
-                return true;
-            }
+        if (serviceConfig.isEmpty() || !serviceConfig.get().hasRestrictions()) {
+            return true;
         }
 
-        // Check domains
-        if (source.host().isPresent()) {
-            if (accessConfig.allowedDomains().isPresent()) {
-                if (matchesDomain(
-                        source.host().get(), accessConfig.allowedDomains().get())) {
-                    return true;
-                }
-            }
-
-            // Check subdomains
-            if (accessConfig.allowedSubdomains().isPresent()) {
-                if (matchesSubdomain(
-                        source.host().get(), accessConfig.allowedSubdomains().get())) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private boolean isSourceInGlobalAllowedList(SourceIdentifier source) {
-        // Check IPs
-        if (config.allowedIps().isPresent()) {
-            if (matchesIp(source.ipAddress(), config.allowedIps().get())) {
-                return true;
-            }
-        }
-
-        // Check domains
-        if (source.host().isPresent()) {
-            if (config.allowedDomains().isPresent()) {
-                if (matchesDomain(source.host().get(), config.allowedDomains().get())) {
-                    return true;
-                }
-            }
-
-            // Check subdomains
-            if (config.allowedSubdomains().isPresent()) {
-                if (matchesSubdomain(
-                        source.host().get(), config.allowedSubdomains().get())) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        // A domain-only service policy cannot establish caller identity and therefore
+        // matches no source. Registration validation also rejects new domain policies;
+        // this fail-closed behavior protects legacy stored registrations.
+        final var servicePatterns = serviceConfig.get().allowedIps().orElse(List.of());
+        return matches(source.ipAddress(), parseConfiguredNetworks(servicePatterns, "service"));
     }
 
     boolean matchesIp(String sourceIp, List<String> allowedPatterns) {
-        for (var pattern : allowedPatterns) {
-            if (pattern.contains("/")) {
-                // CIDR notation
-                if (matchesCidr(sourceIp, pattern)) {
-                    return true;
-                }
-            } else {
-                // Exact match
-                if (pattern.equals(sourceIp)) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return matches(sourceIp, parseConfiguredNetworks(allowedPatterns, "access-control"));
     }
 
-    private boolean matchesCidr(String sourceIp, String cidr) {
-        try {
-            // Get cached parsed CIDR or parse and cache it
-            final var parsedCidr = cidrCache.computeIfAbsent(cidr, this::parseCidr);
-            if (parsedCidr == null) {
-                return false;
-            }
-
-            // Get cached parsed source IP or parse and cache it
-            final var sourceBytes = ipAddressCache.computeIfAbsent(sourceIp, this::parseIpAddress);
-            if (sourceBytes == null) {
-                return false;
-            }
-
-            final var networkBytes = parsedCidr.networkBytes();
-            final var prefixLength = parsedCidr.prefixLength();
-
-            if (networkBytes.length != sourceBytes.length) {
-                return false;
-            }
-
-            final var fullBytes = prefixLength / 8;
-            final var remainingBits = prefixLength % 8;
-
-            // Compare full bytes
-            for (var i = 0; i < fullBytes; i++) {
-                if (networkBytes[i] != sourceBytes[i]) {
-                    return false;
-                }
-            }
-
-            // Compare remaining bits
-            if (remainingBits > 0 && fullBytes < networkBytes.length) {
-                final var mask = (byte) (0xFF << (8 - remainingBits));
-                if ((networkBytes[fullBytes] & mask) != (sourceBytes[fullBytes] & mask)) {
-                    return false;
-                }
-            }
-
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
+    private boolean matches(String sourceIp, List<IpNetwork> networks) {
+        final var source = IpNetwork.parse(sourceIp).filter(IpNetwork::isExactAddress);
+        return source.isPresent() && networks.stream().anyMatch(network -> network.contains(source.get()));
     }
 
-    /**
-     * Parse a CIDR pattern into network bytes and prefix length.
-     * Return null if the pattern is invalid.
-     */
-    private ParsedCidr parseCidr(String cidr) {
-        try {
-            final var parts = cidr.split("/");
-            if (parts.length != 2) {
-                return null;
-            }
-            final var networkAddress = InetAddress.getByName(parts[0]);
-            final var prefixLength = Integer.parseInt(parts[1]);
-            return new ParsedCidr(networkAddress.getAddress(), prefixLength);
-        } catch (UnknownHostException | NumberFormatException e) {
-            return null;
-        }
-    }
-
-    /**
-     * Parse an IP address string into bytes.
-     * Return null if the address is invalid.
-     */
-    private byte[] parseIpAddress(String ip) {
-        try {
-            return InetAddress.getByName(ip).getAddress();
-        } catch (UnknownHostException e) {
-            return null;
-        }
-    }
-
-    boolean matchesDomain(String sourceHost, List<String> allowedDomains) {
-        var lowerSourceHost = sourceHost.toLowerCase();
-        for (var domain : allowedDomains) {
-            if (lowerSourceHost.equals(domain.toLowerCase())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    boolean matchesSubdomain(String sourceHost, List<String> allowedSubdomains) {
-        var lowerSourceHost = sourceHost.toLowerCase();
-        for (var pattern : allowedSubdomains) {
-            var lowerPattern = pattern.toLowerCase();
-
-            // Handle *.example.com pattern
-            if (lowerPattern.startsWith("*.")) {
-                var suffix = lowerPattern.substring(1); // .example.com
-                if (lowerSourceHost.endsWith(suffix) && !lowerSourceHost.equals(suffix.substring(1))) {
-                    return true;
-                }
-            } else if (lowerSourceHost.equals(lowerPattern)) {
-                return true;
-            }
-        }
-        return false;
+    private List<IpNetwork> parseConfiguredNetworks(List<String> patterns, String policyName) {
+        return patterns.stream()
+                .map(pattern -> IpNetwork.parse(pattern).orElseGet(() -> {
+                    LOG.warnf("Ignoring invalid %s IP/CIDR: %s", policyName, pattern);
+                    return null;
+                }))
+                .filter(java.util.Objects::nonNull)
+                .toList();
     }
 }

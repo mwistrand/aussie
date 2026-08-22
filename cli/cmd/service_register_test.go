@@ -164,9 +164,7 @@ func TestValidateServiceConfig_FullConfig(t *testing.T) {
 			}
 		],
 		"accessConfig": {
-			"allowedIps": ["10.0.0.0/8"],
-			"allowedDomains": ["example.com"],
-			"allowedSubdomains": ["api"]
+			"allowedIps": ["10.0.0.0/8"]
 		},
 		"cors": {
 			"allowedOrigins": ["http://localhost:3000"],
@@ -273,8 +271,6 @@ func TestRegisterCmd_HasAllFlags(t *testing.T) {
 		"default-visibility",
 		"default-auth-required",
 		"allowed-ips",
-		"allowed-domains",
-		"allowed-subdomains",
 		"cors-origins",
 		"cors-methods",
 		"cors-headers",
@@ -628,31 +624,25 @@ func TestBuildServiceRegistration_CorsFlags(t *testing.T) {
 	}
 }
 
-func TestBuildServiceRegistration_AccessConfigFlags(t *testing.T) {
+func TestBuildServiceRegistration_AccessConfigFlag(t *testing.T) {
 	// Save and restore global state
 	oldRegisterFile := registerFile
 	oldAllowedIPs := allowedIPs
-	oldAllowedDomains := allowedDomains
 	defer func() {
 		registerFile = oldRegisterFile
 		allowedIPs = oldAllowedIPs
-		allowedDomains = oldAllowedDomains
 	}()
 
 	registerFile = ""
 	allowedIPs = []string{"10.0.0.0/8", "192.168.0.0/16"}
-	allowedDomains = []string{"example.com"}
 
 	cmd := &cobra.Command{}
 	cmd.Flags().StringVarP(&registerFile, "file", "f", "", "")
 	cmd.Flags().StringVar(&serviceID, "service-id", "", "")
 	cmd.Flags().StringVar(&baseURL, "base-url", "", "")
 	cmd.Flags().StringSliceVar(&allowedIPs, "allowed-ips", nil, "")
-	cmd.Flags().StringSliceVar(&allowedDomains, "allowed-domains", nil, "")
-	cmd.Flags().StringSliceVar(&allowedSubdomains, "allowed-subdomains", nil, "")
 
 	cmd.Flags().Set("allowed-ips", "10.0.0.0/8,192.168.0.0/16")
-	cmd.Flags().Set("allowed-domains", "example.com")
 
 	reg, err := buildServiceRegistration(cmd)
 	if err != nil {
@@ -664,9 +654,6 @@ func TestBuildServiceRegistration_AccessConfigFlags(t *testing.T) {
 	}
 	if len(reg.AccessConfig.AllowedIPs) != 2 {
 		t.Errorf("AllowedIPs length = %d, want 2", len(reg.AccessConfig.AllowedIPs))
-	}
-	if len(reg.AccessConfig.AllowedDomains) != 1 {
-		t.Errorf("AllowedDomains length = %d, want 1", len(reg.AccessConfig.AllowedDomains))
 	}
 }
 

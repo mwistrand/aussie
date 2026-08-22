@@ -12,14 +12,14 @@ public interface AccessControlConfig {
     Optional<List<String>> allowedIps();
 
     /**
-     * Global list of allowed domains for private endpoint access.
-     * Example: internal.example.com
+     * Legacy compatibility setting. Host names are request routing metadata and are
+     * never used to authorize callers.
      */
     Optional<List<String>> allowedDomains();
 
     /**
-     * Global list of allowed subdomain patterns for private endpoint access.
-     * Supports wildcard patterns like *.internal.example.com
+     * Legacy compatibility setting. Host names are request routing metadata and are
+     * never used to authorize callers.
      */
     Optional<List<String>> allowedSubdomains();
 }

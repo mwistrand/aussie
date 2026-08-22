@@ -468,13 +468,13 @@ Private endpoints are protected by access control rules. Configure globally with
 ```bash
 # Allow specific IPs and CIDR ranges
 export AUSSIE_GATEWAY_ACCESS_CONTROL_ALLOWED_IPS=10.0.0.0/8,192.168.0.0/16,127.0.0.1
-
-# Allow specific domains
-export AUSSIE_GATEWAY_ACCESS_CONTROL_ALLOWED_DOMAINS=internal.example.com
-
-# Allow subdomain patterns
-export AUSSIE_GATEWAY_ACCESS_CONTROL_ALLOWED_SUBDOMAINS=*.internal.example.com
 ```
+
+The global list is a mandatory outer boundary. A service's `accessConfig.allowedIps`
+must be contained by the global ranges and is intersected with them at request time.
+Service registration rejects broader ranges. Host, `Forwarded: host=`, and
+`X-Forwarded-Host` values never authorize a caller because they identify the requested
+authority, not the caller's network identity.
 
 ### Trusted Proxy Configuration
 
