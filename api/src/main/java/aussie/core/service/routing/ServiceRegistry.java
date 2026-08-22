@@ -166,10 +166,9 @@ public class ServiceRegistry {
         LOG.debugf("Received service changed event: %s", serviceId);
         repository
                 .findById(serviceId)
-                .invoke(opt -> opt.ifPresentOrElse(
-                        this::compileAndCacheRoutes,
-                        () -> LOG.debugf("Service not found in repository after changed event: %s", serviceId)))
-                .chain(opt -> opt.map(cache::put).orElse(Uni.createFrom().voidItem()))
+                .map(this::onlyValidForRouting)
+                .invoke(opt -> opt.ifPresentOrElse(this::compileAndCacheRoutes, () -> removeCompiledRoutes(serviceId)))
+                .chain(opt -> opt.map(cache::put).orElseGet(() -> cache.invalidate(serviceId)))
                 .subscribe()
                 .with(
                         v -> LOG.debugf("Refreshed cache for service: %s", serviceId),
@@ -206,6 +205,9 @@ public class ServiceRegistry {
                     final var nextRoutes = new HashMap<String, CompiledRoute>();
                     final var nextById = new HashMap<String, ServiceRoutes>();
                     for (var registration : registrations) {
+                        if (!isValidForRouting(registration)) {
+                            continue;
+                        }
                         nextById.put(registration.serviceId(), ServiceRoutes.of(registration));
                         for (var endpoint : registration.endpoints()) {
                             nextRoutes.put(
@@ -480,24 +482,18 @@ public class ServiceRegistry {
     }
 
     /**
-     * Get a service by ID.
+     * Get a routable service by ID from the validated local snapshot.
      *
-     * <p>
-     * This method does NOT enforce authorization. Use
+     * <p>The snapshot is refreshed from persistent storage when stale. Registrations that
+     * fail current gateway policy are deliberately absent, so every request-path consumer
+     * shares the same containment boundary. This method does NOT enforce authorization. Use
      * {@link #getServiceAuthorized(String, Set)} for authorized retrieval.
      *
      * @param serviceId The service ID to find
      * @return Uni with Optional containing the service if found
      */
     public Uni<Optional<ServiceRegistration>> getService(String serviceId) {
-        // Try cache first, then fall back to repository
-        return cache.get(serviceId).flatMap(cached -> {
-            if (cached.isPresent()) {
-                return Uni.createFrom().item(cached);
-            }
-            return repository.findById(serviceId).call(opt -> opt.map(cache::put)
-                    .orElse(Uni.createFrom().voidItem()));
-        });
+        return ensureCacheFresh().map(ignored -> getServiceFromLocalCache(serviceId));
     }
 
     /**
@@ -546,6 +542,10 @@ public class ServiceRegistry {
      * @return Uni completing when the update is persisted
      */
     public Uni<Void> update(ServiceRegistration service) {
+        final var validationResult = validator.validate(service);
+        if (validationResult instanceof ValidationResult.Invalid invalid) {
+            return Uni.createFrom().failure(new IllegalArgumentException(invalid.reason()));
+        }
         return repository
                 .save(service)
                 .invoke(() -> compileAndCacheRoutes(service))
@@ -689,12 +689,28 @@ public class ServiceRegistry {
         }
     }
 
-    private void removeCompiledRoutes(ServiceRegistration service) {
-        servicesById.remove(service.serviceId());
-        for (var endpoint : service.endpoints()) {
-            var routeKey = buildRouteKey(service.serviceId(), endpoint.path());
-            compiledRoutes.remove(routeKey);
+    private Optional<ServiceRegistration> onlyValidForRouting(Optional<ServiceRegistration> registration) {
+        return registration.filter(this::isValidForRouting);
+    }
+
+    private boolean isValidForRouting(ServiceRegistration service) {
+        final var validationResult = validator.validate(service);
+        if (validationResult instanceof ValidationResult.Invalid invalid) {
+            LOG.errorf(
+                    "Service excluded from routing by gateway policy: serviceId=%s reason=%s",
+                    service.serviceId(), invalid.reason());
+            return false;
         }
+        return true;
+    }
+
+    private void removeCompiledRoutes(String serviceId) {
+        servicesById.remove(serviceId);
+        compiledRoutes.entrySet().removeIf(entry -> entry.getKey().startsWith(serviceId + ":"));
+    }
+
+    private void removeCompiledRoutes(ServiceRegistration service) {
+        removeCompiledRoutes(service.serviceId());
     }
 
     private String buildRouteKey(String serviceId, String path) {

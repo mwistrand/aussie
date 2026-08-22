@@ -478,9 +478,7 @@ export AUSSIE_GATEWAY_ACCESS_CONTROL_ALLOWED_SUBDOMAINS=*.internal.example.com
 
 ### Trusted Proxy Configuration
 
-By default, Aussie trusts forwarding headers (`X-Forwarded-For`, `Forwarded`, `X-Real-IP`) from any source. In production, this allows clients to spoof their IP address and bypass IP-based access controls.
-
-Enable trusted proxy validation to only honor forwarding headers from known proxy IPs:
+By default, Aussie ignores forwarding headers (`X-Forwarded-For`, `Forwarded`, `X-Real-IP`) and uses the direct socket peer. Enable proxy trust only when requests arrive through known proxy IPs:
 
 ```bash
 # Enable trusted proxy validation
@@ -490,7 +488,7 @@ export AUSSIE_GATEWAY_TRUSTED_PROXY_ENABLED=true
 export AUSSIE_GATEWAY_TRUSTED_PROXY_PROXIES=10.0.0.0/8,192.168.0.0/16
 ```
 
-When enabled, requests from IPs outside the trusted list will have their forwarding headers ignored, and the socket-level IP address will be used instead. This is critical for IP-based access control to work correctly.
+Requests from IPs outside the trusted list have their forwarding headers ignored, and the socket-level IP address is used instead. This is critical for IP-based access control to work correctly.
 
 **Important:** If you enable trusted proxy validation without configuring any proxy addresses, *all* forwarding headers will be rejected and the socket IP will always be used directly.
 
@@ -547,7 +545,13 @@ Services can also declare arbitrary additional response headers via `customHeade
 
 ### SSRF Protection
 
-Service registration validates `baseUrl` to prevent server-side request forgery. The following address categories are blocked:
+Service registration validates `baseUrl` against an operator-owned host allowlist and SSRF address policy. Configure the hosts before registering services:
+
+```bash
+export AUSSIE_GATEWAY_SECURITY_ALLOWED_UPSTREAM_HOSTS=api.example.com,*.services.example.com
+```
+
+An absent or empty allowlist denies all upstream routing. Exact hosts and explicit subdomain patterns are supported; a global `*` is rejected. The following address categories are also blocked:
 
 | Category | Examples | Reason |
 |----------|----------|--------|
@@ -555,9 +559,9 @@ Service registration validates `baseUrl` to prevent server-side request forgery.
 | Link-local | `169.254.x.x` | Blocks cloud metadata endpoints (AWS, GCP, Azure) |
 | Wildcard | `0.0.0.0`, `::` | Prevents binding to all interfaces |
 
-Private network addresses (`10.x`, `172.16-31.x`, `192.168.x`) are allowed for internal service-to-service routing.
+Private network addresses (`10.x`, `172.16-31.x`, `192.168.x`) are denied by default even when their host is allowlisted. Internal deployments must explicitly set `AUSSIE_GATEWAY_SECURITY_ALLOW_PRIVATE_UPSTREAMS=true`.
 
-DNS-based SSRF (registering a hostname that later resolves to a blocked IP) is mitigated by restricting service registration to authenticated admin users.
+This host allowlist is an emergency containment boundary, not a complete DNS-rebinding defense. Until connection-time DNS authorization is implemented, also enforce network-level egress policy and permit only operator-controlled DNS names.
 
 ## Request Forwarding
 
@@ -662,8 +666,11 @@ Aussie supports server-side sessions for maintaining authentication state across
 ### Configuration
 
 ```properties
-# Enable sessions (default: true)
+# Enable session validation and lifecycle operations (default: true)
 aussie.session.enabled=true
+
+# Unsafe legacy identity-construction endpoints remain disabled in normal mode
+aussie.session.public-creation-enabled=false
 
 # Session lifetime and idle timeout
 aussie.session.ttl=PT8H
@@ -688,6 +695,8 @@ aussie.session.jws.include-claims=sub,email,name,roles
 ```
 
 When `sliding-expiration` is enabled, the idle timeout resets on each request. Sessions are hard-capped by `ttl` regardless of activity.
+
+`POST /auth/session` and `GET /auth/callback` accept unvalidated caller identity in the legacy demo flow. They are enabled only by the `%dev` profile and must remain disabled in normal deployments until the production OIDC transaction flow replaces them.
 
 ### Cookie Security
 
@@ -1104,7 +1113,8 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | `AUSSIE_GATEWAY_TRUSTED_PROXY_ENABLED` | `false` | Enable trusted proxy validation for forwarding headers |
 | `AUSSIE_GATEWAY_TRUSTED_PROXY_PROXIES` | - | Trusted proxy IPs/CIDRs (comma-separated) |
 | `AUSSIE_GATEWAY_SECURITY_PUBLIC_DEFAULT_VISIBILITY_ENABLED` | `false` | Allow services to set PUBLIC as default endpoint visibility |
-| `AUSSIE_GATEWAY_SECURITY_ALLOW_PRIVATE_UPSTREAMS` | `true` | Allow upstream URLs to use private (site-local) addresses |
+| `AUSSIE_GATEWAY_SECURITY_ALLOWED_UPSTREAM_HOSTS` | - | Required exact hosts or explicit subdomain patterns; empty denies all upstreams |
+| `AUSSIE_GATEWAY_SECURITY_ALLOW_PRIVATE_UPSTREAMS` | `false` | Allow allowlisted upstream hosts to resolve to private (site-local) addresses |
 | `AUSSIE_GATEWAY_SECURITY_HEADERS_ENABLED` | `true` | Enable security response headers |
 | `AUSSIE_GATEWAY_SECURITY_HEADERS_CONTENT_TYPE_OPTIONS` | `nosniff` | X-Content-Type-Options header value |
 | `AUSSIE_GATEWAY_SECURITY_HEADERS_FRAME_OPTIONS` | `DENY` | X-Frame-Options header value |

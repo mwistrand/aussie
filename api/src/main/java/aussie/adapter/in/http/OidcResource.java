@@ -98,6 +98,8 @@ public class OidcResource {
             @QueryParam("state") String clientState,
             @QueryParam("idp_url") String idpUrl) {
 
+        requirePublicEndpointsEnabled();
+
         if (!pkceConfig.enabled()) {
             throw GatewayProblem.featureDisabled("PKCE");
         }
@@ -168,6 +170,8 @@ public class OidcResource {
             @FormParam("code_verifier") String codeVerifier,
             @FormParam("state") String state,
             @FormParam("redirect_uri") String redirectUri) {
+
+        requirePublicEndpointsEnabled();
 
         if (!pkceConfig.enabled()) {
             throw GatewayProblem.featureDisabled("PKCE");
@@ -253,6 +257,12 @@ public class OidcResource {
                 .getProvider()
                 .exchange(request)
                 .flatMap(tokenResponse -> handleTokenResponse(tokenResponse));
+    }
+
+    private void requirePublicEndpointsEnabled() {
+        if (!oidcConfig.publicEndpointsEnabled()) {
+            throw GatewayProblem.featureDisabled("Public OIDC helpers");
+        }
     }
 
     /**

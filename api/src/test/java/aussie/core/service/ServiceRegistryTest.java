@@ -39,6 +39,7 @@ class ServiceRegistryTest {
     private static final Duration TIMEOUT = Duration.ofSeconds(5);
     private ServiceRegistry registry;
     private ServiceAuthorizationService authService;
+    private InMemoryServiceRegistrationRepository repository;
 
     // Permissive security config for testing
     private static final GatewaySecurityConfig PERMISSIVE_CONFIG = TestGatewaySecurityConfig.permissive();
@@ -77,12 +78,13 @@ class ServiceRegistryTest {
 
     @BeforeEach
     void setUp() {
+        repository = new InMemoryServiceRegistrationRepository();
         var validator = new ServiceRegistrationValidator(
                 PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
         var defaultPolicy = new DefaultPermissionPolicy();
         authService = new ServiceAuthorizationService(defaultPolicy);
         registry = new ServiceRegistry(
-                new InMemoryServiceRegistrationRepository(),
+                repository,
                 NoOpConfigurationCache.INSTANCE,
                 validator,
                 authService,
@@ -95,9 +97,24 @@ class ServiceRegistryTest {
     class RegistrationTests {
 
         @Test
+        @DisplayName("Should quarantine a stored service whose upstream is no longer allowlisted")
+        void shouldQuarantineStoredServiceOutsideAllowlist() {
+            var service = createService("blocked-service", "https://blocked.invalid");
+            repository.save(service).await().atMost(TIMEOUT);
+
+            registry.initialize().await().atMost(TIMEOUT);
+
+            assertTrue(registry.getService("blocked-service")
+                    .await()
+                    .atMost(TIMEOUT)
+                    .isEmpty());
+            assertTrue(registry.findRoute("/blocked-service/path", "GET").isEmpty());
+        }
+
+        @Test
         @DisplayName("Should register a service")
         void shouldRegisterService() {
-            var service = createService("test-service", "http://localhost:8080");
+            var service = createService("test-service", "http://192.0.2.10:8080");
             var result = registry.register(service).await().atMost(TIMEOUT);
 
             assertInstanceOf(RegistrationResult.Success.class, result);
@@ -109,21 +126,21 @@ class ServiceRegistryTest {
         @Test
         @DisplayName("Should replace existing service on re-registration with correct version")
         void shouldReplaceExistingService() {
-            var service1 = createServiceWithVersion("test-service", "http://localhost:8080", 1);
-            var service2 = createServiceWithVersion("test-service", "http://localhost:9090", 2);
+            var service1 = createServiceWithVersion("test-service", "http://192.0.2.10:8080", 1);
+            var service2 = createServiceWithVersion("test-service", "http://192.0.2.10:9090", 2);
 
             registry.register(service1).await().atMost(TIMEOUT);
             registry.register(service2).await().atMost(TIMEOUT);
 
             var result = registry.getService("test-service").await().atMost(TIMEOUT);
             assertTrue(result.isPresent());
-            assertEquals(URI.create("http://localhost:9090"), result.get().baseUrl());
+            assertEquals(URI.create("http://192.0.2.10:9090"), result.get().baseUrl());
         }
 
         @Test
         @DisplayName("Should unregister a service")
         void shouldUnregisterService() {
-            var service = createService("test-service", "http://localhost:8080");
+            var service = createService("test-service", "http://192.0.2.10:8080");
             registry.register(service).await().atMost(TIMEOUT);
             registry.unregister("test-service").await().atMost(TIMEOUT);
 
@@ -143,13 +160,13 @@ class ServiceRegistryTest {
         @Test
         @DisplayName("Should list all registered services")
         void shouldListAllServices() {
-            registry.register(createService("service-1", "http://localhost:8081"))
+            registry.register(createService("service-1", "http://192.0.2.10:8081"))
                     .await()
                     .atMost(TIMEOUT);
-            registry.register(createService("service-2", "http://localhost:8082"))
+            registry.register(createService("service-2", "http://192.0.2.10:8082"))
                     .await()
                     .atMost(TIMEOUT);
-            registry.register(createService("service-3", "http://localhost:8083"))
+            registry.register(createService("service-3", "http://192.0.2.10:8083"))
                     .await()
                     .atMost(TIMEOUT);
 
@@ -172,7 +189,7 @@ class ServiceRegistryTest {
         @Test
         @DisplayName("Should succeed for new service with version 1")
         void shouldSucceedForNewServiceWithVersion1() {
-            var service = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            var service = createServiceWithVersion("test-service", "http://192.0.2.10:8080", 1);
             var result = registry.register(service).await().atMost(TIMEOUT);
 
             assertInstanceOf(RegistrationResult.Success.class, result);
@@ -181,7 +198,7 @@ class ServiceRegistryTest {
         @Test
         @DisplayName("Should fail for new service with version 0")
         void shouldFailForNewServiceWithVersion0() {
-            var service = createServiceWithVersion("test-service", "http://localhost:8080", 0);
+            var service = createServiceWithVersion("test-service", "http://192.0.2.10:8080", 0);
             var result = registry.register(service).await().atMost(TIMEOUT);
 
             assertInstanceOf(RegistrationResult.Failure.class, result);
@@ -193,7 +210,7 @@ class ServiceRegistryTest {
         @Test
         @DisplayName("Should fail for new service with version 2")
         void shouldFailForNewServiceWithVersion2() {
-            var service = createServiceWithVersion("test-service", "http://localhost:8080", 2);
+            var service = createServiceWithVersion("test-service", "http://192.0.2.10:8080", 2);
             var result = registry.register(service).await().atMost(TIMEOUT);
 
             assertInstanceOf(RegistrationResult.Failure.class, result);
@@ -206,17 +223,17 @@ class ServiceRegistryTest {
         @DisplayName("Should succeed for update with version current+1")
         void shouldSucceedForUpdateWithCorrectVersion() {
             // Register initial service with version 1
-            var service1 = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            var service1 = createServiceWithVersion("test-service", "http://192.0.2.10:8080", 1);
             registry.register(service1).await().atMost(TIMEOUT);
 
             // Update with version 2 (current + 1)
-            var service2 = createServiceWithVersion("test-service", "http://localhost:9090", 2);
+            var service2 = createServiceWithVersion("test-service", "http://192.0.2.10:9090", 2);
             var result = registry.register(service2).await().atMost(TIMEOUT);
 
             assertInstanceOf(RegistrationResult.Success.class, result);
             var retrieved = registry.getService("test-service").await().atMost(TIMEOUT);
             assertTrue(retrieved.isPresent());
-            assertEquals(URI.create("http://localhost:9090"), retrieved.get().baseUrl());
+            assertEquals(URI.create("http://192.0.2.10:9090"), retrieved.get().baseUrl());
             assertEquals(2, retrieved.get().version());
         }
 
@@ -224,11 +241,11 @@ class ServiceRegistryTest {
         @DisplayName("Should fail for update with same version")
         void shouldFailForUpdateWithSameVersion() {
             // Register initial service with version 1
-            var service1 = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            var service1 = createServiceWithVersion("test-service", "http://192.0.2.10:8080", 1);
             registry.register(service1).await().atMost(TIMEOUT);
 
             // Try to update with version 1 (same as current)
-            var service2 = createServiceWithVersion("test-service", "http://localhost:9090", 1);
+            var service2 = createServiceWithVersion("test-service", "http://192.0.2.10:9090", 1);
             var result = registry.register(service2).await().atMost(TIMEOUT);
 
             assertInstanceOf(RegistrationResult.Failure.class, result);
@@ -242,11 +259,11 @@ class ServiceRegistryTest {
         @DisplayName("Should fail for update with version too high")
         void shouldFailForUpdateWithVersionTooHigh() {
             // Register initial service with version 1
-            var service1 = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            var service1 = createServiceWithVersion("test-service", "http://192.0.2.10:8080", 1);
             registry.register(service1).await().atMost(TIMEOUT);
 
             // Try to update with version 3 (skipping version 2)
-            var service2 = createServiceWithVersion("test-service", "http://localhost:9090", 3);
+            var service2 = createServiceWithVersion("test-service", "http://192.0.2.10:9090", 3);
             var result = registry.register(service2).await().atMost(TIMEOUT);
 
             assertInstanceOf(RegistrationResult.Failure.class, result);
@@ -260,11 +277,11 @@ class ServiceRegistryTest {
         @DisplayName("Should fail for update with version 0")
         void shouldFailForUpdateWithVersion0() {
             // Register initial service with version 1
-            var service1 = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            var service1 = createServiceWithVersion("test-service", "http://192.0.2.10:8080", 1);
             registry.register(service1).await().atMost(TIMEOUT);
 
             // Try to update with version 0
-            var service2 = createServiceWithVersion("test-service", "http://localhost:9090", 0);
+            var service2 = createServiceWithVersion("test-service", "http://192.0.2.10:9090", 0);
             var result = registry.register(service2).await().atMost(TIMEOUT);
 
             assertInstanceOf(RegistrationResult.Failure.class, result);
@@ -277,11 +294,11 @@ class ServiceRegistryTest {
         @DisplayName("Should fail for update with negative version")
         void shouldFailForUpdateWithNegativeVersion() {
             // Register initial service with version 1
-            var service1 = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            var service1 = createServiceWithVersion("test-service", "http://192.0.2.10:8080", 1);
             registry.register(service1).await().atMost(TIMEOUT);
 
             // Try to update with version -5
-            var service2 = createServiceWithVersion("test-service", "http://localhost:9090", -5);
+            var service2 = createServiceWithVersion("test-service", "http://192.0.2.10:9090", -5);
             var result = registry.register(service2).await().atMost(TIMEOUT);
 
             assertInstanceOf(RegistrationResult.Failure.class, result);
@@ -292,19 +309,19 @@ class ServiceRegistryTest {
         @DisplayName("Should allow sequential version updates")
         void shouldAllowSequentialVersionUpdates() {
             // Version 1
-            var v1 = createServiceWithVersion("test-service", "http://localhost:8080", 1);
+            var v1 = createServiceWithVersion("test-service", "http://192.0.2.10:8080", 1);
             assertInstanceOf(
                     RegistrationResult.Success.class,
                     registry.register(v1).await().atMost(TIMEOUT));
 
             // Version 2
-            var v2 = createServiceWithVersion("test-service", "http://localhost:8080", 2);
+            var v2 = createServiceWithVersion("test-service", "http://192.0.2.10:8080", 2);
             assertInstanceOf(
                     RegistrationResult.Success.class,
                     registry.register(v2).await().atMost(TIMEOUT));
 
             // Version 3
-            var v3 = createServiceWithVersion("test-service", "http://localhost:8080", 3);
+            var v3 = createServiceWithVersion("test-service", "http://192.0.2.10:8080", 3);
             assertInstanceOf(
                     RegistrationResult.Success.class,
                     registry.register(v3).await().atMost(TIMEOUT));
@@ -324,7 +341,7 @@ class ServiceRegistryTest {
         void shouldMatchExactPath() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -341,7 +358,7 @@ class ServiceRegistryTest {
             var endpoint = new EndpointConfig(
                     "/api/users/{userId}", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -358,7 +375,7 @@ class ServiceRegistryTest {
             var endpoint = new EndpointConfig(
                     "/api/users/{userId}/posts/{postId}", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -376,7 +393,7 @@ class ServiceRegistryTest {
         void shouldMatchWildcardPath() {
             var endpoint = new EndpointConfig("/api/**", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("api-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -392,7 +409,7 @@ class ServiceRegistryTest {
             var endpoint =
                     new EndpointConfig("/api/*/info", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("api-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -409,7 +426,7 @@ class ServiceRegistryTest {
         void shouldNotMatchWrongMethod() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -424,7 +441,7 @@ class ServiceRegistryTest {
         void shouldMatchAnyMethodWithWildcard() {
             var endpoint = new EndpointConfig("/api/data", Set.of("*"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("data-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -439,7 +456,7 @@ class ServiceRegistryTest {
         void shouldMatchCaseInsensitiveMethods() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -454,7 +471,7 @@ class ServiceRegistryTest {
         void shouldReturnServiceOnlyMatchWhenNoEndpointMatches() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -472,7 +489,7 @@ class ServiceRegistryTest {
         void shouldReturnServiceOnlyMatchInPassThroughMode() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -490,7 +507,7 @@ class ServiceRegistryTest {
         void shouldNormalizePathsWithoutLeadingSlash() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -504,7 +521,7 @@ class ServiceRegistryTest {
         void shouldHandleNullPath() {
             var endpoint = new EndpointConfig("/", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("root-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -518,7 +535,7 @@ class ServiceRegistryTest {
         void shouldHandleEmptyPath() {
             var endpoint = new EndpointConfig("/", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("root-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -538,7 +555,7 @@ class ServiceRegistryTest {
             var endpoint = new EndpointConfig(
                     "/api/v1/users/{userId}", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.of("/users/{userId}"));
             var service = ServiceRegistration.builder("user-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -558,7 +575,7 @@ class ServiceRegistryTest {
                     EndpointVisibility.PUBLIC,
                     Optional.of("/orgs/{org}/members/{userId}"));
             var service = ServiceRegistration.builder("user-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -579,7 +596,7 @@ class ServiceRegistryTest {
         void shouldRemoveRoutesOnUnregister() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -604,7 +621,7 @@ class ServiceRegistryTest {
         @Test
         @DisplayName("Should allow admin to create service")
         void shouldAllowAdminToCreateService() {
-            var service = createService("test-service", "http://localhost:8080");
+            var service = createService("test-service", "http://192.0.2.10:8080");
             var result = registry.register(service, ADMIN_PERMISSIONS).await().atMost(TIMEOUT);
 
             assertInstanceOf(RegistrationResult.Success.class, result);
@@ -613,7 +630,7 @@ class ServiceRegistryTest {
         @Test
         @DisplayName("Should deny unauthorized user from creating service")
         void shouldDenyUnauthorizedUserFromCreatingService() {
-            var service = createService("test-service", "http://localhost:8080");
+            var service = createService("test-service", "http://192.0.2.10:8080");
             var result = registry.register(service, NO_PERMISSIONS).await().atMost(TIMEOUT);
 
             assertInstanceOf(RegistrationResult.Failure.class, result);
@@ -629,7 +646,7 @@ class ServiceRegistryTest {
             var policy = new ServicePermissionPolicy(
                     Map.of("service.config.update", new OperationPermission(Set.of("test-service.lead"))));
             var service = ServiceRegistration.builder("test-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of())
                     .permissionPolicy(policy)
                     .build();
@@ -637,7 +654,7 @@ class ServiceRegistryTest {
 
             // Update with lead permissions
             var updatedService = ServiceRegistration.builder("test-service")
-                    .baseUrl("http://localhost:9090")
+                    .baseUrl("http://192.0.2.10:9090")
                     .endpoints(List.of())
                     .permissionPolicy(policy)
                     .version(2)
@@ -655,7 +672,7 @@ class ServiceRegistryTest {
             var policy = new ServicePermissionPolicy(
                     Map.of("service.config.update", new OperationPermission(Set.of("test-service.lead"))));
             var service = ServiceRegistration.builder("test-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of())
                     .permissionPolicy(policy)
                     .build();
@@ -663,7 +680,7 @@ class ServiceRegistryTest {
 
             // Try to update with readonly permissions
             var updatedService = ServiceRegistration.builder("test-service")
-                    .baseUrl("http://localhost:9090")
+                    .baseUrl("http://192.0.2.10:9090")
                     .endpoints(List.of())
                     .permissionPolicy(policy)
                     .version(2)
@@ -685,7 +702,7 @@ class ServiceRegistryTest {
             var policy = new ServicePermissionPolicy(
                     Map.of("service.config.update", new OperationPermission(Set.of("test-service.lead"))));
             var service = ServiceRegistration.builder("test-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of())
                     .permissionPolicy(policy)
                     .build();
@@ -693,7 +710,7 @@ class ServiceRegistryTest {
 
             // Update with same policy (should not require permissions.write)
             var updatedService = ServiceRegistration.builder("test-service")
-                    .baseUrl("http://localhost:9090")
+                    .baseUrl("http://192.0.2.10:9090")
                     .endpoints(List.of())
                     .permissionPolicy(policy) // Same policy
                     .version(2)
@@ -711,7 +728,7 @@ class ServiceRegistryTest {
             var initialPolicy = new ServicePermissionPolicy(
                     Map.of("service.config.update", new OperationPermission(Set.of("test-service.lead"))));
             var service = ServiceRegistration.builder("test-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of())
                     .permissionPolicy(initialPolicy)
                     .build();
@@ -722,7 +739,7 @@ class ServiceRegistryTest {
                     "service.config.update",
                     new OperationPermission(Set.of("test-service.lead", "test-service.admin"))));
             var updatedService = ServiceRegistration.builder("test-service")
-                    .baseUrl("http://localhost:9090")
+                    .baseUrl("http://192.0.2.10:9090")
                     .endpoints(List.of())
                     .permissionPolicy(newPolicy) // Different policy
                     .version(2)
@@ -743,7 +760,7 @@ class ServiceRegistryTest {
             var initialPolicy = new ServicePermissionPolicy(
                     Map.of("service.config.update", new OperationPermission(Set.of("test-service.lead"))));
             var service = ServiceRegistration.builder("test-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of())
                     .permissionPolicy(initialPolicy)
                     .build();
@@ -754,7 +771,7 @@ class ServiceRegistryTest {
                     "service.config.update",
                     new OperationPermission(Set.of("test-service.lead", "test-service.admin"))));
             var updatedService = ServiceRegistration.builder("test-service")
-                    .baseUrl("http://localhost:9090")
+                    .baseUrl("http://192.0.2.10:9090")
                     .endpoints(List.of())
                     .permissionPolicy(newPolicy)
                     .version(2)
@@ -769,7 +786,7 @@ class ServiceRegistryTest {
         @DisplayName("Should deny unauthorized delete")
         void shouldDenyUnauthorizedDelete() {
             // Create service
-            var service = createService("test-service", "http://localhost:8080");
+            var service = createService("test-service", "http://192.0.2.10:8080");
             registry.register(service, ADMIN_PERMISSIONS).await().atMost(TIMEOUT);
 
             // Try to delete with readonly permissions
@@ -786,7 +803,7 @@ class ServiceRegistryTest {
         @DisplayName("Should allow admin to delete")
         void shouldAllowAdminToDelete() {
             // Create service
-            var service = createService("test-service", "http://localhost:8080");
+            var service = createService("test-service", "http://192.0.2.10:8080");
             registry.register(service, ADMIN_PERMISSIONS).await().atMost(TIMEOUT);
 
             // Delete with admin permissions
@@ -804,7 +821,7 @@ class ServiceRegistryTest {
             var policy = new ServicePermissionPolicy(
                     Map.of("service.config.read", new OperationPermission(Set.of("test-service.readonly"))));
             var service = ServiceRegistration.builder("test-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of())
                     .permissionPolicy(policy)
                     .build();
@@ -848,7 +865,7 @@ class ServiceRegistryTest {
         void shouldReturnServiceAfterRegistration() {
             var endpoint = new EndpointConfig("/api/data", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("lookup-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
@@ -864,7 +881,7 @@ class ServiceRegistryTest {
         void shouldReturnEmptyAfterUnregister() {
             var endpoint = new EndpointConfig("/api/data", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("lookup-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             registry.register(service).await().atMost(TIMEOUT);

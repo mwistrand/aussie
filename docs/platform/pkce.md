@@ -12,6 +12,8 @@ PKCE (RFC 7636) is a security extension to the OAuth 2.0 authorization code flow
 
 Aussie requires PKCE with the S256 challenge method for all OIDC authorization flows by default.
 
+The legacy public OIDC helpers remain disabled outside the local development profile through `aussie.auth.oidc.public-endpoints-enabled=false`. PKCE alone does not make the legacy flow production-safe because its state record does not yet bind provider, redirect URI, nonce, and the complete one-time transaction.
+
 ## Configuration
 
 ### Application Properties

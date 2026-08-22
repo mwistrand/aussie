@@ -63,7 +63,7 @@ All durations use ISO-8601 format (e.g., `PT30S` for 30 seconds, `PT1H` for 1 ho
 
 **Profile overrides:** None.
 
-**Security considerations:** If Aussie is deployed behind a load balancer or reverse proxy, enable this and configure the proxy addresses. Without trusted proxy validation, any client can forge forwarding headers to spoof their IP address, bypassing IP-based access controls and rate limiting.
+**Security considerations:** Forwarding headers are ignored while proxy trust is disabled. If Aussie is deployed behind a load balancer or reverse proxy, enable this and configure the proxy addresses; headers remain ignored for direct peers outside that list.
 
 ### 1.5 Gateway Security
 
@@ -74,6 +74,8 @@ All durations use ISO-8601 format (e.g., `PT30S` for 30 seconds, `PT1H` for 1 ho
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
 | `aussie.gateway.security.public-default-visibility-enabled` | `boolean` | `false` | `AUSSIE_GATEWAY_SECURITY_PUBLIC_DEFAULT_VISIBILITY_ENABLED` | When false, services cannot set `defaultVisibility` to `PUBLIC`. When true, services may expose endpoints publicly by default. |
+| `aussie.gateway.security.allowed-upstream-hosts` | `Optional<List<String>>` | _(not set)_ | `AUSSIE_GATEWAY_SECURITY_ALLOWED_UPSTREAM_HOSTS` | Required exact hosts or explicit `*.example.com` subdomain patterns. Empty denies all upstream routing; global `*` is rejected. |
+| `aussie.gateway.security.allow-private-upstreams` | `boolean` | `false` | `AUSSIE_GATEWAY_SECURITY_ALLOW_PRIVATE_UPSTREAMS` | Permit allowlisted upstreams to use private/site-local addresses. |
 
 **Profile overrides:** None.
 
@@ -260,6 +262,7 @@ Services can override individual security headers by including a `securityHeader
 
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
+| `aussie.auth.oidc.public-endpoints-enabled` | `boolean` | `false` | `AUSSIE_AUTH_OIDC_PUBLIC_ENDPOINTS_ENABLED` | Enable unsafe legacy browser-facing OIDC helpers. Development only. |
 | `aussie.auth.oidc.token-exchange.enabled` | `boolean` | `false` | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_ENABLED` | Enable OIDC token exchange. When disabled, the `/auth/oidc/token` endpoint returns a feature-disabled error. |
 | `aussie.auth.oidc.token-exchange.create-session` | `boolean` | `true` | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_CREATE_SESSION` | Create Aussie session after successful token exchange. |
 | `aussie.auth.oidc.token-exchange.provider` | `String` | `default` | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_PROVIDER` | Token exchange provider. Options: `default`, or custom SPI name. |
@@ -278,6 +281,7 @@ Services can override individual security headers by including a `securityHeader
 | Profile | Property | Value |
 |---------|----------|-------|
 | `%dev` | `aussie.auth.oidc.token-exchange.enabled` | `true` |
+| `%dev` | `aussie.auth.oidc.public-endpoints-enabled` | `true` |
 | `%dev` | `aussie.auth.oidc.token-exchange.token-endpoint` | `http://localhost:3000/api/auth/oidc/token` |
 | `%dev` | `aussie.auth.oidc.token-exchange.client-id` | `aussie-gateway` |
 | `%dev` | `aussie.auth.oidc.token-exchange.client-secret` | `demo-secret` |
@@ -492,6 +496,7 @@ The test profile disables auth rate limiting because test suites exercising auth
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
 | `aussie.session.enabled` | `boolean` | `true` | `AUSSIE_SESSION_ENABLED` | Enable session management. When disabled, uses Authorization header flow. |
+| `aussie.session.public-creation-enabled` | `boolean` | `false` | `AUSSIE_SESSION_PUBLIC_CREATION_ENABLED` | Enable unsafe legacy `POST /auth/session` and `GET /auth/callback` endpoints. Development only. |
 | `aussie.session.ttl` | `Duration` | `PT8H` | `AUSSIE_SESSION_TTL` | Session time-to-live. |
 | `aussie.session.idle-timeout` | `Duration` | `PT30M` | `AUSSIE_SESSION_IDLE_TIMEOUT` | Invalidate session after inactivity. |
 | `aussie.session.sliding-expiration` | `boolean` | `true` | `AUSSIE_SESSION_SLIDING_EXPIRATION` | Refresh session TTL on each request. |

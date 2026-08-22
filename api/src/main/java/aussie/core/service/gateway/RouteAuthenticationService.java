@@ -159,21 +159,18 @@ public class RouteAuthenticationService {
                 yield issuanceService
                         .issueAsync(valid, route.audience(), route.service().serviceId())
                         .map(aussieTokenOpt -> {
-                            if (aussieTokenOpt.isPresent()) {
+                            if (aussieTokenOpt.isPresent()
+                                    && aussieTokenOpt.get().hasToken()) {
                                 LOG.debugv(
                                         "Authenticated request for {0}, subject: {1}",
                                         route.endpointConfig().path(), valid.subject());
                                 return (RouteAuthResult) new RouteAuthResult.Authenticated(aussieTokenOpt.get());
                             } else {
-                                // Issuance failed but validation succeeded - still allow with original claims
-                                // This is a degraded mode where backends won't get the Aussie token
                                 LOG.warnv(
-                                        "Token issuance failed for {0}, allowing request without Aussie token",
+                                        "Token issuance failed for protected route {0}; denying request",
                                         route.endpointConfig().path());
-                                // Create a minimal token representation for the result
-                                final var minimalToken =
-                                        new AussieToken("", valid.subject(), valid.expiresAt(), valid.claims());
-                                return (RouteAuthResult) new RouteAuthResult.Authenticated(minimalToken);
+                                return (RouteAuthResult)
+                                        new RouteAuthResult.Unauthorized("Authentication token issuance failed");
                             }
                         });
             }

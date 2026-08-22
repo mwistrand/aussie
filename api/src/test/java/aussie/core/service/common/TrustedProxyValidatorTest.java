@@ -20,13 +20,13 @@ class TrustedProxyValidatorTest {
     class DisabledTests {
 
         @Test
-        @DisplayName("should always trust forwarding headers")
-        void shouldAlwaysTrust() {
+        @DisplayName("should always distrust forwarding headers")
+        void shouldAlwaysDistrust() {
             var validator = createValidator(false, null);
 
-            assertTrue(validator.shouldTrustForwardingHeaders("1.2.3.4"));
-            assertTrue(validator.shouldTrustForwardingHeaders("192.168.1.1"));
-            assertTrue(validator.shouldTrustForwardingHeaders(null));
+            assertFalse(validator.shouldTrustForwardingHeaders("1.2.3.4"));
+            assertFalse(validator.shouldTrustForwardingHeaders("192.168.1.1"));
+            assertFalse(validator.shouldTrustForwardingHeaders(null));
         }
     }
 

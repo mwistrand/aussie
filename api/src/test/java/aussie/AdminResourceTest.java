@@ -98,6 +98,8 @@ class AdminResourceTest {
                 .post("/admin/services")
                 .then()
                 .statusCode(400)
-                .body("detail", equalTo("baseUrl must not point to a loopback, link-local, or metadata address"));
+                .body(
+                        "detail",
+                        equalTo("baseUrl must not point to a loopback, link-local, site-local, or metadata address"));
     }
 }

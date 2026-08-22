@@ -86,7 +86,7 @@ public class SourceIdentifierExtractor {
             ipAddress = socketIp != null ? socketIp : fallbackIp.get();
         }
 
-        final var host = trustHeaders ? extractHost(headers) : Optional.<String>empty();
+        final var host = extractHost(headers, trustHeaders);
         final var forwardedFor = trustHeaders ? extractForwardedFor(headers) : Optional.<String>empty();
 
         return new SourceIdentifier(ipAddress, host, forwardedFor);
@@ -117,23 +117,26 @@ public class SourceIdentifierExtractor {
         return null;
     }
 
-    private static Optional<String> extractHost(Function<String, String> headers) {
-        // Check X-Forwarded-Host first
-        final var xForwardedHost = headers.apply("X-Forwarded-Host");
-        if (xForwardedHost != null && !xForwardedHost.isEmpty()) {
-            return Optional.of(xForwardedHost.split(",")[0].trim());
-        }
+    private static Optional<String> extractHost(Function<String, String> headers, boolean trustForwardingHeaders) {
+        if (trustForwardingHeaders) {
+            // Check X-Forwarded-Host first
+            final var xForwardedHost = headers.apply("X-Forwarded-Host");
+            if (xForwardedHost != null && !xForwardedHost.isEmpty()) {
+                return Optional.of(xForwardedHost.split(",")[0].trim());
+            }
 
-        // Check RFC 7239 Forwarded header
-        final var forwarded = headers.apply("Forwarded");
-        if (forwarded != null && !forwarded.isEmpty()) {
-            final var hostParam = extractForwardedParam(forwarded, "host");
-            if (hostParam != null) {
-                return Optional.of(hostParam);
+            // Check RFC 7239 Forwarded header
+            final var forwarded = headers.apply("Forwarded");
+            if (forwarded != null && !forwarded.isEmpty()) {
+                final var hostParam = extractForwardedParam(forwarded, "host");
+                if (hostParam != null) {
+                    return Optional.of(hostParam);
+                }
             }
         }
 
-        // Fall back to Host header
+        // Host describes the direct request authority and is safe to use even when
+        // forwarding headers from the peer are not trusted.
         var host = headers.apply("Host");
         if (host != null && !host.isEmpty()) {
             // Remove port if present

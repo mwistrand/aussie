@@ -49,7 +49,7 @@ public class TrustedProxyValidator {
      */
     public boolean shouldTrustForwardingHeaders(String socketIp) {
         if (!config.enabled()) {
-            return true;
+            return false;
         }
         if (socketIp == null || socketIp.isEmpty()) {
             return false;

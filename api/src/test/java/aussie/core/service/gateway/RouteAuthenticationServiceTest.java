@@ -209,8 +209,8 @@ class RouteAuthenticationServiceTest {
         }
 
         @Test
-        @DisplayName("should create minimal token when issuance fails")
-        void shouldCreateMinimalTokenWhenIssuanceFails() {
+        @DisplayName("should deny protected route when issuance fails")
+        void shouldDenyProtectedRouteWhenIssuanceFails() {
             var headers = Map.of("Authorization", List.of("Bearer valid-token"));
             var expiresAt = Instant.now().plusSeconds(3600);
             var validResult = new TokenValidationResult.Valid("user-1", "issuer", Map.of("sub", "user-1"), expiresAt);
@@ -224,11 +224,7 @@ class RouteAuthenticationServiceTest {
                     .await()
                     .atMost(Duration.ofSeconds(1));
 
-            assertInstanceOf(RouteAuthResult.Authenticated.class, result);
-            var authenticated = (RouteAuthResult.Authenticated) result;
-            assertEquals("user-1", authenticated.token().subject());
-            // Minimal token has empty JWS
-            assertTrue(!authenticated.token().hasToken());
+            assertInstanceOf(RouteAuthResult.Unauthorized.class, result);
         }
 
         @Test

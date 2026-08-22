@@ -122,7 +122,7 @@ class ServiceRegistryMultiInstanceTest {
             // Register a service on Instance A
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of(endpoint))
                     .build();
             instanceA.register(service).await().atMost(TIMEOUT);
@@ -148,7 +148,7 @@ class ServiceRegistryMultiInstanceTest {
             var endpoint =
                     new EndpointConfig("/api/products", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("product-service")
-                    .baseUrl("http://localhost:8081")
+                    .baseUrl("http://192.0.2.10:8081")
                     .endpoints(List.of(endpoint))
                     .build();
             sharedRepository.save(service).await().atMost(TIMEOUT);
@@ -191,7 +191,7 @@ class ServiceRegistryMultiInstanceTest {
             var endpoint =
                     new EndpointConfig("/api/orders", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("order-service")
-                    .baseUrl("http://localhost:8082")
+                    .baseUrl("http://192.0.2.10:8082")
                     .endpoints(List.of(endpoint))
                     .build();
             sharedRepository.save(service).await().atMost(TIMEOUT);
@@ -221,7 +221,7 @@ class ServiceRegistryMultiInstanceTest {
             // Register service directly to repository
             var endpoint = new EndpointConfig("/api/items", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("item-service")
-                    .baseUrl("http://localhost:8083")
+                    .baseUrl("http://192.0.2.10:8083")
                     .endpoints(List.of(endpoint))
                     .build();
             sharedRepository.save(service).await().atMost(TIMEOUT);
@@ -246,7 +246,7 @@ class ServiceRegistryMultiInstanceTest {
 
             var endpoint = new EndpointConfig("/api/local", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("local-service")
-                    .baseUrl("http://localhost:8084")
+                    .baseUrl("http://192.0.2.10:8084")
                     .endpoints(List.of(endpoint))
                     .build();
 
@@ -264,7 +264,7 @@ class ServiceRegistryMultiInstanceTest {
 
             var endpoint = new EndpointConfig("/api/temp", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("temp-service")
-                    .baseUrl("http://localhost:8085")
+                    .baseUrl("http://192.0.2.10:8085")
                     .endpoints(List.of(endpoint))
                     .build();
 
@@ -306,7 +306,7 @@ class ServiceRegistryMultiInstanceTest {
             // Register a service directly in the shared repo
             var endpoint = new EndpointConfig("/api/data", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("data-service")
-                    .baseUrl("http://localhost:8090")
+                    .baseUrl("http://192.0.2.10:8090")
                     .endpoints(List.of(endpoint))
                     .build();
             sharedRepository.save(service).await().atMost(TIMEOUT);
@@ -378,7 +378,7 @@ class ServiceRegistryMultiInstanceTest {
             // Register a service in the shared repo
             var endpoint = new EndpointConfig("/api/retry", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("retry-service")
-                    .baseUrl("http://localhost:8091")
+                    .baseUrl("http://192.0.2.10:8091")
                     .endpoints(List.of(endpoint))
                     .build();
             sharedRepository.save(service).await().atMost(TIMEOUT);

@@ -5,6 +5,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Optional;
@@ -14,22 +17,33 @@ import jakarta.inject.Inject;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.core.model.auth.ServiceAccessConfig;
+import aussie.core.model.common.ValidationResult;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.service.ServiceRegistration;
+import aussie.core.service.routing.ServiceRegistrationValidator;
 import aussie.core.service.routing.ServiceRegistry;
 
 @QuarkusTest
 @DisplayName("Access Control Integration Tests")
 class AccessControlIntegrationTest {
+
+    @BeforeAll
+    static void allowLoopbackTestBackends() {
+        var validator = mock(ServiceRegistrationValidator.class);
+        when(validator.validate(any())).thenReturn(ValidationResult.valid());
+        QuarkusMock.installMockForType(validator, ServiceRegistrationValidator.class);
+    }
 
     @Inject
     ServiceRegistry serviceRegistry;

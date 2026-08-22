@@ -1,10 +1,9 @@
 package aussie.adapter.in.validation;
 
-import java.net.InetAddress;
 import java.net.URI;
-import java.net.UnknownHostException;
 
 import aussie.adapter.in.problem.GatewayProblem;
+import aussie.core.service.routing.UpstreamAddressPolicy;
 
 /**
  * Utility for validating URLs with SSRF protection.
@@ -46,7 +45,7 @@ public final class UrlValidator {
             throw GatewayProblem.badRequest(paramName + " must have a valid host");
         }
 
-        if (isBlockedHost(host, allowPrivateUpstreams)) {
+        if (UpstreamAddressPolicy.isBlocked(host, allowPrivateUpstreams)) {
             final var detail = allowPrivateUpstreams
                     ? paramName + " must not point to a loopback, link-local, or metadata address"
                     : paramName + " must not point to a loopback, link-local, site-local, or metadata address";
@@ -54,39 +53,5 @@ public final class UrlValidator {
         }
 
         return uri;
-    }
-
-    /**
-     * Check if a host is blocked for SSRF protection.
-     *
-     * <p>Always blocks:
-     * <ul>
-     *   <li>Loopback addresses (127.x.x.x, ::1, localhost)</li>
-     *   <li>Link-local addresses (169.254.x.x) - includes cloud metadata endpoints</li>
-     *   <li>Wildcard addresses (0.0.0.0, ::)</li>
-     * </ul>
-     *
-     * <p>When {@code allowPrivateUpstreams} is false, also blocks site-local
-     * addresses (10.x, 172.16-31.x, 192.168.x). These are allowed by default
-     * for gateway-to-upstream forwarding.
-     *
-     * @param host                  the hostname or IP address to check
-     * @param allowPrivateUpstreams whether to allow site-local addresses
-     * @return true if the host is blocked
-     */
-    private static boolean isBlockedHost(String host, boolean allowPrivateUpstreams) {
-        if (host.equalsIgnoreCase("localhost") || host.equals("0.0.0.0") || host.equals("::")) {
-            return true;
-        }
-
-        try {
-            final var addr = InetAddress.getByName(host);
-            if (addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isAnyLocalAddress()) {
-                return true;
-            }
-            return !allowPrivateUpstreams && addr.isSiteLocalAddress();
-        } catch (UnknownHostException e) {
-            return false;
-        }
     }
 }

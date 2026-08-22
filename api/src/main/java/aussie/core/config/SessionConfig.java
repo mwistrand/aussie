@@ -27,6 +27,18 @@ public interface SessionConfig {
     boolean enabled();
 
     /**
+     * Enable the legacy public session-creation and demo callback endpoints.
+     *
+     * <p>These endpoints accept caller-provided identity data and therefore must remain
+     * disabled outside an isolated development environment. Session authentication,
+     * inspection, refresh, and logout remain controlled by {@link #enabled()}.
+     *
+     * @return true if the unsafe development-only endpoints are enabled (default: false)
+     */
+    @WithDefault("false")
+    boolean publicCreationEnabled();
+
+    /**
      * Cookie configuration.
      */
     CookieConfig cookie();

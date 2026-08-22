@@ -333,6 +333,11 @@ class SessionServiceTest {
         }
 
         @Override
+        public boolean publicCreationEnabled() {
+            return false;
+        }
+
+        @Override
         public CookieConfig cookie() {
             return new CookieConfig() {
                 @Override

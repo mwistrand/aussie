@@ -2,6 +2,8 @@
 
 The OIDC Token Exchange feature enables Aussie to complete the OAuth 2.0 authorization code flow by exchanging authorization codes for tokens with identity providers.
 
+> **Containment status:** The current browser-facing `/auth/oidc/authorize` and `/auth/oidc/token` helpers are disabled in normal mode because the legacy flow does not yet bind the complete authorization transaction or validate ID tokens before session creation. They are available only in the local development profile while the production OIDC flow is rebuilt.
+
 ## Overview
 
 When a user authenticates with an identity provider (IdP), Aussie can:
@@ -19,6 +21,7 @@ This feature works in conjunction with [PKCE](pkce.md) for secure authorization 
 Token exchange is **disabled by default**. Enable it with:
 
 ```properties
+aussie.auth.oidc.public-endpoints-enabled=true # local development only
 aussie.auth.oidc.token-exchange.enabled=true
 ```
 

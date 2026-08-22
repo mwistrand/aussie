@@ -6,8 +6,8 @@ import java.util.Map;
 /**
  * A signed JWS token issued by Aussie for backend services.
  *
- * <p>The JWS may be empty in degraded mode when token issuance fails but
- * authentication succeeded. Check {@link #hasToken()} before using the JWS.
+ * <p>The JWS may be empty while an issuance attempt is being represented internally,
+ * but such a value must never be used to authorize or forward a protected route.
  *
  * @param jws       the signed JWT string (to be used as Bearer token), may be empty
  * @param subject   the subject claim from the original token

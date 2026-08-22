@@ -102,7 +102,7 @@ public SourceIdentifier extract(ContainerRequestContext request, String socketIp
 }
 ```
 
-When the socket IP is not in the trusted proxy list, the extractor falls back to the raw socket address. The client's claimed `X-Forwarded-For` is ignored entirely.
+When proxy trust is disabled, or when the socket IP is not in the trusted proxy list, the extractor falls back to the raw socket address. The client's claimed `X-Forwarded-For` is ignored entirely.
 
 The CIDR matching itself is carefully implemented. Line 153 of `TrustedProxyValidator.java` shows the IP parsing function refuses to resolve hostnames:
 

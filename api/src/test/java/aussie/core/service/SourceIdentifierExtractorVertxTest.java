@@ -3,9 +3,10 @@ package aussie.core.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.util.List;
 import java.util.Optional;
 
 import io.vertx.core.http.HttpServerRequest;
@@ -18,7 +19,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import aussie.core.model.common.TrustedProxyConfig;
 import aussie.core.service.common.SourceIdentifierExtractor;
 import aussie.core.service.common.TrustedProxyValidator;
 
@@ -39,9 +39,9 @@ class SourceIdentifierExtractorVertxTest {
 
     @BeforeEach
     void setUp() {
-        // Trust all headers (same default as the JAX-RS sibling test).
-        var config = new TestTrustedProxyConfig(false, null);
-        var validator = new TrustedProxyValidator(config);
+        // Parser-focused tests use an explicitly trusted request boundary.
+        var validator = mock(TrustedProxyValidator.class);
+        when(validator.shouldTrustForwardingHeaders(nullable(String.class))).thenReturn(true);
         extractor = new SourceIdentifierExtractor(validator);
     }
 
@@ -162,15 +162,6 @@ class SourceIdentifierExtractorVertxTest {
             var result = extractor.extract(request, "10.0.0.1");
 
             assertFalse(result.forwardedFor().isPresent());
-        }
-    }
-
-    /** Mirrors the inner record used by {@link SourceIdentifierExtractorTest}. */
-    private record TestTrustedProxyConfig(boolean enabled, List<String> proxyList) implements TrustedProxyConfig {
-
-        @Override
-        public Optional<List<String>> proxies() {
-            return Optional.ofNullable(proxyList);
         }
     }
 }

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import java.nio.charset.StandardCharsets;
@@ -62,6 +63,7 @@ class OidcResourceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(oidcConfig.publicEndpointsEnabled()).thenReturn(true);
         resource = new OidcResource(
                 pkceService,
                 pkceConfig,
@@ -75,6 +77,23 @@ class OidcResourceTest {
     @Nested
     @DisplayName("authorize")
     class Authorize {
+
+        @Test
+        @DisplayName("throws featureDisabled when public OIDC helpers are disabled")
+        void throwsFeatureDisabledWhenPublicHelpersDisabled() {
+            when(oidcConfig.publicEndpointsEnabled()).thenReturn(false);
+
+            final var ex = assertThrows(
+                    HttpProblem.class,
+                    () -> resource.authorize(
+                            "https://app.example.com/callback",
+                            "challenge",
+                            "S256",
+                            null,
+                            "https://idp.example.com/auth"));
+
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
+        }
 
         @Test
         @DisplayName("throws featureDisabled when PKCE is disabled")

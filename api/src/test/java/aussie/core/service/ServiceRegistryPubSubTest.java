@@ -113,7 +113,7 @@ class ServiceRegistryPubSubTest {
             receivedEvents.clear();
 
             var updated = ServiceRegistration.builder("test-service")
-                    .baseUrl("http://localhost:9090")
+                    .baseUrl("http://192.0.2.10:9090")
                     .endpoints(List.of())
                     .version(2)
                     .build();
@@ -130,7 +130,7 @@ class ServiceRegistryPubSubTest {
         void doesNotPublishOnFailedRegistration() {
             // version != 1 for new service → failure
             var service = ServiceRegistration.builder("test-service")
-                    .baseUrl("http://localhost:8080")
+                    .baseUrl("http://192.0.2.10:8080")
                     .endpoints(List.of())
                     .version(5)
                     .build();
@@ -153,7 +153,7 @@ class ServiceRegistryPubSubTest {
             receivedEvents.clear();
 
             var updated = ServiceRegistration.builder("test-service")
-                    .baseUrl("http://localhost:9090")
+                    .baseUrl("http://192.0.2.10:9090")
                     .endpoints(List.of())
                     .version(2)
                     .build();
@@ -297,7 +297,7 @@ class ServiceRegistryPubSubTest {
 
     private ServiceRegistration createService(String serviceId) {
         return ServiceRegistration.builder(serviceId)
-                .baseUrl("http://localhost:8080")
+                .baseUrl("http://192.0.2.10:8080")
                 .endpoints(List.of())
                 .build();
     }
@@ -305,7 +305,7 @@ class ServiceRegistryPubSubTest {
     private ServiceRegistration createServiceWithEndpoint(String serviceId) {
         var endpoint = new EndpointConfig("/api/test", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
         return ServiceRegistration.builder(serviceId)
-                .baseUrl("http://localhost:8080")
+                .baseUrl("http://192.0.2.10:8080")
                 .endpoints(List.of(endpoint))
                 .build();
     }

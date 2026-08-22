@@ -1,6 +1,7 @@
 package aussie.core.service.routing;
 
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -44,6 +45,11 @@ public class ServiceRegistrationValidator {
      * @return ValidationResult.valid() if valid, or ValidationResult.Invalid with reason if not
      */
     public ValidationResult validate(ServiceRegistration registration) {
+        final var upstreamResult = validateUpstreamHost(registration);
+        if (upstreamResult.isInvalid()) {
+            return upstreamResult;
+        }
+
         // Check gateway guardrail for public default visibility
         if (EndpointVisibility.PUBLIC.equals(registration.defaultVisibility())
                 && !securityConfig.publicDefaultVisibilityEnabled()) {
@@ -78,6 +84,49 @@ public class ServiceRegistrationValidator {
         }
 
         return ValidationResult.valid();
+    }
+
+    private ValidationResult validateUpstreamHost(ServiceRegistration registration) {
+        final var host = normalizeHost(registration.baseUrl().getHost());
+        final var allowedHosts = securityConfig.allowedUpstreamHosts();
+        if (host == null
+                || allowedHosts.isEmpty()
+                || allowedHosts.get().stream().noneMatch(entry -> matchesHost(host, entry))) {
+            return ValidationResult.invalid(
+                    "Upstream host is not allowed by gateway egress policy: "
+                            + registration.baseUrl().getHost(),
+                    400);
+        }
+        if (UpstreamAddressPolicy.isBlocked(host, securityConfig.allowPrivateUpstreams())) {
+            return ValidationResult.invalid(
+                    "Upstream address is not allowed by gateway egress policy: "
+                            + registration.baseUrl().getHost(),
+                    400);
+        }
+        return ValidationResult.valid();
+    }
+
+    private static boolean matchesHost(String host, String configuredEntry) {
+        final var pattern = normalizeHost(configuredEntry);
+        if (pattern == null || "*".equals(pattern)) {
+            return false;
+        }
+        if (pattern.startsWith("*.")) {
+            final var suffix = pattern.substring(1);
+            return host.endsWith(suffix) && host.length() > suffix.length();
+        }
+        return host.equals(pattern);
+    }
+
+    private static String normalizeHost(String host) {
+        if (host == null || host.isBlank()) {
+            return null;
+        }
+        var normalized = host.trim().toLowerCase(Locale.ROOT);
+        while (normalized.endsWith(".")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized.isBlank() ? null : normalized;
     }
 
     private ValidationResult validateWindowSeconds(ServiceRegistration registration) {

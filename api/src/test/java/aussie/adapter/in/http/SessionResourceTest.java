@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -69,6 +70,7 @@ class SessionResourceTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        lenient().when(config.publicCreationEnabled()).thenReturn(true);
         resource = new SessionResource(sessionManagement, cookieManager, config, securityIdentity);
 
         // Inject the mock HttpServerRequest via reflection
@@ -109,6 +111,21 @@ class SessionResourceTest {
     @Nested
     @DisplayName("createSession")
     class CreateSession {
+
+        @Test
+        @DisplayName("throws featureDisabled when public session creation is disabled")
+        void throwsFeatureDisabledWhenPublicCreationDisabled() {
+            when(config.enabled()).thenReturn(true);
+            when(config.publicCreationEnabled()).thenReturn(false);
+
+            final var request = new SessionResource.CreateSessionRequest(
+                    "admin", "caller-controlled", Map.of(), Set.of("admin"), null);
+
+            final var ex = assertThrows(HttpProblem.class, () -> resource.createSession(request));
+
+            assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
+            verify(sessionManagement, never()).createSession(anyString(), anyString(), any(), any(), any(), any());
+        }
 
         @Test
         @DisplayName("throws featureDisabled when sessions are disabled")

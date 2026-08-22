@@ -37,7 +37,111 @@ class ServiceRegistrationValidatorTest {
             TestResiliencyConfig.permissive();
 
     private ServiceRegistration.Builder createServiceBuilder() {
-        return ServiceRegistration.builder("test-service").baseUrl("http://localhost:8080");
+        return ServiceRegistration.builder("test-service").baseUrl("http://192.0.2.10:8080");
+    }
+
+    @Nested
+    @DisplayName("Upstream Host Allowlist")
+    class UpstreamHostAllowlistTests {
+
+        @Test
+        @DisplayName("Should reject every upstream when allowlist is absent")
+        void shouldRejectWhenAllowlistAbsent() {
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.withAllowedUpstreamHosts(null),
+                    PERMISSIVE_RATE_LIMIT_CONFIG,
+                    PERMISSIVE_RESILIENCY_CONFIG);
+
+            var result = validator.validate(createServiceBuilder().build());
+
+            assertInstanceOf(ValidationResult.Invalid.class, result);
+            assertEquals(400, ((ValidationResult.Invalid) result).suggestedStatusCode());
+        }
+
+        @Test
+        @DisplayName("Should reject a global wildcard")
+        void shouldRejectGlobalWildcard() {
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.withAllowedUpstreamHosts(List.of("*")),
+                    PERMISSIVE_RATE_LIMIT_CONFIG,
+                    PERMISSIVE_RESILIENCY_CONFIG);
+
+            var result = validator.validate(createServiceBuilder().build());
+
+            assertInstanceOf(ValidationResult.Invalid.class, result);
+        }
+
+        @Test
+        @DisplayName("Should accept an exact host case-insensitively")
+        void shouldAcceptExactHost() {
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.withAllowedUpstreamHosts(List.of("EXAMPLE.COM.")),
+                    PERMISSIVE_RATE_LIMIT_CONFIG,
+                    PERMISSIVE_RESILIENCY_CONFIG);
+
+            var result = validator.validate(
+                    createServiceBuilder().baseUrl("https://example.com").build());
+
+            assertInstanceOf(ValidationResult.Valid.class, result);
+        }
+
+        @Test
+        @DisplayName("Should allow subdomains without allowing the parent domain")
+        void shouldMatchOnlySubdomains() {
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.withAllowedUpstreamHosts(List.of("*.example.com")),
+                    PERMISSIVE_RATE_LIMIT_CONFIG,
+                    PERMISSIVE_RESILIENCY_CONFIG);
+            var subdomain =
+                    createServiceBuilder().baseUrl("https://api.example.com").build();
+            var parent = createServiceBuilder().baseUrl("https://example.com").build();
+
+            assertInstanceOf(ValidationResult.Valid.class, validator.validate(subdomain));
+            assertInstanceOf(ValidationResult.Invalid.class, validator.validate(parent));
+        }
+
+        @Test
+        @DisplayName("Should reject an allowlisted private address when private upstreams are disabled")
+        void shouldRejectPrivateAddressWhenDisabled() {
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.withUpstreamPolicy(false, List.of("10.0.0.5")),
+                    PERMISSIVE_RATE_LIMIT_CONFIG,
+                    PERMISSIVE_RESILIENCY_CONFIG);
+            var service = createServiceBuilder().baseUrl("http://10.0.0.5").build();
+
+            var result = validator.validate(service);
+
+            assertInstanceOf(ValidationResult.Invalid.class, result);
+            assertEquals(400, ((ValidationResult.Invalid) result).suggestedStatusCode());
+        }
+
+        @Test
+        @DisplayName("Should accept an allowlisted private address when private upstreams are enabled")
+        void shouldAcceptPrivateAddressWhenEnabled() {
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.withUpstreamPolicy(true, List.of("10.0.0.5")),
+                    PERMISSIVE_RATE_LIMIT_CONFIG,
+                    PERMISSIVE_RESILIENCY_CONFIG);
+            var service = createServiceBuilder().baseUrl("http://10.0.0.5").build();
+
+            var result = validator.validate(service);
+
+            assertInstanceOf(ValidationResult.Valid.class, result);
+        }
+
+        @Test
+        @DisplayName("Should reject loopback even when private upstreams are enabled")
+        void shouldAlwaysRejectLoopback() {
+            var validator = new ServiceRegistrationValidator(
+                    TestGatewaySecurityConfig.withUpstreamPolicy(true, List.of("127.0.0.1")),
+                    PERMISSIVE_RATE_LIMIT_CONFIG,
+                    PERMISSIVE_RESILIENCY_CONFIG);
+            var service = createServiceBuilder().baseUrl("http://127.0.0.1").build();
+
+            var result = validator.validate(service);
+
+            assertInstanceOf(ValidationResult.Invalid.class, result);
+        }
     }
 
     @Nested

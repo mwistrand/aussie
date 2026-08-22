@@ -3,6 +3,9 @@ package aussie.core.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -31,9 +34,9 @@ class SourceIdentifierExtractorTest {
 
     @BeforeEach
     void setUp() {
-        // Default: trusted proxy disabled (all headers trusted, backward-compatible)
-        var config = new TestTrustedProxyConfig(false, null);
-        var validator = new TrustedProxyValidator(config);
+        // Parser-focused tests use an explicitly trusted request boundary.
+        var validator = mock(TrustedProxyValidator.class);
+        when(validator.shouldTrustForwardingHeaders(nullable(String.class))).thenReturn(true);
         extractor = new SourceIdentifierExtractor(validator);
     }
 
@@ -270,8 +273,8 @@ class SourceIdentifierExtractorTest {
     class TrustedProxyTests {
 
         @Test
-        @DisplayName("Should use forwarding headers when trust is disabled")
-        void shouldUseHeadersWhenTrustDisabled() {
+        @DisplayName("Should ignore forwarding headers when trust is disabled")
+        void shouldIgnoreHeadersWhenTrustDisabled() {
             var config = new TestTrustedProxyConfig(false, null);
             var validator = new TrustedProxyValidator(config);
             var ext = new SourceIdentifierExtractor(validator);
@@ -279,7 +282,23 @@ class SourceIdentifierExtractorTest {
             var request = new TestContainerRequestContext().withHeader("X-Forwarded-For", "192.168.1.100");
 
             var result = ext.extract(request, "10.0.0.1");
-            assertEquals("192.168.1.100", result.ipAddress());
+            assertEquals("10.0.0.1", result.ipAddress());
+        }
+
+        @Test
+        @DisplayName("Should preserve raw Host while ignoring forwarded hosts when trust is disabled")
+        void shouldPreserveRawHostWhenTrustDisabled() {
+            var config = new TestTrustedProxyConfig(false, null);
+            var validator = new TrustedProxyValidator(config);
+            var ext = new SourceIdentifierExtractor(validator);
+            var request = new TestContainerRequestContext()
+                    .withHeader("Host", "private.example.com:8443")
+                    .withHeader("X-Forwarded-Host", "spoofed.example.com")
+                    .withHeader("Forwarded", "host=also-spoofed.example.com");
+
+            var result = ext.extract(request, "10.0.0.1");
+
+            assertEquals(Optional.of("private.example.com"), result.host());
         }
 
         @Test

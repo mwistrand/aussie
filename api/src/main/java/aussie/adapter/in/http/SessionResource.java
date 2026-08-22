@@ -71,9 +71,7 @@ public class SessionResource {
     @Path("/session")
     @Consumes(MediaType.APPLICATION_JSON)
     public Uni<Response> createSession(CreateSessionRequest createRequest) {
-        if (!config.enabled()) {
-            throw GatewayProblem.featureDisabled("Sessions");
-        }
+        requirePublicCreationEnabled();
 
         String userAgent = request.getHeader("User-Agent");
         String ipAddress =
@@ -269,10 +267,7 @@ public class SessionResource {
     @GET
     @Path("/callback")
     public Uni<Response> authCallback(@QueryParam("token") String token, @QueryParam("redirect") String redirectUrl) {
-
-        if (!config.enabled()) {
-            throw GatewayProblem.featureDisabled("Sessions");
-        }
+        requirePublicCreationEnabled();
 
         if (token == null || token.isBlank()) {
             throw GatewayProblem.badRequest("Token is required");
@@ -352,6 +347,12 @@ public class SessionResource {
             return claims;
         } catch (Exception e) {
             throw new IllegalArgumentException("Failed to parse JWT payload", e);
+        }
+    }
+
+    private void requirePublicCreationEnabled() {
+        if (!config.enabled() || !config.publicCreationEnabled()) {
+            throw GatewayProblem.featureDisabled("Public session creation");
         }
     }
 

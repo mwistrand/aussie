@@ -84,6 +84,7 @@ class OidcResourceUnitTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(oidcConfig.publicEndpointsEnabled()).thenReturn(true);
         resource = new OidcResource(
                 pkceService,
                 pkceConfig,

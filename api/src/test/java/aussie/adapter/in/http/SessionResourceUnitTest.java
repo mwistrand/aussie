@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -72,6 +73,7 @@ class SessionResourceUnitTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        lenient().when(config.publicCreationEnabled()).thenReturn(true);
         resource = new SessionResource(sessionManagement, cookieManager, config, securityIdentity);
 
         final var requestField = SessionResource.class.getDeclaredField("request");

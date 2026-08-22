@@ -1,5 +1,6 @@
 package aussie.core.model.gateway;
 
+import java.util.Objects;
 import java.util.Optional;
 
 import aussie.core.model.auth.AussieToken;
@@ -16,6 +17,14 @@ public sealed interface RouteAuthResult {
      * @param authSessionId the session ID if session-based auth was used (for logout tracking)
      */
     record Authenticated(AussieToken token, Optional<String> authSessionId) implements RouteAuthResult {
+
+        public Authenticated {
+            Objects.requireNonNull(token, "token");
+            if (!token.hasToken()) {
+                throw new IllegalArgumentException("Authenticated routes require a signed downstream token");
+            }
+            authSessionId = authSessionId == null ? Optional.empty() : authSessionId;
+        }
 
         /**
          * Convenience constructor for non-session authentication.

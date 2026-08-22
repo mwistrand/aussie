@@ -21,6 +21,18 @@ import io.smallrye.config.WithName;
 public interface OidcConfig {
 
     /**
+     * Enable the legacy browser-facing OIDC helper endpoints.
+     *
+     * <p>The current helpers do not bind the full authorization transaction or validate
+     * ID tokens before session creation, so they are disabled by default and intended
+     * only for the local demo until the production OIDC flow replaces them.
+     *
+     * @return true if the unsafe development-only endpoints are enabled (default: false)
+     */
+    @WithDefault("false")
+    boolean publicEndpointsEnabled();
+
+    /**
      * Token exchange configuration.
      */
     @WithName("token-exchange")
