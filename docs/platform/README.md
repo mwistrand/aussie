@@ -478,7 +478,7 @@ export AUSSIE_GATEWAY_ACCESS_CONTROL_ALLOWED_SUBDOMAINS=*.internal.example.com
 
 ### Trusted Proxy Configuration
 
-By default, Aussie ignores forwarding headers (`X-Forwarded-For`, `Forwarded`, `X-Real-IP`) and uses the direct socket peer. Enable proxy trust only when requests arrive through known proxy IPs:
+By default, Aussie ignores forwarding headers (`X-Forwarded-For`, `Forwarded`, `X-Real-IP`, `X-Forwarded-Proto`) and uses the direct socket peer and request scheme. Enable proxy trust only when requests arrive through known proxy IPs:
 
 ```bash
 # Enable trusted proxy validation
@@ -488,7 +488,16 @@ export AUSSIE_GATEWAY_TRUSTED_PROXY_ENABLED=true
 export AUSSIE_GATEWAY_TRUSTED_PROXY_PROXIES=10.0.0.0/8,192.168.0.0/16
 ```
 
-Requests from IPs outside the trusted list have their forwarding headers ignored, and the socket-level IP address is used instead. This is critical for IP-based access control to work correctly.
+Requests from IPs outside the trusted list have their forwarding headers ignored, and the socket-level IP address and direct request scheme are used instead. This is critical for IP-based access control and secure downstream redirects and cookies to work correctly.
+
+For a trusted peer, Aussie caps forwarding headers at 8 KiB and 16 hops, validates
+IP literals, and walks the chain from right to left. Trusted proxy hops are removed
+until the rightmost untrusted address is found; attacker-controlled leftmost entries
+therefore cannot override the effective client. `X-Real-IP` is accepted only as a
+single-hop fallback when neither chain header is present. Malformed, obfuscated,
+oversized, or overlong chains fall back to the direct socket peer. A trusted
+`Forwarded: proto=` or `X-Forwarded-Proto` value is restricted to `http` or `https`
+and preserved when Aussie rebuilds forwarding metadata for the upstream.
 
 **Important:** If you enable trusted proxy validation without configuring any proxy addresses, *all* forwarding headers will be rejected and the socket IP will always be used directly.
 
@@ -569,6 +578,10 @@ By default, Aussie uses RFC 7239 `Forwarded` headers:
 ```
 Forwarded: for=192.0.2.60;proto=https;host=api.example.com
 ```
+Inbound forwarding headers are stripped. The outbound value is rebuilt from the
+canonical client context and request metadata, including a validated external scheme
+from a trusted TLS-terminating proxy, so an upstream never receives an
+attacker-supplied chain.
 To use legacy `X-Forwarded-*` headers instead, configure:
 ```bash
 export AUSSIE_GATEWAY_FORWARDING_USE_RFC7239=false

@@ -8,7 +8,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.port.out.ForwardedHeaderBuilder;
-import aussie.core.service.common.ClientIpExtractor;
 
 /**
  * Build RFC 7239 compliant Forwarded header.
@@ -22,9 +21,9 @@ public class Rfc7239ForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         var parts = new ArrayList<String>();
 
         // for - client IP address
-        var clientIp = ClientIpExtractor.extract(originalRequest);
+        var clientIp = originalRequest.clientIp();
         if (clientIp != null) {
-            parts.add("for=" + quoteIfNeeded(clientIp));
+            parts.add("for=" + formatNodeIdentifier(clientIp));
         }
 
         // proto - original protocol
@@ -42,33 +41,15 @@ public class Rfc7239ForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         // by - gateway identifier (optional, could be configured)
         // For now, we skip 'by' as it requires gateway IP configuration
 
-        var existingForwarded = originalRequest.getHeaderString("Forwarded");
         var newForwarded = String.join(";", parts);
-
-        if (existingForwarded != null && !existingForwarded.isEmpty()) {
-            newForwarded = existingForwarded + ", " + newForwarded;
-        }
-
         return Map.of("Forwarded", newForwarded);
     }
 
     private String extractProtocol(GatewayRequest request) {
-        // Check existing Forwarded header
-        var forwarded = request.getHeaderString("Forwarded");
-        if (forwarded != null) {
-            var proto = ClientIpExtractor.extractForwardedParam(forwarded, "proto");
-            if (proto != null) {
-                return proto;
-            }
+        if (request.externalScheme() != null) {
+            return request.externalScheme();
         }
 
-        // Check X-Forwarded-Proto
-        var xForwardedProto = request.getHeaderString("X-Forwarded-Proto");
-        if (xForwardedProto != null && !xForwardedProto.isEmpty()) {
-            return xForwardedProto;
-        }
-
-        // Fall back to request URI scheme
         var requestUri = request.requestUri();
         if (requestUri != null) {
             return requestUri.getScheme();
@@ -88,5 +69,12 @@ public class Rfc7239ForwardedHeaderBuilder implements ForwardedHeaderBuilder {
             return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
         }
         return value;
+    }
+
+    private String formatNodeIdentifier(String clientIp) {
+        if (clientIp.indexOf(':') >= 0 && !clientIp.startsWith("[")) {
+            return quoteIfNeeded("[" + clientIp + "]");
+        }
+        return quoteIfNeeded(clientIp);
     }
 }

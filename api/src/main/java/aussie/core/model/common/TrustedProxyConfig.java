@@ -9,7 +9,7 @@ import io.smallrye.config.WithDefault;
  * Configuration for trusted proxy validation.
  *
  * <p>When enabled, forwarding headers ({@code X-Forwarded-For},
- * {@code Forwarded}, {@code X-Real-IP}) are only trusted when the
+ * {@code Forwarded}, {@code X-Real-IP}, {@code X-Forwarded-Proto}) are only trusted when the
  * direct connection originates from a listed proxy IP or CIDR range.
  */
 public interface TrustedProxyConfig {

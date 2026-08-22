@@ -15,6 +15,7 @@ import io.vertx.core.http.HttpServerRequest;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.in.problem.ProblemDetail;
 import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.telemetry.GatewayMetrics;
@@ -56,6 +57,7 @@ public class WebSocketRateLimitFilter {
     private final GatewayMetrics metrics;
     private final SecurityEventDispatcher securityEventDispatcher;
     private final ProxyErrorWriter errorWriter;
+    private final ClientContextResolver clientContextResolver;
 
     @Inject
     public WebSocketRateLimitFilter(
@@ -65,7 +67,8 @@ public class WebSocketRateLimitFilter {
             ServiceRegistry serviceRegistry,
             GatewayMetrics metrics,
             SecurityEventDispatcher securityEventDispatcher,
-            ProxyErrorWriter errorWriter) {
+            ProxyErrorWriter errorWriter,
+            ClientContextResolver clientContextResolver) {
         this.rateLimiter = rateLimiter;
         this.config = config;
         this.rateLimitResolver = rateLimitResolver;
@@ -73,6 +76,7 @@ public class WebSocketRateLimitFilter {
         this.metrics = metrics;
         this.securityEventDispatcher = securityEventDispatcher;
         this.errorWriter = errorWriter;
+        this.clientContextResolver = clientContextResolver;
     }
 
     /**
@@ -216,40 +220,7 @@ public class WebSocketRateLimitFilter {
     }
 
     private String extractClientId(RoutingContext ctx) {
-        return extractSessionId(ctx)
-                .or(() -> extractAuthHeaderHash(ctx))
-                .or(() -> extractApiKeyId(ctx))
-                .orElseGet(() -> extractClientIp(ctx));
-    }
-
-    private Optional<String> extractSessionId(RoutingContext ctx) {
-        final var sessionCookie = ctx.request().getCookie("aussie_session");
-        if (sessionCookie != null) {
-            return Optional.of("session:" + SecureHash.truncatedSha256(sessionCookie.getValue(), 16));
-        }
-        final var sessionHeader = ctx.request().getHeader("X-Session-ID");
-        return Optional.ofNullable(sessionHeader).map(h -> "session:" + SecureHash.truncatedSha256(h, 16));
-    }
-
-    private Optional<String> extractAuthHeaderHash(RoutingContext ctx) {
-        final var auth = ctx.request().getHeader("Authorization");
-        if (auth != null && auth.startsWith("Bearer ")) {
-            return Optional.of("bearer:" + hashToken(auth.substring(7)));
-        }
-        return Optional.empty();
-    }
-
-    private Optional<String> extractApiKeyId(RoutingContext ctx) {
-        return Optional.ofNullable(ctx.request().getHeader("X-API-Key-ID")).map(id -> "apikey:" + id);
-    }
-
-    private String extractClientIp(RoutingContext ctx) {
-        final var forwarded = ctx.request().getHeader("X-Forwarded-For");
-        if (forwarded != null) {
-            return "ip:" + forwarded.split(",")[0].trim();
-        }
-        final var remoteAddress = ctx.request().remoteAddress();
-        return "ip:" + (remoteAddress != null ? remoteAddress.host() : "unknown");
+        return "ip:" + clientContextResolver.getOrCompute(ctx).resolvedIp();
     }
 
     private String hashClientId(String clientId) {
@@ -257,10 +228,6 @@ public class WebSocketRateLimitFilter {
             return "unknown";
         }
         return SecureHash.truncatedSha256(clientId, 16);
-    }
-
-    private String hashToken(String token) {
-        return SecureHash.truncatedSha256(token, 16);
     }
 
     private record RateLimitResult(RateLimitDecision decision, Optional<ServiceRegistration> service) {}

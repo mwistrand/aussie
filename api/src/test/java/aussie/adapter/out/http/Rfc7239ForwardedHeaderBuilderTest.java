@@ -25,9 +25,14 @@ class Rfc7239ForwardedHeaderBuilderTest {
     }
 
     private GatewayRequest createRequest(Map<String, String> headers, URI requestUri, String clientIp) {
+        return createRequest(headers, requestUri, clientIp, null);
+    }
+
+    private GatewayRequest createRequest(
+            Map<String, String> headers, URI requestUri, String clientIp, String externalScheme) {
         Map<String, List<String>> headerMap = new HashMap<>();
         headers.forEach((k, v) -> headerMap.put(k, List.of(v)));
-        return new GatewayRequest("GET", "/api/test", headerMap, requestUri, null, clientIp);
+        return new GatewayRequest("GET", "/api/test", headerMap, requestUri, null, clientIp, externalScheme);
     }
 
     private GatewayRequest createRequest(Map<String, String> headers) {
@@ -62,25 +67,25 @@ class Rfc7239ForwardedHeaderBuilderTest {
         }
 
         @Test
-        @DisplayName("Should include 'for' parameter with client IP from X-Forwarded-For")
-        void shouldIncludeForParameterFromXForwardedFor() {
+        @DisplayName("Should ignore caller-supplied X-Forwarded-For")
+        void shouldIgnoreCallerSuppliedXForwardedFor() {
             var request = createRequest(Map.of("X-Forwarded-For", "192.168.1.100"));
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
             var forwarded = headers.get("Forwarded");
-            assertTrue(forwarded.contains("for=192.168.1.100"));
+            assertTrue(!forwarded.contains("for="));
         }
 
         @Test
-        @DisplayName("Should include 'proto' parameter from X-Forwarded-Proto")
-        void shouldIncludeProtoParameterFromXForwardedProto() {
+        @DisplayName("Should ignore caller-supplied X-Forwarded-Proto")
+        void shouldIgnoreCallerSuppliedXForwardedProto() {
             var request = createRequest(Map.of("X-Forwarded-Proto", "https"));
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
             var forwarded = headers.get("Forwarded");
-            assertTrue(forwarded.contains("proto=https"));
+            assertTrue(forwarded.contains("proto=http"));
         }
 
         @Test
@@ -106,14 +111,28 @@ class Rfc7239ForwardedHeaderBuilderTest {
         }
 
         @Test
-        @DisplayName("Should extract for from existing Forwarded header")
-        void shouldExtractFromExistingForwardedHeader() {
+        @DisplayName("Should preserve a canonical external scheme across TLS termination")
+        void shouldUseCanonicalExternalScheme() {
+            var request = createRequest(
+                    Map.of("Forwarded", "for=198.51.100.5;proto=https"),
+                    URI.create("http://gateway:8080/api/test"),
+                    "198.51.100.5",
+                    "https");
+
+            var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
+
+            assertTrue(headers.get("Forwarded").contains("proto=https"));
+        }
+
+        @Test
+        @DisplayName("Should ignore caller-supplied Forwarded header")
+        void shouldIgnoreExistingForwardedHeader() {
             var request = createRequest(Map.of("Forwarded", "for=192.168.1.50;proto=https"));
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
             var forwarded = headers.get("Forwarded");
-            assertTrue(forwarded.contains("for=192.168.1.50") || forwarded.contains("for=\"192.168.1.50\""));
+            assertTrue(!forwarded.contains("for="));
         }
     }
 
@@ -135,7 +154,7 @@ class Rfc7239ForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should quote IPv6 addresses")
         void shouldQuoteIpv6Addresses() {
-            var request = createRequest(Map.of("X-Forwarded-For", "[::1]"));
+            var request = createRequest(Map.of(), null, "::1");
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
@@ -149,8 +168,8 @@ class Rfc7239ForwardedHeaderBuilderTest {
     class ChainingTests {
 
         @Test
-        @DisplayName("Should append to existing Forwarded header")
-        void shouldAppendToExistingForwarded() {
+        @DisplayName("Should replace an existing Forwarded header")
+        void shouldReplaceExistingForwarded() {
             var request = createRequest(
                     Map.of("Forwarded", "for=192.168.1.1;proto=https"),
                     URI.create("http://localhost:8080/api"),
@@ -159,8 +178,9 @@ class Rfc7239ForwardedHeaderBuilderTest {
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
             var forwarded = headers.get("Forwarded");
-            assertTrue(forwarded.contains("for=192.168.1.1"));
-            assertTrue(forwarded.contains(", ")); // Should have comma separator for new entry
+            assertTrue(forwarded.contains("for=10.0.0.1"));
+            assertTrue(!forwarded.contains("192.168.1.1"));
+            assertTrue(!forwarded.contains(", "));
         }
     }
 }

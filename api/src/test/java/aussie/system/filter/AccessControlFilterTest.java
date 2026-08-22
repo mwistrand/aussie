@@ -29,6 +29,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.in.context.ClientContextResolver;
+import aussie.common.context.ClientContext;
 import aussie.core.model.common.SourceIdentifier;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
@@ -36,7 +38,6 @@ import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.service.auth.AccessControlEvaluator;
-import aussie.core.service.common.SourceIdentifierExtractor;
 import aussie.core.service.routing.ServiceRegistry;
 
 @DisplayName("AccessControlFilter")
@@ -49,7 +50,7 @@ class AccessControlFilterTest {
     private ServiceRegistry serviceRegistry;
 
     @Mock
-    private SourceIdentifierExtractor sourceExtractor;
+    private ClientContextResolver clientContextResolver;
 
     @Mock
     private AccessControlEvaluator accessEvaluator;
@@ -70,7 +71,7 @@ class AccessControlFilterTest {
 
     @BeforeEach
     void setUp() {
-        filter = new AccessControlFilter(serviceRegistry, sourceExtractor, accessEvaluator);
+        filter = new AccessControlFilter(serviceRegistry, clientContextResolver, accessEvaluator);
     }
 
     private ServiceRegistration createService(String serviceId) {
@@ -97,8 +98,8 @@ class AccessControlFilterTest {
     }
 
     private void setupSocketAddress(String host) {
-        when(vertxRequest.remoteAddress()).thenReturn(socketAddress);
-        when(socketAddress.host()).thenReturn(host);
+        org.mockito.Mockito.lenient().when(vertxRequest.remoteAddress()).thenReturn(socketAddress);
+        org.mockito.Mockito.lenient().when(socketAddress.host()).thenReturn(host);
     }
 
     @Nested
@@ -117,7 +118,8 @@ class AccessControlFilterTest {
             when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.of(routeResult));
 
             var source = SourceIdentifier.of("192.168.1.1");
-            when(sourceExtractor.extract(requestContext, "192.168.1.1")).thenReturn(source);
+            when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
+                    .thenReturn(new ClientContext("192.168.1.1", false, null));
             when(accessEvaluator.isAllowed(source, routeResult, service.accessConfig()))
                     .thenReturn(true);
 
@@ -138,7 +140,8 @@ class AccessControlFilterTest {
             when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.of(routeResult));
 
             var source = SourceIdentifier.of("192.168.1.1");
-            when(sourceExtractor.extract(requestContext, "192.168.1.1")).thenReturn(source);
+            when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
+                    .thenReturn(new ClientContext("192.168.1.1", false, null));
             when(accessEvaluator.isAllowed(source, routeResult, service.accessConfig()))
                     .thenReturn(false);
 
@@ -204,7 +207,8 @@ class AccessControlFilterTest {
             when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.of(routeResult));
 
             var source = SourceIdentifier.of("10.0.0.1");
-            when(sourceExtractor.extract(requestContext, "10.0.0.1")).thenReturn(source);
+            when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
+                    .thenReturn(new ClientContext("10.0.0.1", false, null));
             when(accessEvaluator.isAllowed(source, routeResult, service.accessConfig()))
                     .thenReturn(true);
 
@@ -226,7 +230,8 @@ class AccessControlFilterTest {
             when(serviceRegistry.findRoute("/api/unknown", "GET")).thenReturn(Optional.empty());
 
             var source = SourceIdentifier.of("10.0.0.1");
-            when(sourceExtractor.extract(eq(requestContext), eq("10.0.0.1"))).thenReturn(source);
+            when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
+                    .thenReturn(new ClientContext("10.0.0.1", false, null));
             when(accessEvaluator.isAllowed(eq(source), any(ServiceOnlyMatch.class), eq(service.accessConfig())))
                     .thenReturn(true);
 
@@ -252,7 +257,8 @@ class AccessControlFilterTest {
             when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.of(otherRouteMatch));
 
             var source = SourceIdentifier.of("10.0.0.1");
-            when(sourceExtractor.extract(eq(requestContext), eq("10.0.0.1"))).thenReturn(source);
+            when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
+                    .thenReturn(new ClientContext("10.0.0.1", false, null));
             when(accessEvaluator.isAllowed(eq(source), any(ServiceOnlyMatch.class), eq(myService.accessConfig())))
                     .thenReturn(true);
 
@@ -294,7 +300,8 @@ class AccessControlFilterTest {
             when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.empty());
 
             var source = SourceIdentifier.of("10.0.0.1");
-            when(sourceExtractor.extract(eq(requestContext), eq("10.0.0.1"))).thenReturn(source);
+            when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
+                    .thenReturn(new ClientContext("10.0.0.1", false, null));
             when(accessEvaluator.isAllowed(eq(source), any(ServiceOnlyMatch.class), eq(service.accessConfig())))
                     .thenReturn(true);
 
@@ -312,7 +319,7 @@ class AccessControlFilterTest {
         @DisplayName("should set socketIp to null when remoteAddress is null")
         void nullRemoteAddress() {
             setupPath("/gateway/api/users", "GET");
-            when(vertxRequest.remoteAddress()).thenReturn(null);
+            org.mockito.Mockito.lenient().when(vertxRequest.remoteAddress()).thenReturn(null);
 
             when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.empty());
 

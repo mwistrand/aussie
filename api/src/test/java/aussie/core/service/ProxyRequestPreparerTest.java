@@ -172,6 +172,28 @@ class ProxyRequestPreparerTest {
         }
 
         @Test
+        @DisplayName("Should replace every caller-supplied forwarding header")
+        void shouldReplaceInboundForwardingHeaders() {
+            final var headers = new HashMap<String, List<String>>();
+            headers.put("Forwarded", List.of("for=198.51.100.66"));
+            headers.put("X-Forwarded-For", List.of("198.51.100.66"));
+            headers.put("X-Forwarded-Host", List.of("attacker.example"));
+            headers.put("X-Forwarded-Proto", List.of("https"));
+            headers.put("X-Real-IP", List.of("198.51.100.66"));
+            headerBuilder.setHeaders(Map.of("Forwarded", "for=192.168.1.100;proto=http;host=client:8080"));
+
+            final var prepared = preparer.prepare(createRequest(headers), createRoute("http://backend:9090"));
+
+            assertEquals(
+                    List.of("for=192.168.1.100;proto=http;host=client:8080"),
+                    prepared.headers().get("Forwarded"));
+            assertFalse(prepared.headers().containsKey("X-Forwarded-For"));
+            assertFalse(prepared.headers().containsKey("X-Forwarded-Host"));
+            assertFalse(prepared.headers().containsKey("X-Forwarded-Proto"));
+            assertFalse(prepared.headers().containsKey("X-Real-IP"));
+        }
+
+        @Test
         @DisplayName("Should filter headers dynamically declared in Connection header")
         void shouldFilterDynamicHopByHopHeaders() {
             Map<String, List<String>> headers = new HashMap<>();

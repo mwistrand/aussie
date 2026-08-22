@@ -34,6 +34,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.in.context.ClientContextResolver;
+import aussie.common.context.ClientContext;
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.GatewayResult;
 import aussie.core.port.in.PassThroughUseCase;
@@ -60,11 +62,14 @@ class PassThroughResourceTest {
     @Mock
     private SocketAddress socketAddress;
 
+    @Mock
+    private ClientContextResolver clientContextResolver;
+
     private PassThroughResource resource;
 
     @BeforeEach
     void setUp() {
-        resource = new PassThroughResource(passThroughUseCase, routingContext);
+        resource = new PassThroughResource(passThroughUseCase, routingContext, clientContextResolver);
 
         var headers = new MultivaluedHashMap<String, String>();
         headers.putSingle("Content-Type", "application/json");
@@ -76,6 +81,9 @@ class PassThroughResourceTest {
         lenient().when(routingContext.request()).thenReturn(httpServerRequest);
         lenient().when(httpServerRequest.remoteAddress()).thenReturn(socketAddress);
         lenient().when(socketAddress.host()).thenReturn("192.168.1.1");
+        lenient()
+                .when(clientContextResolver.getOrCompute(routingContext))
+                .thenReturn(new ClientContext("192.168.1.1", false, null));
     }
 
     @Nested
@@ -242,6 +250,22 @@ class PassThroughResourceTest {
                     List.of("text/html", "application/json"),
                     captor.getValue().headers().get("Accept"));
         }
+
+        @Test
+        @DisplayName("trusted external scheme is captured from the client context")
+        void externalSchemeIsCaptured() {
+            when(clientContextResolver.getOrCompute(routingContext))
+                    .thenReturn(new ClientContext("10.0.0.1", true, "198.51.100.5", "https"));
+            var success = new GatewayResult.Success(200, Map.of(), new byte[0]);
+            when(passThroughUseCase.forward(eq("svc"), any()))
+                    .thenReturn(Uni.createFrom().item(success));
+
+            resource.proxyGet("svc", "test", requestContext).await().atMost(Duration.ofSeconds(5));
+
+            var captor = ArgumentCaptor.forClass(GatewayRequest.class);
+            verify(passThroughUseCase).forward(eq("svc"), captor.capture());
+            assertEquals("https", captor.getValue().externalScheme());
+        }
     }
 
     @Nested
@@ -251,7 +275,8 @@ class PassThroughResourceTest {
         @Test
         @DisplayName("returns host from remote address")
         void returnsHostFromRemoteAddress() {
-            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(clientContextResolver.getOrCompute(routingContext))
+                    .thenReturn(new ClientContext("10.0.0.1", false, null));
             var success = new GatewayResult.Success(200, Map.of(), new byte[0]);
             when(passThroughUseCase.forward(eq("svc"), any()))
                     .thenReturn(Uni.createFrom().item(success));
@@ -264,9 +289,9 @@ class PassThroughResourceTest {
         }
 
         @Test
-        @DisplayName("returns null when remoteAddress is null")
-        void returnsNullWhenRemoteAddressIsNull() {
-            when(httpServerRequest.remoteAddress()).thenReturn(null);
+        @DisplayName("uses the fixed unknown identity when the peer is unavailable")
+        void usesUnknownWhenRemoteAddressIsNull() {
+            when(clientContextResolver.getOrCompute(routingContext)).thenReturn(new ClientContext(null, false, null));
             var success = new GatewayResult.Success(200, Map.of(), new byte[0]);
             when(passThroughUseCase.forward(eq("svc"), any()))
                     .thenReturn(Uni.createFrom().item(success));
@@ -275,7 +300,7 @@ class PassThroughResourceTest {
 
             var captor = ArgumentCaptor.forClass(GatewayRequest.class);
             verify(passThroughUseCase).forward(eq("svc"), captor.capture());
-            assertNull(captor.getValue().clientIp());
+            assertEquals("unknown", captor.getValue().clientIp());
         }
     }
 

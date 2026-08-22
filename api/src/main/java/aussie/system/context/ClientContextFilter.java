@@ -6,7 +6,11 @@ import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.container.ContainerRequestContext;
 
 import io.vertx.core.http.HttpServerRequest;
+import io.vertx.ext.web.RoutingContext;
 import org.jboss.resteasy.reactive.server.ServerRequestFilter;
+
+import aussie.adapter.in.context.ClientContextResolver;
+import aussie.common.context.ClientContext;
 
 /**
  * Filter that resolves and stashes the per-request {@link ClientContext}
@@ -20,14 +24,16 @@ import org.jboss.resteasy.reactive.server.ServerRequestFilter;
 public class ClientContextFilter {
 
     private final ClientContextResolver resolver;
+    private final RoutingContext routingContext;
 
     @Inject
-    public ClientContextFilter(ClientContextResolver resolver) {
+    public ClientContextFilter(ClientContextResolver resolver, RoutingContext routingContext) {
         this.resolver = resolver;
+        this.routingContext = routingContext;
     }
 
     @ServerRequestFilter(priority = Priorities.AUTHENTICATION - 150)
     public void filter(ContainerRequestContext requestContext, HttpServerRequest vertxRequest) {
-        requestContext.setProperty(ClientContextResolver.CONTEXT_PROPERTY, resolver.resolve(vertxRequest));
+        requestContext.setProperty(ClientContextResolver.CONTEXT_PROPERTY, resolver.getOrCompute(routingContext));
     }
 }

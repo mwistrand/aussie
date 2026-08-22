@@ -40,6 +40,8 @@ class RateLimitIntegrationTest {
             overrides.put("aussie.rate-limiting.window-seconds", "60");
             overrides.put("aussie.rate-limiting.burst-capacity", String.valueOf(BURST_CAPACITY));
             overrides.put("aussie.rate-limiting.include-headers", "true");
+            overrides.put("aussie.gateway.trusted-proxy.enabled", "true");
+            overrides.put("aussie.gateway.trusted-proxy.proxies", "127.0.0.1/32,::1/128");
             return overrides;
         }
     }
@@ -47,7 +49,7 @@ class RateLimitIntegrationTest {
     @Test
     @DisplayName("allowed request should include X-RateLimit-* headers")
     void allowedRequestShouldExposeRateLimitHeaders() {
-        given().header("X-API-Key-ID", "headers-only-client")
+        given().header("X-Forwarded-For", "192.0.2.10")
                 .when()
                 .get("/admin/services")
                 .then()
@@ -55,26 +57,25 @@ class RateLimitIntegrationTest {
                 .header("X-RateLimit-Limit", org.hamcrest.Matchers.notNullValue())
                 .header("X-RateLimit-Remaining", org.hamcrest.Matchers.notNullValue())
                 .header("X-RateLimit-Reset", org.hamcrest.Matchers.notNullValue());
-        // The above call consumes one token from the headers-only-client bucket;
-        // it does not impact the burst-test client below since we use a different key.
+        // The trusted network identity keeps this test independent from the burst test.
     }
 
     @Test
     @DisplayName("burst beyond capacity should yield 429 with Retry-After")
     void burstShouldEventuallyReturn429() {
-        var clientKey = "burst-test-client";
-
-        // Each iteration shares the same bucket via X-API-Key-ID. The first
-        // BURST_CAPACITY requests must succeed; the next must be rejected.
+        // Rotating an unverified API-key identifier must not rotate the canonical
+        // network bucket. The first BURST_CAPACITY requests succeed; the next fails.
         for (int i = 1; i <= BURST_CAPACITY; i++) {
-            given().header("X-API-Key-ID", clientKey)
+            given().header("X-Forwarded-For", "192.0.2.11")
+                    .header("X-API-Key-ID", "rotated-key-" + i)
                     .when()
                     .get("/admin/services")
                     .then()
                     .statusCode(200);
         }
 
-        given().header("X-API-Key-ID", clientKey)
+        given().header("X-Forwarded-For", "192.0.2.11")
+                .header("X-API-Key-ID", "rotated-key-final")
                 .when()
                 .get("/admin/services")
                 .then()

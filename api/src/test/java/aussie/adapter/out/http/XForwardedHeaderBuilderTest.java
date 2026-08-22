@@ -26,9 +26,14 @@ class XForwardedHeaderBuilderTest {
     }
 
     private GatewayRequest createRequest(Map<String, String> headers, URI requestUri, String clientIp) {
+        return createRequest(headers, requestUri, clientIp, null);
+    }
+
+    private GatewayRequest createRequest(
+            Map<String, String> headers, URI requestUri, String clientIp, String externalScheme) {
         Map<String, List<String>> headerMap = new HashMap<>();
         headers.forEach((k, v) -> headerMap.put(k, List.of(v)));
-        return new GatewayRequest("GET", "/api/test", headerMap, requestUri, null, clientIp);
+        return new GatewayRequest("GET", "/api/test", headerMap, requestUri, null, clientIp, externalScheme);
     }
 
     private GatewayRequest createRequest(Map<String, String> headers) {
@@ -63,26 +68,23 @@ class XForwardedHeaderBuilderTest {
         }
 
         @Test
-        @DisplayName("Should append to existing X-Forwarded-For chain")
-        void shouldAppendToExistingChain() {
+        @DisplayName("Should replace an inbound X-Forwarded-For chain")
+        void shouldReplaceExistingChain() {
             var request = createRequest(Map.of("X-Forwarded-For", "203.0.113.50, 192.168.1.1"), null, "10.0.0.1");
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
-            var xff = headers.get("X-Forwarded-For");
-            assertTrue(xff.startsWith("203.0.113.50"));
-            assertTrue(xff.contains(", "));
+            assertEquals("10.0.0.1", headers.get("X-Forwarded-For"));
         }
 
         @Test
-        @DisplayName("Should extract first IP from existing chain for new entry")
-        void shouldExtractFirstIpFromChain() {
+        @DisplayName("Should not trust an inbound chain without a canonical client IP")
+        void shouldIgnoreExistingChainWithoutCanonicalClientIp() {
             var request = createRequest(Map.of("X-Forwarded-For", "  203.0.113.50  , 192.168.1.1"));
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
-            // First IP should be preserved at start
-            assertTrue(headers.get("X-Forwarded-For").contains("203.0.113.50"));
+            assertTrue(!headers.containsKey("X-Forwarded-For"));
         }
     }
 
@@ -127,9 +129,19 @@ class XForwardedHeaderBuilderTest {
     class XForwardedProtoTests {
 
         @Test
-        @DisplayName("Should set X-Forwarded-Proto from existing header")
-        void shouldSetXForwardedProtoFromExistingHeader() {
+        @DisplayName("Should ignore inbound X-Forwarded-Proto")
+        void shouldIgnoreInboundXForwardedProto() {
             var request = createRequest(Map.of("X-Forwarded-Proto", "https"));
+
+            var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
+
+            assertEquals("http", headers.get("X-Forwarded-Proto"));
+        }
+
+        @Test
+        @DisplayName("Should fall back to request URI scheme")
+        void shouldFallBackToRequestUriScheme() {
+            var request = createRequest(URI.create("https://localhost:8443/api/test"));
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
@@ -137,9 +149,13 @@ class XForwardedHeaderBuilderTest {
         }
 
         @Test
-        @DisplayName("Should fall back to request URI scheme")
-        void shouldFallBackToRequestUriScheme() {
-            var request = createRequest(URI.create("https://localhost:8443/api/test"));
+        @DisplayName("Should preserve a canonical external scheme across TLS termination")
+        void shouldUseCanonicalExternalScheme() {
+            var request = createRequest(
+                    Map.of("X-Forwarded-Proto", "https"),
+                    URI.create("http://gateway:8080/api/test"),
+                    "198.51.100.5",
+                    "https");
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 

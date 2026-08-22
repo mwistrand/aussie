@@ -26,13 +26,13 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.TelemetryHelper;
 import aussie.core.config.AuthRateLimitConfig;
 import aussie.core.service.auth.AuthRateLimitService;
 import aussie.core.service.common.TrustedProxyValidator;
 import aussie.spi.FailedAttemptRepository;
-import aussie.system.context.ClientContextResolver;
 
 @DisplayName("AuthRateLimitFilter")
 class AuthRateLimitFilterTest {
@@ -70,6 +70,10 @@ class AuthRateLimitFilterTest {
         when(socketAddress.host()).thenReturn("127.0.0.1");
         when(vertxRequest.remoteAddress()).thenReturn(socketAddress);
         when(trustedProxyValidator.shouldTrustForwardingHeaders(anyString())).thenReturn(true);
+        when(trustedProxyValidator.isTrustedProxy(anyString())).thenAnswer(invocation -> {
+            final var address = invocation.getArgument(0, String.class);
+            return java.util.Set.of("198.51.100.178", "192.168.1.1").contains(address);
+        });
 
         filter = new AuthRateLimitFilter(
                 rateLimitService,
@@ -253,8 +257,8 @@ class AuthRateLimitFilterTest {
         }
 
         @Test
-        @DisplayName("should fallback to X-Forwarded-For when Forwarded header has no for directive")
-        void shouldFallbackToXForwardedForWhenNoForDirective() {
+        @DisplayName("should reject X-Forwarded-For fallback when Forwarded header is malformed")
+        void shouldRejectXForwardedForFallbackWhenNoForDirective() {
             setupRequestContext("/auth/login", "proto=https;by=203.0.113.43", "10.0.0.1");
 
             var rateLimitResult = AuthRateLimitService.RateLimitResult.allow();
@@ -265,7 +269,7 @@ class AuthRateLimitFilterTest {
 
             ArgumentCaptor<String> ipCaptor = ArgumentCaptor.forClass(String.class);
             verify(rateLimitService).checkAuthLimit(ipCaptor.capture(), any());
-            assertEquals("10.0.0.1", ipCaptor.getValue());
+            assertEquals("127.0.0.1", ipCaptor.getValue());
         }
 
         @Test

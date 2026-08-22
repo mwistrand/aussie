@@ -40,6 +40,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.TelemetryHelper;
 import aussie.core.config.RateLimitingConfig;
@@ -56,7 +57,6 @@ import aussie.core.port.out.RateLimiter;
 import aussie.core.service.common.TrustedProxyValidator;
 import aussie.core.service.ratelimit.RateLimitResolver;
 import aussie.core.service.routing.ServiceRegistry;
-import aussie.system.context.ClientContextResolver;
 
 @DisplayName("RateLimitFilter")
 class RateLimitFilterTest {
@@ -116,6 +116,10 @@ class RateLimitFilterTest {
         // Default: requests arrive from a trusted proxy at 127.0.0.1
         when(socketAddress.host()).thenReturn("127.0.0.1");
         when(trustedProxyValidator.shouldTrustForwardingHeaders(anyString())).thenReturn(true);
+        when(trustedProxyValidator.isTrustedProxy(anyString())).thenAnswer(invocation -> {
+            final var address = invocation.getArgument(0, String.class);
+            return Set.of("192.168.1.1", "172.16.0.1").contains(address);
+        });
 
         filter = new RateLimitFilter(
                 rateLimiter,
@@ -351,12 +355,11 @@ class RateLimitFilterTest {
     class ClientIdExtractionTests {
 
         @Test
-        @DisplayName("should use session cookie when available")
-        void shouldUseSessionCookieWhenAvailable() {
+        @DisplayName("should ignore an unverified session cookie")
+        void shouldIgnoreUnverifiedSessionCookie() {
             setupRequest("/service-1/api/test", null);
             var cookie = mock(Cookie.class);
-            when(cookie.getValue()).thenReturn("session-abc123");
-            when(request.getCookie("aussie_session")).thenReturn(cookie);
+            lenient().when(request.getCookie("aussie_session")).thenReturn(cookie);
 
             var decision = RateLimitDecision.allow();
             when(rateLimiter.checkAndConsume(any(), any()))
@@ -367,14 +370,14 @@ class RateLimitFilterTest {
             ArgumentCaptor<RateLimitKey> keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
             verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
 
-            assertTrue(keyCaptor.getValue().clientId().startsWith("session:"));
+            assertEquals("ip:127.0.0.1", keyCaptor.getValue().clientId());
         }
 
         @Test
-        @DisplayName("should use authorization header hash when no session")
-        void shouldUseAuthorizationHeaderHashWhenNoSession() {
+        @DisplayName("should ignore an unverified bearer credential")
+        void shouldIgnoreUnverifiedBearerCredential() {
             setupRequest("/service-1/api/test", null);
-            when(request.getHeader("Authorization")).thenReturn("Bearer token123");
+            lenient().when(request.getHeader("Authorization")).thenReturn("Bearer token123");
 
             var decision = RateLimitDecision.allow();
             when(rateLimiter.checkAndConsume(any(), any()))
@@ -385,14 +388,14 @@ class RateLimitFilterTest {
             ArgumentCaptor<RateLimitKey> keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
             verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
 
-            assertTrue(keyCaptor.getValue().clientId().startsWith("bearer:"));
+            assertEquals("ip:127.0.0.1", keyCaptor.getValue().clientId());
         }
 
         @Test
-        @DisplayName("should use API key ID when no session or auth header")
-        void shouldUseApiKeyIdWhenNoSessionOrAuthHeader() {
+        @DisplayName("should ignore an unverified API key ID")
+        void shouldIgnoreUnverifiedApiKeyId() {
             setupRequest("/service-1/api/test", null);
-            when(request.getHeader("X-API-Key-ID")).thenReturn("key-456");
+            lenient().when(request.getHeader("X-API-Key-ID")).thenReturn("key-456");
 
             var decision = RateLimitDecision.allow();
             when(rateLimiter.checkAndConsume(any(), any()))
@@ -403,7 +406,7 @@ class RateLimitFilterTest {
             ArgumentCaptor<RateLimitKey> keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
             verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
 
-            assertEquals("apikey:key-456", keyCaptor.getValue().clientId());
+            assertEquals("ip:127.0.0.1", keyCaptor.getValue().clientId());
         }
 
         @Test
@@ -535,10 +538,10 @@ class RateLimitFilterTest {
         }
 
         @Test
-        @DisplayName("should use X-Session-ID header when no session cookie")
-        void shouldUseSessionIdHeader() {
+        @DisplayName("should ignore an unverified session header")
+        void shouldIgnoreUnverifiedSessionIdHeader() {
             setupRequest("/service-1/api/test", null);
-            when(request.getHeader("X-Session-ID")).thenReturn("header-session-xyz");
+            lenient().when(request.getHeader("X-Session-ID")).thenReturn("header-session-xyz");
 
             var decision = RateLimitDecision.allow();
             when(rateLimiter.checkAndConsume(any(), any()))
@@ -549,7 +552,7 @@ class RateLimitFilterTest {
             ArgumentCaptor<RateLimitKey> keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
             verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
 
-            assertEquals("session:header-session-xyz", keyCaptor.getValue().clientId());
+            assertEquals("ip:127.0.0.1", keyCaptor.getValue().clientId());
         }
 
         @Test
@@ -616,8 +619,8 @@ class RateLimitFilterTest {
         }
 
         @Test
-        @DisplayName("should fallback to X-Forwarded-For when Forwarded header has no for directive")
-        void shouldFallbackToXForwardedForWhenNoForDirective() {
+        @DisplayName("should reject X-Forwarded-For fallback when Forwarded header is malformed")
+        void shouldRejectXForwardedForFallbackWhenNoForDirective() {
             setupRequest("/service-1/api/test", null);
             when(request.getHeader("Forwarded")).thenReturn("proto=https;by=203.0.113.43");
             when(request.getHeader("X-Forwarded-For")).thenReturn("10.0.0.1");
@@ -631,7 +634,7 @@ class RateLimitFilterTest {
             ArgumentCaptor<RateLimitKey> keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
             verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
 
-            assertEquals("ip:10.0.0.1", keyCaptor.getValue().clientId());
+            assertEquals("ip:127.0.0.1", keyCaptor.getValue().clientId());
         }
 
         @Test

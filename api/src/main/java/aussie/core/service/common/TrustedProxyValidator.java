@@ -48,6 +48,14 @@ public class TrustedProxyValidator {
      * @return true if forwarding headers should be trusted
      */
     public boolean shouldTrustForwardingHeaders(String socketIp) {
+        return isTrustedProxy(socketIp);
+    }
+
+    /**
+     * Check whether an address is one of the configured trusted proxy hops.
+     * This is also used while walking a forwarding chain from right to left.
+     */
+    public boolean isTrustedProxy(String socketIp) {
         if (!config.enabled()) {
             return false;
         }

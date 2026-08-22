@@ -19,6 +19,7 @@ import io.vertx.core.http.WebSocketConnectOptions;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.in.problem.ProblemDetail;
 import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
@@ -59,6 +60,7 @@ public class WebSocketGateway {
     private final GatewayMetrics metrics;
     private final WebSocketRateLimitService rateLimitService;
     private final ProxyErrorWriter errorWriter;
+    private final ClientContextResolver clientContextResolver;
 
     @Inject
     public WebSocketGateway(
@@ -67,13 +69,15 @@ public class WebSocketGateway {
             Vertx vertx,
             GatewayMetrics metrics,
             WebSocketRateLimitService rateLimitService,
-            ProxyErrorWriter errorWriter) {
+            ProxyErrorWriter errorWriter,
+            ClientContextResolver clientContextResolver) {
         this.gatewayUseCase = gatewayUseCase;
         this.config = config;
         this.vertx = vertx;
         this.metrics = metrics;
         this.rateLimitService = rateLimitService;
         this.errorWriter = errorWriter;
+        this.clientContextResolver = clientContextResolver;
     }
 
     /**
@@ -158,7 +162,9 @@ public class WebSocketGateway {
     private void establishProxy(RoutingContext ctx, WebSocketUpgradeResult.Authorized auth) {
         final var sessionId = UUID.randomUUID().toString();
         final var serviceId = auth.route().service().serviceId();
-        final var clientId = extractClientId(ctx);
+        final var clientId = auth.token()
+                .map(token -> "principal:" + SecureHash.truncatedSha256(token.subject(), 16))
+                .orElseGet(() -> extractClientId(ctx));
 
         // Extract auth session ID and user ID for logout tracking
         final var authSessionId = auth.authSessionId();
@@ -259,34 +265,9 @@ public class WebSocketGateway {
                 .replaceWithVoid();
     }
 
+    /** Network identity used before authentication or when a public route has no principal. */
     private String extractClientId(RoutingContext ctx) {
-        // Priority: session cookie > auth header > API key header > IP
-        final var sessionCookie = ctx.request().getCookie("aussie_session");
-        if (sessionCookie != null) {
-            return "session:" + SecureHash.truncatedSha256(sessionCookie.getValue(), 16);
-        }
-
-        final var sessionHeader = ctx.request().getHeader("X-Session-ID");
-        if (sessionHeader != null) {
-            return "session:" + SecureHash.truncatedSha256(sessionHeader, 16);
-        }
-
-        final var authHeader = ctx.request().getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            return "bearer:" + SecureHash.truncatedSha256(authHeader.substring(7), 16);
-        }
-
-        final var apiKeyId = ctx.request().getHeader("X-API-Key-ID");
-        if (apiKeyId != null) {
-            return "apikey:" + apiKeyId;
-        }
-
-        final var forwarded = ctx.request().getHeader("X-Forwarded-For");
-        if (forwarded != null) {
-            return "ip:" + forwarded.split(",")[0].trim();
-        }
-
-        return "ip:unknown";
+        return "ip:" + clientContextResolver.getOrCompute(ctx).resolvedIp();
     }
 
     /**
@@ -343,8 +324,7 @@ public class WebSocketGateway {
         ctx.request().headers().forEach(entry -> headers.computeIfAbsent(entry.getKey(), k -> new ArrayList<>())
                 .add(entry.getValue()));
 
-        var remoteAddress = ctx.request().remoteAddress();
-        var clientIp = remoteAddress != null ? remoteAddress.host() : null;
+        var clientIp = clientContextResolver.getOrCompute(ctx).resolvedIp();
 
         return new WebSocketUpgradeRequest(
                 path, headers, URI.create(ctx.request().absoluteURI()), clientIp);

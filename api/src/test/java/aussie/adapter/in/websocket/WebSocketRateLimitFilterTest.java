@@ -30,13 +30,16 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.in.problem.ProblemDetail;
 import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
+import aussie.common.context.ClientContext;
 import aussie.core.config.RateLimitingConfig;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
 import aussie.core.model.ratelimit.RateLimitDecision;
+import aussie.core.model.ratelimit.RateLimitKey;
 import aussie.core.port.out.RateLimiter;
 import aussie.core.service.ratelimit.RateLimitResolver;
 import aussie.core.service.routing.ServiceRegistry;
@@ -81,17 +84,28 @@ class WebSocketRateLimitFilterTest {
     @Mock
     private ProxyErrorWriter errorWriter;
 
+    @Mock
+    private ClientContextResolver clientContextResolver;
+
     private WebSocketRateLimitFilter filter;
 
     @BeforeEach
     void setUp() {
         filter = new WebSocketRateLimitFilter(
-                rateLimiter, config, rateLimitResolver, serviceRegistry, metrics, securityEventDispatcher, errorWriter);
+                rateLimiter,
+                config,
+                rateLimitResolver,
+                serviceRegistry,
+                metrics,
+                securityEventDispatcher,
+                errorWriter,
+                clientContextResolver);
 
         lenient().when(ctx.request()).thenReturn(request);
         lenient().when(ctx.response()).thenReturn(response);
         lenient().when(response.setStatusCode(anyInt())).thenReturn(response);
         lenient().when(response.putHeader(anyString(), anyString())).thenReturn(response);
+        lenient().when(clientContextResolver.getOrCompute(ctx)).thenReturn(new ClientContext("unknown", false, null));
     }
 
     private void mockWebSocketUpgrade() {
@@ -349,7 +363,7 @@ class WebSocketRateLimitFilterTest {
     }
 
     @Nested
-    @DisplayName("extractClientId")
+    @DisplayName("pre-authentication identity")
     class ExtractClientIdTests {
 
         private void setupRateLimitPath() {
@@ -367,102 +381,34 @@ class WebSocketRateLimitFilterTest {
         }
 
         @Test
-        @DisplayName("Should use session cookie when present")
-        void shouldUseSessionCookie() {
+        @DisplayName("uses only the canonical network identity")
+        void shouldUseCanonicalNetworkIdentity() {
+            setupRateLimitPath();
+            when(clientContextResolver.getOrCompute(ctx)).thenReturn(new ClientContext("10.0.0.5", false, null));
+
+            filter.checkWebSocketRateLimit(ctx);
+
+            final var keyCaptor = org.mockito.ArgumentCaptor.forClass(RateLimitKey.class);
+            verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
+            assertEquals("ip:10.0.0.5", keyCaptor.getValue().clientId());
+        }
+
+        @Test
+        @DisplayName("unverified credentials cannot rotate the network bucket")
+        void shouldIgnoreUnverifiedCredentials() {
             setupRateLimitPath();
             final var cookie = mock(Cookie.class);
-            when(cookie.getValue()).thenReturn("session-abc");
-            when(request.getCookie("aussie_session")).thenReturn(cookie);
+            lenient().when(cookie.getValue()).thenReturn("attacker-session");
+            lenient().when(request.getCookie("aussie_session")).thenReturn(cookie);
+            lenient().when(request.getHeader("Authorization")).thenReturn("Bearer attacker-token");
+            lenient().when(request.getHeader("X-API-Key-ID")).thenReturn("attacker-key");
+            when(clientContextResolver.getOrCompute(ctx)).thenReturn(new ClientContext("192.0.2.10", false, null));
 
             filter.checkWebSocketRateLimit(ctx);
 
-            verify(ctx).next();
-        }
-
-        @Test
-        @DisplayName("Should use session header when no cookie")
-        void shouldUseSessionHeader() {
-            setupRateLimitPath();
-            when(request.getCookie("aussie_session")).thenReturn(null);
-            when(request.getHeader("X-Session-ID")).thenReturn("session-header-123");
-
-            filter.checkWebSocketRateLimit(ctx);
-
-            verify(ctx).next();
-        }
-
-        @Test
-        @DisplayName("Should use bearer auth hash when no session")
-        void shouldUseBearerAuthHash() {
-            setupRateLimitPath();
-            when(request.getCookie("aussie_session")).thenReturn(null);
-            when(request.getHeader("X-Session-ID")).thenReturn(null);
-            when(request.getHeader("Authorization")).thenReturn("Bearer my-token");
-
-            filter.checkWebSocketRateLimit(ctx);
-
-            verify(ctx).next();
-        }
-
-        @Test
-        @DisplayName("Should use API key ID when no session or bearer")
-        void shouldUseApiKeyId() {
-            setupRateLimitPath();
-            when(request.getCookie("aussie_session")).thenReturn(null);
-            when(request.getHeader("X-Session-ID")).thenReturn(null);
-            when(request.getHeader("Authorization")).thenReturn(null);
-            when(request.getHeader("X-API-Key-ID")).thenReturn("key-123");
-
-            filter.checkWebSocketRateLimit(ctx);
-
-            verify(ctx).next();
-        }
-
-        @Test
-        @DisplayName("Should use X-Forwarded-For when no other identifiers")
-        void shouldUseForwardedFor() {
-            setupRateLimitPath();
-            when(request.getCookie("aussie_session")).thenReturn(null);
-            when(request.getHeader("X-Session-ID")).thenReturn(null);
-            when(request.getHeader("Authorization")).thenReturn(null);
-            when(request.getHeader("X-API-Key-ID")).thenReturn(null);
-            when(request.getHeader("X-Forwarded-For")).thenReturn("10.0.0.1, 192.168.1.1");
-
-            filter.checkWebSocketRateLimit(ctx);
-
-            verify(ctx).next();
-        }
-
-        @Test
-        @DisplayName("Should use remote address IP as last resort")
-        void shouldUseRemoteAddress() {
-            setupRateLimitPath();
-            when(request.getCookie("aussie_session")).thenReturn(null);
-            when(request.getHeader("X-Session-ID")).thenReturn(null);
-            when(request.getHeader("Authorization")).thenReturn(null);
-            when(request.getHeader("X-API-Key-ID")).thenReturn(null);
-            when(request.getHeader("X-Forwarded-For")).thenReturn(null);
-            when(request.remoteAddress()).thenReturn(SocketAddress.inetSocketAddress(12345, "10.0.0.5"));
-
-            filter.checkWebSocketRateLimit(ctx);
-
-            verify(ctx).next();
-        }
-
-        @Test
-        @DisplayName("Should handle null remote address gracefully")
-        void shouldHandleNullRemoteAddress() {
-            setupRateLimitPath();
-            when(request.getCookie("aussie_session")).thenReturn(null);
-            when(request.getHeader("X-Session-ID")).thenReturn(null);
-            when(request.getHeader("Authorization")).thenReturn(null);
-            when(request.getHeader("X-API-Key-ID")).thenReturn(null);
-            when(request.getHeader("X-Forwarded-For")).thenReturn(null);
-            when(request.remoteAddress()).thenReturn(null);
-
-            filter.checkWebSocketRateLimit(ctx);
-
-            verify(ctx).next();
+            final var keyCaptor = org.mockito.ArgumentCaptor.forClass(RateLimitKey.class);
+            verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
+            assertEquals("ip:192.0.2.10", keyCaptor.getValue().clientId());
         }
     }
 

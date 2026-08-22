@@ -18,6 +18,7 @@ import jakarta.ws.rs.core.Response;
 import io.smallrye.mutiny.Uni;
 import io.vertx.ext.web.RoutingContext;
 
+import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.GatewayResult;
@@ -36,11 +37,14 @@ public class GatewayResource {
 
     private final GatewayUseCase gatewayUseCase;
     private final RoutingContext routingContext;
+    private final ClientContextResolver clientContextResolver;
 
     @Inject
-    public GatewayResource(GatewayUseCase gatewayUseCase, RoutingContext routingContext) {
+    public GatewayResource(
+            GatewayUseCase gatewayUseCase, RoutingContext routingContext, ClientContextResolver clientContextResolver) {
         this.gatewayUseCase = gatewayUseCase;
         this.routingContext = routingContext;
+        this.clientContextResolver = clientContextResolver;
     }
 
     @GET
@@ -96,18 +100,15 @@ public class GatewayResource {
     private GatewayRequest toGatewayRequest(String path, ContainerRequestContext requestContext, byte[] body) {
         // MultivaluedMap<String, String> IS-A Map<String, List<String>>; pass it through
         // instead of materialising a defensive copy that the downstream pipeline never mutates.
+        final var clientContext = clientContextResolver.getOrCompute(routingContext);
         return new GatewayRequest(
                 requestContext.getMethod(),
                 path,
                 requestContext.getHeaders(),
                 requestContext.getUriInfo().getRequestUri(),
                 body,
-                extractClientIp());
-    }
-
-    private String extractClientIp() {
-        var remoteAddress = routingContext.request().remoteAddress();
-        return remoteAddress != null ? remoteAddress.host() : null;
+                clientContext.resolvedIp(),
+                clientContext.externalScheme());
     }
 
     private Response toResponse(GatewayResult result) {

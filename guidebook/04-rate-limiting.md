@@ -187,72 +187,29 @@ The fixed window's boundary problem is worth understanding concretely. If the li
 
 ## 4. Multi-Layer Client Identification
 
-A rate limiter is only as good as its ability to distinguish one client from another. Aussie uses a priority chain of four identification strategies, implemented in `RateLimitFilter.extractClientId` (`api/src/main/java/aussie/system/filter/RateLimitFilter.java`):
+A rate limiter is only as good as its identity boundary. Aussie's admission filter runs before authentication, so it uses only the canonical network identity implemented in `RateLimitFilter.extractClientId` (`api/src/main/java/aussie/system/filter/RateLimitFilter.java`):
 
 ```java
 private String extractClientId(ContainerRequestContext requestContext, HttpServerRequest request) {
-    return extractSessionId(request)
-            .or(() -> extractAuthHeaderHash(request))
-            .or(() -> extractApiKeyId(request))
-            .orElseGet(() -> "ip:" + clientContextResolver.getOrCompute(requestContext, request).resolvedIp());
+    return "ip:" + clientContextResolver.getOrCompute(requestContext, request).resolvedIp();
 }
 ```
 
-The chain evaluates top to bottom and stops at the first match. Each layer produces a prefixed string (`session:`, `bearer:`, `apikey:`, `ip:`) so that identifiers from different layers never collide.
+Session cookies, bearer tokens, and API-key identifiers are still caller-controlled bytes at this point. Letting any of them select the bucket would allow an attacker to rotate a header on every request and bypass the admission limit. Verified-principal quotas belong after authentication and supplement rather than replace this network bucket.
 
-### Layer 1: Session ID
+### Canonical client IP
 
-```java
-private Optional<String> extractSessionId(HttpServerRequest request) {
-    final var cookie = request.getCookie(SESSION_COOKIE);
-    if (cookie != null) {
-        return Optional.of("session:" + cookie.getValue());
-    }
-    final var header = request.getHeader("X-Session-ID");
-    return Optional.ofNullable(header).map(h -> "session:" + h);
-}
-```
-
-Session IDs are the most precise client identifier. They survive IP changes (mobile users switching from WiFi to cellular), they work behind shared NAT (entire offices behind one IP), and they are already tied to a specific authenticated user. The cookie (`aussie_session`) is checked first, then the `X-Session-ID` header for clients that cannot use cookies.
-
-### Layer 2: Bearer Token Hash
-
-```java
-private Optional<String> extractAuthHeaderHash(HttpServerRequest request) {
-    final var auth = request.getHeader("Authorization");
-    if (auth != null && auth.startsWith("Bearer ")) {
-        return Optional.of("bearer:" + hashToken(auth.substring(7)));
-    }
-    return Optional.empty();
-}
-```
-
-The token is hashed with SHA-256, truncated to 16 characters (via `SecureHash.truncatedSha256`). This is critical: rate limit keys are stored in Redis and in-memory maps. Storing raw bearer tokens in those locations would create a secondary credential store. The truncated hash is sufficient for uniqueness in the rate limiting context while being useless as a credential if the store is compromised.
-
-### Layer 3: API Key ID
-
-```java
-private Optional<String> extractApiKeyId(HttpServerRequest request) {
-    return Optional.ofNullable(request.getHeader("X-API-Key-ID"))
-        .map(id -> "apikey:" + id);
-}
-```
-
-Note that this uses `X-API-Key-ID`, not the API key itself. The ID is a non-secret identifier for the key. This is intentional: the API key is a secret and should not appear in rate limit storage.
-
-### Layer 4: Client IP (Fallback)
-
-The IP layer is delegated to `ClientContextResolver` (`api/src/main/java/aussie/system/context/ClientContextResolver.java`), which resolves the client IP exactly once per request and caches the result on `ContainerRequestContext`. `ClientContextFilter` runs at priority `Priorities.AUTHENTICATION - 150` (850), ahead of `AuthRateLimitFilter` (900) and `RateLimitFilter` (950), so by the time either rate-limit filter executes the resolved IP is already memoised. Subsequent filters call:
+The IP layer is delegated to `ClientContextResolver` (`api/src/main/java/aussie/adapter/in/context/ClientContextResolver.java`), which resolves the client IP exactly once per request and shares the result through both the Vert.x and JAX-RS request contexts. `ClientContextFilter` runs at priority `Priorities.AUTHENTICATION - 150` (850), ahead of `AuthRateLimitFilter` (900) and `RateLimitFilter` (950), so by the time either rate-limit filter executes the resolved IP is already memoised. Subsequent filters call:
 
 ```java
 clientContextResolver.getOrCompute(requestContext, vertxRequest).resolvedIp();
 ```
 
-The resolver itself implements the priority chain: RFC 7239 `Forwarded` (when the socket peer is a trusted proxy), then `X-Forwarded-For`, then the socket address, with `"unknown"` as the final sentinel. The IPv6 bracket handling and IPv4 port stripping in the `Forwarded` parser are unchanged from the previous inline implementations and are exercised by `ClientContextResolverTest`.
+The resolver first verifies that the socket peer is a configured proxy. It caps forwarding metadata at 8 KiB and 16 hops, accepts only valid IP nodes, then walks the chain from right to left past trusted proxy hops. The first untrusted address is the effective client, so a spoofed leftmost entry is ignored. Untrusted peers and malformed chains fall back to the socket address, with `"unknown"` as the final sentinel.
 
-**Why this ordering matters.** Consider a corporate environment where 500 developers share a single public IP behind NAT. If you rate limit by IP only, the entire office shares one rate limit bucket. By prioritizing session IDs and bearer tokens, each developer gets their own bucket. The IP fallback exists for unauthenticated requests, where it is the best you can do.
+**Why this phase boundary matters.** A corporate NAT may place many users in one admission bucket, but that is an explicit availability trade-off. A post-authentication quota can distinguish verified users; it cannot erase the shared network protection.
 
-**What a senior engineer might do differently.** Some gateway implementations let service teams define custom client identification logic. For example, rate limiting by a tenant ID extracted from a JWT claim. This is more flexible but harder to make safe. The four-layer approach in Aussie is opinionated. It covers the common cases without requiring service teams to write extraction logic, which is a common source of bugs (forgetting to hash secrets, using mutable headers for identity, etc.).
+**What a senior engineer might do differently.** Some gateways let service teams define custom pre-authentication identity headers. That flexibility is unsafe unless an authenticated infrastructure component creates and protects the header. Aussie keeps the pre-authentication namespace fixed and reserves principal-aware quotas for verified identities.
 
 ## 5. Platform Maximum Ceiling: Preventing Dangerous Configurations
 

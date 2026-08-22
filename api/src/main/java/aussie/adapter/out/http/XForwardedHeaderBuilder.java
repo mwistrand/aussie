@@ -8,7 +8,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.port.out.ForwardedHeaderBuilder;
-import aussie.core.service.common.ClientIpExtractor;
 
 /**
  * Build legacy X-Forwarded-* headers.
@@ -23,15 +22,11 @@ public class XForwardedHeaderBuilder implements ForwardedHeaderBuilder {
     public Map<String, String> buildHeaders(GatewayRequest originalRequest, URI targetUri) {
         Map<String, String> headers = new HashMap<>();
 
-        // X-Forwarded-For - client IP (append to existing if present)
-        var clientIp = ClientIpExtractor.extract(originalRequest);
-        var existingXff = originalRequest.getHeaderString("X-Forwarded-For");
+        // The request's clientIp was resolved once at the inbound trust boundary.
+        // Never preserve an untrusted caller-supplied forwarding chain.
+        var clientIp = originalRequest.clientIp();
         if (clientIp != null) {
-            if (existingXff != null && !existingXff.isEmpty()) {
-                headers.put("X-Forwarded-For", existingXff + ", " + clientIp);
-            } else {
-                headers.put("X-Forwarded-For", clientIp);
-            }
+            headers.put("X-Forwarded-For", clientIp);
         }
 
         // X-Forwarded-Host - original host
@@ -50,13 +45,10 @@ public class XForwardedHeaderBuilder implements ForwardedHeaderBuilder {
     }
 
     private String extractProtocol(GatewayRequest request) {
-        // Check existing X-Forwarded-Proto
-        var xForwardedProto = request.getHeaderString("X-Forwarded-Proto");
-        if (xForwardedProto != null && !xForwardedProto.isEmpty()) {
-            return xForwardedProto;
+        if (request.externalScheme() != null) {
+            return request.externalScheme();
         }
 
-        // Fall back to request URI scheme
         var requestUri = request.requestUri();
         if (requestUri != null) {
             return requestUri.getScheme();

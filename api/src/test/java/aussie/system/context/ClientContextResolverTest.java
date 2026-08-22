@@ -23,6 +23,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import aussie.adapter.in.context.ClientContextResolver;
+import aussie.common.context.ClientContext;
 import aussie.core.service.common.TrustedProxyValidator;
 
 @DisplayName("ClientContextResolver")
@@ -54,12 +56,15 @@ class ClientContextResolverTest {
                     .thenReturn(false);
             when(request.getHeader("Forwarded")).thenReturn("for=1.2.3.4");
             when(request.getHeader("X-Forwarded-For")).thenReturn("1.2.3.4");
+            when(request.getHeader("X-Real-IP")).thenReturn("1.2.3.4");
+            when(request.getHeader("X-Forwarded-Proto")).thenReturn("https");
 
             final var ctx = resolver.resolve(request);
 
             assertEquals("203.0.113.99", ctx.socketIp());
             assertFalse(ctx.trustForwardingHeaders());
             assertNull(ctx.forwardedClientIp());
+            assertNull(ctx.externalScheme());
             assertEquals("203.0.113.99", ctx.resolvedIp());
         }
 
@@ -105,8 +110,8 @@ class ClientContextResolverTest {
         }
 
         @Test
-        @DisplayName("falls back to X-Forwarded-For when Forwarded has no for=")
-        void fallsBackToXForwardedFor() {
+        @DisplayName("rejects X-Forwarded-For fallback when Forwarded is malformed")
+        void rejectsXForwardedForFallback() {
             when(socketAddress.host()).thenReturn("10.0.0.1");
             when(trustedProxyValidator.shouldTrustForwardingHeaders(anyString()))
                     .thenReturn(true);
@@ -115,7 +120,139 @@ class ClientContextResolverTest {
 
             final var ctx = resolver.resolve(request);
 
-            assertEquals("198.51.100.1", ctx.forwardedClientIp());
+            assertNull(ctx.forwardedClientIp());
+            assertEquals("10.0.0.1", ctx.resolvedIp());
+        }
+
+        @Test
+        @DisplayName("rejects out-of-range ports in Forwarded nodes")
+        void rejectsOutOfRangePort() {
+            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders(anyString()))
+                    .thenReturn(true);
+            when(request.getHeader("Forwarded")).thenReturn("for=192.0.2.60:65536");
+
+            final var ctx = resolver.resolve(request);
+
+            assertNull(ctx.forwardedClientIp());
+            assertEquals("10.0.0.1", ctx.resolvedIp());
+        }
+
+        @Test
+        @DisplayName("walks from the trusted edge and ignores a spoofed leftmost hop")
+        void resolvesRightmostUntrustedHop() {
+            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.0.0.1")).thenReturn(true);
+            when(trustedProxyValidator.isTrustedProxy("10.0.0.2")).thenReturn(true);
+            when(trustedProxyValidator.isTrustedProxy("203.0.113.10")).thenReturn(false);
+            when(request.getHeader("X-Forwarded-For")).thenReturn("198.51.100.66, 203.0.113.10, 10.0.0.2");
+
+            final var ctx = resolver.resolve(request);
+
+            assertEquals("203.0.113.10", ctx.forwardedClientIp());
+            assertEquals("203.0.113.10", ctx.resolvedIp());
+        }
+
+        @Test
+        @DisplayName("uses X-Real-IP as the final trusted single-hop fallback")
+        void usesXRealIpFallback() {
+            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.0.0.1")).thenReturn(true);
+            when(request.getHeader("X-Real-IP")).thenReturn("198.51.100.44");
+
+            final var ctx = resolver.resolve(request);
+
+            assertEquals("198.51.100.44", ctx.forwardedClientIp());
+            assertEquals("198.51.100.44", ctx.resolvedIp());
+        }
+
+        @Test
+        @DisplayName("prefers X-Forwarded-For over X-Real-IP")
+        void prefersXForwardedForOverXRealIp() {
+            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.0.0.1")).thenReturn(true);
+            when(request.getHeader("X-Forwarded-For")).thenReturn("203.0.113.20");
+            when(request.getHeader("X-Real-IP")).thenReturn("198.51.100.44");
+
+            final var ctx = resolver.resolve(request);
+
+            assertEquals("203.0.113.20", ctx.resolvedIp());
+        }
+
+        @Test
+        @DisplayName("rejects a non-literal X-Real-IP value")
+        void rejectsInvalidXRealIp() {
+            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.0.0.1")).thenReturn(true);
+            when(request.getHeader("X-Real-IP")).thenReturn("client.example.com");
+
+            final var ctx = resolver.resolve(request);
+
+            assertNull(ctx.forwardedClientIp());
+            assertEquals("10.0.0.1", ctx.resolvedIp());
+        }
+
+        @Test
+        @DisplayName("captures a validated scheme from Forwarded")
+        void capturesForwardedScheme() {
+            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.0.0.1")).thenReturn(true);
+            when(request.getHeader("Forwarded")).thenReturn("for=198.51.100.5;proto=HTTPS");
+            when(request.getHeader("X-Forwarded-Proto")).thenReturn("http");
+
+            final var ctx = resolver.resolve(request);
+
+            assertEquals("https", ctx.externalScheme());
+        }
+
+        @Test
+        @DisplayName("uses X-Forwarded-Proto when Forwarded is absent")
+        void capturesXForwardedProto() {
+            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.0.0.1")).thenReturn(true);
+            when(request.getHeader("X-Forwarded-Proto")).thenReturn("https");
+
+            final var ctx = resolver.resolve(request);
+
+            assertEquals("https", ctx.externalScheme());
+        }
+
+        @Test
+        @DisplayName("rejects unsupported forwarded schemes")
+        void rejectsUnsupportedScheme() {
+            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.0.0.1")).thenReturn(true);
+            when(request.getHeader("X-Forwarded-Proto")).thenReturn("javascript");
+
+            final var ctx = resolver.resolve(request);
+
+            assertNull(ctx.externalScheme());
+        }
+
+        @Test
+        @DisplayName("falls back to the socket peer for oversized forwarding headers")
+        void rejectsOversizedForwardingHeader() {
+            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.0.0.1")).thenReturn(true);
+            when(request.getHeader("X-Forwarded-For")).thenReturn("1".repeat(8193));
+
+            final var ctx = resolver.resolve(request);
+
+            assertNull(ctx.forwardedClientIp());
+            assertEquals("10.0.0.1", ctx.resolvedIp());
+        }
+
+        @Test
+        @DisplayName("falls back to the socket peer for obfuscated Forwarded nodes")
+        void rejectsObfuscatedForwardedNode() {
+            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.0.0.1")).thenReturn(true);
+            when(request.getHeader("Forwarded")).thenReturn("for=_hidden");
+
+            final var ctx = resolver.resolve(request);
+
+            assertNull(ctx.forwardedClientIp());
+            assertEquals("10.0.0.1", ctx.resolvedIp());
         }
 
         @Test

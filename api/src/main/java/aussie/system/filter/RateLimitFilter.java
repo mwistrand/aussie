@@ -1,7 +1,6 @@
 package aussie.system.filter;
 
 import java.time.Instant;
-import java.util.Optional;
 
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -17,6 +16,7 @@ import io.vertx.core.http.HttpServerRequest;
 import org.jboss.resteasy.reactive.server.ServerRequestFilter;
 import org.jboss.resteasy.reactive.server.ServerResponseFilter;
 
+import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.SpanAttributes;
@@ -34,7 +34,6 @@ import aussie.core.service.ratelimit.RateLimitResolver;
 import aussie.core.service.routing.ServiceRegistry;
 import aussie.core.util.SecureHash;
 import aussie.spi.SecurityEvent;
-import aussie.system.context.ClientContextResolver;
 
 /**
  * Reactive filter that enforces rate limits on incoming requests.
@@ -49,21 +48,15 @@ import aussie.system.context.ClientContextResolver;
  * When a route match exists, service and endpoint-specific limits apply.
  * Otherwise, platform defaults are used.
  *
- * <p>
- * Client identification priority:
- * <ol>
- * <li>Session ID from cookie or header</li>
- * <li>Authorization header (bearer token hash)</li>
- * <li>API key ID header</li>
- * <li>Client IP from Forwarded or X-Forwarded-For or remote address</li>
- * </ol>
+ * <p>Because this filter runs before authentication, its bucket identity is always the
+ * canonical network identity. Caller-supplied cookies, bearer strings, and API-key
+ * identifiers are deliberately excluded: none have been verified at this phase and
+ * allowing them to select a bucket would make the limit trivially bypassable.
  */
 @Singleton
 public class RateLimitFilter {
 
     private static final String RATE_LIMIT_DECISION_ATTR = "aussie.ratelimit.decision";
-    private static final String SESSION_COOKIE = "aussie_session";
-
     private final RateLimiter rateLimiter;
     private final Instance<RateLimitingConfig> configInstance;
     private final Metrics metrics;
@@ -200,39 +193,9 @@ public class RateLimitFilter {
                 .build();
     }
 
-    // -------------------------------------------------------------------------
-    // Client Identification (priority: session > auth > api key > IP)
-    // -------------------------------------------------------------------------
-
     private String extractClientId(ContainerRequestContext requestContext, HttpServerRequest request) {
-        return extractSessionId(request)
-                .or(() -> extractAuthHeaderHash(request))
-                .or(() -> extractApiKeyId(request))
-                .orElseGet(() -> "ip:"
-                        + clientContextResolver
-                                .getOrCompute(requestContext, request)
-                                .resolvedIp());
-    }
-
-    private Optional<String> extractSessionId(HttpServerRequest request) {
-        final var cookie = request.getCookie(SESSION_COOKIE);
-        if (cookie != null) {
-            return Optional.of("session:" + cookie.getValue());
-        }
-        final var header = request.getHeader("X-Session-ID");
-        return Optional.ofNullable(header).map(h -> "session:" + h);
-    }
-
-    private Optional<String> extractAuthHeaderHash(HttpServerRequest request) {
-        final var auth = request.getHeader("Authorization");
-        if (auth != null && auth.startsWith("Bearer ")) {
-            return Optional.of("bearer:" + hashToken(auth.substring(7)));
-        }
-        return Optional.empty();
-    }
-
-    private Optional<String> extractApiKeyId(HttpServerRequest request) {
-        return Optional.ofNullable(request.getHeader("X-API-Key-ID")).map(id -> "apikey:" + id);
+        return "ip:"
+                + clientContextResolver.getOrCompute(requestContext, request).resolvedIp();
     }
 
     private EffectiveRateLimit resolveEffectiveLimit(RouteLookupResult routeResult) {
@@ -243,13 +206,6 @@ public class RateLimitFilter {
     }
 
     private String hashClientId(String clientId) {
-        if (clientId == null) {
-            return "unknown";
-        }
         return SecureHash.truncatedSha256(clientId, 16);
-    }
-
-    private String hashToken(String token) {
-        return SecureHash.truncatedSha256(token, 16);
     }
 }

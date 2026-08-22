@@ -10,12 +10,13 @@ import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpServerRequest;
 import org.jboss.resteasy.reactive.server.ServerRequestFilter;
 
+import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.in.problem.GatewayProblem;
+import aussie.core.model.common.SourceIdentifier;
 import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.ServicePath;
 import aussie.core.service.auth.AccessControlEvaluator;
-import aussie.core.service.common.SourceIdentifierExtractor;
 import aussie.core.service.routing.ServiceRegistry;
 
 /**
@@ -29,16 +30,16 @@ public class AccessControlFilter {
     private static final Set<String> RESERVED_PATHS = Set.of("admin", "gateway", "q");
 
     private final ServiceRegistry serviceRegistry;
-    private final SourceIdentifierExtractor sourceExtractor;
+    private final ClientContextResolver clientContextResolver;
     private final AccessControlEvaluator accessEvaluator;
 
     @Inject
     public AccessControlFilter(
             ServiceRegistry serviceRegistry,
-            SourceIdentifierExtractor sourceExtractor,
+            ClientContextResolver clientContextResolver,
             AccessControlEvaluator accessEvaluator) {
         this.serviceRegistry = serviceRegistry;
-        this.sourceExtractor = sourceExtractor;
+        this.clientContextResolver = clientContextResolver;
         this.accessEvaluator = accessEvaluator;
     }
 
@@ -47,10 +48,6 @@ public class AccessControlFilter {
         var path = requestContext.getUriInfo().getPath();
         var method = requestContext.getMethod();
 
-        final var socketIp = vertxRequest.remoteAddress() != null
-                ? vertxRequest.remoteAddress().host()
-                : null;
-
         // Normalize path - remove leading slash if present
         if (path.startsWith("/")) {
             path = path.substring(1);
@@ -58,15 +55,15 @@ public class AccessControlFilter {
 
         // Handle gateway requests
         if (path.startsWith("gateway/")) {
-            return handleGatewayRequest(requestContext, socketIp, path, method);
+            return handleGatewayRequest(requestContext, vertxRequest, path, method);
         }
 
         // Handle pass-through requests (/{serviceId}/{path})
-        return handlePassThroughRequest(requestContext, socketIp, path, method);
+        return handlePassThroughRequest(requestContext, vertxRequest, path, method);
     }
 
     private Uni<Response> handleGatewayRequest(
-            ContainerRequestContext requestContext, String socketIp, String path, String method) {
+            ContainerRequestContext requestContext, HttpServerRequest vertxRequest, String path, String method) {
         var gatewayPath = "/" + path.substring("gateway/".length());
 
         var routeResult = serviceRegistry.findRoute(gatewayPath, method);
@@ -74,11 +71,11 @@ public class AccessControlFilter {
             return Uni.createFrom().nullItem();
         }
 
-        return checkAccessControl(requestContext, socketIp, routeResult.get());
+        return checkAccessControl(requestContext, vertxRequest, routeResult.get());
     }
 
     private Uni<Response> handlePassThroughRequest(
-            ContainerRequestContext requestContext, String socketIp, String path, String method) {
+            ContainerRequestContext requestContext, HttpServerRequest vertxRequest, String path, String method) {
         final var servicePath = ServicePath.parse(path);
 
         if (RESERVED_PATHS.contains(servicePath.serviceId().toLowerCase())) {
@@ -97,18 +94,19 @@ public class AccessControlFilter {
             var routeResult = serviceRegistry.findRoute(servicePath.path(), method);
             if (routeResult.isPresent()
                     && routeResult.get().service().serviceId().equals(servicePath.serviceId())) {
-                return checkAccessControl(requestContext, socketIp, routeResult.get());
+                return checkAccessControl(requestContext, vertxRequest, routeResult.get());
             }
 
             // For pass-through without a specific route, use ServiceOnlyMatch
             // which uses service defaults for visibility/authRequired/rateLimitConfig
-            return checkAccessControl(requestContext, socketIp, new ServiceOnlyMatch(service));
+            return checkAccessControl(requestContext, vertxRequest, new ServiceOnlyMatch(service));
         });
     }
 
     private Uni<Response> checkAccessControl(
-            ContainerRequestContext requestContext, String socketIp, RouteLookupResult route) {
-        var source = sourceExtractor.extract(requestContext, socketIp);
+            ContainerRequestContext requestContext, HttpServerRequest vertxRequest, RouteLookupResult route) {
+        var source = SourceIdentifier.of(
+                clientContextResolver.getOrCompute(requestContext, vertxRequest).resolvedIp());
         var isAllowed = accessEvaluator.isAllowed(source, route, route.service().accessConfig());
 
         if (!isAllowed) {

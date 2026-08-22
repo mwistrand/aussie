@@ -47,6 +47,10 @@ public class ProxyRequestPreparer {
      */
     private static final Set<String> CONNECTION_DIRECTIVES = Set.of("close", "keep-alive");
 
+    /** Forwarding metadata is always rebuilt from the canonical inbound context. */
+    private static final Set<String> INBOUND_FORWARDING_HEADERS = Set.of(
+            "forwarded", "x-forwarded-for", "x-forwarded-host", "x-forwarded-port", "x-forwarded-proto", "x-real-ip");
+
     private final ForwardedHeaderBuilderProvider headerBuilderProvider;
 
     @Inject
@@ -137,6 +141,11 @@ public class ProxyRequestPreparer {
     private boolean shouldSkipHeader(String headerName, Set<String> dynamicHopByHop) {
         for (final var hop : HOP_BY_HOP_HEADERS) {
             if (hop.equalsIgnoreCase(headerName)) {
+                return true;
+            }
+        }
+        for (final var forwarding : INBOUND_FORWARDING_HEADERS) {
+            if (forwarding.equalsIgnoreCase(headerName)) {
                 return true;
             }
         }

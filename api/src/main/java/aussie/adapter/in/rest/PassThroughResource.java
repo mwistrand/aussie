@@ -18,6 +18,7 @@ import jakarta.ws.rs.core.Response;
 import io.smallrye.mutiny.Uni;
 import io.vertx.ext.web.RoutingContext;
 
+import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.GatewayResult;
@@ -39,11 +40,16 @@ public class PassThroughResource {
 
     private final PassThroughUseCase passThroughUseCase;
     private final RoutingContext routingContext;
+    private final ClientContextResolver clientContextResolver;
 
     @Inject
-    public PassThroughResource(PassThroughUseCase passThroughUseCase, RoutingContext routingContext) {
+    public PassThroughResource(
+            PassThroughUseCase passThroughUseCase,
+            RoutingContext routingContext,
+            ClientContextResolver clientContextResolver) {
         this.passThroughUseCase = passThroughUseCase;
         this.routingContext = routingContext;
+        this.clientContextResolver = clientContextResolver;
     }
 
     @GET
@@ -123,18 +129,15 @@ public class PassThroughResource {
         // MultivaluedMap<String, String> IS-A Map<String, List<String>>. The map is read-only
         // for the rest of this request, so passing it directly avoids a per-request HashMap +
         // per-value List.copyOf round-trip.
+        final var clientContext = clientContextResolver.getOrCompute(routingContext);
         return new GatewayRequest(
                 requestContext.getMethod(),
                 path,
                 requestContext.getHeaders(),
                 requestContext.getUriInfo().getRequestUri(),
                 body,
-                extractClientIp());
-    }
-
-    private String extractClientIp() {
-        var remoteAddress = routingContext.request().remoteAddress();
-        return remoteAddress != null ? remoteAddress.host() : null;
+                clientContext.resolvedIp(),
+                clientContext.externalScheme());
     }
 
     private Response toResponse(GatewayResult result) {

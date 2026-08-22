@@ -131,12 +131,15 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
 
 ## Client Identification
 
-Rate limits are applied per-client. Client identification priority:
+The admission limit runs before authentication and is always keyed by the
+canonical network identity. Session cookies, bearer strings, and API-key headers
+are unverified at that point and cannot select or rotate the bucket.
 
-1. Session ID (from cookie or `X-Session-ID` header)
-2. Bearer token (hashed for privacy)
-3. API Key ID (from `X-API-Key-ID` header)
-4. IP address (from `X-Forwarded-For` or remote address)
+By default the network identity is the direct socket peer. When trusted proxies
+are explicitly configured, Aussie walks the bounded forwarding chain from the
+trusted edge and selects the rightmost untrusted address. Post-authentication
+quotas may additionally use a verified principal, but they do not replace the
+network-level admission limit.
 
 ## Limitations
 

@@ -388,7 +388,7 @@ The two implementations handle different header formats. The legacy `XForwardedH
 The standards-based `Rfc7239ForwardedHeaderBuilder` at `api/src/main/java/aussie/adapter/out/http/Rfc7239ForwardedHeaderBuilder.java` (lines 18-92) produces:
 - `Forwarded: for=<client IP>;proto=<protocol>;host=<original host>`
 
-Both handle edge cases like appending to existing forwarding headers and quoting IPv6 addresses.
+Both replace inbound forwarding metadata with the gateway's canonical client context. This prevents attacker-supplied chains from being propagated upstream; the RFC 7239 implementation also quotes IPv6 addresses correctly.
 
 **Why this matters at the staff level:** This seems like over-engineering for a two-option config switch. But consider: some organizations have internal standards for forwarding headers. Some backend services can only parse one format. A load balancer team might need a custom format that includes internal routing metadata. By putting this behind an interface now, you prevent the "we need to fork the gateway" conversation later.
 

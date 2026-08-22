@@ -14,6 +14,7 @@ import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpServerRequest;
 import org.jboss.resteasy.reactive.server.ServerRequestFilter;
 
+import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.TelemetryHelper;
@@ -22,7 +23,6 @@ import aussie.core.service.auth.AuthRateLimitService;
 import aussie.core.util.SecureHash;
 import aussie.spi.FailedAttemptRepository;
 import aussie.spi.SecurityEvent;
-import aussie.system.context.ClientContextResolver;
 
 /**
  * Reactive filter that enforces authentication rate limits.

@@ -8,7 +8,6 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -17,7 +16,6 @@ import java.net.URI;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.MultiMap;
 import io.vertx.core.Vertx;
-import io.vertx.core.http.Cookie;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.net.SocketAddress;
@@ -30,16 +28,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.in.problem.ProblemDetail;
 import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
 import aussie.adapter.out.telemetry.GatewayMetrics;
+import aussie.common.context.ClientContext;
 import aussie.core.config.WebSocketConfig;
 import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
 import aussie.core.service.auth.JwksCacheService.JwksFetchException;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
-import aussie.core.util.SecureHash;
 
 @DisplayName("WebSocketGateway")
 @ExtendWith(MockitoExtension.class)
@@ -72,16 +71,21 @@ class WebSocketGatewayTest {
     @Mock
     private ProxyErrorWriter errorWriter;
 
+    @Mock
+    private ClientContextResolver clientContextResolver;
+
     private WebSocketGateway gateway;
 
     @BeforeEach
     void setUp() {
-        gateway = new WebSocketGateway(gatewayUseCase, config, vertx, metrics, rateLimitService, errorWriter);
+        gateway = new WebSocketGateway(
+                gatewayUseCase, config, vertx, metrics, rateLimitService, errorWriter, clientContextResolver);
 
         lenient().when(ctx.request()).thenReturn(request);
         lenient().when(ctx.response()).thenReturn(response);
         lenient().when(response.setStatusCode(anyInt())).thenReturn(response);
         lenient().when(response.putHeader(anyString(), anyString())).thenReturn(response);
+        lenient().when(clientContextResolver.getOrCompute(ctx)).thenReturn(new ClientContext(null, false, null));
     }
 
     private static org.mockito.ArgumentMatcher<ProblemDetail> problemWithStatus(int status) {
@@ -392,111 +396,18 @@ class WebSocketGatewayTest {
     }
 
     @Nested
-    @DisplayName("extractClientId")
+    @DisplayName("canonical network identity")
     class ExtractClientIdTests {
 
         @Test
-        @DisplayName("Should return hashed session cookie value as highest priority")
-        void shouldReturnSessionCookie() throws Exception {
-            final var cookie = mock(Cookie.class);
-            when(cookie.getValue()).thenReturn("abc123");
-            when(request.getCookie("aussie_session")).thenReturn(cookie);
+        @DisplayName("uses the request-scoped resolved client context")
+        void shouldUseResolvedClientContext() throws Exception {
+            when(clientContextResolver.getOrCompute(ctx)).thenReturn(new ClientContext("198.51.100.8", false, null));
 
             final var method = WebSocketGateway.class.getDeclaredMethod("extractClientId", RoutingContext.class);
             method.setAccessible(true);
-            final var result = (String) method.invoke(gateway, ctx);
 
-            assertEquals("session:" + SecureHash.truncatedSha256("abc123", 16), result);
-        }
-
-        @Test
-        @DisplayName("Should return hashed session header when no cookie")
-        void shouldReturnSessionHeader() throws Exception {
-            when(request.getCookie("aussie_session")).thenReturn(null);
-            when(request.getHeader("X-Session-ID")).thenReturn("sess-456");
-
-            final var method = WebSocketGateway.class.getDeclaredMethod("extractClientId", RoutingContext.class);
-            method.setAccessible(true);
-            final var result = (String) method.invoke(gateway, ctx);
-
-            assertEquals("session:" + SecureHash.truncatedSha256("sess-456", 16), result);
-        }
-
-        @Test
-        @DisplayName("Should return bearer hash when no session identifiers")
-        void shouldReturnBearerHash() throws Exception {
-            when(request.getCookie("aussie_session")).thenReturn(null);
-            when(request.getHeader("X-Session-ID")).thenReturn(null);
-            when(request.getHeader("Authorization")).thenReturn("Bearer my-token-value");
-
-            final var method = WebSocketGateway.class.getDeclaredMethod("extractClientId", RoutingContext.class);
-            method.setAccessible(true);
-            final var result = (String) method.invoke(gateway, ctx);
-
-            assertEquals("bearer:" + SecureHash.truncatedSha256("my-token-value", 16), result);
-        }
-
-        @Test
-        @DisplayName("Should return API key ID when no session or bearer")
-        void shouldReturnApiKeyId() throws Exception {
-            when(request.getCookie("aussie_session")).thenReturn(null);
-            when(request.getHeader("X-Session-ID")).thenReturn(null);
-            when(request.getHeader("Authorization")).thenReturn(null);
-            when(request.getHeader("X-API-Key-ID")).thenReturn("key-789");
-
-            final var method = WebSocketGateway.class.getDeclaredMethod("extractClientId", RoutingContext.class);
-            method.setAccessible(true);
-            final var result = (String) method.invoke(gateway, ctx);
-
-            assertEquals("apikey:key-789", result);
-        }
-
-        @Test
-        @DisplayName("Should return X-Forwarded-For IP when no other identifiers")
-        void shouldReturnForwardedIp() throws Exception {
-            when(request.getCookie("aussie_session")).thenReturn(null);
-            when(request.getHeader("X-Session-ID")).thenReturn(null);
-            when(request.getHeader("Authorization")).thenReturn(null);
-            when(request.getHeader("X-API-Key-ID")).thenReturn(null);
-            when(request.getHeader("X-Forwarded-For")).thenReturn("10.0.0.1, 192.168.1.1");
-
-            final var method = WebSocketGateway.class.getDeclaredMethod("extractClientId", RoutingContext.class);
-            method.setAccessible(true);
-            final var result = (String) method.invoke(gateway, ctx);
-
-            assertEquals("ip:10.0.0.1", result);
-        }
-
-        @Test
-        @DisplayName("Should return ip:unknown as fallback")
-        void shouldReturnUnknownFallback() throws Exception {
-            when(request.getCookie("aussie_session")).thenReturn(null);
-            when(request.getHeader("X-Session-ID")).thenReturn(null);
-            when(request.getHeader("Authorization")).thenReturn(null);
-            when(request.getHeader("X-API-Key-ID")).thenReturn(null);
-            when(request.getHeader("X-Forwarded-For")).thenReturn(null);
-
-            final var method = WebSocketGateway.class.getDeclaredMethod("extractClientId", RoutingContext.class);
-            method.setAccessible(true);
-            final var result = (String) method.invoke(gateway, ctx);
-
-            assertEquals("ip:unknown", result);
-        }
-
-        @Test
-        @DisplayName("Should skip non-Bearer Authorization header")
-        void shouldSkipNonBearerAuth() throws Exception {
-            when(request.getCookie("aussie_session")).thenReturn(null);
-            when(request.getHeader("X-Session-ID")).thenReturn(null);
-            when(request.getHeader("Authorization")).thenReturn("Basic dXNlcjpwYXNz");
-            when(request.getHeader("X-API-Key-ID")).thenReturn(null);
-            when(request.getHeader("X-Forwarded-For")).thenReturn(null);
-
-            final var method = WebSocketGateway.class.getDeclaredMethod("extractClientId", RoutingContext.class);
-            method.setAccessible(true);
-            final var result = (String) method.invoke(gateway, ctx);
-
-            assertEquals("ip:unknown", result);
+            assertEquals("ip:198.51.100.8", method.invoke(gateway, ctx));
         }
     }
 

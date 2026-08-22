@@ -35,6 +35,7 @@ Spelled out as rules:
 
 | Source Layer | May Depend On |
 |---|---|
+| `common` | Only `java.*`. Shared immutable values with no layer dependencies. |
 | `core/model` | Only `java.*`, `jakarta.validation` annotations. No other aussie packages. |
 | `core/config` | `core/model` (for types used in config interfaces). |
 | `core/cache` | Nothing in aussie (generic utility). |
@@ -45,7 +46,19 @@ Spelled out as rules:
 | `spi` | `core/port/out`, `core/model`. Never adapters or core/service. |
 | `adapter/in` | `core/port/in`, `core/model`, `core/service` (for direct injection), `spi`, other `adapter` packages. |
 | `adapter/out` | `core/port/out`, `core/model`, `core/config`, `core/service` (sparingly), `spi`. |
-| `system/filter` | `core/service`, `core/model`, `core/config`, `core/port/out`, `core/util`, `spi`, `adapter/in/problem`, `adapter/out/telemetry`. |
+| `system/filter` | `common/context`, `core/service`, `core/model`, `core/config`, `core/port/out`, `core/util`, `spi`, `adapter/in/context`, `adapter/in/problem`, `adapter/out/telemetry`. |
+
+## Layer 0: Common
+
+Framework-free values shared across architectural layers.
+
+### `common/context`
+
+| Class | Description |
+|---|---|
+| `ClientContext` | Immutable per-request value holding the socket IP, trusted-proxy decision, forwarded client IP, and canonical resolved IP. |
+
+**Allowed dependencies:** `java.*` only.
 
 ## Layer 1: Core (Model)
 
@@ -579,6 +592,16 @@ These packages translate HTTP, WebSocket, and lifecycle events into calls on cor
 
 **Allowed dependencies:** `adapter/in/problem`.
 
+### `adapter/in/context`
+
+**Role:** Canonical inbound network identity resolution.
+
+| Class | Description |
+|---|---|
+| `ClientContextResolver` | Validates bounded forwarding chains from trusted socket peers, selects the rightmost untrusted address, and shares one `ClientContext` through Vert.x and JAX-RS request contexts. |
+
+**Allowed dependencies:** `common/context`, `core/service/common`, Vert.x, JAX-RS.
+
 ### `adapter/in/websocket`
 
 **Role:** WebSocket proxy adapter using Vert.x native WebSocket handling.
@@ -586,7 +609,7 @@ These packages translate HTTP, WebSocket, and lifecycle events into calls on cor
 | Class | Description |
 |---|---|
 | `WebSocketGateway` | Manages WebSocket proxy sessions. Bi-directional frame forwarding between client and upstream. Handles session invalidation events for forced disconnect. |
-| `WebSocketRateLimitFilter` | `@RouteFilter(50)`. Applies connection-level rate limiting before WebSocket upgrade. |
+| `WebSocketRateLimitFilter` | `@RouteFilter(40)`. Applies connection-level rate limiting before WebSocket upgrade. |
 | `WebSocketUpgradeFilter` | `@RouteFilter(50)`. Intercepts WebSocket upgrade requests and routes them to `WebSocketGateway`. |
 
 **Allowed dependencies:** `core/port/in`, `core/model/websocket`, `core/service/ratelimit`, `core/config`, `adapter/out/telemetry`.
@@ -778,8 +801,6 @@ JAX-RS server filters that intercept requests before they reach resource classes
 
 | Class | Description |
 |---|---|
-| `ClientContext` | Per-request value object holding the resolved socket IP, trusted-proxy decision, and forwarded client IP. |
-| `ClientContextResolver` | Computes a `ClientContext` from the Vert.x request once, caching it on `ContainerRequestContext`. The single source of truth for client IP resolution across filters. |
 | `ClientContextFilter` | `@ServerRequestFilter(priority = AUTHENTICATION - 150)`. Runs ahead of every auth/rate-limit filter so the resolved context is available without re-parsing forwarded headers. |
 
 ### `system/filter`
@@ -792,12 +813,13 @@ JAX-RS server filters that intercept requests before they reach resource classes
 | `AccessControlFilter` | `@ServerRequestFilter` | Evaluates IP allowlists/denylists and endpoint visibility. Blocks requests to private endpoints and denied IPs. |
 | `AuthenticationFilter` | `AUTHENTICATION` | **Deprecated.** Legacy authentication filter retained for backward compatibility with custom `AuthenticationProvider` SPIs. Superseded by Quarkus Security integration (`ApiKeyAuthenticationMechanism`, `JwtAuthenticationMechanism`). Disabled by default. |
 
-**Allowed dependencies:** `core/service`, `core/model`, `core/config`, `core/port/out`, `core/util`, `spi`, `adapter/in/problem`, `adapter/out/telemetry`, `system/context`.
+**Allowed dependencies:** `common/context`, `core/service`, `core/model`, `core/config`, `core/port/out`, `core/util`, `spi`, `adapter/in/context`, `adapter/in/problem`, `adapter/out/telemetry`, `system/context`.
 
 ## Quick Reference: File Counts by Package
 
 | Package | Files |
 |---|---|
+| `common/context` | 1 |
 | `core/model/auth` | 27 |
 | `core/model/common` | 8 |
 | `core/model/gateway` | 5 |
@@ -821,6 +843,7 @@ JAX-RS server filters that intercept requests before they reach resource classes
 | `spi` | 23 |
 | `adapter/in/auth` | 12 |
 | `adapter/in/bootstrap` | 1 |
+| `adapter/in/context` | 1 |
 | `adapter/in/dto` | 20 |
 | `adapter/in/health` | 1 |
 | `adapter/in/http` | 7 |
@@ -834,7 +857,7 @@ JAX-RS server filters that intercept requests before they reach resource classes
 | `adapter/out/storage` | 10 (+ 9 cassandra + 17 memory + 15 redis) |
 | `adapter/out/telemetry` | 19 |
 | `adapter/out/threading` | 1 |
-| `system/context` | 3 |
+| `system/context` | 1 |
 | `system/filter` | 5 |
 | **Total** | **346** |
 

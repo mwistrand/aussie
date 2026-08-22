@@ -58,7 +58,7 @@ The `UnknownHostException` catch on line 81 returns `false` (not blocked), which
 ## 2.2 Trusted Proxy Validation
 
 **File:** `api/src/main/java/aussie/core/service/common/TrustedProxyValidator.java`
-**File:** `api/src/main/java/aussie/core/service/common/SourceIdentifierExtractor.java`
+**File:** `api/src/main/java/aussie/adapter/in/context/ClientContextResolver.java`
 
 Every access control decision in the gateway starts with the question: "Who is making this request?" In an environment with load balancers and reverse proxies, the answer depends on headers like `X-Forwarded-For` and `Forwarded`. But those headers are trivially spoofable; any HTTP client can set them. Trusting them unconditionally is equivalent to letting clients choose their own identity.
 
@@ -69,8 +69,12 @@ The `TrustedProxyValidator` only honors forwarding headers when the direct TCP c
 ```java
 // TrustedProxyValidator.java, lines 50-62
 public boolean shouldTrustForwardingHeaders(String socketIp) {
+    return isTrustedProxy(socketIp);
+}
+
+public boolean isTrustedProxy(String socketIp) {
     if (!config.enabled()) {
-        return true;
+        return false;
     }
     if (socketIp == null || socketIp.isEmpty()) {
         return false;
@@ -83,26 +87,27 @@ public boolean shouldTrustForwardingHeaders(String socketIp) {
 }
 ```
 
-The `SourceIdentifierExtractor` consults this validator before reading any forwarding headers:
+The inbound `ClientContextResolver` consults this validator before reading any forwarding headers and publishes one immutable result to request-path consumers:
 
 ```java
-// SourceIdentifierExtractor.java, lines 44-56
-public SourceIdentifier extract(ContainerRequestContext request, String socketIp) {
-    final var trustHeaders = trustedProxyValidator.shouldTrustForwardingHeaders(socketIp);
-
-    var ipAddress = trustHeaders ? extractIpFromHeaders(request) : null;
-    if (ipAddress == null || ipAddress.isEmpty()) {
-        ipAddress = socketIp != null ? socketIp : extractFallbackIp(request);
-    }
-
-    var host = trustHeaders ? extractHost(request) : Optional.<String>empty();
-    var forwardedFor = trustHeaders ? extractForwardedFor(request) : Optional.<String>empty();
-
-    return new SourceIdentifier(ipAddress, host, forwardedFor);
+// ClientContextResolver.java
+public ClientContext resolve(HttpServerRequest request) {
+    final var remoteAddress = request.remoteAddress();
+    final var socketIp = remoteAddress != null ? remoteAddress.host() : null;
+    final var trust = trustedProxyValidator.shouldTrustForwardingHeaders(socketIp);
+    final var forwardedClientIp = trust ? extractForwardedClientIp(request) : null;
+    final var externalScheme = trust ? extractExternalScheme(request) : null;
+    return new ClientContext(socketIp, trust, forwardedClientIp, externalScheme);
 }
 ```
 
-When proxy trust is disabled, or when the socket IP is not in the trusted proxy list, the extractor falls back to the raw socket address. The client's claimed `X-Forwarded-For` is ignored entirely.
+When proxy trust is disabled, or when the socket IP is not in the trusted proxy list, the resolver falls back to the raw socket address. The client's claimed `X-Forwarded-For` is ignored entirely. For trusted peers it bounds the header at 8 KiB and 16 hops, accepts only literal IP nodes, and walks right-to-left past trusted intermediaries to find the first untrusted address.
+
+When neither forwarding chain is present, a trusted `X-Real-IP` is validated as a
+single literal IP fallback. The resolver also canonicalizes `Forwarded: proto=` or
+`X-Forwarded-Proto` to `http` or `https`, preserving the public scheme across TLS
+termination while rejecting arbitrary caller-controlled protocol values. Both outbound
+header formats consume this canonical value when rebuilding forwarding metadata.
 
 The CIDR matching itself is carefully implemented. Line 153 of `TrustedProxyValidator.java` shows the IP parsing function refuses to resolve hostnames:
 
@@ -124,7 +129,7 @@ A senior would typically use `X-Forwarded-For` without a trust check, assuming t
 
 ### Trade-offs
 
-When `config.enabled()` is false, the validator returns `true` unconditionally: all forwarding headers are trusted. This is the out-of-the-box default to avoid breaking local development. The platform team must explicitly enable validation and configure their proxy CIDRs for production. This is documented, but it means a deployment that forgets to enable it silently trusts all forwarding headers.
+When `config.enabled()` is false, the validator returns `false`: forwarding headers are ignored and the direct socket peer is used. Platform teams must explicitly enable proxy trust and configure every legitimate proxy CIDR; an incomplete list can merge clients into a proxy-address bucket, but it does not let callers spoof identity.
 
 ## 2.3 Production Startup Guards
 
@@ -490,7 +495,7 @@ The separation of auth rate limiting from HTTP rate limiting is the more fundame
 
 ### Consistent Trusted Proxy Validation
 
-The filter resolves the client IP via `ClientContextResolver`, which performs the trusted-proxy check once per request and stashes the result on the JAX-RS request context. The resolver is invoked by the dedicated `ClientContextFilter` at priority `Priorities.AUTHENTICATION - 150`, so every downstream auth-related filter sees the same decision:
+The filter resolves the client IP via `ClientContextResolver`, which performs the trusted-proxy check once per request and shares the same immutable value through the Vert.x and JAX-RS request contexts. The resolver is invoked by the dedicated `ClientContextFilter` at priority `Priorities.AUTHENTICATION - 150`, so every downstream auth-related filter sees the same decision:
 
 ```java
 // AuthRateLimitFilter.java
@@ -504,13 +509,14 @@ public Uni<Response> filter(ContainerRequestContext requestContext, HttpServerRe
 // ClientContextResolver.resolve consults TrustedProxyValidator once:
 final var trust = trustedProxyValidator.shouldTrustForwardingHeaders(socketIp);
 final var forwardedClientIp = trust ? extractForwardedClientIp(request) : null;
+final var externalScheme = trust ? extractExternalScheme(request) : null;
 ```
 
-Without this check, an attacker connecting directly (not through the real ingress proxy) could set an arbitrary `X-Forwarded-For` header to rotate their apparent IP and evade IP-based lockout tracking. The identifier-based tracking provides a second line of defense, but consistent proxy validation is the correct primary control.
+For trusted peers, the resolver caps the header size and hop count, accepts only IP literals, and walks from the right edge past configured proxy hops to the first untrusted address. Without these checks, an attacker could rotate the leftmost `X-Forwarded-For` entry and evade IP-based lockout tracking.
 
 ### Trade-offs
 
-`ClientContextResolver` lives in `aussie.system.context` and is the single source of truth for `(socketIp, trustForwardingHeaders, forwardedClientIp)`. New filters that need the client IP must read it from the resolver rather than re-parsing `Forwarded` / `X-Forwarded-For` themselves; the access-control source extractor (`SourceIdentifierExtractor`) still does its own richer parse for host/forwarded-chain information, which is a separate concern.
+`ClientContextResolver` lives in `aussie.adapter.in.context`; its immutable `ClientContext` value lives in `aussie.common.context`. HTTP filters, REST resources, access control, forwarding builders, and WebSocket admission all consume that value rather than parsing forwarding headers independently.
 
 ## 2.8 CORS at the Vert.x Layer
 
