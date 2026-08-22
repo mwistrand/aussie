@@ -13,6 +13,7 @@ import { createAuthorizationCode, USER_GROUPS, TokenClaims } from '@/lib/auth';
  * - client_id: OAuth client ID
  * - redirect_uri: Where to redirect with the code
  * - state: CSRF protection state to pass back
+ * - nonce: Value to bind into the ID token
  * - code_challenge: PKCE challenge (optional)
  * - code_challenge_method: PKCE method (optional)
  *
@@ -29,6 +30,7 @@ export async function POST(request: NextRequest) {
       client_id: clientId,
       redirect_uri: redirectUri,
       state,
+      nonce,
       code_challenge: codeChallenge,
       code_challenge_method: codeChallengeMethod,
     } = body;
@@ -55,6 +57,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!nonce) {
+      return NextResponse.json(
+        { error: 'nonce is required' },
+        { status: 400 }
+      );
+    }
+
     // Build user claims
     const normalizedUsername = username.trim().toLowerCase();
     let groups: string[] = [];
@@ -75,6 +84,7 @@ export async function POST(request: NextRequest) {
       email: `${normalizedUsername}@demo.local`,
       groups,
       permissions: group === 'admin' ? ['*'] : [],
+      nonce,
     };
 
     // Create authorization code

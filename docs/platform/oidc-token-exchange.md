@@ -2,7 +2,7 @@
 
 The OIDC Token Exchange feature enables Aussie to complete the OAuth 2.0 authorization code flow by exchanging authorization codes for tokens with identity providers.
 
-> **Containment status:** The current browser-facing `/auth/oidc/authorize` and `/auth/oidc/token` helpers are disabled in normal mode because the legacy flow does not yet bind the complete authorization transaction. ID tokens are cryptographically validated before session creation, but state, nonce, provider, and redirect binding still require the production OIDC transaction flow.
+> **Containment status:** The browser-facing helpers remain disabled by default. Their authorization transactions bind a server-configured provider, exact redirect URI, PKCE challenge, nonce, client type, and expiry in one atomically consumed record. Session mode completes with an HttpOnly cookie; the remaining authentication-surface work is still pending.
 
 ## Overview
 
@@ -21,17 +21,19 @@ This feature works in conjunction with [PKCE](pkce.md) for secure authorization 
 Token exchange is **disabled by default**. Enable it with:
 
 ```properties
-aussie.auth.oidc.public-endpoints-enabled=true # local development only
+aussie.auth.oidc.public-endpoints-enabled=true
 aussie.auth.oidc.token-exchange.enabled=true
 ```
 
 ### Required Settings
 
-Configure your IdP's token endpoint and OAuth2 client credentials:
+Configure the provider and redirect allowlist server-side; callers cannot supply an IdP URL or an unregistered redirect:
 
 ```properties
-# IdP token endpoint
+aussie.auth.oidc.token-exchange.provider-id=company-idp
+aussie.auth.oidc.token-exchange.authorization-endpoint=https://auth.example.com/oauth/authorize
 aussie.auth.oidc.token-exchange.token-endpoint=https://auth.example.com/oauth/token
+aussie.auth.oidc.token-exchange.redirect-uris=https://app.example.com/callback
 
 # OAuth2 client credentials
 aussie.auth.oidc.token-exchange.client-id=${OIDC_CLIENT_ID}
@@ -60,7 +62,7 @@ When enabled, Aussie creates a session from the ID token claims:
 aussie.auth.oidc.token-exchange.create-session=true
 ```
 
-Session creation requires:
+Every successful OIDC exchange requires a validated ID token. Session creation additionally requires:
 - Session management enabled (`aussie.session.enabled=true`)
 - An ID token in the token response
 - A matching provider under `aussie.auth.route-auth.providers.*`
@@ -90,17 +92,13 @@ aussie.auth.oidc.token-exchange.timeout=PT10S
 
 ### Token Validation
 
-If you need Aussie to validate the IdP's tokens locally (e.g., for session creation), configure the IdP's JWKS endpoint:
+Configure the same provider ID under route authentication so returned ID tokens are cryptographically validated and bound to the transaction:
 
 ```properties
-# IdP issuer for token validation
-aussie.auth.oidc.token-exchange.issuer=https://auth.example.com
-
-# JWKS URI for token signature verification
-aussie.auth.oidc.token-exchange.jwks-uri=https://auth.example.com/.well-known/jwks.json
-
-# Expected audiences (comma-separated)
-aussie.auth.oidc.token-exchange.audiences=aussie-gateway
+aussie.auth.route-auth.enabled=true
+aussie.auth.route-auth.providers.company-idp.issuer=https://auth.example.com
+aussie.auth.route-auth.providers.company-idp.jwks-uri=https://auth.example.com/.well-known/jwks.json
+aussie.auth.route-auth.providers.company-idp.audiences=aussie-gateway
 ```
 
 ### Scopes
@@ -115,10 +113,14 @@ aussie.auth.oidc.token-exchange.scopes=openid,profile,email
 
 ```properties
 # Enable OIDC token exchange
+aussie.auth.oidc.public-endpoints-enabled=true
 aussie.auth.oidc.token-exchange.enabled=true
 
 # IdP configuration
+aussie.auth.oidc.token-exchange.provider-id=company-idp
+aussie.auth.oidc.token-exchange.authorization-endpoint=https://auth.example.com/oauth/authorize
 aussie.auth.oidc.token-exchange.token-endpoint=https://auth.example.com/oauth/token
+aussie.auth.oidc.token-exchange.redirect-uris=https://app.example.com/callback
 aussie.auth.oidc.token-exchange.client-id=${OIDC_CLIENT_ID}
 aussie.auth.oidc.token-exchange.client-secret=${OIDC_CLIENT_SECRET}
 aussie.auth.oidc.token-exchange.client-auth-method=client_secret_basic
@@ -190,9 +192,9 @@ aussie.auth.oidc.token-exchange.provider=custom-idp
 
 If the configured provider is unavailable, Aussie falls back to the highest-priority available provider.
 
-## API Response
+## API Responses
 
-The `/auth/oidc/token` endpoint returns:
+With `create-session=false`, `/auth/oidc/token` returns the validated public-client tokens:
 
 ```json
 {
@@ -200,20 +202,17 @@ The `/auth/oidc/token` endpoint returns:
   "token_type": "Bearer",
   "expires_in": 3600,
   "id_token": "eyJhbGciOiJSUzI1NiI...",
-  "scope": "openid profile email",
-  "session_id": "abc123..."
+  "scope": "openid profile email"
 }
 ```
 
-Notes:
-- `session_id` is included only when session creation is enabled
-- `refresh_token` is **not** returned (stored server-side)
+With `create-session=true`, it returns `204 No Content` and sets the configured session cookie. Access, ID, refresh, and session tokens are not exposed to browser JavaScript.
 
 ## Security Considerations
 
 1. **Client Secrets**: Always use environment variables for secrets
 2. **PKCE**: Token exchange requires PKCE when enabled
-3. **TLS**: All IdP communication uses HTTPS
+3. **TLS**: Use HTTPS for IdP endpoints outside local development
 4. **Refresh Tokens**: Stored server-side, never exposed to clients
 
 ## Troubleshooting

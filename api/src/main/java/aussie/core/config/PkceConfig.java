@@ -29,18 +29,6 @@ public interface PkceConfig {
     boolean enabled();
 
     /**
-     * Require PKCE for all authorization requests.
-     *
-     * <p>When true, authorization requests without valid PKCE parameters
-     * will be rejected with a 400 error. When false, PKCE is optional
-     * but recommended.
-     *
-     * @return true if PKCE is required (default: true)
-     */
-    @WithDefault("true")
-    boolean required();
-
-    /**
      * Challenge TTL (time-to-live).
      *
      * <p>How long a PKCE challenge remains valid after the authorization

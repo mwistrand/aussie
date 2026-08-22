@@ -3,7 +3,6 @@ package aussie;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.notNullValue;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -18,20 +17,21 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Branch coverage (validation, individual error paths) lives in
  * {@code OidcResourceUnitTest}. This class verifies the real PKCE round-trip
- * (authorize → token exchange) and replay-state rejection.
+ * (authorize → one-time exchange) and replay-state rejection.
  */
 @QuarkusTest
 @DisplayName("OIDC Resource Tests")
 public class OidcResourceTest {
 
-    private static final String IDP_URL = "https://idp.example.com/authorize";
+    private static final String CALLER_SELECTED_IDP_URL = "https://attacker.example.com/authorize";
+    private static final String CONFIGURED_IDP_URL = "https://idp.example.com/authorize";
     private static final String REDIRECT_URI = "http://localhost:3000/callback";
 
     @Test
     @DisplayName("should reject authorize without PKCE parameters")
     void shouldRejectAuthorizeWithoutPkce() {
         given().queryParam("redirect_uri", REDIRECT_URI)
-                .queryParam("idp_url", IDP_URL)
+                .queryParam("idp_url", CALLER_SELECTED_IDP_URL)
                 .when()
                 .get("/auth/oidc/authorize")
                 .then()
@@ -41,22 +41,22 @@ public class OidcResourceTest {
     }
 
     @Test
-    @DisplayName("should round-trip PKCE: authorize → token exchange with valid verifier")
-    void shouldRoundTripPkce() {
+    @DisplayName("should consume valid PKCE state and require an ID token")
+    void shouldConsumePkceStateAndRequireIdToken() {
         var verifier = "valid-verifier-123456789012345678901234567890123";
         var challenge = generateChallenge(verifier);
 
         var redirectLocation = given().redirects()
                 .follow(false)
                 .queryParam("redirect_uri", REDIRECT_URI)
-                .queryParam("idp_url", IDP_URL)
+                .queryParam("idp_url", CALLER_SELECTED_IDP_URL)
                 .queryParam("code_challenge", challenge)
                 .queryParam("code_challenge_method", "S256")
                 .when()
                 .get("/auth/oidc/authorize")
                 .then()
                 .statusCode(303)
-                .header("Location", containsString(IDP_URL))
+                .header("Location", containsString(CONFIGURED_IDP_URL))
                 .extract()
                 .header("Location");
 
@@ -69,9 +69,8 @@ public class OidcResourceTest {
                 .when()
                 .post("/auth/oidc/token")
                 .then()
-                .statusCode(200)
-                .body("access_token", notNullValue())
-                .body("token_type", equalTo("Bearer"));
+                .statusCode(502)
+                .body("detail", containsString("missing ID token"));
 
         // Replayed state must be rejected (one-time use)
         given().contentType("application/x-www-form-urlencoded")

@@ -15,12 +15,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
 
 import io.quarkiverse.resteasy.problem.HttpProblem;
 import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
-import io.vertx.core.http.Cookie;
 import io.vertx.core.http.HttpServerRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -97,10 +97,10 @@ class SessionResourceUnitTest {
         final var session = session();
         when(sessionManagement.createSession(eq(identity), eq("test-agent"), eq(null)))
                 .thenReturn(Uni.createFrom().item(session));
-        when(cookieManager.createCookie(session))
-                .thenReturn(Cookie.cookie("aussie_session", session.id())
-                        .setPath("/")
-                        .setHttpOnly(true));
+        when(cookieManager.createResponseCookie(session))
+                .thenReturn(new NewCookie.Builder("aussie_session")
+                        .value(session.id())
+                        .build());
 
         final var response = resource.createSession(new SessionResource.CreateSessionRequest("signed-token", null))
                 .await()
@@ -120,10 +120,10 @@ class SessionResourceUnitTest {
         final var session = session();
         when(sessionManagement.createSession(identity, null, null))
                 .thenReturn(Uni.createFrom().item(session));
-        when(cookieManager.createCookie(session))
-                .thenReturn(Cookie.cookie("aussie_session", session.id())
-                        .setPath("/")
-                        .setHttpOnly(true));
+        when(cookieManager.createResponseCookie(session))
+                .thenReturn(new NewCookie.Builder("aussie_session")
+                        .value(session.id())
+                        .build());
 
         final var response = resource.createSession(
                         new SessionResource.CreateSessionRequest("signed-token", "https://attacker.example"))
@@ -153,8 +153,11 @@ class SessionResourceUnitTest {
         when(securityIdentity.getPrincipal()).thenReturn(new SessionPrincipal("session-1", "user-1"));
         when(sessionManagement.invalidateSession("session-1"))
                 .thenReturn(Uni.createFrom().voidItem());
-        when(cookieManager.createLogoutCookie())
-                .thenReturn(Cookie.cookie("aussie_session", "").setPath("/").setMaxAge(0));
+        when(cookieManager.createLogoutResponseCookie())
+                .thenReturn(new NewCookie.Builder("aussie_session")
+                        .value("")
+                        .maxAge(0)
+                        .build());
 
         final var response = resource.logout().await().atMost(Duration.ofSeconds(5));
 
@@ -169,8 +172,11 @@ class SessionResourceUnitTest {
         when(securityIdentity.getPrincipal()).thenReturn(new SessionPrincipal("session-1", "user-1"));
         when(sessionManagement.invalidateAllUserSessions("user-1"))
                 .thenReturn(Uni.createFrom().voidItem());
-        when(cookieManager.createLogoutCookie())
-                .thenReturn(Cookie.cookie("aussie_session", "").setPath("/").setMaxAge(0));
+        when(cookieManager.createLogoutResponseCookie())
+                .thenReturn(new NewCookie.Builder("aussie_session")
+                        .value("")
+                        .maxAge(0)
+                        .build());
 
         final var response = resource.logoutAll().await().atMost(Duration.ofSeconds(5));
 
@@ -186,8 +192,10 @@ class SessionResourceUnitTest {
         final var session = session();
         when(sessionManagement.refreshSession("session-1"))
                 .thenReturn(Uni.createFrom().item(Optional.of(session)));
-        when(cookieManager.createCookie(session))
-                .thenReturn(Cookie.cookie("aussie_session", session.id()).setPath("/"));
+        when(cookieManager.createResponseCookie(session))
+                .thenReturn(new NewCookie.Builder("aussie_session")
+                        .value(session.id())
+                        .build());
 
         final var response = resource.refreshSession().await().atMost(Duration.ofSeconds(5));
 
@@ -204,8 +212,10 @@ class SessionResourceUnitTest {
         final var session = session();
         when(sessionManagement.createSession(identity, null, null))
                 .thenReturn(Uni.createFrom().item(session));
-        when(cookieManager.createCookie(session))
-                .thenReturn(Cookie.cookie("aussie_session", session.id()).setPath("/"));
+        when(cookieManager.createResponseCookie(session))
+                .thenReturn(new NewCookie.Builder("aussie_session")
+                        .value(session.id())
+                        .build());
 
         final var response =
                 resource.authCallback("signed-token", "/dashboard").await().atMost(Duration.ofSeconds(5));

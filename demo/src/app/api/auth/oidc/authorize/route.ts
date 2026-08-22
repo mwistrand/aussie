@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
  * - client_id: The client identifier (e.g., "aussie-gateway")
  * - redirect_uri: Where to redirect after authorization
  * - state: CSRF protection state (passed through)
+ * - nonce: Binds the returned ID token to this authorization request
  * - code_challenge: PKCE challenge (optional but recommended)
  * - code_challenge_method: Must be "S256" if challenge provided
  * - scope: Requested scopes (optional)
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest) {
   const clientId = searchParams.get('client_id');
   const redirectUri = searchParams.get('redirect_uri');
   const state = searchParams.get('state');
+  const nonce = searchParams.get('nonce');
   const codeChallenge = searchParams.get('code_challenge');
   const codeChallengeMethod = searchParams.get('code_challenge_method');
   const scope = searchParams.get('scope');
@@ -67,6 +69,16 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  if (!nonce) {
+    return NextResponse.json(
+      {
+        error: 'invalid_request',
+        error_description: 'nonce is required',
+      },
+      { status: 400 }
+    );
+  }
+
   // Validate PKCE parameters if provided
   if (codeChallenge && codeChallengeMethod !== 'S256') {
     return NextResponse.json(
@@ -89,6 +101,7 @@ export async function GET(request: NextRequest) {
   loginUrl.searchParams.set('client_id', clientId);
   loginUrl.searchParams.set('redirect_uri', redirectUri);
   if (state) loginUrl.searchParams.set('state', state);
+  loginUrl.searchParams.set('nonce', nonce);
   if (codeChallenge) loginUrl.searchParams.set('code_challenge', codeChallenge);
   if (codeChallengeMethod)
     loginUrl.searchParams.set('code_challenge_method', codeChallengeMethod);

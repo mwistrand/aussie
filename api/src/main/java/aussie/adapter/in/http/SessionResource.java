@@ -14,7 +14,6 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
 
 import io.quarkus.security.identity.SecurityIdentity;
@@ -84,14 +83,11 @@ public class SessionResource {
         return createValidatedSession(createRequest.token()).map(session -> {
             LOG.infof("Session created for user: %s", session.userId());
 
-            io.vertx.core.http.Cookie vertxCookie = cookieManager.createCookie(session);
-            NewCookie jaxrsCookie = convertToJaxRsCookie(vertxCookie, session);
-
             // Check for redirect
             String redirectUrl = createRequest.redirectUrl();
             if (redirectUrl != null && !redirectUrl.isBlank()) {
                 return Response.seeOther(URI.create(sanitizeRedirectUrl(redirectUrl)))
-                        .cookie(jaxrsCookie)
+                        .cookie(cookieManager.createResponseCookie(session))
                         .build();
             }
 
@@ -99,7 +95,7 @@ public class SessionResource {
                             "sessionId", session.id(),
                             "userId", session.userId(),
                             "expiresAt", session.expiresAt().toString()))
-                    .cookie(jaxrsCookie)
+                    .cookie(cookieManager.createResponseCookie(session))
                     .build();
         });
     }
@@ -165,17 +161,8 @@ public class SessionResource {
                             "Session invalidated: hash=%s",
                             SecureHash.truncatedSha256(sessionPrincipal.getSessionId(), 8));
 
-                    io.vertx.core.http.Cookie logoutCookie = cookieManager.createLogoutCookie();
-                    NewCookie jaxrsCookie = new NewCookie.Builder(logoutCookie.getName())
-                            .value("")
-                            .path(logoutCookie.getPath())
-                            .maxAge(0)
-                            .httpOnly(logoutCookie.isHttpOnly())
-                            .secure(logoutCookie.isSecure())
-                            .build();
-
                     return Response.ok(Map.of("message", "Logged out"))
-                            .cookie(jaxrsCookie)
+                            .cookie(cookieManager.createLogoutResponseCookie())
                             .build();
                 });
     }
@@ -200,17 +187,8 @@ public class SessionResource {
                 .map(v -> {
                     LOG.infof("All sessions invalidated for user: %s", sessionPrincipal.getUserId());
 
-                    io.vertx.core.http.Cookie logoutCookie = cookieManager.createLogoutCookie();
-                    NewCookie jaxrsCookie = new NewCookie.Builder(logoutCookie.getName())
-                            .value("")
-                            .path(logoutCookie.getPath())
-                            .maxAge(0)
-                            .httpOnly(logoutCookie.isHttpOnly())
-                            .secure(logoutCookie.isSecure())
-                            .build();
-
                     return Response.ok(Map.of("message", "Logged out from all devices"))
-                            .cookie(jaxrsCookie)
+                            .cookie(cookieManager.createLogoutResponseCookie())
                             .build();
                 });
     }
@@ -237,14 +215,11 @@ public class SessionResource {
 
             Session session = sessionOpt.get();
 
-            io.vertx.core.http.Cookie vertxCookie = cookieManager.createCookie(session);
-            NewCookie jaxrsCookie = convertToJaxRsCookie(vertxCookie, session);
-
             return Response.ok(Map.of(
                             "sessionId", session.id(),
                             "expiresAt", session.expiresAt().toString(),
                             "lastAccessedAt", session.lastAccessedAt().toString()))
-                    .cookie(jaxrsCookie)
+                    .cookie(cookieManager.createResponseCookie(session))
                     .build();
         });
     }
@@ -270,12 +245,9 @@ public class SessionResource {
         return createValidatedSession(token).map(session -> {
             LOG.infof("Session created via callback for user: %s", session.userId());
 
-            io.vertx.core.http.Cookie vertxCookie = cookieManager.createCookie(session);
-            NewCookie jaxrsCookie = convertToJaxRsCookie(vertxCookie, session);
-
             // Redirect to the original page
             return Response.seeOther(URI.create(safeRedirectUrl))
-                    .cookie(jaxrsCookie)
+                    .cookie(cookieManager.createResponseCookie(session))
                     .build();
         });
     }
@@ -349,28 +321,6 @@ public class SessionResource {
 
         LOG.debugf("Rejecting potentially unsafe redirect URL: %s", redirectUrl);
         return "/";
-    }
-
-    private NewCookie convertToJaxRsCookie(io.vertx.core.http.Cookie vertxCookie, Session session) {
-        var builder = new NewCookie.Builder(vertxCookie.getName())
-                .value(vertxCookie.getValue())
-                .path(vertxCookie.getPath())
-                .httpOnly(vertxCookie.isHttpOnly())
-                .secure(vertxCookie.isSecure());
-
-        if (session.expiresAt() != null) {
-            long maxAge = session.expiresAt().getEpochSecond()
-                    - java.time.Instant.now().getEpochSecond();
-            if (maxAge > 0) {
-                builder.maxAge((int) maxAge);
-            }
-        }
-
-        if (vertxCookie.getDomain() != null) {
-            builder.domain(vertxCookie.getDomain());
-        }
-
-        return builder.build();
     }
 
     /**

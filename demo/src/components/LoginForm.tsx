@@ -6,6 +6,7 @@ interface OidcParams {
   clientId?: string;
   redirectUri?: string;
   state?: string;
+  nonce?: string;
   codeChallenge?: string;
   codeChallengeMethod?: string;
   scope?: string;
@@ -100,6 +101,7 @@ export default function LoginForm({
             client_id: oidcParams.clientId,
             redirect_uri: oidcParams.redirectUri,
             state: oidcParams.state,
+            nonce: oidcParams.nonce,
             code_challenge: oidcParams.codeChallenge,
             code_challenge_method: oidcParams.codeChallengeMethod,
           }),

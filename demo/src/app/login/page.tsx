@@ -12,6 +12,7 @@ interface PageProps {
     client_id?: string;
     redirect_uri?: string;
     state?: string;
+    nonce?: string;
     code_challenge?: string;
     code_challenge_method?: string;
     scope?: string;
@@ -33,6 +34,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
           clientId: params.client_id,
           redirectUri: params.redirect_uri,
           state: params.state,
+          nonce: params.nonce,
           codeChallenge: params.code_challenge,
           codeChallengeMethod: params.code_challenge_method,
           scope: params.scope,

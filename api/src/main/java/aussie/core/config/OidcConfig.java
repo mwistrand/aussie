@@ -21,13 +21,12 @@ import io.smallrye.config.WithName;
 public interface OidcConfig {
 
     /**
-     * Enable the legacy browser-facing OIDC helper endpoints.
+     * Enable the browser-facing OIDC helper endpoints.
      *
-     * <p>The current helpers do not bind the full authorization transaction or validate
-     * ID tokens before session creation, so they are disabled by default and intended
-     * only for the local demo until the production OIDC flow replaces them.
+     * <p>The helpers are disabled by default while the remaining authentication-surface
+     * rollout is unfinished.
      *
-     * @return true if the unsafe development-only endpoints are enabled (default: false)
+     * @return true if the endpoints are enabled (default: false)
      */
     @WithDefault("false")
     boolean publicEndpointsEnabled();
@@ -43,6 +42,18 @@ public interface OidcConfig {
      */
     interface TokenExchangeConfig {
 
+        /** Stable ID of the token-validation provider used for returned ID tokens. */
+        @WithName("provider-id")
+        Optional<String> providerId();
+
+        /** Server-owned authorization endpoint. */
+        @WithName("authorization-endpoint")
+        Optional<String> authorizationEndpoint();
+
+        /** Exact redirect URIs accepted for authorization transactions. */
+        @WithName("redirect-uris")
+        Optional<Set<String>> redirectUris();
+
         /**
          * Enable OIDC token exchange.
          *
@@ -57,9 +68,9 @@ public interface OidcConfig {
         /**
          * Create an Aussie session after successful token exchange.
          *
-         * <p>When true and an ID token is returned, Aussie creates a session
-         * from the token claims. When false, tokens are returned directly
-         * without session creation.
+         * <p>When true, Aussie creates a session from the validated ID token and
+         * returns only an HttpOnly cookie. When false, validated tokens are returned
+         * directly without session creation.
          *
          * @return true to create session (default: true)
          */

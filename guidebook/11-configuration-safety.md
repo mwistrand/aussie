@@ -870,6 +870,9 @@ Several features have dev-specific overrides:
 # api/src/main/resources/application.properties (lines 356, 397-401)
 %dev.aussie.auth.pkce.storage.provider=memory
 %dev.aussie.auth.oidc.token-exchange.enabled=true
+%dev.aussie.auth.oidc.token-exchange.provider-id=demo
+%dev.aussie.auth.oidc.token-exchange.authorization-endpoint=http://localhost:3000/api/auth/oidc/authorize
+%dev.aussie.auth.oidc.token-exchange.redirect-uris=http://localhost:3000/callback
 %dev.aussie.auth.oidc.token-exchange.token-endpoint=http://localhost:3000/api/auth/oidc/token
 %dev.aussie.auth.oidc.token-exchange.client-id=aussie-gateway
 %dev.aussie.auth.oidc.token-exchange.client-secret=demo-secret

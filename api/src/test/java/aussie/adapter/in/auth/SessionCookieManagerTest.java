@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import jakarta.ws.rs.core.NewCookie;
+
 import io.vertx.core.http.Cookie;
 import io.vertx.core.http.CookieSameSite;
 import io.vertx.core.http.HttpServerRequest;
@@ -44,6 +46,19 @@ class SessionCookieManagerTest {
         when(cookieConfig.domain()).thenReturn(Optional.empty());
 
         manager = new SessionCookieManager(config);
+    }
+
+    @Test
+    void createsJaxRsCookieWithBrowserSecurityAttributes() {
+        when(cookieConfig.sameSite()).thenReturn("Strict");
+        final var cookie =
+                manager.createResponseCookie(testSession(Instant.now().plusSeconds(3600)));
+
+        assertEquals("session-123", cookie.getValue());
+        assertTrue(cookie.isSecure());
+        assertTrue(cookie.isHttpOnly());
+        assertEquals(NewCookie.SameSite.STRICT, cookie.getSameSite());
+        assertTrue(cookie.getMaxAge() > 3500);
     }
 
     private Session testSession(Instant expiresAt) {
@@ -164,6 +179,18 @@ class SessionCookieManagerTest {
 
             assertEquals("aussie_session", cookie.getName());
             assertEquals("", cookie.getValue());
+            assertEquals(0, cookie.getMaxAge());
+        }
+
+        @Test
+        void shouldCreateMatchingLogoutResponseCookie() {
+            when(cookieConfig.domain()).thenReturn(Optional.of(".example.com"));
+            when(cookieConfig.sameSite()).thenReturn("Strict");
+
+            final var cookie = manager.createLogoutResponseCookie();
+
+            assertEquals(".example.com", cookie.getDomain());
+            assertEquals(NewCookie.SameSite.STRICT, cookie.getSameSite());
             assertEquals(0, cookie.getMaxAge());
         }
     }

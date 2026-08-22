@@ -12,7 +12,7 @@ PKCE (RFC 7636) is a security extension to the OAuth 2.0 authorization code flow
 
 Aussie requires PKCE with the S256 challenge method for all OIDC authorization flows by default.
 
-The legacy public OIDC helpers remain disabled outside the local development profile through `aussie.auth.oidc.public-endpoints-enabled=false`. PKCE alone does not make the legacy flow production-safe because its state record does not yet bind provider, redirect URI, nonce, and the complete one-time transaction.
+The public OIDC helpers remain disabled by default through `aussie.auth.oidc.public-endpoints-enabled=false`. When enabled, the PKCE challenge is stored with the provider, exact redirect URI, nonce, client type, and expiry in one atomically consumed authorization transaction.
 
 ## Configuration
 
@@ -21,10 +21,6 @@ The legacy public OIDC helpers remain disabled outside the local development pro
 ```properties
 # Enable/disable PKCE support (default: true)
 aussie.auth.pkce.enabled=true
-
-# Require PKCE for all authorization requests (default: true)
-# When false, PKCE is optional but recommended
-aussie.auth.pkce.required=true
 
 # Challenge TTL - how long a PKCE challenge remains valid (default: 10 minutes)
 aussie.auth.pkce.challenge-ttl=PT10M
@@ -63,19 +59,17 @@ Client initiates authorization by redirecting to Aussie:
 ```
 GET /auth/oidc/authorize
   ?redirect_uri=https://app.example.com/callback
-  &idp_url=https://idp.example.com/authorize
   &code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
   &code_challenge_method=S256
-  &state=optional-client-state
 ```
 
-### 3. Aussie Stores Challenge
+### 3. Aussie Stores the Transaction
 
-Aussie stores the code challenge in Redis (keyed by a generated state parameter) and redirects to the IdP.
+Aussie stores the complete one-time authorization transaction in Redis (keyed by a generated state parameter) and redirects to the server-configured IdP with a generated nonce.
 
 ### 4. User Authenticates
 
-The user authenticates with the IdP and is redirected back to Aussie with an authorization code.
+The user authenticates with the IdP and is redirected to the registered client redirect URI with an authorization code and Aussie's state value.
 
 ### 5. Token Exchange with Verifier
 
@@ -94,19 +88,20 @@ code=authorization-code-from-idp
 ### 6. Aussie Verifies PKCE
 
 Aussie:
-1. Retrieves the stored code challenge (one-time use)
+1. Atomically consumes the stored transaction
 2. Computes `BASE64URL(SHA256(code_verifier))`
-3. Compares against the stored challenge
-4. If valid, completes the token exchange
+3. Verifies the PKCE challenge and exact redirect URI
+4. Exchanges with the stored provider configuration
+5. Validates the returned ID token signature, provider, audience, authorized party, nonce, and time claims
 
-## Testing with the Demo App
+## Manual Test
 
-The demo app includes a full OIDC PKCE flow for testing.
+Configure the authorization endpoint and exact redirect URI before starting the flow. The caller cannot override the IdP URL.
 
 ### Start the Environment
 
 ```bash
-# Start Aussie and the demo app
+# Start Aussie and the configured identity provider
 make dev
 ```
 
@@ -141,8 +136,7 @@ console.log('Code Challenge:', codeChallenge);
 ```bash
 # Redirect to Aussie's OIDC authorize endpoint
 curl -v "http://localhost:1234/auth/oidc/authorize?\
-redirect_uri=http://localhost:1234/\
-&idp_url=http://localhost:3000/api/auth/oidc/authorize\
+redirect_uri=http://localhost:3000/callback\
 &code_challenge=${CODE_CHALLENGE}\
 &code_challenge_method=S256"
 ```
@@ -157,7 +151,7 @@ curl -X POST "http://localhost:1234/auth/oidc/token" \
   -d "code=${AUTHORIZATION_CODE}" \
   -d "code_verifier=${CODE_VERIFIER}" \
   -d "state=${STATE}" \
-  -d "redirect_uri=http://localhost:1234/"
+  -d "redirect_uri=http://localhost:3000/callback"
 ```
 
 ## Demo App OIDC Endpoints

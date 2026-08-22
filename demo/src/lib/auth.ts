@@ -39,6 +39,7 @@ export async function getJwks(): Promise<jose.JSONWebKeySet> {
 export interface TokenClaims {
   sub: string;
   name: string;
+  nonce?: string;
   email?: string;
   groups?: string[];
   permissions?: string[];
@@ -93,6 +94,7 @@ export async function generateToken(
     email: claims.email || `${claims.sub}@demo.local`,
     groups: claims.groups || [],
     permissions: claims.permissions || [],
+    ...(claims.nonce && { nonce: claims.nonce }),
     ...(claims.teamId && { teamId: claims.teamId }),
   })
     .setProtectedHeader({ alg: 'RS256', kid: 'demo-key-1' })

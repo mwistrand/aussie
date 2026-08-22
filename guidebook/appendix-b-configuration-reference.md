@@ -241,10 +241,9 @@ Services can override individual security headers by including a `securityHeader
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
 | `aussie.auth.pkce.enabled` | `boolean` | `true` | `AUSSIE_AUTH_PKCE_ENABLED` | Enable PKCE support. |
-| `aussie.auth.pkce.required` | `boolean` | `true` | `AUSSIE_AUTH_PKCE_REQUIRED` | Require PKCE for all authorization requests. When false, PKCE is optional. |
 | `aussie.auth.pkce.challenge-ttl` | `Duration` | `PT10M` | `AUSSIE_AUTH_PKCE_CHALLENGE_TTL` | How long a PKCE challenge remains valid. |
-| `aussie.auth.pkce.storage.provider` | `String` | `redis` | `AUSSIE_AUTH_PKCE_STORAGE_PROVIDER` | Storage provider for PKCE challenges. Options: `redis`, `memory`, or custom SPI name. |
-| `aussie.auth.pkce.storage.redis.key-prefix` | `String` | `aussie:pkce:` | `AUSSIE_AUTH_PKCE_STORAGE_REDIS_KEY_PREFIX` | Redis key prefix for PKCE challenges. |
+| `aussie.auth.pkce.storage.provider` | `String` | `redis` | `AUSSIE_AUTH_PKCE_STORAGE_PROVIDER` | Storage provider for OIDC authorization transactions. Options: `redis`, `memory`, or custom SPI name. |
+| `aussie.auth.pkce.storage.redis.key-prefix` | `String` | `aussie:pkce:` | `AUSSIE_AUTH_PKCE_STORAGE_REDIS_KEY_PREFIX` | Redis key prefix for OIDC authorization transactions. |
 
 **Profile overrides:**
 
@@ -260,10 +259,13 @@ Services can override individual security headers by including a `securityHeader
 
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
-| `aussie.auth.oidc.public-endpoints-enabled` | `boolean` | `false` | `AUSSIE_AUTH_OIDC_PUBLIC_ENDPOINTS_ENABLED` | Enable unsafe legacy browser-facing OIDC helpers. Development only. |
+| `aussie.auth.oidc.public-endpoints-enabled` | `boolean` | `false` | `AUSSIE_AUTH_OIDC_PUBLIC_ENDPOINTS_ENABLED` | Enable browser-facing OIDC authorization helpers. |
 | `aussie.auth.oidc.token-exchange.enabled` | `boolean` | `false` | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_ENABLED` | Enable OIDC token exchange. When disabled, the `/auth/oidc/token` endpoint returns a feature-disabled error. |
-| `aussie.auth.oidc.token-exchange.create-session` | `boolean` | `true` | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_CREATE_SESSION` | Create Aussie session after successful token exchange. |
+| `aussie.auth.oidc.token-exchange.create-session` | `boolean` | `true` | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_CREATE_SESSION` | Create an Aussie session and return only its HttpOnly cookie after successful token exchange. |
 | `aussie.auth.oidc.token-exchange.provider` | `String` | `default` | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_PROVIDER` | Token exchange provider. Options: `default`, or custom SPI name. |
+| `aussie.auth.oidc.token-exchange.provider-id` | `Optional<String>` | _(not set)_ | `OIDC_PROVIDER_ID` | Stable route-auth provider ID used to validate returned ID tokens. |
+| `aussie.auth.oidc.token-exchange.authorization-endpoint` | `Optional<String>` | _(not set)_ | `OIDC_AUTHORIZATION_ENDPOINT` | Server-owned IdP authorization endpoint. |
+| `aussie.auth.oidc.token-exchange.redirect-uris` | `Optional<Set<String>>` | _(not set)_ | `OIDC_REDIRECT_URIS` | Exact redirect URI allowlist. |
 | `aussie.auth.oidc.token-exchange.token-endpoint` | `Optional<String>` | _(not set)_ | `OIDC_TOKEN_ENDPOINT` | IdP token endpoint URL. |
 | `aussie.auth.oidc.token-exchange.client-id` | `Optional<String>` | _(not set)_ | `OIDC_CLIENT_ID` | OAuth2 client ID. |
 | `aussie.auth.oidc.token-exchange.client-secret` | `Optional<String>` | _(not set)_ | `OIDC_CLIENT_SECRET` | OAuth2 client secret. |
@@ -280,6 +282,9 @@ Services can override individual security headers by including a `securityHeader
 |---------|----------|-------|
 | `%dev` | `aussie.auth.oidc.token-exchange.enabled` | `true` |
 | `%dev` | `aussie.auth.oidc.public-endpoints-enabled` | `true` |
+| `%dev` | `aussie.auth.oidc.token-exchange.provider-id` | `demo` |
+| `%dev` | `aussie.auth.oidc.token-exchange.authorization-endpoint` | `http://localhost:3000/api/auth/oidc/authorize` |
+| `%dev` | `aussie.auth.oidc.token-exchange.redirect-uris` | `http://localhost:3000/callback` |
 | `%dev` | `aussie.auth.oidc.token-exchange.token-endpoint` | `http://localhost:3000/api/auth/oidc/token` |
 | `%dev` | `aussie.auth.oidc.token-exchange.client-id` | `aussie-gateway` |
 | `%dev` | `aussie.auth.oidc.token-exchange.client-secret` | `demo-secret` |

@@ -15,6 +15,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.core.config.PkceConfig;
+import aussie.core.model.auth.OidcAuthorizationTransaction;
 import aussie.core.port.out.PkceChallengeRepository;
 
 @DisplayName("PkceService")
@@ -39,7 +41,6 @@ class PkceServiceTest {
         config = mock(PkceConfig.class);
 
         when(config.enabled()).thenReturn(true);
-        when(config.required()).thenReturn(true);
         when(config.challengeTtl()).thenReturn(Duration.ofMinutes(10));
 
         pkceService = new PkceService(repository, config);
@@ -172,45 +173,64 @@ class PkceServiceTest {
     }
 
     @Nested
-    @DisplayName("storeChallenge()")
+    @DisplayName("PKCE input validation")
+    class PkceInputValidationTests {
+
+        @Test
+        void acceptsRfc7636Values() {
+            final var verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+            final var challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+
+            assertTrue(pkceService.isValidCodeVerifier(verifier));
+            assertTrue(pkceService.isValidCodeChallenge(challenge));
+            assertTrue(pkceService.isValidState(challenge));
+        }
+
+        @Test
+        void rejectsValuesOutsideGrammarOrLengthLimits() {
+            assertFalse(pkceService.isValidCodeVerifier("too-short"));
+            assertFalse(pkceService.isValidCodeVerifier("a".repeat(42) + "!"));
+            assertFalse(pkceService.isValidCodeVerifier("a".repeat(129)));
+            assertFalse(pkceService.isValidCodeChallenge("a".repeat(42)));
+            assertFalse(pkceService.isValidCodeChallenge("a".repeat(42) + "="));
+            assertFalse(pkceService.isValidState("a".repeat(44)));
+        }
+    }
+
+    @Nested
+    @DisplayName("transaction storage")
     class StoreChallengeTests {
 
         @Test
         @DisplayName("should store challenge with configured TTL")
         void shouldStoreChallengeWithConfiguredTtl() {
             String state = "test-state";
-            String challenge = "test-challenge";
+            final var transaction = transaction("test-challenge");
 
-            when(repository.store(anyString(), anyString(), any(Duration.class)))
+            when(repository.store(anyString(), any(OidcAuthorizationTransaction.class), any(Duration.class)))
                     .thenReturn(Uni.createFrom().voidItem());
 
-            pkceService.storeChallenge(state, challenge).await().atMost(Duration.ofSeconds(1));
+            pkceService.storeTransaction(state, transaction).await().atMost(Duration.ofSeconds(1));
 
-            verify(repository).store(eq(state), eq(challenge), eq(Duration.ofMinutes(10)));
+            verify(repository).store(eq(state), eq(transaction), eq(Duration.ofMinutes(10)));
         }
 
         @Test
         @DisplayName("should reject null state")
         void shouldRejectNullState() {
-            assertThrows(IllegalArgumentException.class, () -> pkceService.storeChallenge(null, "challenge"));
+            assertThrows(IllegalArgumentException.class, () -> pkceService.storeTransaction(null, transaction("x")));
         }
 
         @Test
         @DisplayName("should reject blank state")
         void shouldRejectBlankState() {
-            assertThrows(IllegalArgumentException.class, () -> pkceService.storeChallenge("  ", "challenge"));
+            assertThrows(IllegalArgumentException.class, () -> pkceService.storeTransaction("  ", transaction("x")));
         }
 
         @Test
-        @DisplayName("should reject null challenge")
-        void shouldRejectNullChallenge() {
-            assertThrows(IllegalArgumentException.class, () -> pkceService.storeChallenge("state", null));
-        }
-
-        @Test
-        @DisplayName("should reject blank challenge")
-        void shouldRejectBlankChallenge() {
-            assertThrows(IllegalArgumentException.class, () -> pkceService.storeChallenge("state", "  "));
+        @DisplayName("should reject null transaction")
+        void shouldRejectNullTransaction() {
+            assertThrows(IllegalArgumentException.class, () -> pkceService.storeTransaction("state", null));
         }
     }
 
@@ -221,14 +241,10 @@ class PkceServiceTest {
         @Test
         @DisplayName("should return true for valid verifier")
         void shouldReturnTrueForValidVerifier() {
-            String state = "test-state";
             String verifier = pkceService.generateCodeVerifier();
             String challenge = pkceService.generateChallenge(verifier);
 
-            when(repository.consumeChallenge(state)).thenReturn(Uni.createFrom().item(Optional.of(challenge)));
-
-            Boolean result =
-                    pkceService.verifyChallenge(state, verifier).await().atMost(Duration.ofSeconds(1));
+            boolean result = pkceService.verifyChallenge(transaction(challenge), verifier);
 
             assertTrue(result);
         }
@@ -236,73 +252,65 @@ class PkceServiceTest {
         @Test
         @DisplayName("should return false for invalid verifier")
         void shouldReturnFalseForInvalidVerifier() {
-            String state = "test-state";
             String challenge = "stored-challenge";
             String wrongVerifier = "wrong-verifier-with-sufficient-length-123456";
 
-            when(repository.consumeChallenge(state)).thenReturn(Uni.createFrom().item(Optional.of(challenge)));
-
-            Boolean result =
-                    pkceService.verifyChallenge(state, wrongVerifier).await().atMost(Duration.ofSeconds(1));
+            boolean result = pkceService.verifyChallenge(transaction(challenge), wrongVerifier);
 
             assertFalse(result);
         }
 
         @Test
-        @DisplayName("should return false when challenge not found")
-        void shouldReturnFalseWhenChallengeNotFound() {
-            String state = "unknown-state";
-            String anyVerifier = "some-verifier-with-sufficient-length-12345";
-
-            when(repository.consumeChallenge(state)).thenReturn(Uni.createFrom().item(Optional.empty()));
-
-            Boolean result =
-                    pkceService.verifyChallenge(state, anyVerifier).await().atMost(Duration.ofSeconds(1));
-
-            assertFalse(result);
-        }
-
-        @Test
-        @DisplayName("should consume challenge (one-time use)")
-        void shouldConsumeChallenge() {
+        @DisplayName("should consume transaction by state")
+        void shouldConsumeTransaction() {
             String state = "test-state";
-            String verifier = pkceService.generateCodeVerifier();
-            String challenge = pkceService.generateChallenge(verifier);
+            final var transaction = transaction("challenge");
 
-            when(repository.consumeChallenge(state)).thenReturn(Uni.createFrom().item(Optional.of(challenge)));
+            when(repository.consume(state)).thenReturn(Uni.createFrom().item(Optional.of(transaction)));
 
-            pkceService.verifyChallenge(state, verifier).await().atMost(Duration.ofSeconds(1));
+            final var result = pkceService.consumeTransaction(state).await().atMost(Duration.ofSeconds(1));
 
-            verify(repository).consumeChallenge(state);
+            assertEquals(Optional.of(transaction), result);
+            verify(repository).consume(state);
         }
 
         @Test
         @DisplayName("should reject null state")
         void shouldRejectNullState() {
-            assertThrows(IllegalArgumentException.class, () -> pkceService.verifyChallenge(null, "verifier"));
-            verify(repository, never()).consumeChallenge(anyString());
+            assertThrows(IllegalArgumentException.class, () -> pkceService.consumeTransaction(null));
+            verify(repository, never()).consume(anyString());
         }
 
         @Test
         @DisplayName("should reject blank state")
         void shouldRejectBlankState() {
-            assertThrows(IllegalArgumentException.class, () -> pkceService.verifyChallenge("  ", "verifier"));
-            verify(repository, never()).consumeChallenge(anyString());
+            assertThrows(IllegalArgumentException.class, () -> pkceService.consumeTransaction("  "));
+            verify(repository, never()).consume(anyString());
         }
 
         @Test
         @DisplayName("should reject null verifier")
         void shouldRejectNullVerifier() {
-            assertThrows(IllegalArgumentException.class, () -> pkceService.verifyChallenge("state", null));
-            verify(repository, never()).consumeChallenge(anyString());
+            assertFalse(pkceService.verifyChallenge(transaction("challenge"), null));
         }
 
         @Test
         @DisplayName("should reject blank verifier")
         void shouldRejectBlankVerifier() {
-            assertThrows(IllegalArgumentException.class, () -> pkceService.verifyChallenge("state", "  "));
-            verify(repository, never()).consumeChallenge(anyString());
+            assertFalse(pkceService.verifyChallenge(transaction("challenge"), "  "));
         }
+    }
+
+    private OidcAuthorizationTransaction transaction(String challenge) {
+        final var now = Instant.now();
+        return new OidcAuthorizationTransaction(
+                "provider",
+                "https://app.example/callback",
+                challenge,
+                "nonce",
+                OidcAuthorizationTransaction.ClientType.PUBLIC,
+                now,
+                now.plusSeconds(600));
     }
 
     @Nested
@@ -317,21 +325,6 @@ class PkceServiceTest {
 
             when(config.enabled()).thenReturn(false);
             assertFalse(pkceService.isEnabled());
-        }
-    }
-
-    @Nested
-    @DisplayName("isRequired()")
-    class IsRequiredTests {
-
-        @Test
-        @DisplayName("should return config value")
-        void shouldReturnConfigValue() {
-            when(config.required()).thenReturn(true);
-            assertTrue(pkceService.isRequired());
-
-            when(config.required()).thenReturn(false);
-            assertFalse(pkceService.isRequired());
         }
     }
 }

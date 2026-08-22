@@ -5,13 +5,18 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+
+import aussie.core.model.auth.OidcAuthorizationTransaction;
 
 @DisplayName("InMemoryPkceChallengeRepository")
 class InMemoryPkceChallengeRepositoryTest {
@@ -38,7 +43,10 @@ class InMemoryPkceChallengeRepositoryTest {
             String state = "test-state";
             String challenge = "test-challenge";
 
-            repository.store(state, challenge, Duration.ofMinutes(10)).await().atMost(Duration.ofSeconds(1));
+            repository
+                    .store(state, transaction(challenge), Duration.ofMinutes(10))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
 
             assertEquals(1, repository.getChallengeCount());
         }
@@ -49,35 +57,36 @@ class InMemoryPkceChallengeRepositoryTest {
             String state = "test-state";
 
             repository
-                    .store(state, "challenge-1", Duration.ofMinutes(10))
+                    .store(state, transaction("challenge-1"), Duration.ofMinutes(10))
                     .await()
                     .atMost(Duration.ofSeconds(1));
             repository
-                    .store(state, "challenge-2", Duration.ofMinutes(10))
+                    .store(state, transaction("challenge-2"), Duration.ofMinutes(10))
                     .await()
                     .atMost(Duration.ofSeconds(1));
 
             assertEquals(1, repository.getChallengeCount());
 
-            Optional<String> result = repository.consumeChallenge(state).await().atMost(Duration.ofSeconds(1));
+            Optional<OidcAuthorizationTransaction> result =
+                    repository.consume(state).await().atMost(Duration.ofSeconds(1));
 
             assertTrue(result.isPresent());
-            assertEquals("challenge-2", result.get());
+            assertEquals("challenge-2", result.get().codeChallenge());
         }
 
         @Test
         @DisplayName("should store multiple challenges for different states")
         void shouldStoreMultipleChallenges() {
             repository
-                    .store("state-1", "challenge-1", Duration.ofMinutes(10))
+                    .store("state-1", transaction("challenge-1"), Duration.ofMinutes(10))
                     .await()
                     .atMost(Duration.ofSeconds(1));
             repository
-                    .store("state-2", "challenge-2", Duration.ofMinutes(10))
+                    .store("state-2", transaction("challenge-2"), Duration.ofMinutes(10))
                     .await()
                     .atMost(Duration.ofSeconds(1));
             repository
-                    .store("state-3", "challenge-3", Duration.ofMinutes(10))
+                    .store("state-3", transaction("challenge-3"), Duration.ofMinutes(10))
                     .await()
                     .atMost(Duration.ofSeconds(1));
 
@@ -95,19 +104,22 @@ class InMemoryPkceChallengeRepositoryTest {
             String state = "test-state";
             String challenge = "test-challenge";
 
-            repository.store(state, challenge, Duration.ofMinutes(10)).await().atMost(Duration.ofSeconds(1));
+            repository
+                    .store(state, transaction(challenge), Duration.ofMinutes(10))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
 
             // First consumption should return the challenge
-            Optional<String> result1 =
-                    repository.consumeChallenge(state).await().atMost(Duration.ofSeconds(1));
+            Optional<OidcAuthorizationTransaction> result1 =
+                    repository.consume(state).await().atMost(Duration.ofSeconds(1));
 
             assertTrue(result1.isPresent());
-            assertEquals(challenge, result1.get());
+            assertEquals(challenge, result1.get().codeChallenge());
             assertEquals(0, repository.getChallengeCount());
 
             // Second consumption should return empty (already consumed)
-            Optional<String> result2 =
-                    repository.consumeChallenge(state).await().atMost(Duration.ofSeconds(1));
+            Optional<OidcAuthorizationTransaction> result2 =
+                    repository.consume(state).await().atMost(Duration.ofSeconds(1));
 
             assertFalse(result2.isPresent());
         }
@@ -115,8 +127,8 @@ class InMemoryPkceChallengeRepositoryTest {
         @Test
         @DisplayName("should return empty for non-existent state")
         void shouldReturnEmptyForNonExistentState() {
-            Optional<String> result =
-                    repository.consumeChallenge("unknown").await().atMost(Duration.ofSeconds(1));
+            Optional<OidcAuthorizationTransaction> result =
+                    repository.consume("unknown").await().atMost(Duration.ofSeconds(1));
 
             assertFalse(result.isPresent());
         }
@@ -127,7 +139,10 @@ class InMemoryPkceChallengeRepositoryTest {
             String state = "test-state";
             String challenge = "test-challenge";
 
-            repository.store(state, challenge, Duration.ofMillis(50)).await().atMost(Duration.ofSeconds(1));
+            repository
+                    .store(state, transaction(challenge), Duration.ofMillis(50))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
 
             // Wait for expiration
             try {
@@ -136,7 +151,8 @@ class InMemoryPkceChallengeRepositoryTest {
                 Thread.currentThread().interrupt();
             }
 
-            Optional<String> result = repository.consumeChallenge(state).await().atMost(Duration.ofSeconds(1));
+            Optional<OidcAuthorizationTransaction> result =
+                    repository.consume(state).await().atMost(Duration.ofSeconds(1));
 
             assertFalse(result.isPresent());
         }
@@ -145,22 +161,50 @@ class InMemoryPkceChallengeRepositoryTest {
         @DisplayName("should not affect other challenges")
         void shouldNotAffectOtherChallenges() {
             repository
-                    .store("state-1", "challenge-1", Duration.ofMinutes(10))
+                    .store("state-1", transaction("challenge-1"), Duration.ofMinutes(10))
                     .await()
                     .atMost(Duration.ofSeconds(1));
             repository
-                    .store("state-2", "challenge-2", Duration.ofMinutes(10))
+                    .store("state-2", transaction("challenge-2"), Duration.ofMinutes(10))
                     .await()
                     .atMost(Duration.ofSeconds(1));
 
-            repository.consumeChallenge("state-1").await().atMost(Duration.ofSeconds(1));
+            repository.consume("state-1").await().atMost(Duration.ofSeconds(1));
 
             assertEquals(1, repository.getChallengeCount());
 
-            Optional<String> result =
-                    repository.consumeChallenge("state-2").await().atMost(Duration.ofSeconds(1));
+            Optional<OidcAuthorizationTransaction> result =
+                    repository.consume("state-2").await().atMost(Duration.ofSeconds(1));
             assertTrue(result.isPresent());
-            assertEquals("challenge-2", result.get());
+            assertEquals("challenge-2", result.get().codeChallenge());
+        }
+
+        @Test
+        @DisplayName("should have exactly one concurrent consumer")
+        void shouldHaveExactlyOneConcurrentConsumer() throws Exception {
+            repository
+                    .store("state", transaction("challenge"), Duration.ofMinutes(10))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            final var executor = Executors.newFixedThreadPool(20);
+            try {
+                final Callable<Boolean> consume = () -> repository
+                        .consume("state")
+                        .await()
+                        .atMost(Duration.ofSeconds(1))
+                        .isPresent();
+                var winners = 0;
+                for (final var result : executor.invokeAll(java.util.Collections.nCopies(20, consume))) {
+                    if (result.get()) {
+                        winners++;
+                    }
+                }
+
+                assertEquals(1, winners);
+            } finally {
+                executor.shutdownNow();
+            }
         }
     }
 
@@ -172,11 +216,11 @@ class InMemoryPkceChallengeRepositoryTest {
         @DisplayName("should clear all challenges")
         void shouldClearAllChallenges() {
             repository
-                    .store("state-1", "challenge-1", Duration.ofMinutes(10))
+                    .store("state-1", transaction("challenge-1"), Duration.ofMinutes(10))
                     .await()
                     .atMost(Duration.ofSeconds(1));
             repository
-                    .store("state-2", "challenge-2", Duration.ofMinutes(10))
+                    .store("state-2", transaction("challenge-2"), Duration.ofMinutes(10))
                     .await()
                     .atMost(Duration.ofSeconds(1));
 
@@ -196,13 +240,17 @@ class InMemoryPkceChallengeRepositoryTest {
             String state = "test-state";
             String challenge = "test-challenge";
 
-            repository.store(state, challenge, Duration.ofSeconds(5)).await().atMost(Duration.ofSeconds(1));
+            repository
+                    .store(state, transaction(challenge), Duration.ofSeconds(5))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
 
             // Immediate retrieval should work
-            Optional<String> result = repository.consumeChallenge(state).await().atMost(Duration.ofSeconds(1));
+            Optional<OidcAuthorizationTransaction> result =
+                    repository.consume(state).await().atMost(Duration.ofSeconds(1));
 
             assertTrue(result.isPresent());
-            assertEquals(challenge, result.get());
+            assertEquals(challenge, result.get().codeChallenge());
         }
 
         @Test
@@ -211,7 +259,10 @@ class InMemoryPkceChallengeRepositoryTest {
             String state = "test-state";
             String challenge = "test-challenge";
 
-            repository.store(state, challenge, Duration.ofMillis(50)).await().atMost(Duration.ofSeconds(1));
+            repository
+                    .store(state, transaction(challenge), Duration.ofMillis(50))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
 
             // Wait for TTL to expire
             try {
@@ -220,9 +271,22 @@ class InMemoryPkceChallengeRepositoryTest {
                 Thread.currentThread().interrupt();
             }
 
-            Optional<String> result = repository.consumeChallenge(state).await().atMost(Duration.ofSeconds(1));
+            Optional<OidcAuthorizationTransaction> result =
+                    repository.consume(state).await().atMost(Duration.ofSeconds(1));
 
             assertFalse(result.isPresent());
         }
+    }
+
+    private OidcAuthorizationTransaction transaction(String challenge) {
+        final var now = Instant.now();
+        return new OidcAuthorizationTransaction(
+                "provider",
+                "https://app.example/callback",
+                challenge,
+                "nonce",
+                OidcAuthorizationTransaction.ClientType.PUBLIC,
+                now,
+                now.plusSeconds(600));
     }
 }

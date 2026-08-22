@@ -14,6 +14,7 @@ import jakarta.annotation.PreDestroy;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
+import aussie.core.model.auth.OidcAuthorizationTransaction;
 import aussie.core.port.out.PkceChallengeRepository;
 
 /**
@@ -44,32 +45,32 @@ public class InMemoryPkceChallengeRepository implements PkceChallengeRepository 
     }
 
     @Override
-    public Uni<Void> store(String state, String challenge, Duration ttl) {
+    public Uni<Void> store(String state, OidcAuthorizationTransaction transaction, Duration ttl) {
         return Uni.createFrom().item(() -> {
             final var expiresAt = Instant.now().plus(ttl);
-            challenges.put(state, new ChallengeEntry(challenge, expiresAt));
-            LOG.debugf("Stored PKCE challenge for state: %s with TTL: %s", state, ttl);
+            challenges.put(state, new ChallengeEntry(transaction, expiresAt));
+            LOG.debugf("Stored OIDC authorization transaction with TTL: %s", ttl);
             return null;
         });
     }
 
     @Override
-    public Uni<Optional<String>> consumeChallenge(String state) {
+    public Uni<Optional<OidcAuthorizationTransaction>> consume(String state) {
         return Uni.createFrom().item(() -> {
             final var entry = challenges.remove(state);
             if (entry == null) {
-                LOG.debugf("No PKCE challenge found for state: %s", state);
-                return Optional.<String>empty();
+                LOG.debug("No OIDC authorization transaction found");
+                return Optional.<OidcAuthorizationTransaction>empty();
             }
 
             // Check if expired
             if (Instant.now().isAfter(entry.expiresAt())) {
-                LOG.debugf("PKCE challenge expired for state: %s", state);
-                return Optional.<String>empty();
+                LOG.debug("OIDC authorization transaction expired");
+                return Optional.<OidcAuthorizationTransaction>empty();
             }
 
-            LOG.debugf("Consumed PKCE challenge for state: %s", state);
-            return Optional.of(entry.challenge());
+            LOG.debug("Consumed OIDC authorization transaction");
+            return Optional.of(entry.transaction());
         });
     }
 
@@ -115,5 +116,5 @@ public class InMemoryPkceChallengeRepository implements PkceChallengeRepository 
         challenges.clear();
     }
 
-    private record ChallengeEntry(String challenge, Instant expiresAt) {}
+    private record ChallengeEntry(OidcAuthorizationTransaction transaction, Instant expiresAt) {}
 }

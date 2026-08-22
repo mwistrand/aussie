@@ -449,6 +449,7 @@ export default function TestingDashboardPage() {
       const codeVerifier = generateCodeVerifier();
       const codeChallenge = await generateCodeChallenge(codeVerifier);
       const state = generateCodeVerifier().substring(0, 32);
+      const nonce = generateCodeVerifier().substring(0, 32);
 
       sessionStorage.setItem("pkce_code_verifier", codeVerifier);
       sessionStorage.setItem("pkce_state", state);
@@ -459,6 +460,7 @@ export default function TestingDashboardPage() {
       idpUrl.searchParams.set("client_id", "aussie-gateway");
       idpUrl.searchParams.set("redirect_uri", redirectUri);
       idpUrl.searchParams.set("state", state);
+      idpUrl.searchParams.set("nonce", nonce);
       idpUrl.searchParams.set("code_challenge", codeChallenge);
       idpUrl.searchParams.set("code_challenge_method", "S256");
       idpUrl.searchParams.set("scope", "openid profile email");
