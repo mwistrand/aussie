@@ -519,7 +519,7 @@ Request --> [Local Caffeine Cache] --> [Redis Distributed Cache] --> [Cassandra]
 - **TTL:** 30 seconds (configurable via `LocalCacheConfig`)
 - **Consistency:** Eventual. Stale for up to TTL + jitter.
 
-This tier exists to avoid any I/O at all for repeated requests. The route cache in `ServiceRegistry` is a local `ConcurrentHashMap<String, CompiledRoute>` (line 62) that is refreshed in bulk when the TTL expires. The JWKS cache uses a Caffeine cache with `maximumSize` and `expireAfterWrite`.
+This tier exists to avoid any I/O at all for repeated requests. `ServiceRegistry` publishes a fully compiled immutable `GatewaySnapshot` through one `AtomicReference`; request threads therefore see either the old route generation or the new one, never a partially refreshed map. The JWKS cache uses a Caffeine cache with `maximumSize` and `expireAfterWrite`.
 
 ### Tier 2: Redis Distributed Cache
 
@@ -558,17 +558,18 @@ Cassandra is only hit when both local and Redis caches miss, or during bulk refr
 
 ### How the Tiers Interact on Write
 
-When a service is registered (line 269-274 of `ServiceRegistry.java`):
+When a service is registered:
 
 ```java
 return repository
         .save(service)                        // Write to Cassandra
-        .invoke(() -> compileAndCacheRoutes(service))  // Update local compiled routes
+        .invoke(() -> publishService(service)) // Atomically publish the local snapshot
+        .call(() -> eventPublisher.publishServiceChanged(service.serviceId()))
         .call(() -> cache.put(service))        // Write-through to Redis
         .map(v -> RegistrationResult.success(service));
 ```
 
-This is write-through on the instance that handles the registration. Other instances will pick up the change when their local cache TTL expires and they refresh from Cassandra (or from Redis, if they do a per-key lookup via `getService()`).
+This is write-through on the instance that handles the registration. A configuration event prompts other instances to fetch the changed service immediately; TTL refresh remains the fallback when an event is missed.
 
 ### The No-Op Cache
 
@@ -646,17 +647,17 @@ private Uni<Void> refreshRouteCache() {
     return repository
             .findAll()
             .invoke(registrations -> {
-                compiledRoutes.clear();
-                for (ServiceRegistration registration : registrations) {
-                    compileAndCacheRoutes(registration);
-                }
+                var valid = registrations.stream()
+                        .filter(this::isValidForRouting)
+                        .toList();
+                snapshot.set(GatewaySnapshot.build(valid));
                 lastRefreshed.set(Instant.now());
             })
             .replaceWithVoid();
 }
 ```
 
-This is not cache-aside. It is a periodic full reload triggered by staleness detection. The reason is performance: route matching requires compiled patterns in a `ConcurrentHashMap`, and loading them one at a time on cache miss would mean the first request after a cold start (or after TTL expiry) would take the hit of loading just one route, while subsequent requests would gradually warm the cache. A bulk reload ensures the entire route table is available after a single database query.
+This is not cache-aside. It is a periodic full reload triggered by staleness detection. The snapshot is built and conflict-checked before the atomic publication, so invalid data cannot expose a partial route generation. A bulk reload makes the entire route table available after a single database query.
 
 ### The Reactive Context Matters
 

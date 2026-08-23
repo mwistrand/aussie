@@ -417,6 +417,8 @@ When registering a service, you can configure endpoints for gateway routing:
 - Single wildcard: `/api/*/info` - matches `/api/users/info`, `/api/orders/info`
 - Multi wildcard: `/api/**` - matches `/api/anything/here/deeply/nested`
 
+Gateway routes must have unambiguous ownership. Registration returns `409 Conflict` when a route can match the same path and HTTP method as a route owned by another service. Use disjoint methods or paths to resolve the conflict.
+
 ### Visibility
 - PUBLIC: Accessible from any source
 - PRIVATE: Restricted by `accessConfig` (IP/domain allowlists)

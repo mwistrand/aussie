@@ -2,13 +2,10 @@ package aussie.core.service.routing;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.annotation.PreDestroy;
@@ -23,10 +20,9 @@ import aussie.core.cache.LocalCacheConfig;
 import aussie.core.model.auth.Permission;
 import aussie.core.model.auth.ServicePermissionPolicy;
 import aussie.core.model.common.ValidationResult;
-import aussie.core.model.routing.EndpointConfig;
+import aussie.core.model.routing.GatewaySnapshot;
 import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.ServiceOnlyMatch;
-import aussie.core.model.routing.ServiceRoutes;
 import aussie.core.model.service.RegistrationResult;
 import aussie.core.model.service.ServiceConfigEvent;
 import aussie.core.model.service.ServicePath;
@@ -69,13 +65,8 @@ public class ServiceRegistry {
     private final ServiceConfigEventPublisher eventPublisher;
     private final Duration routeCacheTtl;
 
-    // Local cache for compiled route patterns (always in-memory for fast matching)
-    private final Map<String, CompiledRoute> compiledRoutes = new ConcurrentHashMap<>();
-
-    // Per-service index for O(1) lookup by service ID. Each entry pre-bakes the
-    // compiled RouteIndex so the request hot path performs a single map get
-    // followed by a direct match call (no Caffeine lookup, no Optional alloc).
-    private final Map<String, ServiceRoutes> servicesById = new ConcurrentHashMap<>();
+    // Every request observes one fully compiled, immutable generation.
+    private final AtomicReference<GatewaySnapshot> snapshot = new AtomicReference<>(GatewaySnapshot.empty());
 
     // TTL tracking for multi-instance cache refresh
     private final AtomicReference<Instant> lastRefreshed = new AtomicReference<>(Instant.MIN);
@@ -167,7 +158,7 @@ public class ServiceRegistry {
         repository
                 .findById(serviceId)
                 .map(this::onlyValidForRouting)
-                .invoke(opt -> opt.ifPresentOrElse(this::compileAndCacheRoutes, () -> removeCompiledRoutes(serviceId)))
+                .invoke(opt -> opt.ifPresentOrElse(this::publishService, () -> removeService(serviceId)))
                 .chain(opt -> opt.map(cache::put).orElseGet(() -> cache.invalidate(serviceId)))
                 .subscribe()
                 .with(
@@ -178,8 +169,7 @@ public class ServiceRegistry {
     /** Remove compiled routes and invalidate the distributed cache for a deleted service. */
     private void handleServiceRemoved(String serviceId) {
         LOG.debugf("Received service removed event: %s", serviceId);
-        compiledRoutes.entrySet().removeIf(entry -> entry.getKey().startsWith(serviceId + ":"));
-        servicesById.remove(serviceId);
+        removeService(serviceId);
         cache.invalidate(serviceId)
                 .subscribe()
                 .with(
@@ -191,8 +181,8 @@ public class ServiceRegistry {
      * Refresh all routes from persistent storage.
      *
      * <p>
-     * Clears the local cache and reloads all service registrations from storage.
-     * Update the last-refreshed timestamp for TTL tracking.
+     * Builds and atomically publishes all valid service registrations from storage,
+     * then updates the last-refreshed timestamp for TTL tracking.
      *
      * @return Uni completing when refresh is done
      */
@@ -200,25 +190,10 @@ public class ServiceRegistry {
         return repository
                 .findAll()
                 .invoke(registrations -> {
-                    // Build the new state off-line first, then merge into the live maps so
-                    // concurrent readers never observe an empty map mid-refresh.
-                    final var nextRoutes = new HashMap<String, CompiledRoute>();
-                    final var nextById = new HashMap<String, ServiceRoutes>();
-                    for (var registration : registrations) {
-                        if (!isValidForRouting(registration)) {
-                            continue;
-                        }
-                        nextById.put(registration.serviceId(), ServiceRoutes.of(registration));
-                        for (var endpoint : registration.endpoints()) {
-                            nextRoutes.put(
-                                    buildRouteKey(registration.serviceId(), endpoint.path()),
-                                    new CompiledRoute(registration, endpoint));
-                        }
-                    }
-                    compiledRoutes.putAll(nextRoutes);
-                    compiledRoutes.keySet().retainAll(nextRoutes.keySet());
-                    servicesById.putAll(nextById);
-                    servicesById.keySet().retainAll(nextById.keySet());
+                    final var validRegistrations = registrations.stream()
+                            .filter(this::isValidForRouting)
+                            .toList();
+                    snapshot.set(GatewaySnapshot.build(validRegistrations));
                     lastRefreshed.set(Instant.now());
                 })
                 .replaceWithVoid();
@@ -378,9 +353,15 @@ public class ServiceRegistry {
                 }
             }
 
+            try {
+                snapshot.get().with(service);
+            } catch (IllegalArgumentException conflict) {
+                return Uni.createFrom().item(RegistrationResult.failure(conflict.getMessage(), 409));
+            }
+
             return repository
                     .save(service)
-                    .invoke(() -> compileAndCacheRoutes(service))
+                    .invoke(() -> publishService(service))
                     .call(() -> eventPublisher.publishServiceChanged(service.serviceId()))
                     .call(() -> cache.put(service)
                             .onFailure()
@@ -429,7 +410,7 @@ public class ServiceRegistry {
      */
     public Uni<Boolean> unregister(String serviceId) {
         return repository.findById(serviceId).flatMap(opt -> {
-            opt.ifPresent(this::removeCompiledRoutes);
+            opt.ifPresent(service -> removeService(service.serviceId()));
             return repository
                     .delete(serviceId)
                     .call(deleted -> {
@@ -468,7 +449,7 @@ public class ServiceRegistry {
                         .item(RegistrationResult.failure("Not authorized to delete service: " + serviceId, 403));
             }
 
-            removeCompiledRoutes(existing);
+            removeService(existing.serviceId());
             return repository
                     .delete(serviceId)
                     .call(() -> eventPublisher.publishServiceRemoved(serviceId))
@@ -546,9 +527,10 @@ public class ServiceRegistry {
         if (validationResult instanceof ValidationResult.Invalid invalid) {
             return Uni.createFrom().failure(new IllegalArgumentException(invalid.reason()));
         }
+        snapshot.get().with(service);
         return repository
                 .save(service)
-                .invoke(() -> compileAndCacheRoutes(service))
+                .invoke(() -> publishService(service))
                 .call(() -> eventPublisher.publishServiceChanged(service.serviceId()))
                 .call(() -> cache.put(service)
                         .onFailure()
@@ -579,9 +561,8 @@ public class ServiceRegistry {
      * services.
      *
      * <p>
-     * This is a synchronous operation that checks each registered service's
-     * endpoints for a matching route. Note: This method does NOT refresh the
-     * cache from storage. For multi-instance safe lookups, use
+     * This is a synchronous operation over the current compiled snapshot. Note:
+     * This method does NOT refresh the cache from storage. For multi-instance safe lookups, use
      * {@link #findRouteAsync(String, String)}.
      *
      * @param path   The request path
@@ -609,10 +590,12 @@ public class ServiceRegistry {
      * segment matches a registered service ID.
      */
     private Optional<RouteLookupResult> findRouteInCache(String path, String method) {
+        final var currentSnapshot = snapshot.get();
+
         // Explicit gateway mode: /gateway/api/users -> match /api/users against all services
         if (path != null && (path.toLowerCase().startsWith("/gateway/") || path.equalsIgnoreCase("/gateway"))) {
             final var endpointPath = path.length() > "/gateway".length() ? path.substring("/gateway".length()) : "/";
-            return findRouteByEndpointPath(endpointPath, method);
+            return findRouteByEndpointPath(currentSnapshot, endpointPath, method);
         }
 
         // Parse the path to extract potential service ID and endpoint path
@@ -621,21 +604,22 @@ public class ServiceRegistry {
         final var endpointPath = servicePath.path();
 
         // Check if the parsed serviceId corresponds to a registered service
-        final var routes = servicesById.get(serviceId);
+        final var routes = currentSnapshot.service(serviceId);
 
-        if (routes != null) {
+        if (routes.isPresent()) {
             // Pass-through mode: /demo-service/api/users -> match /api/users against demo-service
-            final var match = routes.matchEndpoint(normalizePath(endpointPath), method.toUpperCase());
+            final var service = routes.get();
+            final var match = currentSnapshot.match(serviceId, normalizePath(endpointPath), method.toUpperCase());
             if (match != null) {
                 return Optional.of(match);
             }
-            return Optional.of(new ServiceOnlyMatch(routes.service()));
+            return Optional.of(new ServiceOnlyMatch(service));
         }
 
         // Implicit gateway mode: No matching serviceId found, so treat the path as an
         // endpoint path and search all services. This handles calls from GatewayService
         // where the path is just the endpoint (e.g., "/api/users" without "/gateway" prefix).
-        return findRouteByEndpointPath(path, method);
+        return findRouteByEndpointPath(currentSnapshot, path, method);
     }
 
     /**
@@ -644,34 +628,12 @@ public class ServiceRegistry {
      *
      * <p>
      * If an exact endpoint match is found, returns a {@link RouteMatch}.
-     * If no endpoint matches but at least one service is registered,
-     * returns a {@link ServiceOnlyMatch} for the first service found.
-     * This fallback behavior allows the gateway to proxy requests to a service
-     * even when no explicit endpoint is configured.
      */
-    private Optional<RouteLookupResult> findRouteByEndpointPath(String endpointPath, String method) {
-        ServiceRegistration firstService = null;
+    private Optional<RouteLookupResult> findRouteByEndpointPath(
+            GatewaySnapshot currentSnapshot, String endpointPath, String method) {
         final var normalizedPath = normalizePath(endpointPath);
         final var upperMethod = method.toUpperCase();
-
-        for (var routes : servicesById.values()) {
-            // Track the first service for fallback
-            if (firstService == null) {
-                firstService = routes.service();
-            }
-
-            final var match = routes.matchEndpoint(normalizedPath, upperMethod);
-            if (match != null) {
-                return Optional.of(match);
-            }
-        }
-
-        // Fallback: return ServiceOnlyMatch for the first service if any exist
-        if (firstService != null) {
-            return Optional.of(new ServiceOnlyMatch(firstService));
-        }
-
-        return Optional.empty();
+        return Optional.ofNullable(currentSnapshot.match(normalizedPath, upperMethod));
     }
 
     private static String normalizePath(String path) {
@@ -681,12 +643,8 @@ public class ServiceRegistry {
         return path.startsWith("/") ? path : "/" + path;
     }
 
-    private void compileAndCacheRoutes(ServiceRegistration service) {
-        servicesById.put(service.serviceId(), ServiceRoutes.of(service));
-        for (var endpoint : service.endpoints()) {
-            var routeKey = buildRouteKey(service.serviceId(), endpoint.path());
-            compiledRoutes.put(routeKey, new CompiledRoute(service, endpoint));
-        }
+    private void publishService(ServiceRegistration service) {
+        snapshot.updateAndGet(current -> current.with(service));
     }
 
     private Optional<ServiceRegistration> onlyValidForRouting(Optional<ServiceRegistration> registration) {
@@ -704,20 +662,9 @@ public class ServiceRegistry {
         return true;
     }
 
-    private void removeCompiledRoutes(String serviceId) {
-        servicesById.remove(serviceId);
-        compiledRoutes.entrySet().removeIf(entry -> entry.getKey().startsWith(serviceId + ":"));
+    private void removeService(String serviceId) {
+        snapshot.updateAndGet(current -> current.without(serviceId));
     }
-
-    private void removeCompiledRoutes(ServiceRegistration service) {
-        removeCompiledRoutes(service.serviceId());
-    }
-
-    private String buildRouteKey(String serviceId, String path) {
-        return serviceId + ":" + path;
-    }
-
-    private record CompiledRoute(ServiceRegistration service, EndpointConfig endpoint) {}
 
     /**
      * Get a service by ID from the local in-memory cache (non-blocking).
@@ -734,8 +681,7 @@ public class ServiceRegistry {
         if (serviceId == null || ServicePath.UNKNOWN_SERVICE.equals(serviceId)) {
             return Optional.empty();
         }
-        final var routes = servicesById.get(serviceId);
-        return routes == null ? Optional.empty() : Optional.of(routes.service());
+        return snapshot.get().service(serviceId);
     }
 
     /**

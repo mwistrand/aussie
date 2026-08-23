@@ -83,6 +83,18 @@ class RouteIndexTest {
         }
 
         @Test
+        @DisplayName("treats regex metacharacters as route literals")
+        void treatsRegexMetacharactersAsLiterals() {
+            var endpoints = List.of(endpoint("/releases/v1.0+final", "GET"));
+            var index = RouteIndex.build(endpoints);
+
+            assertTrue(index.findMatch(service(endpoints), "/releases/v1.0+final", "GET")
+                    .isPresent());
+            assertFalse(index.findMatch(service(endpoints), "/releases/v1x000final", "GET")
+                    .isPresent());
+        }
+
+        @Test
         @DisplayName("returns empty when first segment does not match any bucket or wildcard")
         void returnsEmptyWhenNothingMatches() {
             var endpoints = List.of(endpoint("/api/users", "GET"));

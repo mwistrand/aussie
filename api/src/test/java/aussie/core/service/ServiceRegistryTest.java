@@ -417,8 +417,7 @@ class ServiceRegistryTest {
             assertTrue(registry.findRoute("/api/users/info", "GET").isPresent());
             assertTrue(registry.findRoute("/api/products/info", "GET").isPresent());
             var extra = registry.findRoute("/api/users/extra/info", "GET");
-            assertTrue(extra.isPresent());
-            assertInstanceOf(ServiceOnlyMatch.class, extra.get());
+            assertTrue(extra.isEmpty());
         }
 
         @Test
@@ -432,8 +431,7 @@ class ServiceRegistryTest {
             registry.register(service).await().atMost(TIMEOUT);
 
             var result = registry.findRoute("/api/users", "POST");
-            assertTrue(result.isPresent());
-            assertInstanceOf(ServiceOnlyMatch.class, result.get());
+            assertTrue(result.isEmpty());
         }
 
         @Test
@@ -467,8 +465,8 @@ class ServiceRegistryTest {
         }
 
         @Test
-        @DisplayName("Should return ServiceOnlyMatch when service matches but no endpoint")
-        void shouldReturnServiceOnlyMatchWhenNoEndpointMatches() {
+        @DisplayName("Should not select an arbitrary service when no gateway endpoint matches")
+        void shouldReturnEmptyWhenNoGatewayEndpointMatches() {
             var endpoint = new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());
             var service = ServiceRegistration.builder("user-service")
                     .baseUrl("http://192.0.2.10:8080")
@@ -476,12 +474,36 @@ class ServiceRegistryTest {
                     .build();
             registry.register(service).await().atMost(TIMEOUT);
 
-            // This path does not match the endpoint, but the registry iterates services
-            // and should return a ServiceOnlyMatch wrapping the service
             var result = registry.findRoute("/api/products", "GET");
-            assertTrue(result.isPresent());
-            assertInstanceOf(ServiceOnlyMatch.class, result.get());
-            assertEquals("user-service", result.get().service().serviceId());
+            assertTrue(result.isEmpty());
+        }
+
+        @Test
+        @DisplayName("Should reject conflicting routes owned by different services")
+        void shouldRejectCrossServiceRouteConflict() {
+            var exact = ServiceRegistration.builder("exact-service")
+                    .baseUrl("http://192.0.2.10:8080")
+                    .endpoints(List.of(new EndpointConfig(
+                            "/api/users/me", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty())))
+                    .build();
+            var parameter = ServiceRegistration.builder("parameter-service")
+                    .baseUrl("http://192.0.2.10:8081")
+                    .endpoints(List.of(new EndpointConfig(
+                            "/api/users/{id}", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty())))
+                    .build();
+
+            assertInstanceOf(
+                    RegistrationResult.Success.class,
+                    registry.register(exact).await().atMost(TIMEOUT));
+            var result = registry.register(parameter).await().atMost(TIMEOUT);
+
+            var failure = assertInstanceOf(RegistrationResult.Failure.class, result);
+            assertEquals(409, failure.statusCode());
+            assertTrue(repository
+                    .findById("parameter-service")
+                    .await()
+                    .atMost(TIMEOUT)
+                    .isEmpty());
         }
 
         @Test

@@ -1,8 +1,10 @@
 package aussie.core.model.routing;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,6 +28,7 @@ import aussie.core.model.service.ServiceRegistration;
 public final class RouteIndex {
 
     private static final Pattern PARAM_NAME_PATTERN = Pattern.compile("\\{([^/]+)\\}");
+    private static final Pattern PARAM_NAME = Pattern.compile("[A-Za-z][A-Za-z0-9]*");
 
     private final Map<String, List<CompiledEndpoint>> byFirstSegment;
     private final List<CompiledEndpoint> wildcardEndpoints;
@@ -53,6 +56,28 @@ public final class RouteIndex {
             immutableBuckets.put(entry.getKey(), List.copyOf(entry.getValue()));
         }
 
+        return new RouteIndex(immutableBuckets, List.copyOf(wildcards));
+    }
+
+    static RouteIndex buildGateway(List<ServiceRegistration> services) {
+        final var byFirstSegment = new HashMap<String, List<CompiledEndpoint>>();
+        final var wildcards = new ArrayList<CompiledEndpoint>();
+        var order = 0;
+        for (final var service : services) {
+            for (final var endpoint : service.endpoints()) {
+                final var compiled = CompiledEndpoint.of(endpoint, order++, service);
+                if (compiled.firstStaticSegment == null) {
+                    wildcards.add(compiled);
+                } else {
+                    byFirstSegment
+                            .computeIfAbsent(compiled.firstStaticSegment, ignored -> new ArrayList<>())
+                            .add(compiled);
+                }
+            }
+        }
+
+        final var immutableBuckets = new HashMap<String, List<CompiledEndpoint>>(byFirstSegment.size());
+        byFirstSegment.forEach((segment, routes) -> immutableBuckets.put(segment, List.copyOf(routes)));
         return new RouteIndex(immutableBuckets, List.copyOf(wildcards));
     }
 
@@ -107,6 +132,10 @@ public final class RouteIndex {
         return null;
     }
 
+    RouteMatch match(String normalizedPath, String upperMethod) {
+        return match(null, normalizedPath, upperMethod);
+    }
+
     /**
      * Return the first path segment (between leading '/' and next '/'), or empty string for "/".
      */
@@ -123,6 +152,7 @@ public final class RouteIndex {
      */
     static final class CompiledEndpoint {
         final EndpointConfig endpoint;
+        final ServiceRegistration service;
         final Pattern pattern;
         final List<String> paramNames;
         final String firstStaticSegment; // null if first segment is wildcard/parameterized
@@ -130,11 +160,13 @@ public final class RouteIndex {
 
         private CompiledEndpoint(
                 EndpointConfig endpoint,
+                ServiceRegistration service,
                 Pattern pattern,
                 List<String> paramNames,
                 String firstStaticSegment,
                 int order) {
             this.endpoint = endpoint;
+            this.service = service;
             this.pattern = pattern;
             this.paramNames = paramNames;
             this.firstStaticSegment = firstStaticSegment;
@@ -142,11 +174,15 @@ public final class RouteIndex {
         }
 
         static CompiledEndpoint of(EndpointConfig endpoint, int order) {
+            return of(endpoint, order, null);
+        }
+
+        static CompiledEndpoint of(EndpointConfig endpoint, int order, ServiceRegistration service) {
             final var template = endpoint.path();
             final var pattern = compilePathPattern(template);
             final var paramNames = extractParamNames(template);
             final var firstStaticSegment = staticFirstSegment(template);
-            return new CompiledEndpoint(endpoint, pattern, paramNames, firstStaticSegment, order);
+            return new CompiledEndpoint(endpoint, service, pattern, paramNames, firstStaticSegment, order);
         }
 
         RouteMatch tryMatch(ServiceRegistration service, String normalizedPath, String upperMethod) {
@@ -165,7 +201,7 @@ public final class RouteIndex {
                     .map(rewrite -> applyPathRewrite(rewrite, pathVariables))
                     .orElse(normalizedPath);
 
-            return new RouteMatch(service, endpoint, targetPath, pathVariables);
+            return new RouteMatch(this.service == null ? service : this.service, endpoint, targetPath, pathVariables);
         }
 
         private Map<String, String> extractPathVariables(Matcher matcher) {
@@ -198,12 +234,42 @@ public final class RouteIndex {
         }
 
         private static Pattern compilePathPattern(String pathTemplate) {
-            // Convert path template with {param} placeholders to regex
-            var regex = pathTemplate
-                    .replaceAll("\\{([^/]+)\\}", "(?<$1>[^/]+)")
-                    .replaceAll("\\*\\*", ".*")
-                    .replaceAll("(?<!\\.)\\*", "[^/]*");
-            return Pattern.compile("^" + regex + "$");
+            final var regex = new StringBuilder("^");
+            final var names = new HashSet<String>();
+            for (var index = 0; index < pathTemplate.length(); ) {
+                final var current = pathTemplate.charAt(index);
+                if (current == '{') {
+                    final var end = pathTemplate.indexOf('}', index + 1);
+                    if (end < 0) {
+                        throw new IllegalArgumentException("Unclosed route parameter in path: " + pathTemplate);
+                    }
+                    final var name = pathTemplate.substring(index + 1, end);
+                    if (!PARAM_NAME.matcher(name).matches() || !names.add(name)) {
+                        throw new IllegalArgumentException("Invalid or duplicate route parameter: " + name);
+                    }
+                    regex.append("(?<").append(name).append(">[^/]+)");
+                    index = end + 1;
+                } else if (current == '}') {
+                    throw new IllegalArgumentException("Unexpected '}' in route path: " + pathTemplate);
+                } else if (current == '*') {
+                    final var doubleStar = index + 1 < pathTemplate.length() && pathTemplate.charAt(index + 1) == '*';
+                    regex.append(doubleStar ? ".*" : "[^/]*");
+                    index += doubleStar ? 2 : 1;
+                } else {
+                    final var special = nextSpecial(pathTemplate, index);
+                    regex.append(Pattern.quote(pathTemplate.substring(index, special)));
+                    index = special;
+                }
+            }
+            return Pattern.compile(regex.append('$').toString());
+        }
+
+        private static int nextSpecial(String path, int start) {
+            var index = start;
+            while (index < path.length() && "{}*".indexOf(path.charAt(index)) < 0) {
+                index++;
+            }
+            return index;
         }
 
         private static List<String> extractParamNames(String pathTemplate) {
@@ -262,5 +328,91 @@ public final class RouteIndex {
 
     int wildcardCount() {
         return wildcardEndpoints.size();
+    }
+
+    static boolean overlaps(EndpointConfig left, EndpointConfig right) {
+        if (!methodsOverlap(left.methods(), right.methods())) {
+            return false;
+        }
+        final var leftFirstSegment = CompiledEndpoint.staticFirstSegment(left.path());
+        final var rightFirstSegment = CompiledEndpoint.staticFirstSegment(right.path());
+        if (leftFirstSegment != null && rightFirstSegment != null && !leftFirstSegment.equals(rightFirstSegment)) {
+            return false;
+        }
+        return pathsOverlap(tokens(left.path()), tokens(right.path()));
+    }
+
+    private static boolean methodsOverlap(Set<String> left, Set<String> right) {
+        return left.contains("*") || right.contains("*") || left.stream().anyMatch(right::contains);
+    }
+
+    private static List<PathToken> tokens(String path) {
+        final var tokens = new ArrayList<PathToken>(path.length());
+        for (var index = 0; index < path.length(); ) {
+            final var current = path.charAt(index);
+            if (current == '{') {
+                tokens.add(PathToken.NON_SLASH);
+                tokens.add(PathToken.STAR);
+                index = path.indexOf('}', index + 1) + 1;
+            } else if (current == '*') {
+                final var doubleStar = index + 1 < path.length() && path.charAt(index + 1) == '*';
+                tokens.add(doubleStar ? PathToken.DOUBLE_STAR : PathToken.STAR);
+                index += doubleStar ? 2 : 1;
+            } else {
+                tokens.add(PathToken.literal(current));
+                index++;
+            }
+        }
+        return tokens;
+    }
+
+    private static boolean pathsOverlap(List<PathToken> left, List<PathToken> right) {
+        final var pending = new ArrayDeque<PathState>();
+        final var visited = new HashSet<PathState>();
+        pending.add(new PathState(0, 0));
+
+        while (!pending.isEmpty()) {
+            final var state = pending.removeFirst();
+            if (!visited.add(state)) {
+                continue;
+            }
+            if (state.left() == left.size() && state.right() == right.size()) {
+                return true;
+            }
+
+            final var leftToken = state.left() < left.size() ? left.get(state.left()) : null;
+            final var rightToken = state.right() < right.size() ? right.get(state.right()) : null;
+            if (leftToken != null && leftToken.repeats()) {
+                pending.add(new PathState(state.left() + 1, state.right()));
+            }
+            if (rightToken != null && rightToken.repeats()) {
+                pending.add(new PathState(state.left(), state.right() + 1));
+            }
+            if (leftToken != null && rightToken != null && leftToken.overlaps(rightToken)) {
+                pending.add(new PathState(
+                        leftToken.repeats() ? state.left() : state.left() + 1,
+                        rightToken.repeats() ? state.right() : state.right() + 1));
+            }
+        }
+        return false;
+    }
+
+    private record PathState(int left, int right) {}
+
+    private record PathToken(int literal, boolean matchesSlash, boolean repeats) {
+        private static final PathToken NON_SLASH = new PathToken(-1, false, false);
+        private static final PathToken STAR = new PathToken(-1, false, true);
+        private static final PathToken DOUBLE_STAR = new PathToken(-1, true, true);
+
+        private static PathToken literal(char value) {
+            return new PathToken(value, false, false);
+        }
+
+        private boolean overlaps(PathToken other) {
+            if (literal >= 0) {
+                return other.literal >= 0 ? literal == other.literal : other.matchesSlash || literal != '/';
+            }
+            return other.literal < 0 || matchesSlash || other.literal != '/';
+        }
     }
 }

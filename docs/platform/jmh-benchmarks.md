@@ -8,7 +8,7 @@ JMH benchmarks live in `api/src/jmh/java/aussie/benchmark/` and exercise pure do
 
 | Benchmark                    | Target                                                                 |
 |------------------------------|------------------------------------------------------------------------|
-| `RouteMatchingBenchmark`     | `ServiceRegistration#findRoute` (exact, parameterized, wildcard, rewrite) and `ServiceRegistry`-style resolve-and-match through the per-service `RouteIndex` across 1/10/100/500 services |
+| `RouteMatchingBenchmark`     | Exact, parameterized, wildcard, and rewrite matching plus global immutable-snapshot lookup across 1/10/100/500 services |
 | `BucketAlgorithmBenchmark`   | Token bucket allowed/rejected/refill and status computation            |
 | `BloomFilterBenchmark`       | Revocation bloom filter "definitely not revoked" fast path             |
 | `RevocationCacheBenchmark`   | Caffeine-backed revocation cache hit, miss, and expiry detection       |

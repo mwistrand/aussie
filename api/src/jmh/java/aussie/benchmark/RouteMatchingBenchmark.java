@@ -22,8 +22,7 @@ import org.openjdk.jmh.infra.Blackhole;
 
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
-import aussie.core.model.routing.RouteIndex;
-import aussie.core.model.routing.ServiceRoutes;
+import aussie.core.model.routing.GatewaySnapshot;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.service.routing.GlobPatternMatcher;
 
@@ -186,46 +185,39 @@ public class RouteMatchingBenchmark {
     }
 
     /**
-     * Scaling state for the registry hot path: pre-baked {@link ServiceRoutes} per service,
-     * keyed by serviceId. Mirrors how {@code ServiceRegistry#findRoute} resolves the service
-     * before dispatching to the per-service {@code RouteIndex}.
+     * Scaling state for the registry's immutable global route snapshot.
      */
     @State(Scope.Benchmark)
     public static class ServiceCountScalingState {
         @Param({"1", "10", "100", "500"})
         int serviceCount;
 
-        java.util.Map<String, ServiceRoutes> servicesById;
-        String[] matchingServiceIds;
+        GatewaySnapshot snapshot;
         String matchingPath;
 
         @Setup
         public void setup() {
-            servicesById = new java.util.HashMap<>(serviceCount * 2);
-            matchingServiceIds = new String[serviceCount];
+            final var registrations = new ArrayList<ServiceRegistration>(serviceCount);
             for (var i = 0; i < serviceCount; i++) {
                 final var serviceId = "svc-" + i;
-                matchingServiceIds[i] = serviceId;
                 final var registration = ServiceRegistration.builder(serviceId)
                         .baseUrl(URI.create("http://backend.example.com"))
-                        .endpoints(List.of(EndpointConfig.publicEndpoint("/api/users/{id}", Set.of("GET"))))
+                        .endpoints(List.of(
+                                EndpointConfig.publicEndpoint("/" + serviceId + "/api/users/{id}", Set.of("GET"))))
                         .build();
-                servicesById.put(serviceId, ServiceRoutes.of(registration));
+                registrations.add(registration);
             }
-            matchingPath = "/api/users/42";
+            snapshot = GatewaySnapshot.build(registrations);
+            matchingPath = "/svc-" + (serviceCount - 1) + "/api/users/42";
         }
     }
 
     /**
-     * Worst-case registry hot path: resolve a service from a map of N entries and dispatch
-     * an endpoint match. Targets {@code §5.2} — should be flat across service counts since
-     * lookup is O(1) and the per-service {@link RouteIndex} is pre-baked.
+     * Registry gateway hot path. Static first-segment indexing should keep lookup flat as
+     * unrelated service count grows.
      */
     @Benchmark
     public void registry_resolveAndMatch(ServiceCountScalingState state, Blackhole bh) {
-        // Pick the last service so any leakage of linear scanning shows up
-        final var serviceId = state.matchingServiceIds[state.serviceCount - 1];
-        final var routes = state.servicesById.get(serviceId);
-        bh.consume(routes.matchEndpoint(state.matchingPath, "GET"));
+        bh.consume(state.snapshot.match(state.matchingPath, "GET"));
     }
 }

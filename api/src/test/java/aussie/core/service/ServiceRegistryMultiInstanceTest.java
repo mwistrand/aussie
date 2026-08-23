@@ -1,6 +1,7 @@
 package aussie.core.service;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
@@ -211,6 +212,32 @@ class ServiceRegistryMultiInstanceTest {
     @Nested
     @DisplayName("Cache Freshness")
     class CacheFreshness {
+
+        @Test
+        @DisplayName("Conflicting refresh should retain the last-known-good snapshot")
+        void conflictingRefreshShouldRetainLastKnownGoodSnapshot() throws InterruptedException {
+            var active = ServiceRegistration.builder("active-service")
+                    .baseUrl("http://192.0.2.10:8080")
+                    .endpoints(List.of(new EndpointConfig(
+                            "/api/items", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty())))
+                    .build();
+            sharedRepository.save(active).await().atMost(TIMEOUT);
+            instanceA.initialize().await().atMost(TIMEOUT);
+
+            var conflicting = ServiceRegistration.builder("conflicting-service")
+                    .baseUrl("http://192.0.2.10:8081")
+                    .endpoints(List.of(new EndpointConfig(
+                            "/api/{item}", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty())))
+                    .build();
+            sharedRepository.save(conflicting).await().atMost(TIMEOUT);
+            Thread.sleep(150);
+
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> instanceA.findRouteAsync("/api/items", "GET").await().atMost(TIMEOUT));
+            assertTrue(instanceA.findRoute("/api/items", "GET").isPresent());
+            assertTrue(instanceA.getServiceFromLocalCache("conflicting-service").isEmpty());
+        }
 
         @Test
         @DisplayName("findRouteAsync should not refresh cache when still fresh")

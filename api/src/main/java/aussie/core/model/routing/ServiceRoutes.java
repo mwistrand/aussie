@@ -8,8 +8,8 @@ import aussie.core.model.service.ServiceRegistration;
  * an endpoint match in two pointer-chasing operations with no per-request cache
  * lookup or {@link java.util.Optional} allocation.
  *
- * <p>Built once at registration / refresh time by {@code ServiceRegistry} and
- * stored in its {@code servicesById} map.
+ * <p>Built once at registration / refresh time and stored in the active
+ * {@link GatewaySnapshot}.
  */
 public record ServiceRoutes(ServiceRegistration service, RouteIndex index) {
 

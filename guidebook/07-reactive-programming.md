@@ -152,13 +152,13 @@ Each step depends on the result of the previous step. The `flatMap` operator exp
 
 ### chain vs flatMap
 
-`chain` is semantically identical to `flatMap`: it chains a `Uni`-returning function. It exists as an alias to read better in certain contexts. The `ServiceRegistry` uses `chain` for fire-and-forget side effects:
+`chain` is semantically identical to `flatMap`: it chains a `Uni`-returning function. It exists as an alias to read better in certain contexts. `ServiceRegistry` uses `call` for reactive side effects:
 
 ```java
-// api/src/main/java/aussie/core/service/routing/ServiceRegistry.java, lines 269-273
 return repository
         .save(service)
-        .invoke(() -> compileAndCacheRoutes(service))
+        .invoke(() -> publishService(service))
+        .call(() -> eventPublisher.publishServiceChanged(service.serviceId()))
         .call(() -> cache.put(service))
         .map(v -> RegistrationResult.success(service));
 ```
