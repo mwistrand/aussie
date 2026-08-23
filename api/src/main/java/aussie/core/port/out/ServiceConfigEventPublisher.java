@@ -42,6 +42,10 @@ public interface ServiceConfigEventPublisher {
      */
     Uni<Void> publishServiceChanged(String serviceId);
 
+    default Uni<Void> publishServiceChanged(String serviceId, long generation) {
+        return publishServiceChanged(serviceId);
+    }
+
     /**
      * Publish that a service was removed.
      *
@@ -49,6 +53,10 @@ public interface ServiceConfigEventPublisher {
      * @return Uni completing when the event is published
      */
     Uni<Void> publishServiceRemoved(String serviceId);
+
+    default Uni<Void> publishServiceRemoved(String serviceId, long generation) {
+        return publishServiceRemoved(serviceId);
+    }
 
     /**
      * Subscribe to service configuration events from other instances.

@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -242,6 +244,9 @@ class ServiceRegistryMultiInstanceTest {
                     () -> instanceA.findRouteAsync("/api/items", "GET").await().atMost(TIMEOUT));
             assertTrue(instanceA.findRoute("/api/items", "GET").isPresent());
             assertTrue(instanceA.getServiceFromLocalCache("conflicting-service").isEmpty());
+            final var status = instanceA.routingStatus().await().atMost(TIMEOUT);
+            assertTrue(status.durableGeneration() > status.activeGeneration());
+            assertTrue(status.lastRejectedGeneration().isPresent());
         }
 
         @Test
@@ -264,6 +269,57 @@ class ServiceRegistryMultiInstanceTest {
             // Async method should still return empty (cache is fresh, no refresh)
             var result = instanceA.findRouteAsync("/api/items", "GET").await().atMost(TIMEOUT);
             assertFalse(result.isPresent());
+        }
+
+        @Test
+        @DisplayName("Older refresh should not replace a newer routing generation")
+        void olderRefreshShouldNotReplaceNewerGeneration() {
+            final var delayedGeneration = new CompletableFuture<Long>();
+            final var repository = mock(ServiceRegistrationRepository.class);
+            final var oldService = ServiceRegistration.builder("old-service")
+                    .baseUrl("http://192.0.2.10:8080")
+                    .endpoints(List.of(
+                            new EndpointConfig("/api/old", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty())))
+                    .build();
+            final var newService = ServiceRegistration.builder("new-service")
+                    .baseUrl("http://192.0.2.10:8081")
+                    .endpoints(List.of(
+                            new EndpointConfig("/api/new", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty())))
+                    .build();
+
+            when(repository.currentGeneration())
+                    .thenReturn(Uni.createFrom().item(0L))
+                    .thenReturn(Uni.createFrom().item(0L))
+                    .thenReturn(Uni.createFrom().item(1L))
+                    .thenReturn(Uni.createFrom().completionStage(() -> delayedGeneration))
+                    .thenReturn(Uni.createFrom().item(2L))
+                    .thenReturn(Uni.createFrom().item(2L))
+                    .thenReturn(Uni.createFrom().item(2L));
+            when(repository.findAll())
+                    .thenReturn(Uni.createFrom().item(List.of()))
+                    .thenReturn(Uni.createFrom().item(List.of(oldService)))
+                    .thenReturn(Uni.createFrom().item(List.of(newService)));
+
+            final var publisher = new InMemoryServiceConfigEventPublisher();
+            final var registry = new ServiceRegistry(
+                    repository,
+                    NoOpConfigurationCache.INSTANCE,
+                    new ServiceRegistrationValidator(
+                            PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG),
+                    new ServiceAuthorizationService(new DefaultPermissionPolicy()),
+                    publisher,
+                    shortTtlCacheConfig(Duration.ofMinutes(1)));
+            registry.initialize().await().atMost(TIMEOUT);
+
+            publisher.publishServiceChanged("old-service", 1L).await().atMost(TIMEOUT);
+            publisher.publishServiceChanged("new-service", 2L).await().atMost(TIMEOUT);
+            assertTrue(registry.findRoute("/api/new", "GET").isPresent());
+
+            delayedGeneration.complete(1L);
+
+            assertTrue(registry.findRoute("/api/new", "GET").isPresent());
+            assertFalse(registry.findRoute("/api/old", "GET").isPresent());
+            assertEquals(2L, registry.routingStatus().await().atMost(TIMEOUT).activeGeneration());
         }
     }
 
@@ -564,6 +620,11 @@ class ServiceRegistryMultiInstanceTest {
         public Uni<Long> count() {
             return delegate.count();
         }
+
+        @Override
+        public Uni<Long> currentGeneration() {
+            return delegate.currentGeneration();
+        }
     }
 
     /**
@@ -624,6 +685,11 @@ class ServiceRegistryMultiInstanceTest {
         @Override
         public Uni<Long> count() {
             return delegate.count();
+        }
+
+        @Override
+        public Uni<Long> currentGeneration() {
+            return delegate.currentGeneration();
         }
     }
 }

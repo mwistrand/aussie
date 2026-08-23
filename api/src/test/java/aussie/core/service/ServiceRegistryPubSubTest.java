@@ -103,6 +103,7 @@ class ServiceRegistryPubSubTest {
             assertEquals(1, receivedEvents.size());
             var event = assertInstanceOf(ServiceConfigEvent.ServiceChanged.class, receivedEvents.getFirst());
             assertEquals("test-service", event.serviceId());
+            assertEquals(1L, event.generation());
         }
 
         @Test

@@ -54,6 +54,9 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     private final PreparedStatement selectAllStmt;
     private final PreparedStatement countStmt;
     private final PreparedStatement existsStmt;
+    private final PreparedStatement selectGenerationStmt;
+    private final PreparedStatement initializeGenerationStmt;
+    private final PreparedStatement updateGenerationStmt;
 
     public CassandraServiceRegistrationRepository(ObjectMapper objectMapper, CqlSession session) {
         this.objectMapper = objectMapper;
@@ -68,6 +71,12 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
         this.selectAllStmt = prepareSelectAll();
         this.countStmt = prepareCount();
         this.existsStmt = prepareExists();
+        this.selectGenerationStmt =
+                session.prepare("SELECT generation FROM service_config_generation WHERE scope = 'global'");
+        this.initializeGenerationStmt = session.prepare(
+                "INSERT INTO service_config_generation (scope, generation, updated_at) VALUES ('global', 1, toTimestamp(now())) IF NOT EXISTS");
+        this.updateGenerationStmt = session.prepare(
+                "UPDATE service_config_generation SET generation = ?, updated_at = toTimestamp(now()) WHERE scope = 'global' IF generation = ?");
     }
 
     private PreparedStatement prepareInsert() {
@@ -146,6 +155,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                 .completionStage(() -> session.executeAsync(bindInsert(insertStmt, registration))
                         .toCompletableFuture())
                 .emitOn(executor)
+                .call(ignored -> advanceGeneration())
                 .replaceWithVoid();
     }
 
@@ -156,7 +166,10 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                 .completionStage(() -> session.executeAsync(bindInsert(insertIfAbsentStmt, registration))
                         .toCompletableFuture())
                 .emitOn(executor)
-                .map(this::createResult);
+                .map(this::createResult)
+                .call(result -> result.applied()
+                        ? advanceGeneration()
+                        : Uni.createFrom().voidItem());
     }
 
     @Override
@@ -189,7 +202,10 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                 })
                 .emitOn(executor)
                 .map(this::conditionalResult);
-        return retryAfterLegacyVersionInitialization(registration.serviceId(), expectedVersion, mutation);
+        return retryAfterLegacyVersionInitialization(registration.serviceId(), expectedVersion, mutation)
+                .call(result -> result.applied()
+                        ? advanceGeneration()
+                        : Uni.createFrom().voidItem());
     }
 
     @Override
@@ -220,6 +236,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                         return session.executeAsync(bound).toCompletableFuture();
                     })
                     .emitOn(executor)
+                    .call(ignored -> advanceGeneration())
                     .map(rs -> true);
         });
     }
@@ -232,7 +249,10 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                         .toCompletableFuture())
                 .emitOn(executor)
                 .map(this::conditionalResult);
-        return retryAfterLegacyVersionInitialization(serviceId, expectedVersion, mutation);
+        return retryAfterLegacyVersionInitialization(serviceId, expectedVersion, mutation)
+                .call(result -> result.applied()
+                        ? advanceGeneration()
+                        : Uni.createFrom().voidItem());
     }
 
     @Override
@@ -271,6 +291,44 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                     Row row = rs.one();
                     return row != null ? row.getLong(0) : 0L;
                 });
+    }
+
+    @Override
+    public Uni<Long> currentGeneration() {
+        final var executor = getContextExecutor();
+        return Uni.createFrom()
+                .completionStage(
+                        () -> session.executeAsync(selectGenerationStmt.bind()).toCompletableFuture())
+                .emitOn(executor)
+                .map(result -> {
+                    final var row = result.one();
+                    return row == null ? 0L : row.getLong("generation");
+                });
+    }
+
+    private Uni<Void> advanceGeneration() {
+        return currentGeneration().flatMap(current -> {
+            final var executor = getContextExecutor();
+            return Uni.createFrom()
+                    .completionStage(() -> session.executeAsync(updateGenerationStmt.bind(current + 1L, current))
+                            .toCompletableFuture())
+                    .emitOn(executor)
+                    .flatMap(result -> {
+                        if (result.wasApplied()) {
+                            return Uni.createFrom().voidItem();
+                        }
+                        if (current != 0L) {
+                            return advanceGeneration();
+                        }
+                        return Uni.createFrom()
+                                .completionStage(() -> session.executeAsync(initializeGenerationStmt.bind())
+                                        .toCompletableFuture())
+                                .emitOn(executor)
+                                .flatMap(initialized -> initialized.wasApplied()
+                                        ? Uni.createFrom().voidItem()
+                                        : advanceGeneration());
+                    });
+        });
     }
 
     private BoundStatement bindInsert(PreparedStatement statement, ServiceRegistration registration) {

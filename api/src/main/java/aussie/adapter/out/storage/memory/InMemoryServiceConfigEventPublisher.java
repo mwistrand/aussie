@@ -47,11 +47,16 @@ public class InMemoryServiceConfigEventPublisher implements ServiceConfigEventPu
     /** {@inheritDoc} */
     @Override
     public Uni<Void> publishServiceChanged(String serviceId) {
+        return publishServiceChanged(serviceId, 0L);
+    }
+
+    @Override
+    public Uni<Void> publishServiceChanged(String serviceId, long generation) {
         return Uni.createFrom().voidItem().invoke(() -> {
             if (closed.get()) {
                 return;
             }
-            var event = new ServiceConfigEvent.ServiceChanged(serviceId);
+            var event = new ServiceConfigEvent.ServiceChanged(serviceId, generation);
             processor.onNext(event);
             LOG.debugf("Published service changed event (in-memory): %s", serviceId);
         });
@@ -60,11 +65,16 @@ public class InMemoryServiceConfigEventPublisher implements ServiceConfigEventPu
     /** {@inheritDoc} */
     @Override
     public Uni<Void> publishServiceRemoved(String serviceId) {
+        return publishServiceRemoved(serviceId, 0L);
+    }
+
+    @Override
+    public Uni<Void> publishServiceRemoved(String serviceId, long generation) {
         return Uni.createFrom().voidItem().invoke(() -> {
             if (closed.get()) {
                 return;
             }
-            var event = new ServiceConfigEvent.ServiceRemoved(serviceId);
+            var event = new ServiceConfigEvent.ServiceRemoved(serviceId, generation);
             processor.onNext(event);
             LOG.debugf("Published service removed event (in-memory): %s", serviceId);
         });

@@ -56,6 +56,26 @@ class RedisServiceConfigEventPublisherTest {
         }
 
         @Test
+        @DisplayName("preserves legacy service ID with numeric prefix")
+        void preservesLegacyNumericPrefix() {
+            handler.accept("changed:123:my-service");
+
+            var event = assertInstanceOf(ServiceConfigEvent.ServiceChanged.class, received.getFirst());
+            assertEquals("123:my-service", event.serviceId());
+            assertEquals(0L, event.generation());
+        }
+
+        @Test
+        @DisplayName("parses versioned generation")
+        void parsesVersionedGeneration() {
+            handler.accept("changed-v1:42:org:team:my-service");
+
+            var event = assertInstanceOf(ServiceConfigEvent.ServiceChanged.class, received.getFirst());
+            assertEquals("org:team:my-service", event.serviceId());
+            assertEquals(42L, event.generation());
+        }
+
+        @Test
         @DisplayName("rejects changed message with empty service ID")
         void rejectsChangedWithEmptyId() {
             handler.accept("changed:");

@@ -73,4 +73,7 @@ public interface ServiceRegistrationRepository {
      * @return Uni with count
      */
     Uni<Long> count();
+
+    /** Return the durable, monotonically increasing generation of service configuration. */
+    Uni<Long> currentGeneration();
 }

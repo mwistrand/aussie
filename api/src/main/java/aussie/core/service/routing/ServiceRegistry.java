@@ -1,11 +1,17 @@
 package aussie.core.service.routing;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.annotation.PreDestroy;
@@ -22,6 +28,7 @@ import aussie.core.model.auth.ServicePermissionPolicy;
 import aussie.core.model.common.ValidationResult;
 import aussie.core.model.routing.GatewaySnapshot;
 import aussie.core.model.routing.RouteLookupResult;
+import aussie.core.model.routing.RoutingSnapshotStatus;
 import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.ConditionalWriteResult;
 import aussie.core.model.service.RegistrationResult;
@@ -67,7 +74,11 @@ public class ServiceRegistry {
     private final Duration routeCacheTtl;
 
     // Every request observes one fully compiled, immutable generation.
-    private final AtomicReference<GatewaySnapshot> snapshot = new AtomicReference<>(GatewaySnapshot.empty());
+    private final AtomicReference<RoutingState> routingState =
+            new AtomicReference<>(new RoutingState(GatewaySnapshot.empty(), 0L, checksum(List.of())));
+    private final AtomicLong durableGeneration = new AtomicLong();
+    private final AtomicReference<RoutingSnapshotStatus.RejectedGeneration> lastRejectedGeneration =
+            new AtomicReference<>();
 
     // TTL tracking for multi-instance cache refresh
     private final AtomicReference<Instant> lastRefreshed = new AtomicReference<>(Instant.MIN);
@@ -109,11 +120,8 @@ public class ServiceRegistry {
     /**
      * Subscribe to service config events for cross-instance cache invalidation.
      *
-     * <p>On receiving an event, the local cache is updated:
-     * <ul>
-     *   <li>{@code ServiceChanged}: re-fetches from repository, updates compiled routes and distributed cache</li>
-     *   <li>{@code ServiceRemoved}: removes compiled routes and invalidates distributed cache</li>
-     * </ul>
+     * <p>On receiving a newer event, the complete durable configuration is rebuilt and
+     * atomically published. This prevents request threads from observing a mixture of generations.
      *
      * <p>Note: the originating instance also receives its own events (self-echo).
      * The redundant re-fetch is harmless since the data is already current.
@@ -147,35 +155,17 @@ public class ServiceRegistry {
 
     /** Dispatch a received config event to the appropriate handler. */
     private void handleConfigEvent(ServiceConfigEvent event) {
-        switch (event) {
-            case ServiceConfigEvent.ServiceChanged changed -> handleServiceChanged(changed.serviceId());
-            case ServiceConfigEvent.ServiceRemoved removed -> handleServiceRemoved(removed.serviceId());
+        if (event.generation() > 0L && event.generation() <= routingState.get().generation()) {
+            return;
         }
-    }
-
-    /** Re-fetch a changed service from the repository and update local and distributed caches. */
-    private void handleServiceChanged(String serviceId) {
-        LOG.debugf("Received service changed event: %s", serviceId);
-        repository
-                .findById(serviceId)
-                .map(this::onlyValidForRouting)
-                .invoke(opt -> opt.ifPresentOrElse(this::publishService, () -> removeService(serviceId)))
-                .chain(opt -> opt.map(cache::put).orElseGet(() -> cache.invalidate(serviceId)))
+        LOG.debugf("Received service config event: serviceId=%s generation=%d", event.serviceId(), event.generation());
+        refreshRouteCache()
                 .subscribe()
                 .with(
-                        v -> LOG.debugf("Refreshed cache for service: %s", serviceId),
-                        err -> LOG.warnf(err, "Failed to handle service changed event: %s", serviceId));
-    }
-
-    /** Remove compiled routes and invalidate the distributed cache for a deleted service. */
-    private void handleServiceRemoved(String serviceId) {
-        LOG.debugf("Received service removed event: %s", serviceId);
-        removeService(serviceId);
-        cache.invalidate(serviceId)
-                .subscribe()
-                .with(
-                        v -> LOG.debugf("Invalidated cache for removed service: %s", serviceId),
-                        err -> LOG.warnf(err, "Failed to invalidate cache for removed service: %s", serviceId));
+                        v -> LOG.debugf(
+                                "Published routing generation %d",
+                                routingState.get().generation()),
+                        err -> LOG.warnf(err, "Rejected service config generation %d", event.generation()));
     }
 
     /**
@@ -188,16 +178,41 @@ public class ServiceRegistry {
      * @return Uni completing when refresh is done
      */
     private Uni<Void> refreshRouteCache() {
+        return refreshRouteCache(0);
+    }
+
+    private Uni<Void> refreshRouteCache(int attempt) {
         return repository
-                .findAll()
-                .invoke(registrations -> {
-                    final var validRegistrations = registrations.stream()
-                            .filter(this::isValidForRouting)
-                            .toList();
-                    snapshot.set(GatewaySnapshot.build(validRegistrations));
-                    lastRefreshed.set(Instant.now());
+                .currentGeneration()
+                .flatMap(before -> {
+                    durableGeneration.accumulateAndGet(before, Math::max);
+                    return repository.findAll().flatMap(registrations -> repository
+                            .currentGeneration()
+                            .flatMap(after -> {
+                                durableGeneration.accumulateAndGet(after, Math::max);
+                                if (before != after && attempt < 4) {
+                                    return refreshRouteCache(attempt + 1);
+                                }
+                                if (before != after) {
+                                    return Uni.createFrom()
+                                            .failure(new IllegalStateException("Configuration changed during refresh"));
+                                }
+                                final var validRegistrations = registrations.stream()
+                                        .filter(this::isValidForRouting)
+                                        .toList();
+                                final var candidate = GatewaySnapshot.build(validRegistrations);
+                                final var candidateState =
+                                        new RoutingState(candidate, after, checksum(validRegistrations));
+                                routingState.accumulateAndGet(
+                                        candidateState,
+                                        (current, next) -> next.generation() < current.generation() ? current : next);
+                                lastRefreshed.set(Instant.now());
+                                return Uni.createFrom().voidItem();
+                            }));
                 })
-                .replaceWithVoid();
+                .onFailure()
+                .invoke(error -> lastRejectedGeneration.set(new RoutingSnapshotStatus.RejectedGeneration(
+                        durableGeneration.get(), error.getMessage(), Instant.now())));
     }
 
     /**
@@ -355,7 +370,7 @@ public class ServiceRegistry {
             }
 
             try {
-                snapshot.get().with(service);
+                routingState.get().snapshot().with(service);
             } catch (IllegalArgumentException conflict) {
                 return Uni.createFrom().item(RegistrationResult.failure(conflict.getMessage(), 409));
             }
@@ -525,7 +540,7 @@ public class ServiceRegistry {
         if (validationResult instanceof ValidationResult.Invalid invalid) {
             return Uni.createFrom().item(RegistrationResult.failure(invalid.reason(), invalid.suggestedStatusCode()));
         }
-        snapshot.get().with(service);
+        routingState.get().snapshot().with(service);
         return repository.replaceIfVersion(service, service.version() - 1).flatMap(result -> {
             if (!result.applied()) {
                 return Uni.createFrom().item(versionConflict(result));
@@ -535,21 +550,58 @@ public class ServiceRegistry {
     }
 
     private Uni<Void> publishChange(ServiceRegistration service) {
-        publishService(service);
-        return eventPublisher.publishServiceChanged(service.serviceId()).call(() -> cache.put(service)
-                .onFailure()
-                .invoke(err -> LOG.warnf(err, "Failed to update cache for service: %s", service.serviceId()))
-                .onFailure()
-                .recoverWithNull());
+        return refreshRouteCache()
+                .call(() -> eventPublisher.publishServiceChanged(
+                        service.serviceId(), routingState.get().generation()))
+                .call(() -> cache.put(service)
+                        .onFailure()
+                        .invoke(err -> LOG.warnf(err, "Failed to update cache for service: %s", service.serviceId()))
+                        .onFailure()
+                        .recoverWithNull());
     }
 
     private Uni<Void> publishRemoval(String serviceId) {
-        removeService(serviceId);
-        return eventPublisher.publishServiceRemoved(serviceId).call(() -> cache.invalidate(serviceId)
-                .onFailure()
-                .invoke(err -> LOG.warnf(err, "Failed to invalidate cache for service: %s", serviceId))
-                .onFailure()
-                .recoverWithNull());
+        return refreshRouteCache()
+                .call(() -> eventPublisher.publishServiceRemoved(
+                        serviceId, routingState.get().generation()))
+                .call(() -> cache.invalidate(serviceId)
+                        .onFailure()
+                        .invoke(err -> LOG.warnf(err, "Failed to invalidate cache for service: %s", serviceId))
+                        .onFailure()
+                        .recoverWithNull());
+    }
+
+    /** Return local routing state together with the latest durable generation. */
+    public Uni<RoutingSnapshotStatus> routingStatus() {
+        return repository.currentGeneration().map(generation -> {
+            durableGeneration.accumulateAndGet(generation, Math::max);
+            return localRoutingStatus();
+        });
+    }
+
+    RoutingSnapshotStatus localRoutingStatus() {
+        final var state = routingState.get();
+        final var active = state.generation();
+        final var durable = durableGeneration.get();
+        return new RoutingSnapshotStatus(
+                active,
+                durable,
+                Math.max(0L, durable - active),
+                state.checksum(),
+                Optional.ofNullable(lastRejectedGeneration.get()));
+    }
+
+    private static String checksum(List<ServiceRegistration> registrations) {
+        try {
+            final var digest = MessageDigest.getInstance("SHA-256");
+            registrations.stream()
+                    .sorted(Comparator.comparing(ServiceRegistration::serviceId))
+                    .map(service -> service.serviceId() + "\0" + service.version() + "\n")
+                    .forEach(value -> digest.update(value.getBytes(StandardCharsets.UTF_8)));
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(impossible);
+        }
     }
 
     /**
@@ -603,7 +655,7 @@ public class ServiceRegistry {
      * segment matches a registered service ID.
      */
     private Optional<RouteLookupResult> findRouteInCache(String path, String method) {
-        final var currentSnapshot = snapshot.get();
+        final var currentSnapshot = routingState.get().snapshot();
 
         // Explicit gateway mode: /gateway/api/users -> match /api/users against all services
         if (path != null && (path.toLowerCase().startsWith("/gateway/") || path.equalsIgnoreCase("/gateway"))) {
@@ -656,14 +708,6 @@ public class ServiceRegistry {
         return path.startsWith("/") ? path : "/" + path;
     }
 
-    private void publishService(ServiceRegistration service) {
-        snapshot.updateAndGet(current -> current.with(service));
-    }
-
-    private Optional<ServiceRegistration> onlyValidForRouting(Optional<ServiceRegistration> registration) {
-        return registration.filter(this::isValidForRouting);
-    }
-
     private boolean isValidForRouting(ServiceRegistration service) {
         final var validationResult = validator.validate(service);
         if (validationResult instanceof ValidationResult.Invalid invalid) {
@@ -673,10 +717,6 @@ public class ServiceRegistry {
             return false;
         }
         return true;
-    }
-
-    private void removeService(String serviceId) {
-        snapshot.updateAndGet(current -> current.without(serviceId));
     }
 
     /**
@@ -694,7 +734,7 @@ public class ServiceRegistry {
         if (serviceId == null || ServicePath.UNKNOWN_SERVICE.equals(serviceId)) {
             return Optional.empty();
         }
-        return snapshot.get().service(serviceId);
+        return routingState.get().snapshot().service(serviceId);
     }
 
     /**
@@ -712,4 +752,6 @@ public class ServiceRegistry {
         }
         return getService(serviceId);
     }
+
+    private record RoutingState(GatewaySnapshot snapshot, long generation, String checksum) {}
 }

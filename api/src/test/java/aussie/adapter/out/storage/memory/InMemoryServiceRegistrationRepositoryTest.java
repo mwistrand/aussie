@@ -38,6 +38,25 @@ class InMemoryServiceRegistrationRepositoryTest {
     class SaveTests {
 
         @Test
+        @DisplayName("Should advance generation only for applied writes")
+        void shouldAdvanceGenerationOnlyForAppliedWrites() {
+            var version1 = createService("test-service");
+
+            assertEquals(0L, repository.currentGeneration().await().atMost(TIMEOUT));
+            assertTrue(
+                    repository.createIfAbsent(version1).await().atMost(TIMEOUT).applied());
+            assertFalse(
+                    repository.createIfAbsent(version1).await().atMost(TIMEOUT).applied());
+            assertEquals(1L, repository.currentGeneration().await().atMost(TIMEOUT));
+            assertTrue(repository
+                    .deleteIfVersion("test-service", 1)
+                    .await()
+                    .atMost(TIMEOUT)
+                    .applied());
+            assertEquals(2L, repository.currentGeneration().await().atMost(TIMEOUT));
+        }
+
+        @Test
         @DisplayName("Should apply only matching conditional writes")
         void shouldApplyOnlyMatchingConditionalWrites() {
             var version1 = createService("test-service");

@@ -28,6 +28,7 @@ import aussie.adapter.in.dto.ServiceRegistrationResponse;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.auth.GatewaySecurityConfig;
 import aussie.core.model.auth.Permission;
+import aussie.core.model.routing.RoutingSnapshotStatus;
 import aussie.core.model.service.RegistrationResult;
 import aussie.core.service.routing.ServiceRegistry;
 
@@ -106,6 +107,13 @@ public class AdminResource {
         return serviceRegistry.getAllServices().map(services -> services.stream()
                 .map(ServiceRegistrationResponse::fromModel)
                 .toList());
+    }
+
+    @GET
+    @Path("/routing-status")
+    @PermissionsAllowed({Permission.SERVICE_CONFIG_READ_VALUE, Permission.ADMIN_VALUE})
+    public Uni<RoutingSnapshotStatus> routingStatus() {
+        return serviceRegistry.routingStatus();
     }
 
     @GET

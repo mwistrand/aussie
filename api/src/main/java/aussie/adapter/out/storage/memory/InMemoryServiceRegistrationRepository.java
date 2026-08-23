@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Uni;
@@ -25,11 +26,13 @@ import aussie.core.port.out.ServiceRegistrationRepository;
 public class InMemoryServiceRegistrationRepository implements ServiceRegistrationRepository {
 
     private final ConcurrentHashMap<String, ServiceRegistration> storage = new ConcurrentHashMap<>();
+    private final AtomicLong generation = new AtomicLong();
 
     @Override
     public Uni<Void> save(ServiceRegistration registration) {
         return Uni.createFrom().item(() -> {
             storage.put(registration.serviceId(), registration);
+            generation.incrementAndGet();
             return null;
         });
     }
@@ -38,9 +41,11 @@ public class InMemoryServiceRegistrationRepository implements ServiceRegistratio
     public Uni<ConditionalWriteResult> createIfAbsent(ServiceRegistration registration) {
         return Uni.createFrom().item(() -> {
             final var existing = storage.putIfAbsent(registration.serviceId(), registration);
-            return existing == null
-                    ? ConditionalWriteResult.appliedResult()
-                    : ConditionalWriteResult.rejected(existing.version());
+            if (existing == null) {
+                generation.incrementAndGet();
+                return ConditionalWriteResult.appliedResult();
+            }
+            return ConditionalWriteResult.rejected(existing.version());
         });
     }
 
@@ -58,6 +63,7 @@ public class InMemoryServiceRegistrationRepository implements ServiceRegistratio
                     return existing;
                 }
                 result.set(ConditionalWriteResult.appliedResult());
+                generation.incrementAndGet();
                 return registration;
             });
             return result.get();
@@ -71,7 +77,13 @@ public class InMemoryServiceRegistrationRepository implements ServiceRegistratio
 
     @Override
     public Uni<Boolean> delete(String serviceId) {
-        return Uni.createFrom().item(() -> storage.remove(serviceId) != null);
+        return Uni.createFrom().item(() -> {
+            final var removed = storage.remove(serviceId) != null;
+            if (removed) {
+                generation.incrementAndGet();
+            }
+            return removed;
+        });
     }
 
     @Override
@@ -88,6 +100,7 @@ public class InMemoryServiceRegistrationRepository implements ServiceRegistratio
                     return existing;
                 }
                 result.set(ConditionalWriteResult.appliedResult());
+                generation.incrementAndGet();
                 return null;
             });
             return result.get();
@@ -107,5 +120,10 @@ public class InMemoryServiceRegistrationRepository implements ServiceRegistratio
     @Override
     public Uni<Long> count() {
         return Uni.createFrom().item(() -> (long) storage.size());
+    }
+
+    @Override
+    public Uni<Long> currentGeneration() {
+        return Uni.createFrom().item(generation::get);
     }
 }

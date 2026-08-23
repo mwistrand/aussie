@@ -165,20 +165,21 @@ public class CassandraMigrationRunner {
     private List<String> listKnownMigrations() {
         // Fallback list of known migrations - update this when adding new migrations
         List<String> known = new ArrayList<>();
-        for (int i = 1; i <= 10; i++) {
-            String prefix = "V" + i + "__";
-            try (InputStream is = getClass().getClassLoader().getResourceAsStream(MIGRATIONS_PATH + prefix)) {
-                // This won't work directly, so we try specific known files
-            } catch (Exception ignored) {
-            }
-        }
-
-        // Try specific known migration files
         String[] candidates = {
             "V1__create_keyspace.cql",
             "V2__create_tables.cql",
             "V3__create_api_keys_table.cql",
-            "V4__add_default_auth_required.cql"
+            "V4__add_default_auth_required.cql",
+            "V5__add_cors_config.cql",
+            "V6__add_permission_policy.cql",
+            "V7__add_rate_limit_config.cql",
+            "V8__create_roles_table.cql",
+            "V9__create_translation_config_tables.cql",
+            "V10__remove_active_column.cql",
+            "V11__add_sampling_config.cql",
+            "V12__add_security_headers_config.cql",
+            "V13__add_timeout_config.cql",
+            "V14__create_service_config_generation.cql"
         };
 
         for (String candidate : candidates) {

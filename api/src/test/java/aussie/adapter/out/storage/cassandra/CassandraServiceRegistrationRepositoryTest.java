@@ -32,13 +32,23 @@ class CassandraServiceRegistrationRepositoryTest {
         final var otherStatement = mock(PreparedStatement.class);
         final var updateStatement = mock(PreparedStatement.class);
         final var initializeStatement = mock(PreparedStatement.class);
+        final var selectGenerationStatement = mock(PreparedStatement.class);
+        final var updateGenerationStatement = mock(PreparedStatement.class);
         final var updateBound = mock(BoundStatement.class);
         final var initializeBound = mock(BoundStatement.class);
+        final var selectGenerationBound = mock(BoundStatement.class);
+        final var updateGenerationBound = mock(BoundStatement.class);
 
         when(session.prepare(anyString())).thenAnswer(invocation -> {
             final var cql = invocation.getArgument(0, String.class);
             if (cql.contains("SET version = 1")) {
                 return initializeStatement;
+            }
+            if (cql.startsWith("SELECT generation")) {
+                return selectGenerationStatement;
+            }
+            if (cql.startsWith("UPDATE service_config_generation")) {
+                return updateGenerationStatement;
             }
             if (cql.contains("IF version = ?") && cql.contains("UPDATE service_registrations")) {
                 return updateStatement;
@@ -47,6 +57,8 @@ class CassandraServiceRegistrationRepositoryTest {
         });
         when(updateStatement.bind(any(Object[].class))).thenReturn(updateBound);
         when(initializeStatement.bind(any(Object[].class))).thenReturn(initializeBound);
+        when(selectGenerationStatement.bind(any(Object[].class))).thenReturn(selectGenerationBound);
+        when(updateGenerationStatement.bind(any(Object[].class))).thenReturn(updateGenerationBound);
 
         final var missingVersion = mock(AsyncResultSet.class);
         final var legacyRow = mock(Row.class);
@@ -58,11 +70,21 @@ class CassandraServiceRegistrationRepositoryTest {
         when(initialized.wasApplied()).thenReturn(true);
         final var updated = mock(AsyncResultSet.class);
         when(updated.wasApplied()).thenReturn(true);
+        final var generationResult = mock(AsyncResultSet.class);
+        final var generationRow = mock(Row.class);
+        when(generationResult.one()).thenReturn(generationRow);
+        when(generationRow.getLong("generation")).thenReturn(1L);
+        final var generationUpdated = mock(AsyncResultSet.class);
+        when(generationUpdated.wasApplied()).thenReturn(true);
 
         when(session.executeAsync(updateBound))
                 .thenReturn(CompletableFuture.completedFuture(missingVersion))
                 .thenReturn(CompletableFuture.completedFuture(updated));
         when(session.executeAsync(initializeBound)).thenReturn(CompletableFuture.completedFuture(initialized));
+        when(session.executeAsync(selectGenerationBound))
+                .thenReturn(CompletableFuture.completedFuture(generationResult));
+        when(session.executeAsync(updateGenerationBound))
+                .thenReturn(CompletableFuture.completedFuture(generationUpdated));
 
         final var repository = new CassandraServiceRegistrationRepository(new ObjectMapper(), session);
         final var registration = ServiceRegistration.builder("legacy-service")

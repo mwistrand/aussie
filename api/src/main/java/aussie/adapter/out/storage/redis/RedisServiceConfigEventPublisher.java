@@ -26,13 +26,11 @@ import aussie.core.port.out.ServiceConfigEventPublisher;
  *
  * <p>Message format:
  * <ul>
- *   <li>Service changed: {@code changed:{serviceId}}</li>
- *   <li>Service removed: {@code removed:{serviceId}}</li>
+ *   <li>Service changed: {@code changed-v1:{generation}:{serviceId}}</li>
+ *   <li>Service removed: {@code removed-v1:{generation}:{serviceId}}</li>
  * </ul>
  *
- * <p>Service IDs may contain the separator character ({@code :});
- * parsing splits on the first separator only, so identifiers with
- * colons are handled correctly.
+ * <p>Legacy messages without a generation remain readable during rolling upgrades.
  */
 @ApplicationScoped
 @Startup
@@ -85,11 +83,16 @@ public class RedisServiceConfigEventPublisher implements ServiceConfigEventPubli
     /** {@inheritDoc} */
     @Override
     public Uni<Void> publishServiceChanged(String serviceId) {
+        return publishServiceChanged(serviceId, 0L);
+    }
+
+    @Override
+    public Uni<Void> publishServiceChanged(String serviceId, long generation) {
         if (!config.enabled()) {
             return Uni.createFrom().voidItem();
         }
 
-        var message = "changed" + MESSAGE_SEPARATOR + serviceId;
+        var message = "changed-v1" + MESSAGE_SEPARATOR + generation + MESSAGE_SEPARATOR + serviceId;
 
         return Uni.createFrom()
                 .voidItem()
@@ -103,11 +106,16 @@ public class RedisServiceConfigEventPublisher implements ServiceConfigEventPubli
     /** {@inheritDoc} */
     @Override
     public Uni<Void> publishServiceRemoved(String serviceId) {
+        return publishServiceRemoved(serviceId, 0L);
+    }
+
+    @Override
+    public Uni<Void> publishServiceRemoved(String serviceId, long generation) {
         if (!config.enabled()) {
             return Uni.createFrom().voidItem();
         }
 
-        var message = "removed" + MESSAGE_SEPARATOR + serviceId;
+        var message = "removed-v1" + MESSAGE_SEPARATOR + generation + MESSAGE_SEPARATOR + serviceId;
 
         return Uni.createFrom()
                 .voidItem()
@@ -159,9 +167,8 @@ public class RedisServiceConfigEventPublisher implements ServiceConfigEventPubli
         /**
          * Parse a pub/sub message into a ServiceConfigEvent.
          *
-         * <p>Format: {@code type:serviceId} where type is "changed" or "removed".
-         * Splits on the first separator only, so service IDs containing colons
-         * are handled correctly.
+         * <p>Versioned format: {@code type-v1:generation:serviceId}. Legacy
+         * {@code type:serviceId} messages are also accepted.
          */
         ServiceConfigEvent parseMessage(String message) {
             if (message == null || message.isBlank()) {
@@ -176,7 +183,27 @@ public class RedisServiceConfigEventPublisher implements ServiceConfigEventPubli
             }
 
             final var type = message.substring(0, firstSep);
-            final var serviceId = message.substring(firstSep + 1);
+            final var payload = message.substring(firstSep + 1);
+            long generation = 0L;
+            String serviceId = payload;
+            if (type.endsWith("-v1")) {
+                final var secondSep = payload.indexOf(MESSAGE_SEPARATOR);
+                if (secondSep <= 0) {
+                    LOG.warnf("Invalid versioned service config event format: %s", message);
+                    return null;
+                }
+                try {
+                    generation = Long.parseLong(payload.substring(0, secondSep));
+                    serviceId = payload.substring(secondSep + 1);
+                } catch (NumberFormatException invalidGeneration) {
+                    LOG.warnf("Invalid service config event generation: %s", message);
+                    return null;
+                }
+                if (generation < 0L) {
+                    LOG.warnf("Negative service config event generation: %s", message);
+                    return null;
+                }
+            }
 
             if (serviceId.isEmpty()) {
                 LOG.warnf("Empty service ID in config event: %s", message);
@@ -184,8 +211,8 @@ public class RedisServiceConfigEventPublisher implements ServiceConfigEventPubli
             }
 
             return switch (type) {
-                case "changed" -> new ServiceConfigEvent.ServiceChanged(serviceId);
-                case "removed" -> new ServiceConfigEvent.ServiceRemoved(serviceId);
+                case "changed", "changed-v1" -> new ServiceConfigEvent.ServiceChanged(serviceId, generation);
+                case "removed", "removed-v1" -> new ServiceConfigEvent.ServiceRemoved(serviceId, generation);
                 default -> {
                     LOG.warnf("Unknown service config event type: %s", type);
                     yield null;

@@ -807,6 +807,7 @@ All admin endpoints require authentication. See [Authentication Configuration](#
 |----------|--------|-------------|
 | `/admin/services` | GET | List all registered services |
 | `/admin/services` | POST | Register a new service |
+| `/admin/services/routing-status` | GET | Show local routing generation, durable generation, convergence lag, checksum, and last rejected generation |
 | `/admin/services/{id}` | GET | Get a specific service |
 | `/admin/services/{id}` | DELETE | Unregister a service |
 
