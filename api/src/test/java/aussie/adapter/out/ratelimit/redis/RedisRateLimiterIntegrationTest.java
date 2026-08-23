@@ -49,6 +49,7 @@ class RedisRateLimiterIntegrationTest {
 
     private static Vertx vertx;
     private static Redis redisClient;
+    private static Redis secondRedisClient;
 
     /**
      * Lua script for atomic token bucket rate limiting.
@@ -133,12 +134,16 @@ class RedisRateLimiterIntegrationTest {
                 new RedisOptions().setConnectionString("redis://" + redis.getHost() + ":" + redis.getMappedPort(6379));
 
         redisClient = Redis.createClient(vertx, redisOptions);
+        secondRedisClient = Redis.createClient(vertx, redisOptions);
     }
 
     @AfterAll
     static void tearDownClass() {
         if (redisClient != null) {
             redisClient.close();
+        }
+        if (secondRedisClient != null) {
+            secondRedisClient.close();
         }
         if (vertx != null) {
             vertx.closeAndAwait();
@@ -179,9 +184,30 @@ class RedisRateLimiterIntegrationTest {
     }
 
     private Response executeProductionTokenBucket(String key, long capacity, double refillRate, long windowSeconds) {
-        return redisClient
-                .send(Request.cmd(Command.EVAL)
+        return executeProductionTokenBucket(redisClient, key, capacity, refillRate, windowSeconds);
+    }
+
+    private Response executeProductionTokenBucket(
+            Redis client, String key, long capacity, double refillRate, long windowSeconds) {
+        return client.send(Request.cmd(Command.EVAL)
                         .arg(RedisRateLimiter.TOKEN_BUCKET_SCRIPT)
+                        .arg("1")
+                        .arg(key)
+                        .arg(String.valueOf(capacity))
+                        .arg(String.valueOf(refillRate))
+                        .arg(String.valueOf(windowSeconds)))
+                .await()
+                .atMost(Duration.ofSeconds(5));
+    }
+
+    private Response executeProductionStatus(String key, long capacity, double refillRate, long windowSeconds) {
+        return executeProductionStatus(redisClient, key, capacity, refillRate, windowSeconds);
+    }
+
+    private Response executeProductionStatus(
+            Redis client, String key, long capacity, double refillRate, long windowSeconds) {
+        return client.send(Request.cmd(Command.EVAL)
+                        .arg(RedisRateLimiter.STATUS_SCRIPT)
                         .arg("1")
                         .arg(key)
                         .arg(String.valueOf(capacity))
@@ -496,6 +522,36 @@ class RedisRateLimiterIntegrationTest {
     @Nested
     @DisplayName("Decision metadata")
     class DecisionMetadataTests {
+
+        @Test
+        @DisplayName("production script should share one bucket across independent Redis clients")
+        void productionScriptShouldShareBucketAcrossIndependentRedisClients() {
+            final var key = "aussie:ratelimit:shared-client-bucket";
+            var allowed = 0;
+
+            for (var i = 0; i < 5; i++) {
+                final var client = i % 2 == 0 ? redisClient : secondRedisClient;
+                if (isAllowed(executeProductionTokenBucket(client, key, 3, 1.0 / 60.0, 60))) {
+                    allowed++;
+                }
+            }
+
+            assertEquals(3, allowed);
+        }
+
+        @Test
+        @DisplayName("production status script should not consume shared bucket tokens")
+        void productionStatusScriptShouldNotConsumeSharedBucketTokens() {
+            final var key = "aussie:ratelimit:shared-status-bucket";
+            executeProductionTokenBucket(secondRedisClient, key, 5, 1.0 / 60.0, 60);
+
+            final var status1 = executeProductionStatus(key, 5, 1.0 / 60.0, 60);
+            final var status2 = executeProductionStatus(secondRedisClient, key, 5, 1.0 / 60.0, 60);
+
+            assertEquals(4, getRemaining(status1));
+            assertEquals(getRemaining(status1), getRemaining(status2));
+            assertEquals(3, getRemaining(executeProductionTokenBucket(key, 5, 1.0 / 60.0, 60)));
+        }
 
         @Test
         @DisplayName("production script should account for a fractional token in retry-after")

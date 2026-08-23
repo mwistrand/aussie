@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -407,6 +408,23 @@ class RateLimitFilterTest {
             verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
 
             assertEquals("ip:127.0.0.1", keyCaptor.getValue().clientId());
+        }
+
+        @Test
+        @DisplayName("should keep one pre-auth bucket while credentials rotate")
+        void shouldKeepOnePreAuthBucketWhileCredentialsRotate() {
+            setupRequest("/service-1/api/test", null);
+            when(rateLimiter.checkAndConsume(any(), any()))
+                    .thenReturn(Uni.createFrom().item(RateLimitDecision.allow()));
+
+            for (var token : List.of("token-a", "token-b", "token-c")) {
+                when(request.getHeader("Authorization")).thenReturn("Bearer " + token);
+                filter.filterRequest(requestContext, request).await().atMost(TIMEOUT);
+            }
+
+            final var keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
+            verify(rateLimiter, times(3)).checkAndConsume(keyCaptor.capture(), any());
+            assertTrue(keyCaptor.getAllValues().stream().allMatch(key -> "ip:127.0.0.1".equals(key.clientId())));
         }
 
         @Test
