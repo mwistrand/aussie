@@ -25,11 +25,12 @@ import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteIndex;
 import aussie.core.model.routing.ServiceRoutes;
 import aussie.core.model.service.ServiceRegistration;
+import aussie.core.service.routing.GlobPatternMatcher;
 
 /**
  * Benchmarks for {@link ServiceRegistration#findRoute} covering exact, parameterized, wildcard,
- * no-match, and path-rewrite routes, plus a scaling benchmark that measures worst-case linear
- * scanning as the endpoint count grows.
+ * no-match, path-rewrite, and glob routes, plus a scaling benchmark that measures worst-case
+ * linear scanning as the endpoint count grows.
  */
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
@@ -37,6 +38,19 @@ import aussie.core.model.service.ServiceRegistration;
 @Measurement(iterations = 5)
 @Fork(2)
 public class RouteMatchingBenchmark {
+
+    @State(Scope.Benchmark)
+    public static class GlobPatternState {
+        final GlobPatternMatcher matcher = new GlobPatternMatcher();
+
+        @Param({"/api/users/123", "/api//users/123/"})
+        String path;
+
+        @Setup
+        public void setup() {
+            matcher.matches("/api/**", path);
+        }
+    }
 
     @State(Scope.Benchmark)
     public static class ExactMatchState {
@@ -164,6 +178,11 @@ public class RouteMatchingBenchmark {
     @Benchmark
     public void findRoute_withPathRewrite(PathRewriteState state, Blackhole bh) {
         bh.consume(state.service.findRoute("/v2/users/42/profile", "GET"));
+    }
+
+    @Benchmark
+    public void matchGlob_requestPath(GlobPatternState state, Blackhole bh) {
+        bh.consume(state.matcher.matches("/api/**", state.path));
     }
 
     /**

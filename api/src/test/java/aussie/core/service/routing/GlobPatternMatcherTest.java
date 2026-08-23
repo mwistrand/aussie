@@ -1,8 +1,11 @@
 package aussie.core.service.routing;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -91,6 +94,20 @@ class GlobPatternMatcherTest {
         @DisplayName("should treat empty path as root")
         void emptyPath() {
             assertTrue(matcher.matches("/", ""));
+        }
+
+        @Test
+        @DisplayName("should not retain attacker-controlled request paths")
+        void doesNotRetainRequestPaths() throws IllegalAccessException {
+            assertFalse(matcher.matches("/configured/**", "/attacker/one"));
+            assertFalse(matcher.matches("/configured/**", "/attacker/two"));
+
+            for (final var field : GlobPatternMatcher.class.getDeclaredFields()) {
+                if (Map.class.isAssignableFrom(field.getType())) {
+                    field.setAccessible(true);
+                    assertEquals(1, ((Map<?, ?>) field.get(matcher)).size());
+                }
+            }
         }
     }
 }

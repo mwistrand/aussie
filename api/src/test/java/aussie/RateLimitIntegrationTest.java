@@ -68,6 +68,8 @@ class RateLimitIntegrationTest {
         for (int i = 1; i <= BURST_CAPACITY; i++) {
             given().header("X-Forwarded-For", "192.0.2.11")
                     .header("X-API-Key-ID", "rotated-key-" + i)
+                    .header("Authorization", "Bearer rotated-token-" + i)
+                    .cookie("aussie_session", "rotated-session-" + i)
                     .when()
                     .get("/admin/services")
                     .then()
@@ -76,6 +78,8 @@ class RateLimitIntegrationTest {
 
         given().header("X-Forwarded-For", "192.0.2.11")
                 .header("X-API-Key-ID", "rotated-key-final")
+                .header("Authorization", "Bearer rotated-token-final")
+                .cookie("aussie_session", "rotated-session-final")
                 .when()
                 .get("/admin/services")
                 .then()

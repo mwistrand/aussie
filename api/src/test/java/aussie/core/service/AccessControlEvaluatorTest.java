@@ -1,8 +1,10 @@
 package aussie.core.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -21,7 +23,7 @@ import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.service.ServiceRegistration;
-import aussie.core.service.auth.*;
+import aussie.core.service.auth.AccessControlEvaluator;
 
 @DisplayName("AccessControlEvaluator")
 class AccessControlEvaluatorTest {
@@ -255,6 +257,25 @@ class AccessControlEvaluatorTest {
             assertTrue(evaluator.isAllowed(SourceIdentifier.of("192.168.16.1"), route, Optional.empty()));
             assertTrue(evaluator.isAllowed(SourceIdentifier.of("192.168.31.255"), route, Optional.empty()));
             assertFalse(evaluator.isAllowed(SourceIdentifier.of("192.168.32.1"), route, Optional.empty()));
+        }
+
+        @Test
+        @DisplayName("Should not retain attacker-controlled source identities")
+        void shouldNotRetainSourceIdentities() throws IllegalAccessException {
+            config.setAllowedIps(List.of("10.0.0.0/8"));
+            final var route = createPrivateRoute("/api/private");
+
+            assertFalse(evaluator.isAllowed(SourceIdentifier.of("192.0.2.1"), route, Optional.empty()));
+            assertFalse(evaluator.isAllowed(SourceIdentifier.of("192.0.2.2"), route, Optional.empty()));
+
+            for (final var field : AccessControlEvaluator.class.getDeclaredFields()) {
+                field.setAccessible(true);
+                if (field.get(evaluator) instanceof Collection<?> values) {
+                    assertEquals(1, values.size());
+                } else if (field.get(evaluator) instanceof Map<?, ?> values) {
+                    assertTrue(values.isEmpty());
+                }
+            }
         }
     }
 

@@ -299,6 +299,20 @@ class ClientContextResolverTest {
         }
 
         @Test
+        @DisplayName("falls back to the socket peer for too many forwarding hops")
+        void rejectsTooManyForwardingHops() {
+            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.0.0.1")).thenReturn(true);
+            when(request.getHeader("X-Forwarded-For"))
+                    .thenReturn(String.join(",", java.util.Collections.nCopies(17, "192.0.2.1")));
+
+            final var ctx = resolver.resolve(request);
+
+            assertTrue(ctx.forwardingChain().isEmpty());
+            assertEquals("10.0.0.1", ctx.resolvedIp());
+        }
+
+        @Test
         @DisplayName("falls back to the socket peer for obfuscated Forwarded nodes")
         void rejectsObfuscatedForwardedNode() {
             when(socketAddress.host()).thenReturn("10.0.0.1");

@@ -4,6 +4,7 @@ import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
@@ -11,7 +12,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 /**
  * Match paths against glob patterns using Java's built-in PathMatcher.
- * Caches compiled patterns and normalized paths for performance.
+ * Caches only configuration-derived compiled patterns; request paths are never retained.
  */
 @ApplicationScoped
 public class GlobPatternMatcher {
@@ -20,7 +21,6 @@ public class GlobPatternMatcher {
     private static final Pattern MULTIPLE_SLASHES = Pattern.compile("/+");
 
     private final Map<String, PathMatcher> matcherCache = new ConcurrentHashMap<>();
-    private final Map<String, String> normalizedPathCache = new ConcurrentHashMap<>();
 
     /**
      * Test if a path matches a glob pattern.
@@ -30,7 +30,7 @@ public class GlobPatternMatcher {
      * @return true if the path matches the pattern
      */
     public boolean matches(String glob, String path) {
-        final var normalizedPath = normalizedPathCache.computeIfAbsent(path, this::normalizePath);
+        final var normalizedPath = normalizePath(Objects.requireNonNull(path));
         final var matcher = matcherCache.computeIfAbsent(glob, this::createMatcher);
         return matcher.matches(Path.of(normalizedPath));
     }
@@ -43,12 +43,12 @@ public class GlobPatternMatcher {
      * Normalizes a path by removing trailing slashes and collapsing multiple slashes.
      */
     private String normalizePath(String path) {
-        if (path == null || path.isEmpty()) {
+        if (path.isEmpty()) {
             return "/";
         }
 
-        // Collapse multiple slashes using pre-compiled pattern
-        var normalized = MULTIPLE_SLASHES.matcher(path).replaceAll("/");
+        // Avoid regex work for the normal case.
+        var normalized = path.contains("//") ? MULTIPLE_SLASHES.matcher(path).replaceAll("/") : path;
 
         // Remove trailing slash (but keep root slash)
         if (normalized.length() > 1 && normalized.endsWith("/")) {
