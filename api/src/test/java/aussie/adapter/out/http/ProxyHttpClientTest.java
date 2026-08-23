@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -13,6 +14,7 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.net.ConnectException;
@@ -34,6 +36,7 @@ import io.vertx.core.http.HttpMethod;
 import io.vertx.mutiny.core.MultiMap;
 import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.buffer.Buffer;
+import io.vertx.mutiny.core.net.SocketAddress;
 import io.vertx.mutiny.ext.web.client.HttpRequest;
 import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
@@ -50,6 +53,7 @@ import aussie.core.config.ResiliencyConfig;
 import aussie.core.model.gateway.PreparedProxyRequest;
 import aussie.core.port.out.Metrics;
 import aussie.core.service.gateway.ProxyRequestPreparer;
+import aussie.core.service.routing.UpstreamAddressResolver;
 
 @DisplayName("ProxyHttpClient")
 @ExtendWith(MockitoExtension.class)
@@ -80,6 +84,9 @@ class ProxyHttpClientTest {
     private Metrics metrics;
 
     @Mock
+    private UpstreamAddressResolver addressResolver;
+
+    @Mock
     private WebClient webClient;
 
     @Mock
@@ -95,9 +102,20 @@ class ProxyHttpClientTest {
         lenient().when(resiliencyConfig.http()).thenReturn(httpConfig);
         lenient().when(httpConfig.connectTimeout()).thenReturn(java.time.Duration.ofSeconds(5));
         lenient().when(httpConfig.requestTimeout()).thenReturn(java.time.Duration.ofSeconds(30));
+        lenient()
+                .when(addressResolver.resolve(any(URI.class)))
+                .thenReturn(
+                        Uni.createFrom().item(io.vertx.core.net.SocketAddress.inetSocketAddress(443, "203.0.113.1")));
 
         proxyHttpClient = new ProxyHttpClient(
-                vertx, requestPreparer, tracer, propagator, telemetryHelper, resiliencyConfig, metrics);
+                vertx,
+                requestPreparer,
+                tracer,
+                propagator,
+                telemetryHelper,
+                resiliencyConfig,
+                metrics,
+                addressResolver);
 
         // Inject the mock WebClient via reflection since init() requires a real Vertx
         var webClientField = ProxyHttpClient.class.getDeclaredField("webClient");
@@ -117,6 +135,8 @@ class ProxyHttpClientTest {
     private HttpRequest<Buffer> mockHttpRequest() {
         HttpRequest<Buffer> httpRequest = mock(HttpRequest.class);
         lenient().when(httpRequest.putHeader(anyString(), anyString())).thenReturn(httpRequest);
+        lenient().when(httpRequest.ssl(anyBoolean())).thenReturn(httpRequest);
+        lenient().when(httpRequest.followRedirects(anyBoolean())).thenReturn(httpRequest);
         lenient().when(httpRequest.timeout(anyLong())).thenReturn(httpRequest);
         return httpRequest;
     }
@@ -136,7 +156,12 @@ class ProxyHttpClientTest {
             var headers = Map.of("Accept", List.of("application/json"));
             var preparedRequest = new PreparedProxyRequest("GET", targetUri, headers, null);
 
-            when(webClient.request(any(HttpMethod.class), eq(8443), eq("backend.example.com"), anyString()))
+            when(webClient.request(
+                            any(HttpMethod.class),
+                            any(SocketAddress.class),
+                            eq(8443),
+                            eq("backend.example.com"),
+                            anyString()))
                     .thenReturn(httpRequest);
 
             // Mock response
@@ -171,7 +196,12 @@ class ProxyHttpClientTest {
             var targetUri = URI.create("https://backend.example.com/api/test");
             var preparedRequest = new PreparedProxyRequest("GET", targetUri, Map.of(), null);
 
-            when(webClient.request(any(HttpMethod.class), eq(443), eq("backend.example.com"), anyString()))
+            when(webClient.request(
+                            any(HttpMethod.class),
+                            any(SocketAddress.class),
+                            eq(443),
+                            eq("backend.example.com"),
+                            anyString()))
                     .thenReturn(httpRequest);
 
             when(httpRequest.send()).thenReturn(Uni.createFrom().failure(new TimeoutException("Request timed out")));
@@ -186,6 +216,23 @@ class ProxyHttpClientTest {
         }
 
         @Test
+        @DisplayName("shouldIncludeAddressResolutionInRequestTimeout")
+        void shouldIncludeAddressResolutionInRequestTimeout() {
+            setupSpanBuilder();
+            when(httpConfig.requestTimeout()).thenReturn(Duration.ofMillis(10));
+            when(addressResolver.resolve(any(URI.class)))
+                    .thenReturn(Uni.createFrom().nothing());
+            var preparedRequest =
+                    new PreparedProxyRequest("GET", URI.create("https://backend.example.com/api/test"), Map.of(), null);
+
+            var result = proxyHttpClient.forward(preparedRequest).await().atMost(Duration.ofSeconds(1));
+
+            assertEquals(504, result.statusCode());
+            verify(metrics).recordProxyTimeout("backend.example.com", "request");
+            verifyNoInteractions(webClient);
+        }
+
+        @Test
         @DisplayName("shouldSendBodyWhenPresent")
         @SuppressWarnings("unchecked")
         void shouldSendBodyWhenPresent() {
@@ -196,7 +243,12 @@ class ProxyHttpClientTest {
             var body = "{\"key\":\"value\"}".getBytes();
             var preparedRequest = new PreparedProxyRequest("POST", targetUri, Map.of(), body);
 
-            when(webClient.request(any(HttpMethod.class), eq(443), eq("backend.example.com"), anyString()))
+            when(webClient.request(
+                            any(HttpMethod.class),
+                            any(SocketAddress.class),
+                            eq(443),
+                            eq("backend.example.com"),
+                            anyString()))
                     .thenReturn(httpRequest);
 
             HttpResponse<Buffer> httpResponse = mock(HttpResponse.class);
@@ -226,7 +278,12 @@ class ProxyHttpClientTest {
             var targetUri = URI.create("https://backend.example.com/api/test");
             var preparedRequest = new PreparedProxyRequest("GET", targetUri, Map.of(), null);
 
-            when(webClient.request(any(HttpMethod.class), eq(443), eq("backend.example.com"), anyString()))
+            when(webClient.request(
+                            any(HttpMethod.class),
+                            any(SocketAddress.class),
+                            eq(443),
+                            eq("backend.example.com"),
+                            anyString()))
                     .thenReturn(httpRequest);
 
             HttpResponse<Buffer> httpResponse = mock(HttpResponse.class);
@@ -255,7 +312,12 @@ class ProxyHttpClientTest {
             var targetUri = URI.create("https://backend.example.com/api/test");
             var preparedRequest = new PreparedProxyRequest("GET", targetUri, Map.of(), null);
 
-            when(webClient.request(any(HttpMethod.class), eq(443), eq("backend.example.com"), anyString()))
+            when(webClient.request(
+                            any(HttpMethod.class),
+                            any(SocketAddress.class),
+                            eq(443),
+                            eq("backend.example.com"),
+                            anyString()))
                     .thenReturn(httpRequest);
 
             HttpResponse<Buffer> httpResponse = mock(HttpResponse.class);
@@ -285,7 +347,12 @@ class ProxyHttpClientTest {
             var targetUri = URI.create("https://backend.example.com/api/test");
             var preparedRequest = new PreparedProxyRequest("GET", targetUri, Map.of(), null);
 
-            when(webClient.request(any(HttpMethod.class), eq(443), eq("backend.example.com"), anyString()))
+            when(webClient.request(
+                            any(HttpMethod.class),
+                            any(SocketAddress.class),
+                            eq(443),
+                            eq("backend.example.com"),
+                            anyString()))
                     .thenReturn(httpRequest);
 
             HttpResponse<Buffer> httpResponse = mock(HttpResponse.class);
@@ -317,7 +384,11 @@ class ProxyHttpClientTest {
             var preparedRequest = new PreparedProxyRequest("GET", targetUri, Map.of(), null);
 
             when(webClient.request(
-                            any(HttpMethod.class), eq(443), eq("backend.example.com"), eq("/api/search?q=test&page=1")))
+                            any(HttpMethod.class),
+                            any(SocketAddress.class),
+                            eq(443),
+                            eq("backend.example.com"),
+                            eq("/api/search?q=test&page=1")))
                     .thenReturn(httpRequest);
 
             HttpResponse<Buffer> httpResponse = mock(HttpResponse.class);
@@ -335,7 +406,11 @@ class ProxyHttpClientTest {
             assertEquals(200, result.statusCode());
             verify(webClient)
                     .request(
-                            any(HttpMethod.class), eq(443), eq("backend.example.com"), eq("/api/search?q=test&page=1"));
+                            any(HttpMethod.class),
+                            any(SocketAddress.class),
+                            eq(443),
+                            eq("backend.example.com"),
+                            eq("/api/search?q=test&page=1"));
         }
 
         @Test
@@ -348,7 +423,12 @@ class ProxyHttpClientTest {
             var targetUri = URI.create("http://backend.example.com/api/test");
             var preparedRequest = new PreparedProxyRequest("GET", targetUri, Map.of(), null);
 
-            when(webClient.request(any(HttpMethod.class), eq(80), eq("backend.example.com"), anyString()))
+            when(webClient.request(
+                            any(HttpMethod.class),
+                            any(SocketAddress.class),
+                            eq(80),
+                            eq("backend.example.com"),
+                            anyString()))
                     .thenReturn(httpRequest);
 
             HttpResponse<Buffer> httpResponse = mock(HttpResponse.class);
@@ -364,7 +444,13 @@ class ProxyHttpClientTest {
             var result = proxyHttpClient.forward(preparedRequest).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(200, result.statusCode());
-            verify(webClient).request(any(HttpMethod.class), eq(80), eq("backend.example.com"), anyString());
+            verify(webClient)
+                    .request(
+                            any(HttpMethod.class),
+                            any(SocketAddress.class),
+                            eq(80),
+                            eq("backend.example.com"),
+                            anyString());
         }
 
         @Test
@@ -377,7 +463,12 @@ class ProxyHttpClientTest {
             var targetUri = URI.create("https://backend.example.com/api/test");
             var preparedRequest = new PreparedProxyRequest("GET", targetUri, Map.of(), null);
 
-            when(webClient.request(any(HttpMethod.class), eq(443), eq("backend.example.com"), anyString()))
+            when(webClient.request(
+                            any(HttpMethod.class),
+                            any(SocketAddress.class),
+                            eq(443),
+                            eq("backend.example.com"),
+                            anyString()))
                     .thenReturn(httpRequest);
 
             HttpResponse<Buffer> httpResponse = mock(HttpResponse.class);
@@ -406,7 +497,12 @@ class ProxyHttpClientTest {
             var body = "test body content".getBytes();
             var preparedRequest = new PreparedProxyRequest("POST", targetUri, Map.of(), body);
 
-            when(webClient.request(any(HttpMethod.class), eq(443), eq("backend.example.com"), anyString()))
+            when(webClient.request(
+                            any(HttpMethod.class),
+                            any(SocketAddress.class),
+                            eq(443),
+                            eq("backend.example.com"),
+                            anyString()))
                     .thenReturn(httpRequest);
 
             HttpResponse<Buffer> httpResponse = mock(HttpResponse.class);

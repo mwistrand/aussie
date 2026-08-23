@@ -46,6 +46,7 @@ import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
 import aussie.core.service.auth.JwksCacheService.JwksFetchException;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
+import aussie.core.service.routing.UpstreamAddressResolver;
 
 @DisplayName("WebSocketGateway (unit)")
 @ExtendWith(MockitoExtension.class)
@@ -81,18 +82,31 @@ class WebSocketGatewayUnitTest {
     @Mock
     private ClientContextResolver clientContextResolver;
 
+    @Mock
+    private UpstreamAddressResolver addressResolver;
+
     private WebSocketGateway gateway;
 
     @BeforeEach
     void setUp() {
         gateway = new WebSocketGateway(
-                gatewayUseCase, config, vertx, metrics, rateLimitService, errorWriter, clientContextResolver);
+                gatewayUseCase,
+                config,
+                vertx,
+                metrics,
+                rateLimitService,
+                errorWriter,
+                clientContextResolver,
+                addressResolver);
 
         lenient().when(ctx.request()).thenReturn(request);
         lenient().when(ctx.response()).thenReturn(response);
         lenient().when(response.setStatusCode(anyInt())).thenReturn(response);
         lenient().when(response.putHeader(anyString(), anyString())).thenReturn(response);
         lenient().when(clientContextResolver.getOrCompute(ctx)).thenReturn(new ClientContext(null, false, null));
+        lenient()
+                .when(addressResolver.resolve(any(URI.class)))
+                .thenReturn(Uni.createFrom().item(SocketAddress.inetSocketAddress(443, "203.0.113.1")));
     }
 
     private static org.mockito.ArgumentMatcher<ProblemDetail> problemWithStatus(int status) {

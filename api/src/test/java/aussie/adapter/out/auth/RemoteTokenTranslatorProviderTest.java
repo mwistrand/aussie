@@ -9,9 +9,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
@@ -20,6 +23,7 @@ import java.util.Set;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+import io.smallrye.mutiny.Uni;
 import io.vertx.mutiny.core.Vertx;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +37,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import aussie.adapter.out.telemetry.TokenTranslationMetrics;
 import aussie.core.config.TokenTranslationConfig;
 import aussie.core.config.TokenTranslationConfig.Remote.FailMode;
+import aussie.core.service.routing.UpstreamAddressResolver;
 
 /**
  * Unit tests for RemoteTokenTranslatorProvider.
@@ -57,6 +62,7 @@ class RemoteTokenTranslatorProviderTest {
     private Vertx vertx;
     private ObjectMapper objectMapper;
     private RemoteTokenTranslatorProvider provider;
+    private UpstreamAddressResolver addressResolver;
 
     @BeforeEach
     void setUp() {
@@ -68,6 +74,7 @@ class RemoteTokenTranslatorProviderTest {
         lenient().when(config.remote()).thenReturn(remoteConfig);
         lenient().when(remoteConfig.timeout()).thenReturn(Duration.ofSeconds(5));
         lenient().when(remoteConfig.failMode()).thenReturn(FailMode.deny);
+        addressResolver = mock(UpstreamAddressResolver.class);
     }
 
     @AfterEach
@@ -82,7 +89,14 @@ class RemoteTokenTranslatorProviderTest {
 
     private void initProvider(String url) {
         lenient().when(remoteConfig.url()).thenReturn(Optional.ofNullable(url));
-        provider = new RemoteTokenTranslatorProvider(vertx, config, metrics, objectMapper);
+        if (url != null && !url.isBlank()) {
+            final var uri = URI.create(url);
+            lenient()
+                    .when(addressResolver.resolve(any(URI.class)))
+                    .thenReturn(Uni.createFrom()
+                            .item(io.vertx.core.net.SocketAddress.inetSocketAddress(uri.getPort(), "127.0.0.1")));
+        }
+        provider = new RemoteTokenTranslatorProvider(vertx, config, metrics, objectMapper, addressResolver);
     }
 
     @Nested
@@ -314,6 +328,20 @@ class RemoteTokenTranslatorProviderTest {
 
             assertTrue(result.roles().isEmpty());
             assertTrue(result.permissions().isEmpty());
+        }
+
+        @Test
+        @DisplayName("should include address resolution in request timeout")
+        void shouldIncludeAddressResolutionInRequestTimeout() {
+            var url = wireMockServer.baseUrl() + "/translate";
+            when(remoteConfig.timeout()).thenReturn(Duration.ofMillis(10));
+            initProvider(url);
+            when(addressResolver.resolve(any(URI.class)))
+                    .thenReturn(Uni.createFrom().nothing());
+
+            assertThrows(
+                    RuntimeException.class,
+                    () -> provider.translate(ISSUER, SUBJECT, Map.of()).await().atMost(Duration.ofSeconds(1)));
         }
 
         @Test

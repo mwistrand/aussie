@@ -35,6 +35,7 @@ import aussie.core.model.gateway.ProxyResponse;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.ProxyClient;
 import aussie.core.service.gateway.ProxyRequestPreparer;
+import aussie.core.service.routing.UpstreamAddressResolver;
 
 /**
  * HTTP adapter for forwarding prepared proxy requests using Vert.x WebClient.
@@ -57,6 +58,7 @@ public class ProxyHttpClient implements ProxyClient {
     private final TelemetryHelper telemetryHelper;
     private final ResiliencyConfig.HttpConfig httpConfig;
     private final Metrics metrics;
+    private final UpstreamAddressResolver addressResolver;
     private WebClient webClient;
 
     @Inject
@@ -67,7 +69,8 @@ public class ProxyHttpClient implements ProxyClient {
             TextMapPropagator propagator,
             TelemetryHelper telemetryHelper,
             ResiliencyConfig resiliencyConfig,
-            Metrics metrics) {
+            Metrics metrics,
+            UpstreamAddressResolver addressResolver) {
         this.vertx = vertx;
         this.requestPreparer = requestPreparer;
         this.tracer = tracer;
@@ -75,6 +78,7 @@ public class ProxyHttpClient implements ProxyClient {
         this.telemetryHelper = telemetryHelper;
         this.httpConfig = resiliencyConfig.http();
         this.metrics = metrics;
+        this.addressResolver = addressResolver;
     }
 
     @PostConstruct
@@ -143,16 +147,20 @@ public class ProxyHttpClient implements ProxyClient {
             telemetryHelper.setRequestSize(span, preparedRequest.body().length);
         }
 
-        var request = createRequest(method, targetUri, effectiveTimeout);
-        applyHeaders(preparedRequest, request);
-
-        // Propagate trace context (W3C Trace Context headers)
-        propagator.inject(Context.current().with(span), request, HEADER_SETTER);
-
         // Use target host as service identifier for metrics
         final var serviceIdentifier = targetUri.getHost();
 
-        return executeRequest(request, preparedRequest.body())
+        return addressResolver
+                .resolve(targetUri)
+                .flatMap(serverAddress -> {
+                    final var request = createRequest(method, targetUri, effectiveTimeout, serverAddress);
+                    applyHeaders(preparedRequest, request);
+                    propagator.inject(Context.current().with(span), request, HEADER_SETTER);
+                    return executeRequest(request, preparedRequest.body());
+                })
+                .ifNoItem()
+                .after(effectiveTimeout)
+                .failWith(() -> new TimeoutException("Request timed out"))
                 .invoke(response -> {
                     span.setAttribute(SpanAttributes.HTTP_STATUS_CODE, (long) response.statusCode());
                     telemetryHelper.setUpstreamLatency(span, System.currentTimeMillis() - startTime);
@@ -222,14 +230,25 @@ public class ProxyHttpClient implements ProxyClient {
         return port;
     }
 
-    private HttpRequest<Buffer> createRequest(HttpMethod method, URI targetUri, java.time.Duration timeout) {
+    private HttpRequest<Buffer> createRequest(
+            HttpMethod method,
+            URI targetUri,
+            java.time.Duration timeout,
+            io.vertx.core.net.SocketAddress serverAddress) {
         var path = targetUri.getRawPath();
         if (targetUri.getRawQuery() != null) {
             path += "?" + targetUri.getRawQuery();
         }
 
         return webClient
-                .request(method, getPort(targetUri), targetUri.getHost(), path)
+                .request(
+                        method,
+                        io.vertx.mutiny.core.net.SocketAddress.newInstance(serverAddress),
+                        getPort(targetUri),
+                        targetUri.getHost(),
+                        path)
+                .ssl("https".equalsIgnoreCase(targetUri.getScheme()))
+                .followRedirects(false)
                 .timeout(timeout.toMillis());
     }
 

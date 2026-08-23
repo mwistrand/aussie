@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.times;
@@ -22,6 +23,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.smallrye.mutiny.Uni;
 import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.buffer.Buffer;
+import io.vertx.mutiny.core.net.SocketAddress;
 import io.vertx.mutiny.ext.web.client.HttpRequest;
 import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
@@ -39,6 +41,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.core.config.ResiliencyConfig;
 import aussie.core.port.out.Metrics;
+import aussie.core.service.routing.UpstreamAddressResolver;
 
 @DisplayName("JwksCacheService")
 @ExtendWith(MockitoExtension.class)
@@ -67,6 +70,9 @@ class JwksCacheServiceTest {
     @Mock
     private Metrics metrics;
 
+    @Mock
+    private UpstreamAddressResolver addressResolver;
+
     private JwksCacheService service;
 
     @BeforeAll
@@ -93,10 +99,14 @@ class JwksCacheServiceTest {
         lenient().when(jwksConfig.maxCacheEntries()).thenReturn(100);
         lenient().when(jwksConfig.cacheTtl()).thenReturn(Duration.ofHours(1));
         lenient().when(resiliencyConfig.jwks()).thenReturn(jwksConfig);
+        lenient()
+                .when(addressResolver.resolve(any(URI.class)))
+                .thenReturn(Uni.createFrom().item(io.vertx.core.net.SocketAddress.inetSocketAddress(443, "192.0.2.1")));
 
         try (var mockedWebClient = mockStatic(WebClient.class)) {
             mockedWebClient.when(() -> WebClient.create(any(Vertx.class))).thenReturn(webClient);
-            service = new JwksCacheService(vertx, resiliencyConfig, new SimpleMeterRegistry(), metrics);
+            service =
+                    new JwksCacheService(vertx, resiliencyConfig, new SimpleMeterRegistry(), metrics, addressResolver);
         }
     }
 
@@ -105,8 +115,9 @@ class JwksCacheServiceTest {
         HttpRequest<Buffer> request = (HttpRequest<Buffer>) org.mockito.Mockito.mock(HttpRequest.class);
         HttpResponse<Buffer> response = (HttpResponse<Buffer>) org.mockito.Mockito.mock(HttpResponse.class);
 
-        when(webClient.getAbs(anyString())).thenReturn(request);
+        when(webClient.requestAbs(any(), any(SocketAddress.class), anyString())).thenReturn(request);
         when(request.ssl(anyBoolean())).thenReturn(request);
+        when(request.followRedirects(false)).thenReturn(request);
         when(request.send()).thenReturn(Uni.createFrom().item(response));
         when(response.statusCode()).thenReturn(statusCode);
         if (body != null) {
@@ -118,8 +129,9 @@ class JwksCacheServiceTest {
     private void mockFetchFailure(Throwable error) {
         HttpRequest<Buffer> request = (HttpRequest<Buffer>) org.mockito.Mockito.mock(HttpRequest.class);
 
-        when(webClient.getAbs(anyString())).thenReturn(request);
+        when(webClient.requestAbs(any(), any(SocketAddress.class), anyString())).thenReturn(request);
         when(request.ssl(anyBoolean())).thenReturn(request);
+        when(request.followRedirects(false)).thenReturn(request);
         when(request.send()).thenReturn(Uni.createFrom().failure(error));
     }
 
@@ -136,7 +148,7 @@ class JwksCacheServiceTest {
 
             assertNotNull(result);
             assertEquals(1, result.getJsonWebKeys().size());
-            verify(webClient).getAbs(JWKS_URI.toString());
+            verify(webClient).requestAbs(any(), any(SocketAddress.class), eq(JWKS_URI.toString()));
         }
 
         @Test
@@ -149,7 +161,7 @@ class JwksCacheServiceTest {
 
             assertNotNull(result);
             assertEquals(1, result.getJsonWebKeys().size());
-            verify(webClient, times(1)).getAbs(anyString());
+            verify(webClient, times(1)).requestAbs(any(), any(SocketAddress.class), anyString());
         }
 
         @Test
@@ -215,13 +227,36 @@ class JwksCacheServiceTest {
             HttpRequest<Buffer> request = (HttpRequest<Buffer>) org.mockito.Mockito.mock(HttpRequest.class);
             HttpResponse<Buffer> response = (HttpResponse<Buffer>) org.mockito.Mockito.mock(HttpResponse.class);
 
-            when(webClient.getAbs(JWKS_URI.toString())).thenReturn(request);
+            when(webClient.requestAbs(any(), any(SocketAddress.class), eq(JWKS_URI.toString())))
+                    .thenReturn(request);
             when(request.ssl(true)).thenReturn(request);
+            when(request.followRedirects(false)).thenReturn(request);
             when(request.send()).thenReturn(Uni.createFrom().item(response));
             when(response.statusCode()).thenReturn(200);
             when(response.bodyAsString()).thenReturn(singleKeyJwks);
 
             service.getKeySet(JWKS_URI).await().atMost(Duration.ofSeconds(5));
+
+            verify(request).ssl(true);
+        }
+
+        @Test
+        @DisplayName("should use SSL for case-insensitive HTTPS schemes")
+        @SuppressWarnings("unchecked")
+        void shouldUseSslForUppercaseHttpsUri() {
+            final var uri = URI.create("HTTPS://auth.example.com/.well-known/jwks.json");
+            HttpRequest<Buffer> request = (HttpRequest<Buffer>) org.mockito.Mockito.mock(HttpRequest.class);
+            HttpResponse<Buffer> response = (HttpResponse<Buffer>) org.mockito.Mockito.mock(HttpResponse.class);
+
+            when(webClient.requestAbs(any(), any(SocketAddress.class), eq(uri.toString())))
+                    .thenReturn(request);
+            when(request.ssl(true)).thenReturn(request);
+            when(request.followRedirects(false)).thenReturn(request);
+            when(request.send()).thenReturn(Uni.createFrom().item(response));
+            when(response.statusCode()).thenReturn(200);
+            when(response.bodyAsString()).thenReturn(singleKeyJwks);
+
+            service.getKeySet(uri).await().atMost(Duration.ofSeconds(5));
 
             verify(request).ssl(true);
         }
@@ -233,8 +268,10 @@ class JwksCacheServiceTest {
             HttpRequest<Buffer> request = (HttpRequest<Buffer>) org.mockito.Mockito.mock(HttpRequest.class);
             HttpResponse<Buffer> response = (HttpResponse<Buffer>) org.mockito.Mockito.mock(HttpResponse.class);
 
-            when(webClient.getAbs(JWKS_URI_HTTP.toString())).thenReturn(request);
+            when(webClient.requestAbs(any(), any(SocketAddress.class), eq(JWKS_URI_HTTP.toString())))
+                    .thenReturn(request);
             when(request.ssl(false)).thenReturn(request);
+            when(request.followRedirects(false)).thenReturn(request);
             when(request.send()).thenReturn(Uni.createFrom().item(response));
             when(response.statusCode()).thenReturn(200);
             when(response.bodyAsString()).thenReturn(singleKeyJwks);
@@ -322,7 +359,7 @@ class JwksCacheServiceTest {
             var result = service.refresh(JWKS_URI).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(2, result.getJsonWebKeys().size());
-            verify(webClient, times(2)).getAbs(anyString());
+            verify(webClient, times(2)).requestAbs(any(), any(SocketAddress.class), anyString());
         }
 
         @Test
@@ -339,7 +376,7 @@ class JwksCacheServiceTest {
 
             assertEquals(2, result.getJsonWebKeys().size());
             // Should not fetch again (cached from refresh)
-            verify(webClient, times(2)).getAbs(anyString());
+            verify(webClient, times(2)).requestAbs(any(), any(SocketAddress.class), anyString());
         }
     }
 
@@ -365,7 +402,7 @@ class JwksCacheServiceTest {
             var result = service.getKeySet(JWKS_URI).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(2, result.getJsonWebKeys().size());
-            verify(webClient, times(2)).getAbs(anyString());
+            verify(webClient, times(2)).requestAbs(any(), any(SocketAddress.class), anyString());
         }
     }
 
@@ -408,8 +445,8 @@ class JwksCacheServiceTest {
             service.getKeySet(uri1).await().atMost(Duration.ofSeconds(5));
             service.getKeySet(uri2).await().atMost(Duration.ofSeconds(5));
 
-            verify(webClient).getAbs(uri1.toString());
-            verify(webClient).getAbs(uri2.toString());
+            verify(webClient).requestAbs(any(), any(SocketAddress.class), eq(uri1.toString()));
+            verify(webClient).requestAbs(any(), any(SocketAddress.class), eq(uri2.toString()));
         }
     }
 
@@ -425,15 +462,18 @@ class JwksCacheServiceTest {
 
             try (var mockedWebClient = mockStatic(WebClient.class)) {
                 mockedWebClient.when(() -> WebClient.create(any(Vertx.class))).thenReturn(webClient);
-                service = new JwksCacheService(vertx, resiliencyConfig, new SimpleMeterRegistry(), metrics);
+                service = new JwksCacheService(
+                        vertx, resiliencyConfig, new SimpleMeterRegistry(), metrics, addressResolver);
             }
 
             // Mock a response that never arrives (Uni that never emits)
             @SuppressWarnings("unchecked")
             HttpRequest<Buffer> request = (HttpRequest<Buffer>) org.mockito.Mockito.mock(HttpRequest.class);
 
-            when(webClient.getAbs(anyString())).thenReturn(request);
+            when(webClient.requestAbs(any(), any(SocketAddress.class), anyString()))
+                    .thenReturn(request);
             when(request.ssl(anyBoolean())).thenReturn(request);
+            when(request.followRedirects(false)).thenReturn(request);
             when(request.send()).thenReturn(Uni.createFrom().nothing());
 
             var exception = assertThrows(

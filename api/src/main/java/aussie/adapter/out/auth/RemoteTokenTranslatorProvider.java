@@ -1,15 +1,18 @@
 package aussie.adapter.out.auth;
 
+import java.net.URI;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeoutException;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.smallrye.mutiny.Uni;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.ext.web.client.WebClient;
@@ -20,6 +23,7 @@ import aussie.adapter.out.telemetry.TokenTranslationMetrics;
 import aussie.core.config.TokenTranslationConfig;
 import aussie.core.config.TokenTranslationConfig.Remote.FailMode;
 import aussie.core.model.auth.TranslatedClaims;
+import aussie.core.service.routing.UpstreamAddressResolver;
 import aussie.spi.TokenTranslatorProvider;
 
 /**
@@ -60,14 +64,20 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
     private final TokenTranslationConfig config;
     private final TokenTranslationMetrics metrics;
     private final ObjectMapper objectMapper;
+    private final UpstreamAddressResolver addressResolver;
 
     @Inject
     public RemoteTokenTranslatorProvider(
-            Vertx vertx, TokenTranslationConfig config, TokenTranslationMetrics metrics, ObjectMapper objectMapper) {
+            Vertx vertx,
+            TokenTranslationConfig config,
+            TokenTranslationMetrics metrics,
+            ObjectMapper objectMapper,
+            UpstreamAddressResolver addressResolver) {
         this.webClient = WebClient.create(vertx);
         this.config = config;
         this.metrics = metrics;
         this.objectMapper = objectMapper;
+        this.addressResolver = addressResolver;
     }
 
     @Override
@@ -108,6 +118,7 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
     @SuppressWarnings("unchecked")
     public Uni<TranslatedClaims> translate(String issuer, String subject, Map<String, Object> claims) {
         final var url = config.remote().url().orElseThrow(() -> new IllegalStateException("Remote URL not configured"));
+        final var uri = URI.create(url);
         final var startTime = System.currentTimeMillis();
 
         LOG.debugf(
@@ -122,14 +133,22 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
                 .put("subject", subject)
                 .put("claims", new JsonObject(jsonSafeClaims));
 
-        final var timeout = config.remote().timeout().toMillis();
+        final var timeout = config.remote().timeout();
 
-        return webClient
-                .postAbs(url)
-                .timeout(timeout)
-                .putHeader("Content-Type", "application/json")
-                .putHeader("Accept", "application/json")
-                .sendJsonObject(request)
+        return addressResolver
+                .resolve(uri)
+                .flatMap(serverAddress -> webClient
+                        .requestAbs(
+                                HttpMethod.POST, io.vertx.mutiny.core.net.SocketAddress.newInstance(serverAddress), url)
+                        .ssl("https".equalsIgnoreCase(uri.getScheme()))
+                        .followRedirects(false)
+                        .timeout(timeout.toMillis())
+                        .putHeader("Content-Type", "application/json")
+                        .putHeader("Accept", "application/json")
+                        .sendJsonObject(request))
+                .ifNoItem()
+                .after(timeout)
+                .failWith(() -> new TimeoutException("Remote translation timed out"))
                 .map(response -> {
                     final var duration = System.currentTimeMillis() - startTime;
                     metrics.recordRemoteCall(response.statusCode(), duration);

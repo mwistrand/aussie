@@ -14,6 +14,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 import io.smallrye.mutiny.Uni;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.buffer.Buffer;
 import io.vertx.mutiny.ext.web.client.HttpResponse;
@@ -26,6 +27,7 @@ import org.jose4j.lang.JoseException;
 import aussie.core.config.ResiliencyConfig;
 import aussie.core.port.out.JwksCache;
 import aussie.core.port.out.Metrics;
+import aussie.core.service.routing.UpstreamAddressResolver;
 
 /**
  * Service for caching and retrieving JSON Web Key Sets (JWKS).
@@ -51,13 +53,19 @@ public class JwksCacheService implements JwksCache {
     private final Map<URI, Uni<JsonWebKeySet>> inFlightFetches = new ConcurrentHashMap<>();
     private final ResiliencyConfig.JwksConfig jwksConfig;
     private final Metrics metrics;
+    private final UpstreamAddressResolver addressResolver;
 
     @Inject
     public JwksCacheService(
-            Vertx vertx, ResiliencyConfig resiliencyConfig, MeterRegistry meterRegistry, Metrics metrics) {
+            Vertx vertx,
+            ResiliencyConfig resiliencyConfig,
+            MeterRegistry meterRegistry,
+            Metrics metrics,
+            UpstreamAddressResolver addressResolver) {
         this.webClient = WebClient.create(vertx);
         this.jwksConfig = resiliencyConfig.jwks();
         this.metrics = metrics;
+        this.addressResolver = addressResolver;
 
         // Build bounded Caffeine cache with LRU eviction
         this.cache = Caffeine.newBuilder()
@@ -123,10 +131,16 @@ public class JwksCacheService implements JwksCache {
     private Uni<JsonWebKeySet> fetchAndCache(URI jwksUri) {
         LOG.infov("Fetching JWKS from {0}", jwksUri);
 
-        return webClient
-                .getAbs(jwksUri.toString())
-                .ssl(jwksUri.getScheme().equals("https"))
-                .send()
+        return addressResolver
+                .resolve(jwksUri)
+                .flatMap(serverAddress -> webClient
+                        .requestAbs(
+                                HttpMethod.GET,
+                                io.vertx.mutiny.core.net.SocketAddress.newInstance(serverAddress),
+                                jwksUri.toString())
+                        .ssl("https".equalsIgnoreCase(jwksUri.getScheme()))
+                        .followRedirects(false)
+                        .send())
                 .ifNoItem()
                 .after(jwksConfig.fetchTimeout())
                 .failWith(() -> {

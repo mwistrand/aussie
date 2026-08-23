@@ -1,16 +1,19 @@
 package aussie.adapter.out.auth;
 
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeoutException;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.buffer.Buffer;
 import io.vertx.mutiny.ext.web.client.HttpResponse;
@@ -23,6 +26,7 @@ import aussie.core.config.OidcConfig;
 import aussie.core.model.auth.OidcTokenExchangeRequest;
 import aussie.core.model.auth.OidcTokenExchangeRequest.ClientAuthMethod;
 import aussie.core.model.auth.OidcTokenExchangeResponse;
+import aussie.core.service.routing.UpstreamAddressResolver;
 import aussie.spi.OidcTokenExchangeProvider;
 
 /**
@@ -46,11 +50,13 @@ public class DefaultOidcTokenExchangeProvider implements OidcTokenExchangeProvid
 
     private final WebClient webClient;
     private final OidcConfig config;
+    private final UpstreamAddressResolver addressResolver;
 
     @Inject
-    public DefaultOidcTokenExchangeProvider(Vertx vertx, OidcConfig config) {
+    public DefaultOidcTokenExchangeProvider(Vertx vertx, OidcConfig config, UpstreamAddressResolver addressResolver) {
         this.webClient = WebClient.create(vertx);
         this.config = config;
+        this.addressResolver = addressResolver;
     }
 
     @Override
@@ -91,24 +97,36 @@ public class DefaultOidcTokenExchangeProvider implements OidcTokenExchangeProvid
     public Uni<OidcTokenExchangeResponse> exchange(OidcTokenExchangeRequest request) {
         LOG.debugf("Exchanging authorization code with IdP: %s", request.tokenEndpoint());
 
-        final var timeout = config.tokenExchange().timeout().toMillis();
+        final var timeout = config.tokenExchange().timeout();
         final var formBody = buildFormBody(request);
+        final var tokenEndpoint = URI.create(request.tokenEndpoint());
 
-        var httpRequest = webClient
-                .postAbs(request.tokenEndpoint())
-                .timeout(timeout)
-                .putHeader("Content-Type", "application/x-www-form-urlencoded")
-                .putHeader("Accept", "application/json");
+        return addressResolver
+                .resolve(tokenEndpoint)
+                .flatMap(serverAddress -> {
+                    var httpRequest = webClient
+                            .requestAbs(
+                                    HttpMethod.POST,
+                                    io.vertx.mutiny.core.net.SocketAddress.newInstance(serverAddress),
+                                    tokenEndpoint.toString())
+                            .ssl("https".equalsIgnoreCase(tokenEndpoint.getScheme()))
+                            .followRedirects(false)
+                            .timeout(timeout.toMillis())
+                            .putHeader("Content-Type", "application/x-www-form-urlencoded")
+                            .putHeader("Accept", "application/json");
 
-        // Add authentication header for client_secret_basic
-        if (request.clientAuthMethod() == ClientAuthMethod.CLIENT_SECRET_BASIC && request.clientSecret() != null) {
-            final var credentials = request.clientId() + ":" + request.clientSecret();
-            final var encoded = Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
-            httpRequest = httpRequest.putHeader("Authorization", "Basic " + encoded);
-        }
-
-        return httpRequest
-                .sendBuffer(Buffer.buffer(formBody))
+                    if (request.clientAuthMethod() == ClientAuthMethod.CLIENT_SECRET_BASIC
+                            && request.clientSecret() != null) {
+                        final var credentials = request.clientId() + ":" + request.clientSecret();
+                        final var encoded =
+                                Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
+                        httpRequest = httpRequest.putHeader("Authorization", "Basic " + encoded);
+                    }
+                    return httpRequest.sendBuffer(Buffer.buffer(formBody));
+                })
+                .ifNoItem()
+                .after(timeout)
+                .failWith(() -> new TimeoutException("Token exchange timed out"))
                 .flatMap(this::parseTokenResponse)
                 .onFailure()
                 .transform(error -> {

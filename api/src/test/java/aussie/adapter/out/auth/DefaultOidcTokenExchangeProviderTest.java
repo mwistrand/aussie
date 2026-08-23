@@ -2,23 +2,29 @@ package aussie.adapter.out.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.net.URI;
 import java.time.Duration;
 import java.util.Optional;
 
+import io.quarkiverse.resteasy.problem.HttpProblem;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.buffer.Buffer;
+import io.vertx.mutiny.core.net.SocketAddress;
 import io.vertx.mutiny.ext.web.client.HttpRequest;
 import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
@@ -34,6 +40,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import aussie.core.config.OidcConfig;
 import aussie.core.model.auth.OidcTokenExchangeRequest;
 import aussie.core.model.auth.OidcTokenExchangeRequest.ClientAuthMethod;
+import aussie.core.service.routing.UpstreamAddressResolver;
 
 @DisplayName("DefaultOidcTokenExchangeProvider")
 @ExtendWith(MockitoExtension.class)
@@ -48,6 +55,9 @@ class DefaultOidcTokenExchangeProviderTest {
     @Mock
     private WebClient webClient;
 
+    @Mock
+    private UpstreamAddressResolver addressResolver;
+
     private DefaultOidcTokenExchangeProvider provider;
 
     @BeforeEach
@@ -58,7 +68,10 @@ class DefaultOidcTokenExchangeProviderTest {
         // Use Vertx.vertx() to create a real (lightweight) Vertx for WebClient construction,
         // then replace with mock WebClient via reflection
         var realVertx = Vertx.vertx();
-        provider = new DefaultOidcTokenExchangeProvider(realVertx, oidcConfig);
+        lenient()
+                .when(addressResolver.resolve(any(URI.class)))
+                .thenReturn(Uni.createFrom().item(io.vertx.core.net.SocketAddress.inetSocketAddress(443, "192.0.2.1")));
+        provider = new DefaultOidcTokenExchangeProvider(realVertx, oidcConfig, addressResolver);
 
         // Inject mock WebClient via reflection
         var webClientField = DefaultOidcTokenExchangeProvider.class.getDeclaredField("webClient");
@@ -153,7 +166,10 @@ class DefaultOidcTokenExchangeProviderTest {
         @SuppressWarnings("unchecked")
         private HttpRequest<Buffer> setupMockRequest() {
             HttpRequest<Buffer> httpRequest = mock(HttpRequest.class);
-            when(webClient.postAbs(anyString())).thenReturn(httpRequest);
+            when(webClient.requestAbs(any(), any(SocketAddress.class), anyString()))
+                    .thenReturn(httpRequest);
+            when(httpRequest.ssl(anyBoolean())).thenReturn(httpRequest);
+            when(httpRequest.followRedirects(anyBoolean())).thenReturn(httpRequest);
             lenient().when(httpRequest.timeout(anyLong())).thenReturn(httpRequest);
             lenient().when(httpRequest.putHeader(anyString(), anyString())).thenReturn(httpRequest);
             return httpRequest;
@@ -299,6 +315,27 @@ class DefaultOidcTokenExchangeProviderTest {
 
             var formBody = bodyCaptor.getValue().toString();
             assertTrue(formBody.contains("scope=openid+profile"));
+        }
+
+        @Test
+        @DisplayName("shouldIncludeAddressResolutionInRequestTimeout")
+        void shouldIncludeAddressResolutionInRequestTimeout() {
+            when(tokenExchangeConfig.timeout()).thenReturn(Duration.ofMillis(10));
+            when(addressResolver.resolve(any(URI.class)))
+                    .thenReturn(Uni.createFrom().nothing());
+            var request = new OidcTokenExchangeRequest(
+                    "auth-code",
+                    "https://app.example.com/callback",
+                    Optional.empty(),
+                    "https://idp.example.com/token",
+                    "client-id",
+                    "client-secret",
+                    ClientAuthMethod.CLIENT_SECRET_BASIC,
+                    Optional.empty());
+
+            assertThrows(
+                    HttpProblem.class, () -> provider.exchange(request).await().atMost(Duration.ofSeconds(1)));
+            verify(webClient, never()).requestAbs(any(), any(SocketAddress.class), anyString());
         }
     }
 

@@ -34,6 +34,7 @@ import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
 import aussie.core.service.auth.JwksCacheService.JwksFetchException;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
+import aussie.core.service.routing.UpstreamAddressResolver;
 import aussie.core.util.SecureHash;
 
 /**
@@ -62,6 +63,7 @@ public class WebSocketGateway {
     private final WebSocketRateLimitService rateLimitService;
     private final ProxyErrorWriter errorWriter;
     private final ClientContextResolver clientContextResolver;
+    private final UpstreamAddressResolver addressResolver;
 
     @Inject
     public WebSocketGateway(
@@ -71,7 +73,8 @@ public class WebSocketGateway {
             GatewayMetrics metrics,
             WebSocketRateLimitService rateLimitService,
             ProxyErrorWriter errorWriter,
-            ClientContextResolver clientContextResolver) {
+            ClientContextResolver clientContextResolver,
+            UpstreamAddressResolver addressResolver) {
         this.gatewayUseCase = gatewayUseCase;
         this.config = config;
         this.vertx = vertx;
@@ -79,6 +82,7 @@ public class WebSocketGateway {
         this.rateLimitService = rateLimitService;
         this.errorWriter = errorWriter;
         this.clientContextResolver = clientContextResolver;
+        this.addressResolver = addressResolver;
     }
 
     /**
@@ -194,65 +198,84 @@ public class WebSocketGateway {
                 .setHeaders(headers)
                 .setSsl("wss".equals(backendUri.getScheme()));
 
-        vertx.createHttpClient()
-                .webSocket(options)
-                .onSuccess(backendWs -> {
-                    // Backend connected - now upgrade client connection (non-blocking)
-                    ctx.request()
-                            .toWebSocket()
-                            .onSuccess(clientWs -> {
-                                // Create message rate limit handler
-                                final var messageHandler =
-                                        createMessageRateLimitHandler(serviceId, clientId, sessionId);
+        addressResolver
+                .resolve(backendUri)
+                .subscribe()
+                .with(
+                        serverAddress -> {
+                            options.setServer(serverAddress);
+                            vertx.createHttpClient()
+                                    .webSocket(options)
+                                    .onSuccess(backendWs -> {
+                                        // Backend connected - now upgrade client connection (non-blocking)
+                                        ctx.request()
+                                                .toWebSocket()
+                                                .onSuccess(clientWs -> {
+                                                    // Create message rate limit handler
+                                                    final var messageHandler = createMessageRateLimitHandler(
+                                                            serviceId, clientId, sessionId);
 
-                                // Both connections established - create proxy session
-                                final var session = new WebSocketProxySession(
-                                        sessionId,
-                                        clientWs,
-                                        backendWs,
-                                        vertx,
-                                        config,
-                                        authSessionId,
-                                        userId,
-                                        messageHandler);
+                                                    // Both connections established - create proxy session
+                                                    final var session = new WebSocketProxySession(
+                                                            sessionId,
+                                                            clientWs,
+                                                            backendWs,
+                                                            vertx,
+                                                            config,
+                                                            authSessionId,
+                                                            userId,
+                                                            messageHandler);
 
-                                activeSessions.put(sessionId, session);
+                                                    activeSessions.put(sessionId, session);
 
-                                // Track connection metrics
-                                metrics.incrementActiveWebSockets();
-                                metrics.recordWebSocketConnect(serviceId);
+                                                    // Track connection metrics
+                                                    metrics.incrementActiveWebSockets();
+                                                    metrics.recordWebSocketConnect(serviceId);
 
-                                // Clean up session when closed
-                                clientWs.closeHandler(v -> {
-                                    activeSessions.remove(sessionId);
-                                    metrics.decrementActiveWebSockets();
-                                    rateLimitService
-                                            .cleanupConnection(serviceId, clientId, sessionId)
-                                            .subscribe()
-                                            .with(
-                                                    ignored -> {},
-                                                    err -> LOG.warnv(
+                                                    // Clean up session when closed
+                                                    clientWs.closeHandler(v -> {
+                                                        activeSessions.remove(sessionId);
+                                                        metrics.decrementActiveWebSockets();
+                                                        rateLimitService
+                                                                .cleanupConnection(serviceId, clientId, sessionId)
+                                                                .subscribe()
+                                                                .with(
+                                                                        ignored -> {},
+                                                                        err -> LOG.warnv(
+                                                                                err,
+                                                                                "Failed to cleanup rate limit state for session {0}",
+                                                                                sessionId));
+                                                    });
+
+                                                    // Start the session (enables message forwarding and timers)
+                                                    session.start();
+
+                                                    LOG.infov(
+                                                            "WebSocket session {0} established to {1}",
+                                                            sessionId, backendUri);
+                                                })
+                                                .onFailure(err -> {
+                                                    LOG.warnv(
                                                             err,
-                                                            "Failed to cleanup rate limit state for session {0}",
-                                                            sessionId));
-                                });
-
-                                // Start the session (enables message forwarding and timers)
-                                session.start();
-
-                                LOG.infov("WebSocket session {0} established to {1}", sessionId, backendUri);
-                            })
-                            .onFailure(err -> {
-                                LOG.warnv(err, "Client WebSocket upgrade failed for session {0}", sessionId);
-                                backendWs.close((short) 1001, "Client upgrade failed");
-                                errorWriter.write(
-                                        ctx, ProblemDetail.internalError("WebSocket upgrade failed"), serviceId);
-                            });
-                })
-                .onFailure(err -> {
-                    LOG.warnv(err, "Backend WebSocket connection failed to {0}", backendUri);
-                    errorWriter.write(ctx, ProblemDetail.badGateway("Backend connection failed"), serviceId);
-                });
+                                                            "Client WebSocket upgrade failed for session {0}",
+                                                            sessionId);
+                                                    backendWs.close((short) 1001, "Client upgrade failed");
+                                                    errorWriter.write(
+                                                            ctx,
+                                                            ProblemDetail.internalError("WebSocket upgrade failed"),
+                                                            serviceId);
+                                                });
+                                    })
+                                    .onFailure(err -> {
+                                        LOG.warnv(err, "Backend WebSocket connection failed to {0}", backendUri);
+                                        errorWriter.write(
+                                                ctx, ProblemDetail.badGateway("Backend connection failed"), serviceId);
+                                    });
+                        },
+                        err -> {
+                            LOG.warnv(err, "Backend WebSocket address denied for service {0}", serviceId);
+                            errorWriter.write(ctx, ProblemDetail.badGateway("Backend connection failed"), serviceId);
+                        });
     }
 
     private MessageRateLimitHandler createMessageRateLimitHandler(String serviceId, String clientId, String sessionId) {
