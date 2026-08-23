@@ -14,7 +14,7 @@ These are not hypothetical decisions. Every one of them is enforced by running c
 
 **Consequences:**
 - The core layer has zero dependency on Jakarta, Quarkus, Vert.x, Cassandra, or Redis. Domain services can be unit tested with plain JUnit and Mockito in milliseconds.
-- There is meaningful indirection. `GatewayService` calls `ProxyClient`, not `ProxyHttpClient`. Reading code requires following the interface to its implementation in the adapter layer.
+- There is meaningful indirection. `GatewayService` returns a `ProxyPlan`; `GatewayResource` passes it to the native Vert.x streaming exchange, which obtains its client through the `OutboundHttpClients` port.
 - The package count is high (nine subdirectories under `core/model` alone), which can feel over-structured to engineers unfamiliar with hexagonal architecture. The counterargument is that the structure is self-documenting.
 - Outbound ports (`core/port/out/`) are enforced as interfaces only: no concrete classes allowed in that package.
 - Models (`core/model/`) cannot depend on services (`core/service/`) or ports (`core/port/`), preventing circular dependencies.
@@ -28,8 +28,9 @@ These are not hypothetical decisions. Every one of them is enforced by running c
   - Outbound ports must be interfaces (line 152-158)
   - Models must not depend on services (line 169-174)
   - Models must not depend on ports (line 180-188)
-- `api/src/main/java/aussie/core/port/out/ProxyClient.java`: A port interface that `GatewayService` depends on, implemented by `ProxyHttpClient` in the adapter layer
-- `api/src/main/java/aussie/core/port/in/GatewayUseCase.java`: Inbound port interface returning `Uni<GatewayResult>`, implemented by `GatewayService`
+- `api/src/main/java/aussie/core/port/out/OutboundHttpClients.java`: Port exposing application-owned Vert.x clients without coupling core services to their construction
+- `api/src/main/java/aussie/core/port/in/GatewayUseCase.java`: Inbound port returning `Uni<ProxyPlan>`, implemented by `GatewayService`
+- `api/src/main/java/aussie/adapter/in/vertx/StreamingProxyExchange.java`: Native HTTP data plane that consumes prepared plans
 
 ## ADR-002: Java Records for Domain Models Instead of POJOs/Lombok
 
@@ -319,8 +320,8 @@ These are not hypothetical decisions. Every one of them is enforced by running c
 
 **Evidence in code:**
 
-- `api/src/main/java/aussie/core/port/out/ProxyClient.java`: `Uni<ProxyResponse> forward(PreparedProxyRequest request)` (line 10)
-- `api/src/main/java/aussie/core/port/in/GatewayUseCase.java`: `Uni<GatewayResult> forward(GatewayRequest request)` (line 22)
+- `api/src/main/java/aussie/core/port/in/GatewayUseCase.java`: `Uni<ProxyPlan> prepare(GatewayRequest request)`
+- `api/src/main/java/aussie/adapter/in/vertx/StreamingProxyExchange.java`: `Multi<Buffer> forward(Uni<ProxyPlan>, HttpServerRequest, boolean)`
 - `api/src/main/java/aussie/core/port/out/ServiceRegistrationRepository.java`: Repository port returning `Uni<List<ServiceRegistration>>`, `Uni<Optional<ServiceRegistration>>`, etc.
 - `api/src/main/java/aussie/core/service/routing/ServiceRegistry.java`: Reactive service:
   - `register()` returns `Uni<RegistrationResult>` and chains `repository.findById().flatMap(...)` (lines 213-275)
@@ -360,9 +361,8 @@ These are not hypothetical decisions. Every one of them is enforced by running c
 - `api/src/main/java/aussie/adapter/out/telemetry/BulkheadMetrics.java`: Micrometer gauges:
   - Registers `aussie.bulkhead.{cassandra,redis,http,jwks}.pool.max` gauges (lines 88-121)
   - Tags with `type` for filtering: `connection_pool`, `request_limit`, `queue_limit` (lines 90-106)
-- `api/src/main/java/aussie/adapter/out/http/ProxyHttpClient.java`: HTTP pool usage:
-  - `WebClientOptions.setConnectTimeout()` from `httpConfig` (line 82)
-  - Per-request timeout from `httpConfig.requestTimeout()` (line 216)
+- `api/src/main/java/aussie/adapter/out/http/OutboundHttpClient.java`: Configures the shared Vert.x client with connect, TLS, per-host pool, and wait-queue limits
+- `api/src/main/java/aussie/adapter/in/vertx/StreamingProxyExchange.java`: Applies the effective request timeout and an instance-wide fail-fast active-exchange limit
 
 ## ADR-014: Request Coalescing for Cache Refresh
 

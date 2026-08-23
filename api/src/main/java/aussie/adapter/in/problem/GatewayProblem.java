@@ -74,6 +74,10 @@ public final class GatewayProblem {
         return build(ProblemDetail.gatewayTimeout(detail));
     }
 
+    public static HttpProblem serviceUnavailable(String detail) {
+        return build(ProblemDetail.serviceUnavailable(detail));
+    }
+
     public static HttpProblem from(GatewayResult result) {
         return switch (result) {
             case GatewayResult.Success ignored -> internalError("Invalid proxy plan");

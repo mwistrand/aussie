@@ -19,20 +19,21 @@ adapter/out/            - Reference implementations (what ships by default)
 META-INF/services/      - ServiceLoader registration files
 ```
 
-The `core/port/out/` directory in Aussie contains 23 outbound port interfaces. Here is the full inventory:
+The `core/port/out/` directory in Aussie contains 24 outbound port interfaces. Here is the full inventory:
 
 ```
 api/src/main/java/aussie/core/port/out/
     ApiKeyRepository.java
     AuthKeyCache.java
+    AuthenticatedContext.java
     ConfigurationCache.java
     ForwardedHeaderBuilder.java
     ForwardedHeaderBuilderProvider.java
     JwksCache.java
     Metrics.java
     OidcRefreshTokenRepository.java
+    OutboundHttpClients.java
     PkceChallengeRepository.java
-    ProxyClient.java
     RateLimiter.java
     RevocationEventPublisher.java
     RoleRepository.java

@@ -25,7 +25,7 @@ aussie/
       websocket/ # WebSocket upgrade models
     port/
       in/        # Use cases: GatewayUseCase, PassThroughUseCase, etc.
-      out/       # Repository/infrastructure interfaces: ProxyClient, Metrics, etc.
+      out/       # Repository/infrastructure interfaces: Metrics, OutboundHttpClients, etc.
     service/     # Domain services implementing use cases
       auth/      # Token validation, key rotation, RBAC
       common/    # Client IP extraction, request validation
@@ -44,10 +44,11 @@ aussie/
       problem/   # RFC 9457 problem details
       rest/      # JAX-RS resource classes
       validation/# Input validation
+      vertx/     # Streaming HTTP exchange and native error writer
       websocket/ # WebSocket gateway adapter
     out/         # Driven adapters: HTTP clients, storage, telemetry
       auth/      # Signing key repos, token translators, OIDC validators
-      http/      # ProxyHttpClient, config mapping, forwarded headers
+      http/      # Managed HTTP clients, config mapping, forwarded headers
       ratelimit/ # In-memory/Redis rate limiter implementations
       storage/   # Cassandra/Redis/in-memory repository implementations
       telemetry/ # Metrics, sampling, security event dispatching
@@ -71,7 +72,7 @@ Another common approach is to skip the port layer entirely and have services dep
 
 ### Trade-offs
 
-The hexagonal structure introduces indirection. `GatewayService` does not call `ProxyHttpClient`; it calls `ProxyClient`, an interface in `core/port/out`. Someone reading the code must follow the interface to its implementation. In an IDE this is a single keystroke; in a code review it requires navigating to the adapter layer.
+The hexagonal structure introduces indirection. `GatewayService` resolves and authenticates a request into a `ProxyPlan`; `GatewayResource` hands that plan to `StreamingProxyExchange`, while the exchange obtains the managed Vert.x client through `OutboundHttpClients`. Reading the full HTTP path therefore crosses the core and inbound-adapter packages.
 
 The package count is also higher. There are nine subdirectories under `core/model` alone. For a team unfamiliar with hexagonal architecture, this can feel over-structured. The counterargument is that the structure is self-documenting: if you want to understand rate limiting, look in `core/model/ratelimit` for the domain model, `core/service/ratelimit` for the logic, and `adapter/out/ratelimit` for the implementations.
 
@@ -363,9 +364,6 @@ public sealed interface GatewayResult {
             if (body == null) { body = new byte[0]; }
         }
 
-        public static Success from(ProxyResponse response) {
-            return new Success(response.statusCode(), response.headers(), response.body());
-        }
     }
 
     record RouteNotFound(String path) implements GatewayResult {}
@@ -378,7 +376,7 @@ public sealed interface GatewayResult {
 }
 ```
 
-`GatewayResult` has eight variants. Because the interface is sealed, the compiler knows all possible subtypes. When `GatewayService` returns a `GatewayResult`, the calling code (typically a REST resource or filter) must handle every variant or the `switch` expression will produce a compile-time warning (or error, with the right compiler flags).
+`GatewayResult` has eight variants. Because the interface is sealed, the compiler knows all possible subtypes. Route preparation uses the rejection variants in `ProxyPlan.Rejected`, while the streaming exchange records `Success` or `Error` outcomes for metrics. Every switch over the result type must account for all variants.
 
 This pattern is used consistently for `RouteAuthResult` (five variants: `Authenticated`, `NotRequired`, `Unauthorized`, `Forbidden`, `BadRequest`), `TokenValidationResult` (three variants: `Valid`, `Invalid`, `NoToken`), `RegistrationResult` (two variants: `Success`, `Failure`), `ValidationResult` (two variants: `Valid`, `Invalid`), and others.
 
@@ -742,10 +740,10 @@ To see how these patterns compose, follow a request through the system:
 
 1. A request arrives at `GatewayResource` (adapter/in/rest), a JAX-RS endpoint.
 2. Before reaching the resource, `RateLimitFilter` (system/filter) checks rate limits by calling `RateLimiter` (core/port/out) and `ServiceRegistry` (core/service/routing). The filter lives in the system layer and is allowed to depend on both core and adapter.
-3. `GatewayResource` calls `GatewayUseCase.forward()` (core/port/in), which is implemented by `GatewayService` (core/service/gateway).
-4. `GatewayService` uses `ServiceRegistry` to find a route (returning a `RouteLookupResult` sealed interface), authenticates via `RouteAuthenticationService` (returning a `RouteAuthResult` sealed interface), and forwards via `ProxyClient` (core/port/out).
-5. `ProxyClient` is implemented by `ProxyHttpClient` (adapter/out/http), which uses Vert.x's HTTP client.
-6. The result is a `GatewayResult` (sealed interface) that the resource maps to an HTTP response.
+3. `GatewayResource` calls `GatewayUseCase.prepare()` (core/port/in), which is implemented by `GatewayService` (core/service/gateway).
+4. `GatewayService` uses `ServiceRegistry` to find a route, authenticates via `RouteAuthenticationService`, and returns a `ProxyPlan` containing either prepared upstream metadata or a typed rejection.
+5. `StreamingProxyExchange` (adapter/in/vertx) consumes the plan and streams the inbound request through the managed Vert.x client supplied by `OutboundHttpClients` (core/port/out).
+6. The exchange streams the upstream status, filtered headers, and body to the client; rejected plans become RFC 9457 problem responses.
 
 At no point does the core layer know about Vert.x, Quarkus, Cassandra, or Redis. The ArchUnit tests guarantee this. The `ConfigProducer` bridges configuration. Sealed interfaces make every outcome explicit. Records make every domain object immutable. The builder makes construction ergonomic.
 

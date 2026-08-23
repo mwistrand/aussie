@@ -388,6 +388,24 @@ class ProxyRequestPreparerTest {
 
             assertEquals(List.of("backend"), prepared.headers().get("Host"));
         }
+
+        @Test
+        @DisplayName("Should bracket an IPv6 Host authority")
+        void shouldBracketIpv6Host() {
+            final var prepared = preparer.prepare(createRequest(Map.of()), createRoute("http://[2001:db8::1]:9090"));
+
+            assertEquals(List.of("[2001:db8::1]:9090"), prepared.headers().get("Host"));
+        }
+
+        @Test
+        @DisplayName("Should include ports that are defaults only for another scheme")
+        void shouldIncludeCrossSchemeDefaultPorts() {
+            final var http = preparer.prepare(createRequest(Map.of()), createRoute("http://backend:443"));
+            final var https = preparer.prepare(createRequest(Map.of()), createRoute("https://backend:80"));
+
+            assertEquals(List.of("backend:443"), http.headers().get("Host"));
+            assertEquals(List.of("backend:80"), https.headers().get("Host"));
+        }
     }
 
     @Nested
@@ -471,6 +489,16 @@ class ProxyRequestPreparerTest {
             var filtered = preparer.filterResponseHeaders(responseHeaders);
 
             assertTrue(filtered.containsKey("Content-Length"));
+        }
+
+        @Test
+        @DisplayName("Should preserve separate Set-Cookie values")
+        void shouldPreserveSetCookieValues() {
+            final var cookies = List.of("a=1; HttpOnly", "b=2; Secure");
+
+            final var filtered = preparer.filterResponseHeaders(Map.of("Set-Cookie", cookies));
+
+            assertSame(cookies, filtered.get("Set-Cookie"));
         }
 
         @Test

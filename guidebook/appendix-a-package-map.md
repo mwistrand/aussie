@@ -125,8 +125,7 @@ Pure domain objects. Records, sealed interfaces, enums, value types. No framewor
 |---|---|
 | `GatewayRequest` | Record encapsulating an inbound HTTP request (method, path, headers, body, client IP). |
 | `GatewayResult` | Sealed interface with `Success`, `RouteNotFound`, `ServiceNotFound`, `ReservedPath`, `Error`, `Unauthorized`, `Forbidden`, and `BadRequest` variants. |
-| `PreparedProxyRequest` | Record with the fully assembled upstream request (URI, headers, body) ready for the `ProxyClient`. |
-| `ProxyResponse` | Record wrapping the upstream response (status, headers, body). |
+| `PreparedProxyRequest` | Record with the fully assembled upstream request metadata used by the streaming exchange. |
 | `RouteAuthResult` | Record combining authentication outcome with the matched route context. |
 
 **Allowed dependencies:** `java.*`. No other aussie packages.
@@ -276,8 +275,8 @@ Inbound ports define use cases the application offers. Implemented by core servi
 
 | Interface | Description |
 |---|---|
-| `GatewayUseCase` | Forward a request via route pattern matching. Single method: `Uni<GatewayResult> forward(GatewayRequest)`. |
-| `PassThroughUseCase` | Forward a request directly by service ID. Single method: `Uni<GatewayResult> forward(String serviceId, GatewayRequest)`. |
+| `GatewayUseCase` | Resolve and authenticate a gateway request into a `ProxyPlan`. |
+| `PassThroughUseCase` | Resolve and authenticate a direct service request into a `ProxyPlan`. |
 | `WebSocketGatewayUseCase` | Handle WebSocket upgrade requests for gateway and pass-through modes. |
 | `ApiKeyManagement` | CRUD for API keys: create, validate, list, revoke, get. |
 | `BootstrapManagement` | Bootstrap admin key creation and state checking. |
@@ -303,7 +302,6 @@ Outbound ports define what core needs from infrastructure. Implemented by driven
 | `Metrics` | Record gateway metrics: requests, latency, traffic, errors, auth, WebSocket, rate limits, timeouts. |
 | `OidcRefreshTokenRepository` | Store and retrieve OIDC refresh tokens keyed by session ID. |
 | `PkceChallengeRepository` | Store and atomically consume PKCE challenges. |
-| `ProxyClient` | Forward a `PreparedProxyRequest` to the upstream service. Single method: `Uni<ProxyResponse> forward(PreparedProxyRequest)`. |
 | `RateLimiter` | Check-and-consume rate limit tokens, get status, reset, remove keys. |
 | `RevocationEventPublisher` | Publish and subscribe to token revocation events across instances. |
 | `RoleRepository` | Persistent role storage with role mapping retrieval. |
@@ -373,8 +371,8 @@ Domain services implementing inbound ports and composing outbound ports. All are
 
 | Class | Description |
 |---|---|
-| `GatewayService` | Implements `GatewayUseCase`. Coordinates route matching, authentication, request preparation, and proxying. |
-| `PassThroughService` | Implements `PassThroughUseCase`. Direct service-ID-based forwarding without pattern matching. |
+| `GatewayService` | Implements `GatewayUseCase`. Coordinates route matching, authentication, and request preparation. |
+| `PassThroughService` | Implements `PassThroughUseCase`. Prepares direct service-ID-based requests. |
 | `ProxyRequestPreparer` | Assembles `PreparedProxyRequest` from the matched route, original request, and forwarded headers. Strips hop-by-hop headers, injects `X-Aussie-*` metadata headers. |
 | `RouteAuthenticationService` | Evaluates per-route auth requirements and issues gateway tokens for authenticated routes. |
 | `WebSocketGatewayService` | Implements `WebSocketGatewayUseCase`. Validates WebSocket upgrade requests against route auth and connection limits. |
@@ -562,10 +560,10 @@ These packages translate HTTP, WebSocket, and lifecycle events into calls on cor
 | `ApiKeyResource` | `@Path("/admin/api-keys")`. API key management. Delegates to `ApiKeyManagement`. |
 | `AuthResource` | `@Path("/auth")`. Authentication endpoints (login, token exchange, user info). |
 | `BenchmarkResource` | `@Path("/admin/benchmark")`. Performance testing endpoints (dev/test only). |
-| `GatewayResource` | `@Path("/gateway")`. Gateway-mode proxy for all HTTP methods. Delegates to `GatewayUseCase`. |
+| `GatewayResource` | `@Path("/gateway")`. Prepares gateway-mode plans and delegates streaming to `StreamingProxyExchange`. |
 | `JacksonCustomizer` | Configures Jackson ObjectMapper settings for the REST API. |
 | `LockoutResource` | `@Path("/admin/lockouts")`. View and clear authentication lockouts. |
-| `PassThroughResource` | `@Path("/{serviceId}")`. Pass-through proxy for all HTTP methods. Delegates to `PassThroughUseCase`. |
+| `PassThroughResource` | `@Path("/{serviceId}")`. Prepares direct-service plans and delegates streaming to `StreamingProxyExchange`. |
 | `RoleResource` | `@Path("/admin/roles")`. RBAC role management. Delegates to `RoleManagement`. |
 | `ServicePermissionsResource` | `@Path("/admin/services/{serviceId}/permissions")`. Per-service permission policy management. |
 | `SigningKeyResource` | `@Path("/admin/signing-keys")`. Signing key management and rotation trigger. |
@@ -583,6 +581,17 @@ These packages translate HTTP, WebSocket, and lifecycle events into calls on cor
 | `UrlValidator` | SSRF-safe URL validation for service base URLs. Rejects internal IPs, metadata endpoints, non-HTTP schemes. |
 
 **Allowed dependencies:** `adapter/in/problem`.
+
+### `adapter/in/vertx`
+
+**Role:** Native Vert.x HTTP exchange and error-response handling.
+
+| Class | Description |
+|---|---|
+| `ProxyErrorWriter` | Writes RFC 9457 errors for Vert.x-native request paths. |
+| `StreamingProxyExchange` | Shared streaming data plane for gateway and pass-through HTTP requests. |
+
+**Allowed dependencies:** `core/port`, `core/model`, `core/config`, `core/service`, `adapter/in/problem`, `adapter/out/telemetry`, Vert.x.
 
 ### `adapter/in/context`
 
@@ -640,7 +649,6 @@ These packages implement outbound ports with concrete infrastructure.
 | `ForwardedHeaderBuilderFactory` | Implements `ForwardedHeaderBuilderProvider`. Selects between `X-Forwarded-*` and RFC 7239 based on configuration. |
 | `ForwardingConfig` | `@ConfigMapping` sub-interface for forwarded header style and stripping settings. |
 | `GatewayConfig` | `@ConfigMapping(prefix = "aussie.gateway")`. Top-level gateway configuration aggregating forwarding, limits, access control, security, and trusted proxy settings. |
-| `ProxyHttpClient` | Implements `ProxyClient`. Uses Vert.x `WebClient` for non-blocking upstream requests with OpenTelemetry trace propagation. |
 | `Rfc7239ForwardedHeaderBuilder` | Implements `ForwardedHeaderBuilder` using RFC 7239 `Forwarded` header format. |
 | `SecurityConfig` | `@ConfigMapping` sub-interface implementing `GatewaySecurityConfig`. |
 | `XForwardedHeaderBuilder` | Implements `ForwardedHeaderBuilder` using legacy `X-Forwarded-For/Host/Proto` headers. |

@@ -3,25 +3,15 @@ package aussie.core.port.in;
 import io.smallrye.mutiny.Uni;
 
 import aussie.core.model.gateway.GatewayRequest;
-import aussie.core.model.gateway.GatewayResult;
 import aussie.core.model.gateway.ProxyPlan;
 
 /**
- * Use case for forwarding requests directly to a service by ID.
+ * Use case for preparing requests to a service by ID.
  *
- * <p>Pass-through mode routes requests using the service ID from the URL path
- * without complex route pattern matching.
+ * <p>Pass-through mode resolves requests using the service ID from the URL path
+ * and produces a plan for the streaming HTTP exchange.
  */
 public interface PassThroughUseCase {
 
     Uni<ProxyPlan> prepare(String serviceId, GatewayRequest request);
-
-    /**
-     * Forward a request to the specified service.
-     *
-     * @param serviceId the target service identifier
-     * @param request   the gateway request containing path, method, headers, and body
-     * @return the gateway result indicating success, authentication failure, or error
-     */
-    Uni<GatewayResult> forward(String serviceId, GatewayRequest request);
 }

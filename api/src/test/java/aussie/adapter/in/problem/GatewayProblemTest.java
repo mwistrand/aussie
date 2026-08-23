@@ -120,6 +120,15 @@ class GatewayProblemTest {
             assertEquals("Gateway Timeout", problem.getTitle());
             assertEquals("Upstream timed out", problem.getDetail());
         }
+
+        @Test
+        @DisplayName("serviceUnavailable should return 503")
+        void serviceUnavailable() {
+            var problem = GatewayProblem.serviceUnavailable("Upstream capacity exhausted");
+            assertEquals(Status.SERVICE_UNAVAILABLE.getStatusCode(), problem.getStatusCode());
+            assertEquals("Service Unavailable", problem.getTitle());
+            assertEquals("Upstream capacity exhausted", problem.getDetail());
+        }
     }
 
     @Nested

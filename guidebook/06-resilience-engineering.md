@@ -396,40 +396,31 @@ This is the key property. Without pool isolation, a slow Cassandra cluster could
 
 ### The HTTP Proxy Pool
 
-The HTTP pool has both per-host and global limits. The per-host limit (`50` default, `100` prod) prevents a single slow upstream from monopolizing all outbound connections. The global limit (`200` default, `500` prod) bounds total resource consumption.
+The HTTP path has both per-host and instance-wide limits. The per-host connection limit (`50` default, `200` prod) prevents a single slow upstream from monopolizing the Vert.x pool. The active-exchange limit (`200` default, `2000` prod) bounds total proxy work across all upstreams.
 
 ```java
-// api/src/main/java/aussie/adapter/out/http/ProxyHttpClient.java, lines 80-87
-
-@PostConstruct
-void init() {
-    var options = new WebClientOptions()
-            .setConnectTimeout((int) httpConfig.connectTimeout().toMillis());
-    this.webClient = WebClient.create(vertx, options);
-    LOG.infov(
-            "ProxyHttpClient initialized with connect timeout: {0}, request timeout: {1}",
-            httpConfig.connectTimeout(), httpConfig.requestTimeout());
-}
+// api/src/main/java/aussie/adapter/out/http/OutboundHttpClient.java
+var options = new WebClientOptions()
+        .setConnectTimeout(Math.toIntExact(config.connectTimeout().toMillis()))
+        .setMaxPoolSize(config.maxConnectionsPerHost())
+        .setMaxWaitQueueSize(config.maxConnections());
 ```
 
-Note that the connect timeout is set at WebClient creation time (it applies to all connections), while the request timeout is set per-request:
+The managed client applies the connect timeout and per-host pool size globally. `StreamingProxyExchange` applies the effective request timeout and an instance-wide fail-fast exchange limit:
 
 ```java
-// ProxyHttpClient.java, lines 208-217
-
-private HttpRequest<Buffer> createRequest(HttpMethod method, URI targetUri) {
-    var path = targetUri.getRawPath();
-    if (targetUri.getRawQuery() != null) {
-        path += "?" + targetUri.getRawQuery();
-    }
-
-    return webClient
-            .request(method, getPort(targetUri), targetUri.getHost(), path)
-            .timeout(httpConfig.requestTimeout().toMillis());
+// api/src/main/java/aussie/adapter/in/vertx/StreamingProxyExchange.java
+if (!exchanges.tryAcquire()) {
+    metrics.recordError(plan.serviceId(), "upstream_capacity");
+    return Uni.createFrom().failure(
+            GatewayProblem.serviceUnavailable("Upstream capacity exhausted"));
 }
+
+var options = new RequestOptions()
+        .setTimeout(timeout.toMillis());
 ```
 
-This separation matters: the connect timeout applies identically to all upstream hosts (TCP handshake latency should not vary by service), but the request timeout could theoretically be overridden per service in the future.
+The semaphore is released when opening fails or when the response stream terminates. This bounds active exchanges across all hosts, while the Vert.x pool independently bounds connections to each host.
 
 ### Cassandra's Multiplied Capacity
 
@@ -663,24 +654,14 @@ A senior engineer who disagrees with this decision might point out that circuit 
 When an upstream connection fails, the gateway classifies the error for metrics:
 
 ```java
-// api/src/main/java/aussie/adapter/out/http/ProxyHttpClient.java, lines 181-198
+// api/src/main/java/aussie/adapter/in/vertx/StreamingProxyExchange.java
 
 private String classifyConnectionError(Throwable error) {
-    var message = error.getMessage() != null ? error.getMessage().toLowerCase() : "";
-    var className = error.getClass().getSimpleName().toLowerCase();
-
-    if (message.contains("refused") || className.contains("refused")) {
-        return "connection_refused";
-    }
-    if (message.contains("reset") || className.contains("reset")) {
-        return "connection_reset";
-    }
-    if (message.contains("unreachable") || className.contains("unreachable")) {
-        return "host_unreachable";
-    }
-    if (message.contains("resolve") || message.contains("unknown host")
-            || className.contains("unknownhost")) {
-        return "dns_resolution_failed";
+    for (var current = error; current != null; current = current.getCause()) {
+        var message = current.getMessage() != null
+                ? current.getMessage().toLowerCase(Locale.ROOT) : "";
+        var className = current.getClass().getSimpleName().toLowerCase(Locale.ROOT);
+        // classify TLS, refused, reset, unreachable, and DNS failures
     }
     return "connection_error";
 }
@@ -703,29 +684,27 @@ Without classification, all four appear as the same `connection_error` metric, m
 
 Exception messages are not part of a public API contract. A Vert.x upgrade could change "Connection refused" to "connection refused" or "Socket connection refused." The `toLowerCase()` call mitigates case changes, but a rewording would silently degrade classification accuracy.
 
-The timeout detection has a similar fragility:
+Timeout detection avoids the same string-matching fragility:
 
 ```java
-// ProxyHttpClient.java, lines 169-179
+// StreamingProxyExchange.java
 
-private boolean isTimeoutException(Throwable error) {
-    var current = error;
-    while (current != null) {
-        var className = current.getClass().getName();
-        if (className.contains("TimeoutException")) {
+private boolean isTimeout(Throwable error) {
+    for (var current = error; current != null; current = current.getCause()) {
+        if (current instanceof TimeoutException
+                || current instanceof io.netty.channel.ConnectTimeoutException) {
             return true;
         }
-        current = current.getCause();
     }
     return false;
 }
 ```
 
-This walks the exception cause chain looking for any class with "TimeoutException" in the name. It works for `java.util.concurrent.TimeoutException`, `io.netty.handler.timeout.ReadTimeoutException`, and any Vert.x-specific timeout class. But it would also match a hypothetical `NotATimeoutException` whose name happens to contain the substring.
+This walks the exception cause chain using concrete timeout types, avoiding message or class-name matching for timeout detection.
 
 ### The Alternative
 
-A cleaner approach would be to register typed exception handlers for specific Vert.x/Netty exception types. This is more robust but creates a coupling to specific Vert.x version exception classes, which could break across major version upgrades. The string-matching approach is more fragile within a version but more resilient across versions. Given that Vert.x exception types have been stable for years and the fallback (`connection_error` / false negative for timeout) is safe, the trade-off favors simplicity.
+A cleaner connection classifier would register typed handlers for specific Vert.x/Netty exception types. This is more robust but creates a coupling to version-specific exception classes. The string-matching classifier keeps a safe `connection_error` fallback, while timeout detection already uses concrete JDK and Netty types.
 
 ## Timeout and Failure Mode Summary
 

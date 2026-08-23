@@ -13,11 +13,6 @@ import aussie.core.model.gateway.ProxyPlan;
 import aussie.core.model.gateway.RouteAuthResult;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.port.in.GatewayUseCase;
-import aussie.core.port.out.AuthenticatedContext;
-import aussie.core.port.out.Metrics;
-import aussie.core.port.out.ProxyClient;
-import aussie.core.port.out.SecurityMonitoring;
-import aussie.core.port.out.TrafficAttributing;
 import aussie.core.service.routing.ServiceRegistry;
 
 /**
@@ -31,8 +26,8 @@ import aussie.core.service.routing.ServiceRegistry;
  *   <li>Request transformation and path rewriting</li>
  * </ul>
  *
- * <p>The service coordinates authentication, authorization, request preparation,
- * and proxying while recording metrics for observability.
+ * <p>The service coordinates authentication, authorization, and request preparation.
+ * The inbound adapter executes the resulting proxy plan.
  *
  * <p>All operations are fully reactive and never block.
  */
@@ -41,39 +36,16 @@ public class GatewayService implements GatewayUseCase {
 
     private final ServiceRegistry serviceRegistry;
     private final ProxyRequestPreparer requestPreparer;
-    private final ProxyClient proxyClient;
     private final RouteAuthenticationService routeAuthService;
-    private final Metrics metrics;
-    private final SecurityMonitoring securityMonitor;
-    private final TrafficAttributing attributionService;
-    private final AuthenticatedContext authenticatedContext;
 
     @Inject
     public GatewayService(
             ServiceRegistry serviceRegistry,
             ProxyRequestPreparer requestPreparer,
-            ProxyClient proxyClient,
-            RouteAuthenticationService routeAuthService,
-            Metrics metrics,
-            SecurityMonitoring securityMonitor,
-            TrafficAttributing attributionService,
-            AuthenticatedContext authenticatedContext) {
+            RouteAuthenticationService routeAuthService) {
         this.serviceRegistry = serviceRegistry;
         this.requestPreparer = requestPreparer;
-        this.proxyClient = proxyClient;
         this.routeAuthService = routeAuthService;
-        this.metrics = metrics;
-        this.securityMonitor = securityMonitor;
-        this.attributionService = attributionService;
-        this.authenticatedContext = authenticatedContext;
-    }
-
-    @Override
-    public Uni<GatewayResult> forward(GatewayRequest request) {
-        final long startTime = System.nanoTime();
-
-        return prepare(request)
-                .flatMap(plan -> execute(plan).invoke(result -> recordMetrics(request, plan, result, startTime)));
     }
 
     @Override
@@ -99,38 +71,6 @@ public class GatewayService implements GatewayUseCase {
         });
     }
 
-    private void recordMetrics(GatewayRequest request, ProxyPlan plan, GatewayResult result, long startTime) {
-        final var serviceId = plan.serviceId();
-        long durationMs = (System.nanoTime() - startTime) / 1_000_000;
-
-        // Record gateway result
-        metrics.recordGatewayResult(serviceId, result);
-
-        // Record request and latency for successful requests
-        if (result instanceof GatewayResult.Success success) {
-            metrics.recordRequest(serviceId, request.method(), success.statusCode());
-            metrics.recordProxyLatency(serviceId, request.method(), success.statusCode(), durationMs);
-
-            // Record traffic attribution using authenticated team ID
-            if (attributionService.isEnabled() && plan instanceof ProxyPlan.Ready ready) {
-                long requestBytes = request.body() != null ? request.body().length : 0;
-                long responseBytes = success.body() != null ? success.body().length : 0;
-                attributionService.record(
-                        request,
-                        ready.service(),
-                        authenticatedContext.getTeamId(),
-                        requestBytes,
-                        responseBytes,
-                        durationMs);
-            }
-        }
-
-        // Record errors
-        if (result instanceof GatewayResult.Error error) {
-            metrics.recordError(serviceId, "upstream_error");
-        }
-    }
-
     private ProxyPlan handleAuthResult(RouteAuthResult authResult, GatewayRequest request, RouteMatch routeMatch) {
         return switch (authResult) {
             case RouteAuthResult.Authenticated auth -> new ProxyPlan.Ready(
@@ -152,16 +92,5 @@ public class GatewayService implements GatewayUseCase {
                     new GatewayResult.BadRequest(badRequest.reason()),
                     routeMatch.service().serviceId());
         };
-    }
-
-    private Uni<GatewayResult> execute(ProxyPlan plan) {
-        if (plan instanceof ProxyPlan.Rejected rejected) {
-            return Uni.createFrom().item(rejected.result());
-        }
-        return proxyClient
-                .forward(((ProxyPlan.Ready) plan).request())
-                .map(response -> (GatewayResult) GatewayResult.Success.from(response))
-                .onFailure()
-                .recoverWithItem(error -> new GatewayResult.Error("Upstream request failed"));
     }
 }

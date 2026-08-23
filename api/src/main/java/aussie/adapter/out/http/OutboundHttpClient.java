@@ -50,7 +50,8 @@ public class OutboundHttpClient implements OutboundHttpClients {
                 || config.connectTimeout().isNegative()
                 || tls.handshakeTimeout().isZero()
                 || tls.handshakeTimeout().isNegative()
-                || config.maxConnectionsPerHost() < 1) {
+                || config.maxConnectionsPerHost() < 1
+                || config.maxConnections() < 1) {
             throw new IllegalArgumentException("Egress timeouts and pool size must be positive");
         }
 
@@ -59,6 +60,7 @@ public class OutboundHttpClient implements OutboundHttpClients {
                 .setSslHandshakeTimeout(tls.handshakeTimeout().toMillis())
                 .setSslHandshakeTimeoutUnit(TimeUnit.MILLISECONDS)
                 .setMaxPoolSize(config.maxConnectionsPerHost())
+                .setMaxWaitQueueSize(config.maxConnections())
                 .setKeepAlive(true)
                 .setIdleTimeout(75)
                 .setTcpNoDelay(true)

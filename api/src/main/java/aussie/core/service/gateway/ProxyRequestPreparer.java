@@ -162,7 +162,11 @@ public class ProxyRequestPreparer {
     private void setHostHeader(Map<String, List<String>> headers, URI targetUri) {
         var port = targetUri.getPort();
         var host = targetUri.getHost();
-        if (port != -1 && port != 80 && port != 443) {
+        if (host.contains(":") && !host.startsWith("[")) {
+            host = "[" + host + "]";
+        }
+        final var defaultPort = "https".equalsIgnoreCase(targetUri.getScheme()) ? 443 : 80;
+        if (port != -1 && port != defaultPort) {
             host += ":" + port;
         }
         headers.put("Host", List.of(host));

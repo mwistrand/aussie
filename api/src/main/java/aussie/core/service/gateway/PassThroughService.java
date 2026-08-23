@@ -17,11 +17,6 @@ import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.in.PassThroughUseCase;
-import aussie.core.port.out.AuthenticatedContext;
-import aussie.core.port.out.Metrics;
-import aussie.core.port.out.ProxyClient;
-import aussie.core.port.out.SecurityMonitoring;
-import aussie.core.port.out.TrafficAttributing;
 import aussie.core.service.routing.EndpointMatcher;
 import aussie.core.service.routing.ServiceRegistry;
 import aussie.core.service.routing.VisibilityResolver;
@@ -34,8 +29,7 @@ import aussie.core.service.routing.VisibilityResolver;
  * to gateway mode for services that don't need complex route matching.
  *
  * <p>The service validates that the service ID is not a reserved path (admin, gateway, q),
- * resolves visibility and authentication requirements, and forwards the request to
- * the appropriate backend.
+ * resolves visibility and authentication requirements, and prepares the proxy plan.
  *
  * <p>All operations are fully reactive and never block.
  */
@@ -52,45 +46,22 @@ public class PassThroughService implements PassThroughUseCase {
 
     private final ServiceRegistry serviceRegistry;
     private final ProxyRequestPreparer requestPreparer;
-    private final ProxyClient proxyClient;
     private final VisibilityResolver visibilityResolver;
     private final EndpointMatcher endpointMatcher;
     private final RouteAuthenticationService routeAuthService;
-    private final Metrics metrics;
-    private final SecurityMonitoring securityMonitor;
-    private final TrafficAttributing attributionService;
-    private final AuthenticatedContext authenticatedContext;
 
     @Inject
     public PassThroughService(
             ServiceRegistry serviceRegistry,
             ProxyRequestPreparer requestPreparer,
-            ProxyClient proxyClient,
             VisibilityResolver visibilityResolver,
             EndpointMatcher endpointMatcher,
-            RouteAuthenticationService routeAuthService,
-            Metrics metrics,
-            SecurityMonitoring securityMonitor,
-            TrafficAttributing attributionService,
-            AuthenticatedContext authenticatedContext) {
+            RouteAuthenticationService routeAuthService) {
         this.serviceRegistry = serviceRegistry;
         this.requestPreparer = requestPreparer;
-        this.proxyClient = proxyClient;
         this.visibilityResolver = visibilityResolver;
         this.endpointMatcher = endpointMatcher;
         this.routeAuthService = routeAuthService;
-        this.metrics = metrics;
-        this.securityMonitor = securityMonitor;
-        this.attributionService = attributionService;
-        this.authenticatedContext = authenticatedContext;
-    }
-
-    @Override
-    public Uni<GatewayResult> forward(String serviceId, GatewayRequest request) {
-        long startTime = System.nanoTime();
-
-        return prepare(serviceId, request)
-                .flatMap(plan -> execute(plan).invoke(result -> recordMetrics(request, plan, result, startTime)));
     }
 
     @Override
@@ -139,17 +110,6 @@ public class PassThroughService implements PassThroughUseCase {
         };
     }
 
-    private Uni<GatewayResult> execute(ProxyPlan plan) {
-        if (plan instanceof ProxyPlan.Rejected rejected) {
-            return Uni.createFrom().item(rejected.result());
-        }
-        return proxyClient
-                .forward(((ProxyPlan.Ready) plan).request())
-                .map(response -> (GatewayResult) GatewayResult.Success.from(response))
-                .onFailure()
-                .recoverWithItem(error -> new GatewayResult.Error("Upstream request failed"));
-    }
-
     private RouteMatch createRouteMatch(ServiceRegistration service, String targetPath, String method) {
         // First, check if there's a matching endpoint config
         var matchedEndpoint = endpointMatcher.match(targetPath, method, service);
@@ -163,37 +123,5 @@ public class PassThroughService implements PassThroughUseCase {
         var catchAllEndpoint =
                 new EndpointConfig("/**", Set.of("*"), visibility, Optional.empty(), service.defaultAuthRequired());
         return new RouteMatch(service, catchAllEndpoint, targetPath, Map.of());
-    }
-
-    private void recordMetrics(GatewayRequest request, ProxyPlan plan, GatewayResult result, long startTime) {
-        final var serviceId = plan.serviceId();
-        long durationMs = (System.nanoTime() - startTime) / 1_000_000;
-
-        // Record gateway result
-        metrics.recordGatewayResult(serviceId, result);
-
-        // Record request and latency for successful requests
-        if (result instanceof GatewayResult.Success success) {
-            metrics.recordRequest(serviceId, request.method(), success.statusCode());
-            metrics.recordProxyLatency(serviceId, request.method(), success.statusCode(), durationMs);
-
-            // Record traffic attribution using authenticated team ID
-            if (attributionService.isEnabled() && plan instanceof ProxyPlan.Ready ready) {
-                long requestBytes = request.body() != null ? request.body().length : 0;
-                long responseBytes = success.body() != null ? success.body().length : 0;
-                attributionService.record(
-                        request,
-                        ready.service(),
-                        authenticatedContext.getTeamId(),
-                        requestBytes,
-                        responseBytes,
-                        durationMs);
-            }
-        }
-
-        // Record errors
-        if (result instanceof GatewayResult.Error) {
-            metrics.recordError(serviceId, "upstream_error");
-        }
     }
 }

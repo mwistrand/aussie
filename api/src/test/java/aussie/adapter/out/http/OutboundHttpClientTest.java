@@ -48,6 +48,7 @@ class OutboundHttpClientTest {
         when(jwksConfig.maxConnections()).thenReturn(3);
         when(httpConfig.connectTimeout()).thenReturn(Duration.ofSeconds(2));
         when(httpConfig.maxConnectionsPerHost()).thenReturn(7);
+        when(httpConfig.maxConnections()).thenReturn(19);
         when(httpConfig.tls()).thenReturn(tlsConfig);
         when(tlsConfig.protocols()).thenReturn(List.of("TLSv1.3", "TLSv1.2"));
         when(tlsConfig.handshakeTimeout()).thenReturn(Duration.ofSeconds(2));
@@ -71,6 +72,7 @@ class OutboundHttpClientTest {
         assertFalse(options.isFollowRedirects());
         assertEquals(2_000, options.getConnectTimeout());
         assertEquals(7, options.getMaxPoolSize());
+        assertEquals(19, options.getMaxWaitQueueSize());
         assertEquals(Set.of("TLSv1.3", "TLSv1.2"), options.getEnabledSecureTransportProtocols());
     }
 
@@ -78,6 +80,14 @@ class OutboundHttpClientTest {
     @DisplayName("rejects obsolete TLS protocols")
     void rejectsObsoleteProtocols() {
         when(tlsConfig.protocols()).thenReturn(List.of("TLSv1.1"));
+
+        assertThrows(IllegalArgumentException.class, () -> OutboundHttpClient.options(httpConfig));
+    }
+
+    @Test
+    @DisplayName("rejects a non-positive total connection limit")
+    void rejectsInvalidTotalConnectionLimit() {
+        when(httpConfig.maxConnections()).thenReturn(0);
 
         assertThrows(IllegalArgumentException.class, () -> OutboundHttpClient.options(httpConfig));
     }

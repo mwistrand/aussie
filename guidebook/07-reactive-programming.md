@@ -16,7 +16,7 @@ Quarkus builds on Vert.x, which uses a small number of event loop threads (typic
 
 This is the core architectural constraint that drives every design decision in this chapter. If you block an event loop thread, even for 50 milliseconds to make a synchronous database call, you stall every other connection managed by that thread. In a gateway handling thousands of connections per event loop, a single blocking call can cascade into a noticeable latency spike across hundreds of unrelated requests.
 
-Aussie enforces this by using `Uni<T>` as its universal return type for any operation that might involve I/O. The type system makes the contract visible: if a method returns `Uni<T>`, it promises not to block.
+Aussie makes this visible with Mutiny types: `Uni<T>` for one asynchronous result and `Multi<T>` for streamed data. Callers compose these values instead of waiting on them.
 
 **What a senior might do instead**: reach for `CompletableFuture<T>` from the JDK standard library. The Mutiny `Uni<T>` type adds lazy evaluation (nothing happens until subscription), built-in composition operators, and integration with Quarkus's context propagation. `CompletableFuture` is eagerly evaluated on creation, which makes patterns like deferred computation and request coalescing (Sections 7.4 and 7.5) significantly harder to implement correctly.
 
@@ -26,37 +26,30 @@ SmallRye Mutiny provides two reactive types. Understanding when to use each is e
 
 ### Uni<T>: Single Asynchronous Result
 
-`Uni<T>` represents an operation that will eventually produce exactly one value (or fail). This is the workhorse of the gateway. Every HTTP request produces one response. Every token validation yields one result. Every cache lookup returns one value or nothing.
+`Uni<T>` represents an operation that will eventually produce exactly one value (or fail). It is the workhorse for route lookup, authentication, cache access, and other single-result operations.
 
-Every port interface in Aussie returns `Uni<T>`:
-
-```java
-// api/src/main/java/aussie/core/port/out/ProxyClient.java, lines 8-11
-public interface ProxyClient {
-
-    Uni<ProxyResponse> forward(PreparedProxyRequest request);
-}
-```
+I/O-facing ports use `Uni<T>` for one asynchronous result. Route preparation is a representative example:
 
 ```java
-// api/src/main/java/aussie/core/port/in/GatewayUseCase.java, lines 14-23
+// api/src/main/java/aussie/core/port/in/GatewayUseCase.java
 public interface GatewayUseCase {
-
-    /**
-     * Forward a request through the gateway.
-     *
-     * @param request the gateway request containing path, method, headers, and body
-     * @return the gateway result indicating success, authentication failure, or error
-     */
-    Uni<GatewayResult> forward(GatewayRequest request);
+    Uni<ProxyPlan> prepare(GatewayRequest request);
 }
 ```
 
-The consistency matters. When every I/O boundary uses `Uni<T>`, the compiler enforces the non-blocking contract. You cannot accidentally call `.get()` on a `Uni` and block. The API does not have a `.get()` method. You must compose operations using the operators described in Section 7.3.
+The consistency matters. Mutiny types make asynchronous boundaries explicit and provide no `.get()` method. Production callers compose them using the operators described in Section 7.3.
 
 ### Multi<T>: Asynchronous Stream
 
-`Multi<T>` represents a stream of zero or more items emitted over time. Aussie uses it sparingly, only where stream semantics are genuinely needed:
+`Multi<T>` represents a stream of zero or more items emitted over time. The HTTP data plane uses it to relay body buffers without aggregation, and administrative services use it for large data sets:
+
+```java
+// api/src/main/java/aussie/adapter/in/vertx/StreamingProxyExchange.java
+public Multi<io.vertx.core.buffer.Buffer> forward(
+        Uni<ProxyPlan> prepared, HttpServerRequest request, boolean suppressResponseBody) {
+    // ...
+}
+```
 
 ```java
 // api/src/main/java/aussie/core/service/auth/TokenRevocationService.java, lines 280-291
@@ -84,9 +77,9 @@ public Multi<String> streamAllRevokedUsers() {
 }
 ```
 
-These are used for administrative operations like bloom filter rebuilds, where the data set might be large enough that loading it all into memory at once is undesirable. The stream allows backpressure-aware processing of thousands of revoked token IDs without buffering them all in a single `List`.
+The revocation streams support administrative work such as bloom-filter rebuilds, where loading the full data set into one `List` is undesirable. The proxy stream similarly lets demand flow between the client and upstream connection.
 
-**Trade-off**: `Multi<T>` introduces complexity around backpressure, cancellation, and error handling that `Uni<T>` avoids. The codebase deliberately limits `Multi<T>` to a handful of streaming use cases. For the typical request/response flow, `Uni<T>` is simpler and sufficient. If you find yourself reaching for `Multi<T>` in request-processing code, reconsider whether you actually need stream semantics or whether a `Uni<List<T>>` would be clearer.
+**Trade-off**: `Multi<T>` introduces complexity around backpressure, cancellation, and error handling that `Uni<T>` avoids. Use it where item-by-item delivery is the requirement; route lookup, authentication, and other single-result operations remain `Uni<T>`.
 
 ## 7.3 Composition Patterns
 
@@ -97,58 +90,46 @@ Reactive code is built by composing small operations into pipelines. Mutiny prov
 `map` transforms the value inside a `Uni` without introducing any asynchronous operation. The transformation function runs on the same thread, inline.
 
 ```java
-// api/src/main/java/aussie/core/service/gateway/GatewayService.java, lines 144-148
-return proxyClient
-        .forward(preparedRequest)
-        .map(response -> (GatewayResult) GatewayResult.Success.from(response))
-        .onFailure()
-        .recoverWithItem(error -> new GatewayResult.Error(error.getMessage()));
+// api/src/main/java/aussie/core/service/gateway/GatewayService.java
+return routeAuthService
+        .authenticate(request, routeMatch)
+        .map(authResult -> handleAuthResult(authResult, request, routeMatch));
 ```
 
-Here `map` converts a `ProxyResponse` into a `GatewayResult.Success`. This is a pure, synchronous data transformation. No I/O, no waiting. Use `map` when your transformation function is cheap and does not itself return a `Uni`.
+Here `map` converts a completed authentication result into a `ProxyPlan`. The conversion is synchronous: it selects a typed rejection or prepares upstream request metadata. Use `map` when the transformation is cheap and does not itself return a `Uni`.
 
 ### flatMap: Async Composition
 
 `flatMap` is for chaining operations where the transformation itself is asynchronous. The function you pass to `flatMap` returns a `Uni<T>`, and `flatMap` "flattens" the resulting `Uni<Uni<T>>` into a plain `Uni<T>`.
 
-The `GatewayService.forward()` method demonstrates multi-stage `flatMap` composition:
+The `GatewayService.prepare()` method demonstrates dependent asynchronous composition:
 
 ```java
-// api/src/main/java/aussie/core/service/gateway/GatewayService.java, lines 68-93
+// api/src/main/java/aussie/core/service/gateway/GatewayService.java
 @Override
-public Uni<GatewayResult> forward(GatewayRequest request) {
-    final long startTime = System.nanoTime();
-
+public Uni<ProxyPlan> prepare(GatewayRequest request) {
     return serviceRegistry.findRouteAsync(request.path(), request.method()).flatMap(routeResult -> {
         if (routeResult.isEmpty()) {
             var result = new GatewayResult.RouteNotFound(request.path());
-            metrics.recordGatewayResult(null, result);
-            return Uni.createFrom().item(result);
+            return Uni.createFrom().item(new ProxyPlan.Rejected(result, null));
         }
-
         if (!(routeResult.get() instanceof RouteMatch routeMatch)) {
             var result = new GatewayResult.RouteNotFound(request.path());
-            metrics.recordGatewayResult(null, result);
-            return Uni.createFrom().item(result);
+            return Uni.createFrom().item(new ProxyPlan.Rejected(result, null));
         }
-
-        var service = routeMatch.service();
-
         return routeAuthService
                 .authenticate(request, routeMatch)
-                .flatMap(authResult -> handleAuthResult(authResult, request, routeMatch))
-                .invoke(result -> recordMetrics(request, service, result, startTime));
+                .map(authResult -> handleAuthResult(authResult, request, routeMatch));
     });
 }
 ```
 
-This method chains three asynchronous operations:
+This method chains two asynchronous stages:
 
 1. **Route lookup** (`serviceRegistry.findRouteAsync`): may refresh from persistent storage
 2. **Authentication** (`routeAuthService.authenticate`): may validate JWTs, fetch JWKS, check sessions
-3. **Proxying** (inside `handleAuthResult`): forwards the request to the upstream service
 
-Each step depends on the result of the previous step. The `flatMap` operator expresses these dependencies without nesting callbacks. Read the code from top to bottom: find route, authenticate, handle auth result, record metrics.
+Authentication depends on the matched route, so `flatMap` expresses the dependency without nesting callbacks. The returned `ProxyPlan` is then consumed by the streaming exchange in the inbound adapter.
 
 ### chain vs flatMap
 
@@ -170,28 +151,27 @@ Note `call()` here, which is similar to `chain` but discards the result. It says
 `invoke` runs a synchronous side effect without altering the pipeline value. It is the non-blocking equivalent of adding a log statement or metrics call:
 
 ```java
-// api/src/main/java/aussie/core/service/gateway/GatewayService.java, line 92
-.invoke(result -> recordMetrics(request, service, result, startTime));
+// api/src/main/java/aussie/core/service/auth/KeyRotationService.java
+.invoke(key -> LOG.infov("Key rotation completed: new key {0}", key.keyId()));
 ```
 
-The `recordMetrics` method is synchronous (it calls `System.nanoTime()` and records counters). Using `invoke` keeps it in the pipeline without changing the `GatewayResult` flowing through.
+Logging is synchronous and does not replace the key flowing through the pipeline. `invoke` makes that side effect explicit.
 
-### onFailure().recoverWithItem: Error Recovery
+### onFailure().transform: Error Translation
 
-This pattern catches failures in the reactive pipeline and converts them to a normal result:
+The streaming exchange translates transport failures into stable HTTP problems:
 
 ```java
-// api/src/main/java/aussie/core/service/gateway/GatewayService.java, lines 144-148
-return proxyClient
-        .forward(preparedRequest)
-        .map(response -> (GatewayResult) GatewayResult.Success.from(response))
-        .onFailure()
-        .recoverWithItem(error -> new GatewayResult.Error(error.getMessage()));
+// api/src/main/java/aussie/adapter/in/vertx/StreamingProxyExchange.java
+.onFailure(this::isTimeout)
+.transform(error -> GatewayProblem.gatewayTimeout("Upstream request timed out"))
+.onFailure(error -> !(error instanceof HttpProblem))
+.transform(error -> GatewayProblem.badGateway("Upstream request failed"));
 ```
 
-If the proxy call throws (connection refused, timeout, upstream error), the failure is caught and converted to a `GatewayResult.Error`. The caller never sees an exception; it gets a typed result it can match on. This pattern appears identically in both `GatewayService` and `PassThroughService` (lines 129-133 and 139-143 of `PassThroughService.java`), enforcing the invariant that the gateway always returns a structured result, never an unhandled exception.
+Timeouts become `504` problems, while other non-HTTP transport failures become `502` problems. Existing policy failures such as `413` are preserved instead of being flattened into a generic upstream error.
 
-**What a senior might do instead**: use `onFailure().recoverWithUni()` to perform an async fallback (retry with a different upstream, for example). Aussie chooses the simpler `recoverWithItem` because its error-handling strategy is to report the failure immediately rather than attempt retries at the gateway layer.
+**What a senior might do instead**: use `onFailure().recoverWithUni()` for a retry or asynchronous fallback. Aussie reports upstream failures immediately because automatic retries are unsafe for non-idempotent proxy requests.
 
 ### Recursive flatMap for Iterative Validation
 
@@ -704,29 +684,29 @@ Testing reactive code requires a different approach than testing synchronous cod
 ### The Basic Pattern
 
 ```java
-// api/src/test/java/aussie/core/service/GatewayServiceTest.java, lines 132-139
+// api/src/test/java/aussie/core/service/gateway/GatewayServiceTest.java
 @Test
-@DisplayName("Should return RouteNotFound when no matching route exists")
-void shouldReturnRouteNotFoundWhenNoMatchingRoute() {
-    var request = createRequest("GET", "/api/unknown");
+void rejectsMissingAndServiceOnlyRoutes() {
+    when(registry.findRouteAsync(any(), any()))
+            .thenReturn(Uni.createFrom().item(Optional.empty()));
 
-    var result = gatewayService.forward(request).await().indefinitely();
+    var plan = service.prepare(request()).await().atMost(Duration.ofSeconds(1));
 
-    assertInstanceOf(GatewayResult.RouteNotFound.class, result);
-    var routeNotFound = (GatewayResult.RouteNotFound) result;
-    assertEquals("/api/unknown", routeNotFound.path());
+    assertInstanceOf(
+            GatewayResult.RouteNotFound.class,
+            ((ProxyPlan.Rejected) plan).result());
 }
 ```
 
-`.await().indefinitely()` blocks the JUnit test thread until the `Uni` resolves. This is acceptable in tests because the test thread is not an event loop thread. In production code, calling `.await()` would block the event loop and is never acceptable.
+`.await().atMost(...)` blocks the JUnit test thread until the `Uni` resolves. This is acceptable in tests because the test thread is not an event loop thread. In production code, calling `.await()` would block the event loop and is never acceptable.
 
 The tests use `.await().atMost(Duration)` with a constant timeout for operations that involve real async work:
 
 ```java
-// api/src/test/java/aussie/core/service/GatewayServiceTest.java, line 44
+// api/src/test/java/aussie/core/service/ServiceRegistryMultiInstanceTest.java
 private static final Duration TIMEOUT = Duration.ofSeconds(5);
 
-// api/src/test/java/aussie/core/service/GatewayServiceTest.java, line 123
+// registration in a test setup
 serviceRegistry.register(service).await().atMost(TIMEOUT);
 ```
 
@@ -776,37 +756,16 @@ The `CountDownLatch` pattern ensures all threads start simultaneously, maximizin
 
 ### Test Doubles for Reactive Interfaces
 
-The test file shows how to create test doubles for reactive interfaces:
+Mockito test doubles return already-resolved reactive values:
 
 ```java
-// api/src/test/java/aussie/core/service/GatewayServiceTest.java, lines 289-316
-private static class TestProxyClient implements ProxyClient {
-    private ProxyResponse response = new ProxyResponse(200, Map.of(), new byte[0]);
-    private Throwable error = null;
-    private PreparedProxyRequest lastRequest = null;
-
-    void setResponse(ProxyResponse response) {
-        this.response = response;
-        this.error = null;
-    }
-
-    void setError(Throwable error) {
-        this.error = error;
-        this.response = null;
-    }
-
-    @Override
-    public Uni<ProxyResponse> forward(PreparedProxyRequest request) {
-        this.lastRequest = request;
-        if (error != null) {
-            return Uni.createFrom().failure(error);
-        }
-        return Uni.createFrom().item(response);
-    }
-}
+when(registry.findRouteAsync(any(), any()))
+        .thenReturn(Uni.createFrom().item(Optional.of(route)));
+when(authentication.authenticate(any(), any()))
+        .thenReturn(Uni.createFrom().item(new RouteAuthResult.NotRequired()));
 ```
 
-The test double wraps synchronous values in `Uni.createFrom().item()` or `Uni.createFrom().failure()`. This is a common pattern: test doubles for reactive interfaces return immediately-resolved Unis, which simplifies test setup while still exercising the reactive composition logic in the code under test.
+`Uni.createFrom().item()` and `Uni.createFrom().failure()` keep setup compact while still exercising the same composition operators used in production.
 
 ## 7.10 The Virtual Threads Alternative
 
@@ -814,7 +773,7 @@ Java 21 introduces virtual threads (Project Loom), which fundamentally change th
 
 ### What Virtual Threads Would Simplify
 
-With virtual threads, the `GatewayService.forward()` method could be written imperatively:
+With virtual threads, the whole route-preparation and proxy pipeline could be written imperatively:
 
 ```java
 // Hypothetical virtual threads version (not actual code)

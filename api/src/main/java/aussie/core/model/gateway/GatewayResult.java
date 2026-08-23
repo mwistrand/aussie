@@ -14,10 +14,6 @@ public sealed interface GatewayResult {
                 body = new byte[0];
             }
         }
-
-        public static Success from(ProxyResponse response) {
-            return new Success(response.statusCode(), response.headers(), response.body());
-        }
     }
 
     record RouteNotFound(String path) implements GatewayResult {}

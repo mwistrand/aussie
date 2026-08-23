@@ -100,38 +100,33 @@ Every setter follows the same pattern: check the master switch, check the attrib
 
 ### W3C Trace Context Propagation Through the Proxy
 
-The gateway sits between clients and upstream services, which means it must propagate trace context faithfully. The `ProxyHttpClient` handles this by injecting the current OTel context into outgoing requests using the standard `TextMapPropagator`:
+The gateway sits between clients and upstream services, which means it must propagate trace context faithfully. `StreamingProxyExchange` injects the current OTel context into each outgoing request using the standard `TextMapPropagator`:
 
 ```java
-// api/src/main/java/aussie/adapter/out/http/ProxyHttpClient.java (lines 49-132)
+// api/src/main/java/aussie/adapter/in/vertx/StreamingProxyExchange.java
 
-private static final TextMapSetter<HttpRequest<Buffer>> HEADER_SETTER =
-        (carrier, key, value) -> carrier.putHeader(key, value);
+private static final TextMapSetter<RequestOptions> HEADER_SETTER = RequestOptions::putHeader;
 
-// In the forward() method:
-var span = tracer.spanBuilder("HTTP " + preparedRequest.method())
+var span = tracer.spanBuilder("HTTP " + prepared.method())
         .setSpanKind(SpanKind.CLIENT)
-        .setAttribute(SpanAttributes.HTTP_METHOD, preparedRequest.method())
-        .setAttribute(SpanAttributes.HTTP_URL, safeTelemetryUri(targetUri))
-        .setAttribute(SpanAttributes.NET_PEER_NAME, targetUri.getHost())
-        .setAttribute(SpanAttributes.NET_PEER_PORT, (long) getPort(targetUri))
+        .setAttribute(SpanAttributes.HTTP_METHOD, prepared.method())
+        .setAttribute(SpanAttributes.HTTP_URL, safeTelemetryUri(target))
+        .setAttribute(SpanAttributes.NET_PEER_NAME, target.getHost())
+        .setAttribute(SpanAttributes.NET_PEER_PORT, (long) port(target))
         .startSpan();
 
-// Add configurable upstream attributes
-telemetryHelper.setUpstreamHost(span, targetUri.getHost());
-telemetryHelper.setUpstreamPort(span, getPort(targetUri));
-telemetryHelper.setUpstreamUri(span, safeTelemetryUri(targetUri));
-
-var request = createRequest(method, targetUri);
-applyHeaders(preparedRequest, request);
-
-// Propagate trace context (W3C Trace Context headers)
-propagator.inject(Context.current().with(span), request, HEADER_SETTER);
+var options = new RequestOptions()
+        .setHost(target.getHost())
+        .setPort(port(target))
+        .setURI(pathAndQuery(target));
+prepared.headers().forEach((name, values) ->
+        values.forEach(value -> options.addHeader(name, value)));
+propagator.inject(Context.current().with(span), options, HEADER_SETTER);
 ```
 
 The telemetry URI preserves the scheme, host, explicit port, and raw path while omitting user info, query parameters, and fragments so credentials and other sensitive values are not exported.
 
-The `HEADER_SETTER` lambda adapts between OTel's `TextMapSetter` interface and Vert.x's `HttpRequest` API. The propagator injects `traceparent` and `tracestate` headers into the outgoing request, enabling end-to-end distributed tracing from client through gateway to upstream service.
+The `HEADER_SETTER` adapts OTel's `TextMapSetter` interface to Vert.x `RequestOptions`. The propagator injects `traceparent` and `tracestate` headers before the streaming request is opened, enabling end-to-end distributed tracing from client through gateway to upstream service.
 
 The corresponding Quarkus configuration enables this:
 

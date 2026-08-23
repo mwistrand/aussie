@@ -6,8 +6,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -26,6 +29,7 @@ import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.RequestOptions;
 import io.vertx.mutiny.core.buffer.Buffer;
 import io.vertx.mutiny.core.http.HttpClient;
+import io.vertx.mutiny.core.http.HttpClientRequest;
 import io.vertx.mutiny.core.http.HttpClientResponse;
 import io.vertx.mutiny.core.http.HttpServerRequest;
 import org.jboss.logging.Logger;
@@ -58,6 +62,7 @@ public class StreamingProxyExchange {
     private final ProxyRequestPreparer requestPreparer;
     private final UpstreamAddressResolver addressResolver;
     private final ResiliencyConfig.HttpConfig httpConfig;
+    private final Semaphore exchanges;
     private final LimitsConfig limits;
     private final Metrics metrics;
     private final TrafficAttributing attributionService;
@@ -83,6 +88,10 @@ public class StreamingProxyExchange {
         this.requestPreparer = requestPreparer;
         this.addressResolver = addressResolver;
         this.httpConfig = resiliencyConfig.http();
+        if (httpConfig.maxConnections() < 1) {
+            throw new IllegalArgumentException("Egress total connection limit must be positive");
+        }
+        this.exchanges = new Semaphore(httpConfig.maxConnections());
         this.limits = limits;
         this.metrics = metrics;
         this.attributionService = attributionService;
@@ -95,8 +104,10 @@ public class StreamingProxyExchange {
     public Multi<io.vertx.core.buffer.Buffer> forward(
             Uni<ProxyPlan> prepared, HttpServerRequest request, boolean suppressResponseBody) {
         request.pause();
+        final var upstreamRequest = new AtomicReference<HttpClientRequest>();
         final var response = Uni.createFrom()
                 .deferred(() -> {
+                    rejectKnownOversizeRequest(request);
                     final long started = System.nanoTime();
                     final var requestBytes = new AtomicLong();
                     return prepared.flatMap(plan -> {
@@ -110,13 +121,20 @@ public class StreamingProxyExchange {
                                 bounded(request.toMulti(), limits.maxBodySize(), "Request", requestBytes),
                                 suppressResponseBody,
                                 requestBytes,
-                                started);
+                                started,
+                                upstreamRequest);
                     });
                 })
                 .onFailure()
-                .invoke(ignored -> request.resume())
+                .invoke(ignored -> {
+                    reset(upstreamRequest.get());
+                    request.resume();
+                })
                 .onCancellation()
-                .invoke(request::resume);
+                .invoke(() -> {
+                    reset(upstreamRequest.get());
+                    request.resume();
+                });
         return RestMulti.fromUniResponse(
                 response,
                 exchange -> responseBody(exchange, suppressResponseBody),
@@ -129,10 +147,16 @@ public class StreamingProxyExchange {
             Multi<Buffer> body,
             boolean suppressResponseBody,
             AtomicLong requestBytes,
-            long started) {
+            long started,
+            AtomicReference<HttpClientRequest> upstreamRequest) {
         final var prepared = plan.request();
         final URI target = prepared.targetUri();
         final var timeout = prepared.requestTimeout().orElse(httpConfig.requestTimeout());
+        if (!exchanges.tryAcquire()) {
+            metrics.recordError(plan.serviceId(), "upstream_capacity");
+            return Uni.createFrom().failure(GatewayProblem.serviceUnavailable("Upstream capacity exhausted"));
+        }
+        final var released = new AtomicBoolean();
         final var span = startSpan(prepared);
         final var teamId = authenticatedContext.getTeamId();
 
@@ -152,6 +176,7 @@ public class StreamingProxyExchange {
                             .forEach((name, values) -> values.forEach(value -> options.addHeader(name, value)));
                     propagator.inject(Context.current().with(span), options, HEADER_SETTER);
                     return httpClient.request(options).flatMap(request -> {
+                        upstreamRequest.set(request);
                         request.setWriteQueueMaxSize(MAX_QUEUED_BYTES);
                         return request.send(body);
                     });
@@ -161,10 +186,18 @@ public class StreamingProxyExchange {
                 .failWith(() -> new TimeoutException("Upstream request timed out"))
                 .map(response -> {
                     rejectKnownOversizeResponse(response, suppressResponseBody);
-                    return new Exchange(plan, response, span, teamId, requestBytes, started);
+                    return new Exchange(plan, response, span, teamId, requestBytes, started, released);
                 })
                 .onFailure()
-                .invoke(error -> recordOpenFailure(plan, span, requestBytes.get(), started, error))
+                .invoke(error -> {
+                    release(released);
+                    recordOpenFailure(plan, span, requestBytes.get(), started, error);
+                })
+                .onCancellation()
+                .invoke(() -> {
+                    release(released);
+                    finishOpenCancellation(span, requestBytes.get(), started);
+                })
                 .onFailure(this::isTimeout)
                 .transform(error -> GatewayProblem.gatewayTimeout("Upstream request timed out"))
                 .onFailure(error -> !(error instanceof HttpProblem))
@@ -175,15 +208,20 @@ public class StreamingProxyExchange {
         final var responseBytes = new AtomicLong();
         final var body =
                 bounded(exchange.response().toMulti(), limits.maxResponseBodySize(), "Response", responseBytes);
-        final Multi<io.vertx.core.buffer.Buffer> output = suppressResponseBody
+        final Multi<io.vertx.core.buffer.Buffer> output = hasNoResponseBody(exchange.response(), suppressResponseBody)
                 ? body.onItem().transformToMultiAndConcatenate(ignored -> Multi.createFrom()
                         .<io.vertx.core.buffer.Buffer>empty())
                 : body.map(Buffer::getDelegate);
-        return output.onTermination()
+        return output.onFailure()
+                .invoke(ignored -> reset(exchange.response().request()))
+                .onCancellation()
+                .invoke(() -> reset(exchange.response().request()))
+                .onTermination()
                 .invoke((failure, cancelled) -> finish(exchange, responseBytes.get(), failure, cancelled));
     }
 
     private void finish(Exchange exchange, long responseBytes, Throwable failure, boolean cancelled) {
+        release(exchange.released());
         final long durationMs = elapsedMillis(exchange.started());
         final var plan = exchange.plan();
         final var span = exchange.span();
@@ -238,6 +276,13 @@ public class StreamingProxyExchange {
         }
     }
 
+    private void finishOpenCancellation(Span span, long requestBytes, long started) {
+        telemetryHelper.setRequestSize(span, requestBytes);
+        telemetryHelper.setResponseSize(span, 0);
+        telemetryHelper.setUpstreamLatency(span, elapsedMillis(started));
+        span.end();
+    }
+
     private void recordStreamFailure(ProxyPlan.Ready plan, Throwable failure) {
         if (isTimeout(failure)) {
             metrics.recordProxyTimeout(plan.serviceId(), "request");
@@ -268,7 +313,7 @@ public class StreamingProxyExchange {
     }
 
     private void rejectKnownOversizeResponse(HttpClientResponse response, boolean suppressResponseBody) {
-        if (suppressResponseBody) {
+        if (hasNoResponseBody(response, suppressResponseBody)) {
             return;
         }
         final var value = response.getHeader("Content-Length");
@@ -283,6 +328,38 @@ public class StreamingProxyExchange {
             }
         } catch (NumberFormatException ignored) {
             // Vert.x validates malformed Content-Length headers before exposing a response.
+        }
+    }
+
+    private void rejectKnownOversizeRequest(HttpServerRequest request) {
+        final var value = request.getHeader("Content-Length");
+        if (value == null) {
+            return;
+        }
+        try {
+            if (Long.parseLong(value) > limits.maxBodySize()) {
+                throw GatewayProblem.payloadTooLarge(
+                        "Request body exceeds maximum allowed size " + limits.maxBodySize());
+            }
+        } catch (NumberFormatException ignored) {
+            // Vert.x rejects malformed Content-Length before dispatching the request.
+        }
+    }
+
+    static boolean hasNoResponseBody(HttpClientResponse response, boolean headRequest) {
+        final int status = response.statusCode();
+        return headRequest || status < 200 || status == 204 || status == 205 || status == 304;
+    }
+
+    private static void reset(HttpClientRequest request) {
+        if (request != null) {
+            request.reset();
+        }
+    }
+
+    private void release(AtomicBoolean released) {
+        if (released.compareAndSet(false, true)) {
+            exchanges.release();
         }
     }
 
@@ -376,5 +453,6 @@ public class StreamingProxyExchange {
             Span span,
             String teamId,
             AtomicLong requestBytes,
-            long started) {}
+            long started,
+            AtomicBoolean released) {}
 }
