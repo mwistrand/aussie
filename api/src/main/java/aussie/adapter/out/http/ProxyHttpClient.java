@@ -106,7 +106,7 @@ public class ProxyHttpClient implements ProxyClient {
         var span = tracer.spanBuilder("HTTP " + preparedRequest.method())
                 .setSpanKind(SpanKind.CLIENT)
                 .setAttribute(SpanAttributes.HTTP_METHOD, preparedRequest.method())
-                .setAttribute(SpanAttributes.HTTP_URL, targetUri.toString())
+                .setAttribute(SpanAttributes.HTTP_URL, safeTelemetryUri(targetUri))
                 .setAttribute(SpanAttributes.NET_PEER_NAME, targetUri.getHost())
                 .setAttribute(SpanAttributes.NET_PEER_PORT, (long) getPort(targetUri))
                 .startSpan();
@@ -114,7 +114,7 @@ public class ProxyHttpClient implements ProxyClient {
         // Add configurable upstream attributes
         telemetryHelper.setUpstreamHost(span, targetUri.getHost());
         telemetryHelper.setUpstreamPort(span, getPort(targetUri));
-        telemetryHelper.setUpstreamUri(span, targetUri.toString());
+        telemetryHelper.setUpstreamUri(span, safeTelemetryUri(targetUri));
         if (preparedRequest.body() != null) {
             telemetryHelper.setRequestSize(span, preparedRequest.body().length);
         }
@@ -209,6 +209,12 @@ public class ProxyHttpClient implements ProxyClient {
             port = "https".equalsIgnoreCase(uri.getScheme()) ? 443 : 80;
         }
         return port;
+    }
+
+    private String safeTelemetryUri(URI uri) {
+        final var path = uri.getRawPath();
+        final var port = uri.getPort() == -1 ? "" : ":" + uri.getPort();
+        return uri.getScheme() + "://" + uri.getHost() + port + (path == null ? "" : path);
     }
 
     private HttpRequest<Buffer> createRequest(

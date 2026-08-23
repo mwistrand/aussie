@@ -8,6 +8,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import io.vertx.mutiny.core.Vertx;
 import org.junit.jupiter.api.AfterEach;
@@ -125,6 +126,23 @@ class UpstreamAddressResolverTest {
                 resolver.resolve(URI.create("https://example.com")).await().atMost(Duration.ofSeconds(5));
 
         assertEquals("93.184.216.34", result.hostAddress());
+    }
+
+    @Test
+    @DisplayName("uses one authorized DNS answer without resolving again")
+    void pinsSingleLookupResult() throws Exception {
+        final var lookups = new AtomicInteger();
+        final var authorizedAddress = address("93.184.216.34");
+        final var resolver = new UpstreamAddressResolver(vertx, false, ignored -> {
+            lookups.incrementAndGet();
+            return List.of(authorizedAddress);
+        });
+
+        final var result =
+                resolver.resolve(URI.create("https://example.com")).await().atMost(Duration.ofSeconds(5));
+
+        assertEquals("93.184.216.34", result.hostAddress());
+        assertEquals(1, lookups.get());
     }
 
     @Test

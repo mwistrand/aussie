@@ -112,7 +112,7 @@ private static final TextMapSetter<HttpRequest<Buffer>> HEADER_SETTER =
 var span = tracer.spanBuilder("HTTP " + preparedRequest.method())
         .setSpanKind(SpanKind.CLIENT)
         .setAttribute(SpanAttributes.HTTP_METHOD, preparedRequest.method())
-        .setAttribute(SpanAttributes.HTTP_URL, targetUri.toString())
+        .setAttribute(SpanAttributes.HTTP_URL, safeTelemetryUri(targetUri))
         .setAttribute(SpanAttributes.NET_PEER_NAME, targetUri.getHost())
         .setAttribute(SpanAttributes.NET_PEER_PORT, (long) getPort(targetUri))
         .startSpan();
@@ -120,7 +120,7 @@ var span = tracer.spanBuilder("HTTP " + preparedRequest.method())
 // Add configurable upstream attributes
 telemetryHelper.setUpstreamHost(span, targetUri.getHost());
 telemetryHelper.setUpstreamPort(span, getPort(targetUri));
-telemetryHelper.setUpstreamUri(span, targetUri.toString());
+telemetryHelper.setUpstreamUri(span, safeTelemetryUri(targetUri));
 
 var request = createRequest(method, targetUri);
 applyHeaders(preparedRequest, request);
@@ -128,6 +128,8 @@ applyHeaders(preparedRequest, request);
 // Propagate trace context (W3C Trace Context headers)
 propagator.inject(Context.current().with(span), request, HEADER_SETTER);
 ```
+
+The telemetry URI preserves the scheme, host, explicit port, and raw path while omitting user info, query parameters, and fragments so credentials and other sensitive values are not exported.
 
 The `HEADER_SETTER` lambda adapts between OTel's `TextMapSetter` interface and Vert.x's `HttpRequest` API. The propagator injects `traceparent` and `tracestate` headers into the outgoing request, enabling end-to-end distributed tracing from client through gateway to upstream service.
 
@@ -141,7 +143,7 @@ quarkus.otel.propagators=tracecontext,baggage
 
 A senior engineer might reach for one of several simpler approaches:
 
-**Approach 1: Set all attributes unconditionally.** This is fine for a small-scale gateway, but in production, each span attribute has a storage cost in your tracing backend. The `upstream-uri` attribute, for instance, is disabled by default (`@WithDefault("false")` in `TelemetryConfig.AttributesConfig`, line 215) because it includes query parameters, creating unbounded cardinality. At scale, unbounded cardinality can crash or significantly degrade your tracing backend.
+**Approach 1: Set all attributes unconditionally.** This is fine for a small-scale gateway, but in production, each span attribute has a storage cost in your tracing backend. The `upstream-uri` attribute, for instance, is disabled by default (`@WithDefault("false")` in `TelemetryConfig.AttributesConfig`, line 215) because variable path segments can create unbounded cardinality. Query parameters are always omitted to avoid exporting credentials and other sensitive values. At scale, unbounded cardinality can crash or significantly degrade your tracing backend.
 
 **Approach 2: Use a single attribute allowlist/blocklist instead of per-attribute flags.** This is more concise but less discoverable. With per-attribute flags, every configurable dimension appears in the `TelemetryConfig.AttributesConfig` interface with its default value and a Javadoc comment. An operator can see exactly what they are controlling without reading code.
 

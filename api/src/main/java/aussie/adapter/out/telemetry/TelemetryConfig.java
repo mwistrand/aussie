@@ -203,7 +203,7 @@ public interface TelemetryConfig {
         @WithDefault("true")
         boolean upstreamPort();
 
-        /** High-cardinality: full upstream URI with query params. */
+        /** High-cardinality: upstream URI without user info, query, or fragment. */
         @WithName("upstream-uri")
         @WithDefault("false")
         boolean upstreamUri();

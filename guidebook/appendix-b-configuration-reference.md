@@ -895,7 +895,7 @@ Team ID is derived from the authenticated API key's `teamId` field, not from req
 | `aussie.telemetry.attributes.response-size` | `boolean` | `true` | `AUSSIE_TELEMETRY_ATTRIBUTES_RESPONSE_SIZE` | Include response size in spans. |
 | `aussie.telemetry.attributes.upstream-host` | `boolean` | `true` | `AUSSIE_TELEMETRY_ATTRIBUTES_UPSTREAM_HOST` | Include upstream host. |
 | `aussie.telemetry.attributes.upstream-port` | `boolean` | `true` | `AUSSIE_TELEMETRY_ATTRIBUTES_UPSTREAM_PORT` | Include upstream port. |
-| `aussie.telemetry.attributes.upstream-uri` | `boolean` | `false` | `AUSSIE_TELEMETRY_ATTRIBUTES_UPSTREAM_URI` | Include full upstream URI with query params. **High cardinality** -- disabled by default to reduce storage costs. |
+| `aussie.telemetry.attributes.upstream-uri` | `boolean` | `false` | `AUSSIE_TELEMETRY_ATTRIBUTES_UPSTREAM_URI` | Include the upstream URI without user info, query, or fragment. **High cardinality** -- disabled by default to reduce storage costs. |
 | `aussie.telemetry.attributes.upstream-latency` | `boolean` | `true` | `AUSSIE_TELEMETRY_ATTRIBUTES_UPSTREAM_LATENCY` | Include upstream latency. |
 | `aussie.telemetry.attributes.rate-limited` | `boolean` | `true` | `AUSSIE_TELEMETRY_ATTRIBUTES_RATE_LIMITED` | Include rate limiting status. |
 | `aussie.telemetry.attributes.rate-limit-remaining` | `boolean` | `true` | `AUSSIE_TELEMETRY_ATTRIBUTES_RATE_LIMIT_REMAINING` | Include remaining rate limit count. |

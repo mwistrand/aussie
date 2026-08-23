@@ -47,6 +47,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.out.telemetry.SpanAttributes;
 import aussie.adapter.out.telemetry.TelemetryHelper;
 import aussie.core.config.ResiliencyConfig;
 import aussie.core.model.gateway.PreparedProxyRequest;
@@ -148,7 +149,8 @@ class ProxyHttpClientTest {
             setupSpanBuilder();
             var httpRequest = mockHttpRequest();
 
-            var targetUri = URI.create("https://backend.example.com:8443/api/test");
+            var targetUri =
+                    URI.create("https://user:password@backend.example.com:8443/api/test?token=do-not-export#fragment");
             var headers = Map.of("Accept", List.of("application/json"));
             var preparedRequest = new PreparedProxyRequest("GET", targetUri, headers, null);
 
@@ -179,6 +181,8 @@ class ProxyHttpClientTest {
 
             assertEquals(200, result.statusCode());
             assertNotNull(result.headers());
+            verify(spanBuilder).setAttribute(SpanAttributes.HTTP_URL, "https://backend.example.com:8443/api/test");
+            verify(telemetryHelper).setUpstreamUri(span, "https://backend.example.com:8443/api/test");
             verify(span).end();
         }
 

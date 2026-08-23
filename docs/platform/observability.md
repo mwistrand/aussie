@@ -224,7 +224,7 @@ Aussie adds the following attributes to spans:
 | `aussie.route.path` | Matched route path |
 | `aussie.route.method` | HTTP method |
 | `http.method` | HTTP method (OTel semantic) |
-| `http.url` | Request URL |
+| `http.url` | Upstream URL without user info, query, or fragment |
 | `http.status_code` | Response status code |
 | `net.peer.name` | Upstream host |
 | `net.peer.port` | Upstream port |
@@ -239,7 +239,7 @@ Some span attributes can be enabled or disabled to control cardinality and stora
 | `aussie.telemetry.attributes.response-size` | `true` | Response body size in bytes |
 | `aussie.telemetry.attributes.upstream-host` | `true` | Upstream service hostname |
 | `aussie.telemetry.attributes.upstream-port` | `true` | Upstream service port |
-| `aussie.telemetry.attributes.upstream-uri` | `false` | Full upstream URI (high-cardinality) |
+| `aussie.telemetry.attributes.upstream-uri` | `false` | Upstream URI without user info, query, or fragment (high-cardinality) |
 | `aussie.telemetry.attributes.upstream-latency` | `true` | Upstream call latency in milliseconds |
 | `aussie.telemetry.attributes.rate-limited` | `true` | Whether request was rate limited |
 | `aussie.telemetry.attributes.rate-limit-remaining` | `true` | Remaining requests in window |
@@ -249,7 +249,7 @@ Some span attributes can be enabled or disabled to control cardinality and stora
 | `aussie.telemetry.attributes.auth-lockout-key` | `true` | The lockout key (IP or identifier) |
 | `aussie.telemetry.attributes.auth-lockout-retry-after` | `true` | Seconds until auth lockout resets |
 
-**High-Cardinality Warning**: `upstream-uri` is disabled by default because it includes query parameters, which can create unbounded cardinality. Enable only for debugging in non-production environments.
+**High-Cardinality Warning**: `upstream-uri` is disabled by default because variable path segments can create unbounded cardinality. User info, query parameters, and fragments are always omitted to avoid exporting credentials or other sensitive values. Enable only for debugging in non-production environments.
 
 Example configuration to enable all attributes for debugging:
 
