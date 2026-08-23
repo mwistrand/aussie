@@ -272,6 +272,11 @@ class RequestSizeValidatorTest {
         }
 
         @Override
+        public long maxResponseBodySize() {
+            return maxBodySize;
+        }
+
+        @Override
         public int maxHeaderSize() {
             return maxHeaderSize;
         }

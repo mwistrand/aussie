@@ -4,6 +4,7 @@ import io.smallrye.mutiny.Uni;
 
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.GatewayResult;
+import aussie.core.model.gateway.ProxyPlan;
 
 /**
  * Use case for forwarding requests directly to a service by ID.
@@ -12,6 +13,8 @@ import aussie.core.model.gateway.GatewayResult;
  * without complex route pattern matching.
  */
 public interface PassThroughUseCase {
+
+    Uni<ProxyPlan> prepare(String serviceId, GatewayRequest request);
 
     /**
      * Forward a request to the specified service.

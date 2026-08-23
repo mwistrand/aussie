@@ -29,6 +29,7 @@ All durations use ISO-8601 format (e.g., `PT30S` for 30 seconds, `PT1H` for 1 ho
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
 | `aussie.gateway.limits.max-body-size` | `long` | `10485760` (10 MB) | `AUSSIE_GATEWAY_LIMITS_MAX_BODY_SIZE` | Maximum request body size in bytes. |
+| `aussie.gateway.limits.max-response-body-size` | `long` | `104857600` (100 MB) | `AUSSIE_GATEWAY_LIMITS_MAX_RESPONSE_BODY_SIZE` | Maximum streamed upstream response size in bytes. |
 | `aussie.gateway.limits.max-header-size` | `int` | `8192` (8 KB) | `AUSSIE_GATEWAY_LIMITS_MAX_HEADER_SIZE` | Maximum size of a single header in bytes. |
 | `aussie.gateway.limits.max-total-headers-size` | `int` | `32768` (32 KB) | `AUSSIE_GATEWAY_LIMITS_MAX_TOTAL_HEADERS_SIZE` | Maximum total size of all headers in bytes. |
 

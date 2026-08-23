@@ -18,6 +18,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -42,6 +43,7 @@ import aussie.core.model.common.ValidationResult;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.service.ServiceRegistration;
+import aussie.core.model.timeout.ServiceTimeoutConfig;
 import aussie.core.service.routing.ServiceRegistrationValidator;
 import aussie.core.service.routing.ServiceRegistry;
 
@@ -63,7 +65,8 @@ class PassThroughIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        backendServer = new WireMockServer(WireMockConfiguration.options().dynamicPort());
+        backendServer =
+                new WireMockServer(WireMockConfiguration.options().dynamicPort().gzipDisabled(true));
         backendServer.start();
     }
 
@@ -315,6 +318,47 @@ class PassThroughIntegrationTest {
                     .statusCode(502)
                     .contentType("application/problem+json")
                     .body("title", containsString("Bad Gateway"));
+        }
+
+        @Test
+        @DisplayName("Should return 504 when the backend exceeds its request timeout")
+        void shouldReturn504WhenBackendTimesOut() {
+            backendServer.stubFor(get(urlEqualTo("/api/slow"))
+                    .willReturn(aResponse().withStatus(200).withFixedDelay(200).withBody("late")));
+            var service = ServiceRegistration.builder("slow-service")
+                    .displayName("Slow Service")
+                    .baseUrl("http://localhost:" + backendServer.port())
+                    .defaultVisibility(EndpointVisibility.PUBLIC)
+                    .defaultAuthRequired(false)
+                    .endpoints(List.of())
+                    .timeoutConfig(ServiceTimeoutConfig.of(Duration.ofMillis(50)))
+                    .build();
+            serviceRegistry.register(service).await().atMost(Duration.ofSeconds(5));
+
+            given().when()
+                    .get("/slow-service/api/slow")
+                    .then()
+                    .statusCode(504)
+                    .contentType("application/problem+json")
+                    .body("title", containsString("Gateway Timeout"));
+        }
+
+        @Test
+        @DisplayName("Should reject a known oversized backend response before streaming it")
+        void shouldRejectKnownOversizedBackendResponse() {
+            backendServer.stubFor(get(urlEqualTo("/api/large"))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Length", "1048577")
+                            .withBody("x".repeat(1_048_577))));
+            registerService("large-service");
+
+            given().when()
+                    .get("/large-service/api/large")
+                    .then()
+                    .statusCode(413)
+                    .contentType("application/problem+json")
+                    .body("title", containsString("Payload Too Large"));
         }
     }
 

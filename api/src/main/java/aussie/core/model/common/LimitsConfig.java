@@ -10,6 +10,10 @@ public interface LimitsConfig {
     @WithDefault("10485760")
     long maxBodySize();
 
+    /** Maximum upstream response body size in bytes. Default: 100 MB. */
+    @WithDefault("104857600")
+    long maxResponseBodySize();
+
     /**
      * Maximum size of a single header in bytes. Default: 8 KB.
      */

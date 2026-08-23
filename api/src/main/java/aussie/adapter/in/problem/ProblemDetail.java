@@ -86,6 +86,10 @@ public record ProblemDetail(String title, int status, String detail, Map<String,
         return new ProblemDetail("Bad Gateway", 502, detail);
     }
 
+    public static ProblemDetail gatewayTimeout(String detail) {
+        return new ProblemDetail("Gateway Timeout", 504, detail);
+    }
+
     // ========== Rate Limit ==========
 
     public static ProblemDetail tooManyRequests(

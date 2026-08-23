@@ -13,15 +13,14 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
-import jakarta.ws.rs.core.Response;
 
-import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.Multi;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.mutiny.core.http.HttpServerRequest;
 
 import aussie.adapter.in.context.ClientContextResolver;
-import aussie.adapter.in.problem.GatewayProblem;
+import aussie.adapter.in.vertx.StreamingProxyExchange;
 import aussie.core.model.gateway.GatewayRequest;
-import aussie.core.model.gateway.GatewayResult;
 import aussie.core.port.in.PassThroughUseCase;
 
 /**
@@ -41,91 +40,97 @@ public class PassThroughResource {
     private final PassThroughUseCase passThroughUseCase;
     private final RoutingContext routingContext;
     private final ClientContextResolver clientContextResolver;
+    private final StreamingProxyExchange proxyExchange;
 
     @Inject
     public PassThroughResource(
             PassThroughUseCase passThroughUseCase,
             RoutingContext routingContext,
-            ClientContextResolver clientContextResolver) {
+            ClientContextResolver clientContextResolver,
+            StreamingProxyExchange proxyExchange) {
         this.passThroughUseCase = passThroughUseCase;
         this.routingContext = routingContext;
         this.clientContextResolver = clientContextResolver;
+        this.proxyExchange = proxyExchange;
     }
 
     @GET
     @Path("{path:.*}")
-    public Uni<Response> proxyGet(
+    public Multi<io.vertx.core.buffer.Buffer> proxyGet(
             @PathParam("serviceId") String serviceId,
             @PathParam("path") String path,
             @Context ContainerRequestContext requestContext) {
-        return proxyRequest(serviceId, path, requestContext, null);
+        return proxyRequest(serviceId, path, requestContext);
     }
 
     @POST
     @Path("{path:.*}")
-    public Uni<Response> proxyPost(
+    public Multi<io.vertx.core.buffer.Buffer> proxyPost(
             @PathParam("serviceId") String serviceId,
             @PathParam("path") String path,
-            @Context ContainerRequestContext requestContext,
-            byte[] body) {
-        return proxyRequest(serviceId, path, requestContext, body);
+            @Context ContainerRequestContext requestContext) {
+        return proxyRequest(serviceId, path, requestContext);
     }
 
     @PUT
     @Path("{path:.*}")
-    public Uni<Response> proxyPut(
+    public Multi<io.vertx.core.buffer.Buffer> proxyPut(
             @PathParam("serviceId") String serviceId,
             @PathParam("path") String path,
-            @Context ContainerRequestContext requestContext,
-            byte[] body) {
-        return proxyRequest(serviceId, path, requestContext, body);
+            @Context ContainerRequestContext requestContext) {
+        return proxyRequest(serviceId, path, requestContext);
     }
 
     @DELETE
     @Path("{path:.*}")
-    public Uni<Response> proxyDelete(
+    public Multi<io.vertx.core.buffer.Buffer> proxyDelete(
             @PathParam("serviceId") String serviceId,
             @PathParam("path") String path,
             @Context ContainerRequestContext requestContext) {
-        return proxyRequest(serviceId, path, requestContext, null);
+        return proxyRequest(serviceId, path, requestContext);
     }
 
     @PATCH
     @Path("{path:.*}")
-    public Uni<Response> proxyPatch(
+    public Multi<io.vertx.core.buffer.Buffer> proxyPatch(
             @PathParam("serviceId") String serviceId,
             @PathParam("path") String path,
-            @Context ContainerRequestContext requestContext,
-            byte[] body) {
-        return proxyRequest(serviceId, path, requestContext, body);
+            @Context ContainerRequestContext requestContext) {
+        return proxyRequest(serviceId, path, requestContext);
     }
 
     @HEAD
     @Path("{path:.*}")
-    public Uni<Response> proxyHead(
+    public Multi<io.vertx.core.buffer.Buffer> proxyHead(
             @PathParam("serviceId") String serviceId,
             @PathParam("path") String path,
             @Context ContainerRequestContext requestContext) {
-        return proxyRequest(serviceId, path, requestContext, null);
+        return proxyRequest(serviceId, path, requestContext, true);
     }
 
     @OPTIONS
     @Path("{path:.*}")
-    public Uni<Response> proxyOptions(
+    public Multi<io.vertx.core.buffer.Buffer> proxyOptions(
             @PathParam("serviceId") String serviceId,
             @PathParam("path") String path,
             @Context ContainerRequestContext requestContext) {
-        return proxyRequest(serviceId, path, requestContext, null);
+        return proxyRequest(serviceId, path, requestContext);
     }
 
-    private Uni<Response> proxyRequest(
-            String serviceId, String path, ContainerRequestContext requestContext, byte[] body) {
+    private Multi<io.vertx.core.buffer.Buffer> proxyRequest(
+            String serviceId, String path, ContainerRequestContext requestContext) {
+        return proxyRequest(serviceId, path, requestContext, false);
+    }
+
+    private Multi<io.vertx.core.buffer.Buffer> proxyRequest(
+            String serviceId, String path, ContainerRequestContext requestContext, boolean suppressResponseBody) {
         var targetPath = path.isEmpty() ? "/" : "/" + path;
-        var gatewayRequest = toGatewayRequest(targetPath, requestContext, body);
-        return passThroughUseCase.forward(serviceId, gatewayRequest).map(this::toResponse);
+        final var request = HttpServerRequest.newInstance(routingContext.request());
+        final var prepared = passThroughUseCase.prepare(serviceId, toGatewayRequest(targetPath, requestContext));
+        return proxyExchange.forward(prepared, request, suppressResponseBody);
     }
 
-    private GatewayRequest toGatewayRequest(String path, ContainerRequestContext requestContext, byte[] body) {
+    private GatewayRequest toGatewayRequest(String path, ContainerRequestContext requestContext) {
         // MultivaluedMap<String, String> IS-A Map<String, List<String>>. The map is read-only
         // for the rest of this request, so passing it directly avoids a per-request HashMap +
         // per-value List.copyOf round-trip.
@@ -135,35 +140,10 @@ public class PassThroughResource {
                 path,
                 requestContext.getHeaders(),
                 requestContext.getUriInfo().getRequestUri(),
-                body,
+                null,
                 clientContext.resolvedIp(),
                 clientContext.externalScheme(),
                 clientContext.externalHost(),
                 clientContext.externalPort());
-    }
-
-    private Response toResponse(GatewayResult result) {
-        return switch (result) {
-            case GatewayResult.Success success -> {
-                var responseBuilder = Response.status(success.statusCode());
-                for (var entry : success.headers().entrySet()) {
-                    for (var value : entry.getValue()) {
-                        responseBuilder.header(entry.getKey(), value);
-                    }
-                }
-                if (success.body().length > 0) {
-                    responseBuilder.entity(success.body());
-                }
-                yield responseBuilder.build();
-            }
-            case GatewayResult.ServiceNotFound s -> throw GatewayProblem.serviceNotFound(s.serviceId());
-            case GatewayResult.ReservedPath rp -> throw GatewayProblem.notFound(
-                    "Path '%s' is reserved".formatted(rp.path()));
-            case GatewayResult.RouteNotFound r -> throw GatewayProblem.routeNotFound(r.path());
-            case GatewayResult.Error e -> throw GatewayProblem.badGateway(e.message());
-            case GatewayResult.Unauthorized u -> throw GatewayProblem.unauthorized(u.reason());
-            case GatewayResult.Forbidden f -> throw GatewayProblem.forbidden(f.reason());
-            case GatewayResult.BadRequest b -> throw GatewayProblem.badRequest(b.reason());
-        };
     }
 }

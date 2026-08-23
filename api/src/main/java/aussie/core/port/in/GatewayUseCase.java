@@ -4,6 +4,7 @@ import io.smallrye.mutiny.Uni;
 
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.GatewayResult;
+import aussie.core.model.gateway.ProxyPlan;
 
 /**
  * Use case for forwarding requests through the gateway using route matching.
@@ -12,6 +13,8 @@ import aussie.core.model.gateway.GatewayResult;
  * and forwards them to the appropriate backend service.
  */
 public interface GatewayUseCase {
+
+    Uni<ProxyPlan> prepare(GatewayRequest request);
 
     /**
      * Forward a request through the gateway.

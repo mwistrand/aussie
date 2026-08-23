@@ -111,6 +111,15 @@ class GatewayProblemTest {
             assertEquals("Bad Gateway", problem.getTitle());
             assertEquals("Upstream unavailable", problem.getDetail());
         }
+
+        @Test
+        @DisplayName("gatewayTimeout should return 504")
+        void gatewayTimeout() {
+            var problem = GatewayProblem.gatewayTimeout("Upstream timed out");
+            assertEquals(Status.GATEWAY_TIMEOUT.getStatusCode(), problem.getStatusCode());
+            assertEquals("Gateway Timeout", problem.getTitle());
+            assertEquals("Upstream timed out", problem.getDetail());
+        }
     }
 
     @Nested

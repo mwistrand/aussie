@@ -9,9 +9,9 @@ import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 
-import aussie.core.model.auth.AussieToken;
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.GatewayResult;
+import aussie.core.model.gateway.ProxyPlan;
 import aussie.core.model.gateway.RouteAuthResult;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.RouteMatch;
@@ -89,17 +89,22 @@ public class PassThroughService implements PassThroughUseCase {
     public Uni<GatewayResult> forward(String serviceId, GatewayRequest request) {
         long startTime = System.nanoTime();
 
+        return prepare(serviceId, request)
+                .flatMap(plan -> execute(plan).invoke(result -> recordMetrics(request, plan, result, startTime)));
+    }
+
+    @Override
+    public Uni<ProxyPlan> prepare(String serviceId, GatewayRequest request) {
+
         if (RESERVED_PATHS.contains(serviceId.toLowerCase())) {
             var result = new GatewayResult.ReservedPath(serviceId);
-            metrics.recordGatewayResult(null, result);
-            return Uni.createFrom().item(result);
+            return Uni.createFrom().item(new ProxyPlan.Rejected(result, null));
         }
 
         return serviceRegistry.getService(serviceId).flatMap(serviceOpt -> {
             if (serviceOpt.isEmpty()) {
                 var result = new GatewayResult.ServiceNotFound(serviceId);
-                metrics.recordGatewayResult(null, result);
-                return Uni.createFrom().item(result);
+                return Uni.createFrom().item(new ProxyPlan.Rejected(result, null));
             }
 
             var service = serviceOpt.get();
@@ -107,41 +112,39 @@ public class PassThroughService implements PassThroughUseCase {
 
             return routeAuthService
                     .authenticate(request, routeMatch)
-                    .flatMap(authResult -> handleAuthResult(authResult, request, routeMatch))
-                    .invoke(result -> recordMetrics(request, service, result, startTime));
+                    .map(authResult -> handleAuthResult(authResult, request, routeMatch));
         });
     }
 
-    private Uni<GatewayResult> handleAuthResult(
-            RouteAuthResult authResult, GatewayRequest request, RouteMatch routeMatch) {
+    private ProxyPlan handleAuthResult(RouteAuthResult authResult, GatewayRequest request, RouteMatch routeMatch) {
         return switch (authResult) {
-            case RouteAuthResult.Authenticated auth -> forwardWithToken(request, routeMatch, auth.token());
-            case RouteAuthResult.NotRequired notRequired -> forwardWithoutToken(request, routeMatch);
-            case RouteAuthResult.Unauthorized unauthorized -> Uni.createFrom()
-                    .item(new GatewayResult.Unauthorized(unauthorized.reason()));
-            case RouteAuthResult.Forbidden forbidden -> Uni.createFrom()
-                    .item(new GatewayResult.Forbidden(forbidden.reason()));
-            case RouteAuthResult.BadRequest badRequest -> Uni.createFrom()
-                    .item(new GatewayResult.BadRequest(badRequest.reason()));
+            case RouteAuthResult.Authenticated auth -> new ProxyPlan.Ready(
+                    request,
+                    requestPreparer.prepare(
+                            request,
+                            routeMatch,
+                            auth.token().hasToken() ? Optional.of(auth.token()) : Optional.empty()),
+                    routeMatch.service());
+            case RouteAuthResult.NotRequired notRequired -> new ProxyPlan.Ready(
+                    request, requestPreparer.prepare(request, routeMatch, Optional.empty()), routeMatch.service());
+            case RouteAuthResult.Unauthorized unauthorized -> new ProxyPlan.Rejected(
+                    new GatewayResult.Unauthorized(unauthorized.reason()),
+                    routeMatch.service().serviceId());
+            case RouteAuthResult.Forbidden forbidden -> new ProxyPlan.Rejected(
+                    new GatewayResult.Forbidden(forbidden.reason()),
+                    routeMatch.service().serviceId());
+            case RouteAuthResult.BadRequest badRequest -> new ProxyPlan.Rejected(
+                    new GatewayResult.BadRequest(badRequest.reason()),
+                    routeMatch.service().serviceId());
         };
     }
 
-    private Uni<GatewayResult> forwardWithToken(GatewayRequest request, RouteMatch routeMatch, AussieToken token) {
-        Optional<AussieToken> tokenOpt = token.hasToken() ? Optional.of(token) : Optional.empty();
-        var preparedRequest = requestPreparer.prepare(request, routeMatch, tokenOpt);
-
+    private Uni<GatewayResult> execute(ProxyPlan plan) {
+        if (plan instanceof ProxyPlan.Rejected rejected) {
+            return Uni.createFrom().item(rejected.result());
+        }
         return proxyClient
-                .forward(preparedRequest)
-                .map(response -> (GatewayResult) GatewayResult.Success.from(response))
-                .onFailure()
-                .recoverWithItem(error -> new GatewayResult.Error("Upstream request failed"));
-    }
-
-    private Uni<GatewayResult> forwardWithoutToken(GatewayRequest request, RouteMatch routeMatch) {
-        var preparedRequest = requestPreparer.prepare(request, routeMatch, Optional.empty());
-
-        return proxyClient
-                .forward(preparedRequest)
+                .forward(((ProxyPlan.Ready) plan).request())
                 .map(response -> (GatewayResult) GatewayResult.Success.from(response))
                 .onFailure()
                 .recoverWithItem(error -> new GatewayResult.Error("Upstream request failed"));
@@ -162,9 +165,8 @@ public class PassThroughService implements PassThroughUseCase {
         return new RouteMatch(service, catchAllEndpoint, targetPath, Map.of());
     }
 
-    private void recordMetrics(
-            GatewayRequest request, ServiceRegistration service, GatewayResult result, long startTime) {
-        var serviceId = service.serviceId();
+    private void recordMetrics(GatewayRequest request, ProxyPlan plan, GatewayResult result, long startTime) {
+        final var serviceId = plan.serviceId();
         long durationMs = (System.nanoTime() - startTime) / 1_000_000;
 
         // Record gateway result
@@ -176,11 +178,16 @@ public class PassThroughService implements PassThroughUseCase {
             metrics.recordProxyLatency(serviceId, request.method(), success.statusCode(), durationMs);
 
             // Record traffic attribution using authenticated team ID
-            if (attributionService.isEnabled()) {
+            if (attributionService.isEnabled() && plan instanceof ProxyPlan.Ready ready) {
                 long requestBytes = request.body() != null ? request.body().length : 0;
                 long responseBytes = success.body() != null ? success.body().length : 0;
                 attributionService.record(
-                        request, service, authenticatedContext.getTeamId(), requestBytes, responseBytes, durationMs);
+                        request,
+                        ready.service(),
+                        authenticatedContext.getTeamId(),
+                        requestBytes,
+                        responseBytes,
+                        durationMs);
             }
         }
 

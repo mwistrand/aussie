@@ -103,6 +103,12 @@ class ProblemDetailTest {
         }
 
         @Test
+        @DisplayName("gatewayTimeout carries 504")
+        void gatewayTimeout() {
+            assertEquals(504, ProblemDetail.gatewayTimeout("upstream timed out").status());
+        }
+
+        @Test
         @DisplayName("payloadTooLarge carries 413")
         void payloadTooLarge() {
             assertEquals(413, ProblemDetail.payloadTooLarge("big").status());

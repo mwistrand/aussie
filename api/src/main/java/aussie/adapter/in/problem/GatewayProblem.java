@@ -2,6 +2,8 @@ package aussie.adapter.in.problem;
 
 import io.quarkiverse.resteasy.problem.HttpProblem;
 
+import aussie.core.model.gateway.GatewayResult;
+
 /**
  * RFC 9457 Problem Details factory for gateway errors.
  *
@@ -66,6 +68,23 @@ public final class GatewayProblem {
 
     public static HttpProblem badGateway(String detail) {
         return build(ProblemDetail.badGateway(detail));
+    }
+
+    public static HttpProblem gatewayTimeout(String detail) {
+        return build(ProblemDetail.gatewayTimeout(detail));
+    }
+
+    public static HttpProblem from(GatewayResult result) {
+        return switch (result) {
+            case GatewayResult.Success ignored -> internalError("Invalid proxy plan");
+            case GatewayResult.RouteNotFound route -> routeNotFound(route.path());
+            case GatewayResult.ServiceNotFound service -> serviceNotFound(service.serviceId());
+            case GatewayResult.ReservedPath reserved -> notFound("Path '%s' is reserved".formatted(reserved.path()));
+            case GatewayResult.Error error -> badGateway(error.message());
+            case GatewayResult.Unauthorized unauthorized -> unauthorized(unauthorized.reason());
+            case GatewayResult.Forbidden forbidden -> forbidden(forbidden.reason());
+            case GatewayResult.BadRequest badRequest -> badRequest(badRequest.reason());
+        };
     }
 
     // ========== Rate Limit Errors ==========

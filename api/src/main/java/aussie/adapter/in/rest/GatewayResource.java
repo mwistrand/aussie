@@ -13,15 +13,14 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
-import jakarta.ws.rs.core.Response;
 
-import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.Multi;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.mutiny.core.http.HttpServerRequest;
 
 import aussie.adapter.in.context.ClientContextResolver;
-import aussie.adapter.in.problem.GatewayProblem;
+import aussie.adapter.in.vertx.StreamingProxyExchange;
 import aussie.core.model.gateway.GatewayRequest;
-import aussie.core.model.gateway.GatewayResult;
 import aussie.core.port.in.GatewayUseCase;
 
 /**
@@ -38,66 +37,81 @@ public class GatewayResource {
     private final GatewayUseCase gatewayUseCase;
     private final RoutingContext routingContext;
     private final ClientContextResolver clientContextResolver;
+    private final StreamingProxyExchange proxyExchange;
 
     @Inject
     public GatewayResource(
-            GatewayUseCase gatewayUseCase, RoutingContext routingContext, ClientContextResolver clientContextResolver) {
+            GatewayUseCase gatewayUseCase,
+            RoutingContext routingContext,
+            ClientContextResolver clientContextResolver,
+            StreamingProxyExchange proxyExchange) {
         this.gatewayUseCase = gatewayUseCase;
         this.routingContext = routingContext;
         this.clientContextResolver = clientContextResolver;
+        this.proxyExchange = proxyExchange;
     }
 
     @GET
     @Path("{path:.*}")
-    public Uni<Response> proxyGet(@PathParam("path") String path, @Context ContainerRequestContext requestContext) {
-        return proxyRequest(path, requestContext, null);
+    public Multi<io.vertx.core.buffer.Buffer> proxyGet(
+            @PathParam("path") String path, @Context ContainerRequestContext requestContext) {
+        return proxyRequest(path, requestContext);
     }
 
     @POST
     @Path("{path:.*}")
-    public Uni<Response> proxyPost(
-            @PathParam("path") String path, @Context ContainerRequestContext requestContext, byte[] body) {
-        return proxyRequest(path, requestContext, body);
+    public Multi<io.vertx.core.buffer.Buffer> proxyPost(
+            @PathParam("path") String path, @Context ContainerRequestContext requestContext) {
+        return proxyRequest(path, requestContext);
     }
 
     @PUT
     @Path("{path:.*}")
-    public Uni<Response> proxyPut(
-            @PathParam("path") String path, @Context ContainerRequestContext requestContext, byte[] body) {
-        return proxyRequest(path, requestContext, body);
+    public Multi<io.vertx.core.buffer.Buffer> proxyPut(
+            @PathParam("path") String path, @Context ContainerRequestContext requestContext) {
+        return proxyRequest(path, requestContext);
     }
 
     @DELETE
     @Path("{path:.*}")
-    public Uni<Response> proxyDelete(@PathParam("path") String path, @Context ContainerRequestContext requestContext) {
-        return proxyRequest(path, requestContext, null);
+    public Multi<io.vertx.core.buffer.Buffer> proxyDelete(
+            @PathParam("path") String path, @Context ContainerRequestContext requestContext) {
+        return proxyRequest(path, requestContext);
     }
 
     @PATCH
     @Path("{path:.*}")
-    public Uni<Response> proxyPatch(
-            @PathParam("path") String path, @Context ContainerRequestContext requestContext, byte[] body) {
-        return proxyRequest(path, requestContext, body);
+    public Multi<io.vertx.core.buffer.Buffer> proxyPatch(
+            @PathParam("path") String path, @Context ContainerRequestContext requestContext) {
+        return proxyRequest(path, requestContext);
     }
 
     @HEAD
     @Path("{path:.*}")
-    public Uni<Response> proxyHead(@PathParam("path") String path, @Context ContainerRequestContext requestContext) {
-        return proxyRequest(path, requestContext, null);
+    public Multi<io.vertx.core.buffer.Buffer> proxyHead(
+            @PathParam("path") String path, @Context ContainerRequestContext requestContext) {
+        return proxyRequest(path, requestContext, true);
     }
 
     @OPTIONS
     @Path("{path:.*}")
-    public Uni<Response> proxyOptions(@PathParam("path") String path, @Context ContainerRequestContext requestContext) {
-        return proxyRequest(path, requestContext, null);
+    public Multi<io.vertx.core.buffer.Buffer> proxyOptions(
+            @PathParam("path") String path, @Context ContainerRequestContext requestContext) {
+        return proxyRequest(path, requestContext);
     }
 
-    private Uni<Response> proxyRequest(String path, ContainerRequestContext requestContext, byte[] body) {
-        var gatewayRequest = toGatewayRequest("/" + path, requestContext, body);
-        return gatewayUseCase.forward(gatewayRequest).map(this::toResponse);
+    private Multi<io.vertx.core.buffer.Buffer> proxyRequest(String path, ContainerRequestContext requestContext) {
+        return proxyRequest(path, requestContext, false);
     }
 
-    private GatewayRequest toGatewayRequest(String path, ContainerRequestContext requestContext, byte[] body) {
+    private Multi<io.vertx.core.buffer.Buffer> proxyRequest(
+            String path, ContainerRequestContext requestContext, boolean suppressResponseBody) {
+        final var request = HttpServerRequest.newInstance(routingContext.request());
+        final var prepared = gatewayUseCase.prepare(toGatewayRequest("/" + path, requestContext));
+        return proxyExchange.forward(prepared, request, suppressResponseBody);
+    }
+
+    private GatewayRequest toGatewayRequest(String path, ContainerRequestContext requestContext) {
         // MultivaluedMap<String, String> IS-A Map<String, List<String>>; pass it through
         // instead of materialising a defensive copy that the downstream pipeline never mutates.
         final var clientContext = clientContextResolver.getOrCompute(routingContext);
@@ -106,35 +120,10 @@ public class GatewayResource {
                 path,
                 requestContext.getHeaders(),
                 requestContext.getUriInfo().getRequestUri(),
-                body,
+                null,
                 clientContext.resolvedIp(),
                 clientContext.externalScheme(),
                 clientContext.externalHost(),
                 clientContext.externalPort());
-    }
-
-    private Response toResponse(GatewayResult result) {
-        return switch (result) {
-            case GatewayResult.Success success -> {
-                var responseBuilder = Response.status(success.statusCode());
-                for (var entry : success.headers().entrySet()) {
-                    for (var value : entry.getValue()) {
-                        responseBuilder.header(entry.getKey(), value);
-                    }
-                }
-                if (success.body().length > 0) {
-                    responseBuilder.entity(success.body());
-                }
-                yield responseBuilder.build();
-            }
-            case GatewayResult.RouteNotFound r -> throw GatewayProblem.routeNotFound(r.path());
-            case GatewayResult.ServiceNotFound s -> throw GatewayProblem.serviceNotFound(s.serviceId());
-            case GatewayResult.ReservedPath rp -> throw GatewayProblem.notFound(
-                    "Path '%s' is reserved".formatted(rp.path()));
-            case GatewayResult.Error e -> throw GatewayProblem.badGateway(e.message());
-            case GatewayResult.Unauthorized u -> throw GatewayProblem.unauthorized(u.reason());
-            case GatewayResult.Forbidden f -> throw GatewayProblem.forbidden(f.reason());
-            case GatewayResult.BadRequest b -> throw GatewayProblem.badRequest(b.reason());
-        };
     }
 }
