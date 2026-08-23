@@ -393,8 +393,7 @@ export default function TestingDashboardPage() {
     setAuthResult({ show: true, success: true, message: "Logging in..." });
 
     try {
-      const loginUrl = `${config.aussieUrl}/${config.serviceId}/api/auth/login`;
-      const response = await fetch(loginUrl, {
+      const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         credentials: "include",

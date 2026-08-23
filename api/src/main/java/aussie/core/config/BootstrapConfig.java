@@ -16,7 +16,7 @@ import io.smallrye.config.WithDefault;
  * <p>Configuration properties:
  * <ul>
  *   <li>{@code aussie.bootstrap.enabled} - Enable bootstrap mode (default: false)</li>
- *   <li>{@code aussie.bootstrap.key} - Required bootstrap key (min 32 chars)</li>
+ *   <li>{@code aussie.bootstrap.key} - Required versioned bootstrap key</li>
  *   <li>{@code aussie.bootstrap.ttl} - Bootstrap key TTL (default: PT24H, max: PT24H)</li>
  *   <li>{@code aussie.bootstrap.recovery-mode} - Allow bootstrap with existing keys (default: false)</li>
  * </ul>
@@ -47,7 +47,7 @@ public interface BootstrapConfig {
      * The bootstrap key provided by the administrator.
      *
      * <p>This key is required when bootstrap is enabled. It must be at least
-     * 32 characters long for security. The key will be hashed and stored;
+     * {@code aussie_v1_} followed by 43 Base64URL characters. The key will be hashed and stored;
      * the plaintext is never logged or persisted.
      *
      * @return the bootstrap key, or empty if not configured

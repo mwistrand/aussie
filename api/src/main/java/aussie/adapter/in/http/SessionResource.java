@@ -21,7 +21,7 @@ import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpServerRequest;
 import org.jboss.logging.Logger;
 
-import aussie.adapter.in.auth.SessionAuthenticationMechanism.SessionPrincipal;
+import aussie.adapter.in.auth.CredentialAuthenticationMechanism.SessionPrincipal;
 import aussie.adapter.in.auth.SessionCookieManager;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.config.SessionConfig;

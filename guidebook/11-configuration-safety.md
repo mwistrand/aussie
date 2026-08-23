@@ -576,7 +576,7 @@ The `production-secrets.md` document (`docs/platform/production-secrets.md`, lin
 | Secret               | Env Variable           | Format                  | Purpose                          | Rotation Cadence |
 |----------------------|------------------------|-------------------------|----------------------------------|------------------|
 | JWS Signing Key      | AUSSIE_JWS_SIGNING_KEY | RSA PKCS#8 PEM          | Signs session JWS tokens         | Quarterly        |
-| Bootstrap Key        | AUSSIE_BOOTSTRAP_KEY   | String (min 32 chars)   | First-time admin setup           | Single-use       |
+| Bootstrap Key        | AUSSIE_BOOTSTRAP_KEY   | `aussie_v1_` + 43 Base64URL chars | First-time admin setup        | Single-use       |
 | Encryption Key       | AUTH_ENCRYPTION_KEY    | Base64-encoded 256-bit  | Encrypts API key records at rest | Annually         |
 | Cassandra Credentials| CASSANDRA_USERNAME/PW  | String                  | Database authentication          | Per org policy   |
 | Redis Password       | REDIS_PASSWORD         | String                  | Redis authentication             | Per org policy   |

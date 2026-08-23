@@ -218,7 +218,7 @@ Every variable includes the exact environment variable name, its default value, 
 | Secret | Env Variable | Format | Purpose | Rotation Cadence |
 |--------|-------------|--------|---------|------------------|
 | JWS Signing Key | `AUSSIE_JWS_SIGNING_KEY` | RSA PKCS#8 PEM | Signs session JWS tokens | Quarterly |
-| Bootstrap Key | `AUSSIE_BOOTSTRAP_KEY` | String (min 32 chars) | First-time admin setup | Single-use |
+| Bootstrap Key | `AUSSIE_BOOTSTRAP_KEY` | `aussie_v1_` plus 43 Base64URL characters | First-time admin setup | Single-use |
 | Encryption Key | `AUTH_ENCRYPTION_KEY` | Base64-encoded 256-bit | Encrypts API key records at rest | Annually |
 ```
 
@@ -592,7 +592,7 @@ The secrets inventory is not a paragraph of prose. It is a table:
 | Secret | Env Variable | Format | Purpose | Rotation Cadence |
 |--------|-------------|--------|---------|------------------|
 | JWS Signing Key | `AUSSIE_JWS_SIGNING_KEY` | RSA PKCS#8 PEM | Signs session JWS tokens | Quarterly |
-| Bootstrap Key | `AUSSIE_BOOTSTRAP_KEY` | String (min 32 chars) | First-time admin setup | Single-use |
+| Bootstrap Key | `AUSSIE_BOOTSTRAP_KEY` | `aussie_v1_` plus 43 Base64URL characters | First-time admin setup | Single-use |
 | Encryption Key | `AUTH_ENCRYPTION_KEY` | Base64-encoded 256-bit | Encrypts API key records at rest | Annually |
 | Cassandra Credentials | `CASSANDRA_USERNAME`, `CASSANDRA_PASSWORD` | String | Database authentication | Per org policy |
 | Redis Password | `REDIS_PASSWORD` | String | Redis authentication | Per org policy |
@@ -623,7 +623,7 @@ The bootstrap mode documentation in the platform guide includes explicit securit
 
 | Practice | Description |
 |----------|-------------|
-| **Use a strong key** | Minimum 32 characters, randomly generated |
+| **Use a strong key** | `aussie_v1_` plus 43 randomly generated Base64URL characters |
 | **Short-lived keys** | Bootstrap keys expire in <=24 hours by design |
 | **Immediate rotation** | Create a permanent key and disable bootstrap immediately |
 | **Audit logs** | All bootstrap operations are logged to `aussie.audit.bootstrap` |

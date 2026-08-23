@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import aussie.core.model.auth.Permission;
 import aussie.core.port.in.ApiKeyManagement;
 import aussie.core.port.out.ApiKeyRepository;
+import aussie.core.service.auth.ApiKeyService;
 
 /**
  * Integration tests for bootstrap admin key functionality.
@@ -32,8 +33,7 @@ import aussie.core.port.out.ApiKeyRepository;
 @DisplayName("Bootstrap Integration Tests")
 public class BootstrapIntegrationTest {
 
-    // Must be at least 32 characters
-    static final String TEST_BOOTSTRAP_KEY = "test-bootstrap-key-for-integration-tests!";
+    static final String TEST_BOOTSTRAP_KEY = ApiKeyService.API_KEY_PREFIX + "C".repeat(43);
 
     @Inject
     ApiKeyRepository repository;

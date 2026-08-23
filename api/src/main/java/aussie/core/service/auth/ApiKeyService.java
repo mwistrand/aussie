@@ -33,9 +33,10 @@ import aussie.core.port.out.ApiKeyRepository;
 @ApplicationScoped
 public class ApiKeyService implements ApiKeyManagement {
 
+    public static final String API_KEY_NAMESPACE = "aussie_";
+    public static final String API_KEY_PREFIX = "aussie_v1_";
     private static final int KEY_LENGTH_BYTES = 32;
     private static final int KEY_ID_LENGTH = 8;
-    private static final int MIN_BOOTSTRAP_KEY_LENGTH = 32;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final ApiKeyRepository repository;
@@ -119,8 +120,9 @@ public class ApiKeyService implements ApiKeyManagement {
         if (plaintextKey == null || plaintextKey.isBlank()) {
             throw new IllegalArgumentException("Plaintext key cannot be null or blank");
         }
-        if (plaintextKey.length() < MIN_BOOTSTRAP_KEY_LENGTH) {
-            throw new IllegalArgumentException("Key must be at least " + MIN_BOOTSTRAP_KEY_LENGTH + " characters");
+        if (!isVersionedKey(plaintextKey)) {
+            throw new IllegalArgumentException(
+                    "Key must use the aussie_v1_ prefix followed by 43 Base64URL characters");
         }
 
         // Validate TTL against configured maximum
@@ -148,12 +150,35 @@ public class ApiKeyService implements ApiKeyManagement {
     /**
      * Generate a cryptographically secure random key.
      *
-     * @return Base64URL-encoded key string (43 characters)
+     * @return versioned Base64URL-encoded key string
      */
     private String generateSecureKey() {
         byte[] bytes = new byte[KEY_LENGTH_BYTES];
         SECURE_RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        return API_KEY_PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    /** Return whether a credential uses the current strict API-key grammar. */
+    public static boolean isVersionedKey(String credential) {
+        if (credential == null || credential.length() != API_KEY_PREFIX.length() + 43) {
+            return false;
+        }
+        if (!credential.startsWith(API_KEY_PREFIX)) {
+            return false;
+        }
+        return credential
+                .substring(API_KEY_PREFIX.length())
+                .chars()
+                .allMatch(c -> (c >= 'A' && c <= 'Z')
+                        || (c >= 'a' && c <= 'z')
+                        || (c >= '0' && c <= '9')
+                        || c == '-'
+                        || c == '_');
+    }
+
+    /** Return whether a credential meets the minimum accepted before versioned prefixes. */
+    public static boolean isLegacyKey(String credential) {
+        return credential != null && credential.length() >= 32;
     }
 
     /**

@@ -100,7 +100,7 @@ class ApiKeyIdentityProviderTest {
                     () -> provider.authenticate(request, context).await().atMost(Duration.ofSeconds(1)));
 
             verify(metrics).recordAuthFailure("invalid_key", null);
-            verify(securityMonitor).recordAuthFailure("api_key", "Invalid API key", null);
+            verify(securityMonitor).recordAuthFailure(null, "invalid_key", "api_key");
         }
 
         @Test

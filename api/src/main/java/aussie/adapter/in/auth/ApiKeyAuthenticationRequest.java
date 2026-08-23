@@ -5,7 +5,7 @@ import io.quarkus.security.identity.request.BaseAuthenticationRequest;
 /**
  * Authentication request containing an API key credential.
  *
- * <p>This is the credential holder passed from {@link ApiKeyAuthenticationMechanism}
+ * <p>This is the credential holder passed from {@link CredentialAuthenticationMechanism}
  * to {@link ApiKeyIdentityProvider} during Quarkus Security authentication.
  */
 public class ApiKeyAuthenticationRequest extends BaseAuthenticationRequest {

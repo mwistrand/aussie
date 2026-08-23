@@ -16,6 +16,7 @@ import aussie.core.model.common.BootstrapResult;
 import aussie.core.port.in.ApiKeyManagement;
 import aussie.core.port.in.BootstrapManagement;
 import aussie.core.port.out.ApiKeyRepository;
+import aussie.core.service.auth.ApiKeyService;
 
 /**
  * Service for managing bootstrap admin key creation.
@@ -38,7 +39,6 @@ public class BootstrapService implements BootstrapManagement {
     private static final String BOOTSTRAP_KEY_NAME = "bootstrap-admin";
     private static final String BOOTSTRAP_KEY_DESCRIPTION = "Bootstrap admin key (auto-expires)";
     private static final Duration MAX_BOOTSTRAP_TTL = Duration.ofHours(24);
-    private static final int MIN_KEY_LENGTH = 32;
 
     private final ApiKeyRepository repository;
     private final BootstrapConfig config;
@@ -59,10 +59,9 @@ public class BootstrapService implements BootstrapManagement {
                 .orElseThrow(() -> new BootstrapException("Bootstrap key is required when bootstrap is enabled. "
                         + "Set AUSSIE_BOOTSTRAP_KEY environment variable."));
 
-        // Validate key length
-        if (plaintextKey.length() < MIN_KEY_LENGTH) {
-            throw new BootstrapException("Bootstrap key must be at least " + MIN_KEY_LENGTH + " characters. "
-                    + "Received: " + plaintextKey.length() + " characters.");
+        if (!ApiKeyService.isVersionedKey(plaintextKey)) {
+            throw new BootstrapException(
+                    "Bootstrap key must use the aussie_v1_ prefix followed by 43 Base64URL characters.");
         }
 
         // Enforce maximum TTL

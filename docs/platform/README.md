@@ -156,8 +156,8 @@ Set the following environment variables before starting Aussie:
 # Enable bootstrap mode
 export AUSSIE_BOOTSTRAP_ENABLED=true
 
-# Provide a secure bootstrap key (minimum 32 characters)
-export AUSSIE_BOOTSTRAP_KEY="your-secure-bootstrap-key-at-least-32-chars"
+# Provide a secure bootstrap key (aussie_v1_ + 43 Base64URL characters)
+export AUSSIE_BOOTSTRAP_KEY="aussie_v1_$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
 
 # Optional: Set TTL (default: 24 hours, maximum: 24 hours)
 export AUSSIE_BOOTSTRAP_TTL=PT24H
@@ -177,7 +177,7 @@ Once created, add your bootstrap key to your configuration and create a permanen
 **~/.aussierc:**
 ```toml
 host = "http://localhost:1234"
-api_key = "your-secure-bootstrap-key-at-least-32-chars"
+api_key = "<the AUSSIE_BOOTSTRAP_KEY value>"
 ```
 
 ```bash
@@ -191,7 +191,7 @@ If you've lost all admin keys, you can use recovery mode to create a new bootstr
 ```bash
 # WARNING: Use only for emergency recovery
 export AUSSIE_BOOTSTRAP_ENABLED=true
-export AUSSIE_BOOTSTRAP_KEY="new-secure-recovery-key-at-least-32-chars"
+export AUSSIE_BOOTSTRAP_KEY="aussie_v1_$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')"
 export AUSSIE_BOOTSTRAP_RECOVERY_MODE=true
 ```
 Recovery mode is logged with a security warning - review your system if you didn't initiate this.
@@ -199,7 +199,7 @@ Recovery mode is logged with a security warning - review your system if you didn
 ### Security Considerations
 | Practice | Description |
 |----------|-------------|
-| **Use a strong key** | Minimum 32 characters, randomly generated |
+| **Use a strong key** | `aussie_v1_` plus 43 randomly generated Base64URL characters |
 | **Short-lived keys** | Bootstrap keys expire in ≤24 hours by design |
 | **Immediate rotation** | Create a permanent key and disable bootstrap immediately |
 | **Audit logs** | All bootstrap operations are logged to `aussie.audit.bootstrap` |
@@ -209,7 +209,7 @@ Recovery mode is logged with a security warning - review your system if you didn
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
 | `AUSSIE_BOOTSTRAP_ENABLED` | `false` | Enable bootstrap mode |
-| `AUSSIE_BOOTSTRAP_KEY` | - | Bootstrap key (min 32 chars) |
+| `AUSSIE_BOOTSTRAP_KEY` | - | Bootstrap key (`aussie_v1_` plus 43 Base64URL characters) |
 | `AUSSIE_BOOTSTRAP_TTL` | `PT24H` | Bootstrap key TTL (max: 24h) |
 | `AUSSIE_BOOTSTRAP_RECOVERY_MODE` | `false` | Allow bootstrap with existing keys |
 
@@ -1096,7 +1096,7 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `AUSSIE_BOOTSTRAP_ENABLED` | `false` | Enable bootstrap mode |
-| `AUSSIE_BOOTSTRAP_KEY` | - | Bootstrap key (min 32 chars) |
+| `AUSSIE_BOOTSTRAP_KEY` | - | Bootstrap key (`aussie_v1_` plus 43 Base64URL characters) |
 | `AUSSIE_BOOTSTRAP_TTL` | `PT24H` | Bootstrap key TTL (max: 24h) |
 | `AUSSIE_BOOTSTRAP_RECOVERY_MODE` | `false` | Allow bootstrap with existing keys |
 

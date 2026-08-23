@@ -78,22 +78,16 @@ The following diagram traces a standard HTTP request from arrival through both f
   |    |-- headers too large? --> 431         |----> RESPONSE (short-circuit)
   |    |-- ok? --> continue                   |
   |    v                                      |
-  |  [Priority 900] ConflictingAuthFilter     |
-  |    |            (@Provider + @Priority)   |
-  |    |-- both auth + session? --> 400       |----> RESPONSE (short-circuit)
-  |    |-- ok? --> continue                   |
-  |    v                                      |
   |  [Priority 950] RateLimitFilter           |
   |    |            (@ServerRequestFilter)    |
   |    |-- disabled? --> continue             |
   |    |-- rate limit exceeded? --> 429       |----> RESPONSE (short-circuit)
   |    |-- ok? --> continue (stores decision) |
   |    v                                      |
-  |  [Priority 1000] AuthenticationFilter     |
-  |    |            (@Provider + @Priority)   |
-  |    |-- legacy disabled? --> skip          |
-  |    |-- auth failure? --> 401/403          |----> RESPONSE (short-circuit)
-  |    |-- ok? --> sets auth context          |
+  |  [Quarkus HTTP Authentication]            |
+  |    |-- parse auth/cookie once             |
+  |    |-- conflict/invalid? --> 401          |----> RESPONSE (short-circuit)
+  |    |-- valid? --> SecurityIdentity        |
   |    v                                      |
   |  [Priority 5000] AccessControlFilter      |
   |    |            (@ServerRequestFilter)    |
@@ -123,7 +117,7 @@ The following diagram traces a standard HTTP request from arrival through both f
                   RESPONSE
 ```
 
-A few things to note about this diagram. First, the WebSocket filters (priorities 50 and 40) only affect WebSocket upgrade requests. For standard HTTP requests, both call `ctx.next()` immediately and pass through in microseconds. Second, `ClientContextFilter` runs at priority 850 (`Priorities.AUTHENTICATION - 150`) so it precedes every filter that needs the client IP or the trusted-proxy decision; downstream HTTP and WebSocket consumers reuse the value shared through the Vert.x and JAX-RS request contexts instead of re-parsing `Forwarded` / `X-Forwarded-For` headers. Third, the three filters at priority 900 (`AuthRateLimitFilter`, `RequestValidationFilter`, and `ConflictingAuthFilter`) all compute to `Priorities.AUTHENTICATION - 100`, which is `1000 - 100 = 900`. Their relative ordering among themselves is not guaranteed by the spec and depends on container implementation details. Fourth, the response path is considerably simpler than the request path; only `RateLimitFilter` has a response filter, and it only adds headers.
+A few things to note about this diagram. First, the WebSocket filters (priorities 50 and 40) only affect WebSocket upgrade requests. For standard HTTP requests, both call `ctx.next()` immediately and pass through in microseconds. Second, `ClientContextFilter` runs at priority 850 (`Priorities.AUTHENTICATION - 150`) so it precedes every filter that needs the client IP or the trusted-proxy decision; downstream HTTP and WebSocket consumers reuse the value shared through the Vert.x and JAX-RS request contexts instead of re-parsing `Forwarded` / `X-Forwarded-For` headers. Third, the two filters at priority 900 (`AuthRateLimitFilter` and `RequestValidationFilter`) have no guaranteed relative order. Fourth, the response path is considerably simpler than the request path; only `RateLimitFilter` has a response filter, and it only adds headers.
 
 ## Layer 1: Vert.x RouteFilters
 
@@ -149,7 +143,7 @@ For non-preflight requests, the filter always calls `next()`, even if the origin
 
 This filter resolves the registered route for the inbound request once and caches the result on the `RoutingContext`, so downstream consumers (auth mechanisms, rate limit, access control) read the cached lookup instead of re-querying `ServiceRegistry`. It runs between CORS (100) and SecurityHeaders (90), so CORS preflights short-circuit at 100 without paying for route resolution.
 
-The filter calls `ServiceRegistry.findRoute(path, method)` and stashes the `Optional<RouteLookupResult>` under the `aussie.route.lookup` key. When the resolved route's effective visibility is `PUBLIC`, the filter also sets `aussie.route.public = Boolean.TRUE`. The four authentication components (`JwtAuthenticationMechanism`, `ApiKeyAuthenticationMechanism`, `SessionAuthenticationMechanism`, `ConflictingAuthFilter`) consult this flag and short-circuit immediately for PUBLIC routes, skipping all credential extraction and validation. `AccessControlFilter` separately enforces source-based access for PRIVATE routes; PUBLIC routes pass through.
+The filter calls `ServiceRegistry.findRoute(path, method)` and stashes the `Optional<RouteLookupResult>` under the `aussie.route.lookup` key. When the resolved route's effective visibility is `PUBLIC`, the filter also sets `aussie.route.public = Boolean.TRUE`. `CredentialAuthenticationMechanism` consults this flag and short-circuits immediately for PUBLIC routes, skipping all credential extraction and validation. `AccessControlFilter` separately enforces source-based access for PRIVATE routes; PUBLIC routes pass through.
 
 **What it modifies:** Sets `aussie.route.lookup` and (when the route is PUBLIC) `aussie.route.public` on the `RoutingContext`.
 
@@ -259,22 +253,6 @@ The filter delegates to `RequestSizeValidator` for the actual validation logic a
 - Headers too large: throws `GatewayProblem.headerTooLarge()`, which maps to HTTP 431.
 - Other validation failure: throws `GatewayProblem.badRequest()`, which maps to HTTP 400.
 
-### ConflictingAuthFilter (Priority 900 = Priorities.AUTHENTICATION - 100)
-
-**File:** `api/src/main/java/aussie/adapter/in/auth/ConflictingAuthFilter.java`
-
-This filter rejects requests that carry both an `Authorization` header and a session cookie simultaneously. Allowing both authentication mechanisms in a single request creates ambiguity (which credential should the gateway honor?) and opens the door to confused deputy attacks where a session-authenticated browser is tricked into sending an API request that also carries an attacker-controlled `Authorization` header.
-
-The filter checks whether sessions are enabled (via `SessionConfig`), whether the request has an `Authorization` header, and whether the request has a session cookie (via `SessionCookieManager`). If both are present, it aborts with 400 Bad Request.
-
-**What it modifies:** Nothing on success. On failure, aborts the request with a JSON error response.
-
-**Short-circuit conditions:**
-- Session config not resolvable: returns without action (passes through).
-- Sessions disabled: returns without action.
-- Cookie manager not resolvable: returns without action.
-- Both `Authorization` header and session cookie present: aborts with 400 Bad Request.
-
 ### RateLimitFilter (Priority 950 = Priorities.AUTHENTICATION - 50)
 
 **File:** `api/src/main/java/aussie/system/filter/RateLimitFilter.java`
@@ -292,25 +270,11 @@ On rate limit exceeded, the filter records metrics, dispatches a `SecurityEvent.
 - Rate limit exceeded: returns a 429 response.
 - Rate limit check fails (Redis error): fail-open, returns null, continues. Logs a warning.
 
-### AuthenticationFilter (Priority 1000 = Priorities.AUTHENTICATION)
+### CredentialAuthenticationMechanism (Quarkus HTTP authentication)
 
-**File:** `api/src/main/java/aussie/system/filter/AuthenticationFilter.java`
+**File:** `api/src/main/java/aussie/adapter/in/auth/CredentialAuthenticationMechanism.java`
 
-This is the legacy authentication filter, **deprecated** in favor of Quarkus Security integration via `ApiKeyAuthenticationMechanism` and `ApiKeyIdentityProvider`. It is disabled by default and only activates when `aussie.auth.use-legacy-filter=true`. It is documented here for completeness and because some deployments with custom `AuthenticationProvider` SPI implementations may still use it.
-
-When enabled, the filter collects all available `AuthenticationProvider` instances from CDI, sorts them by priority (highest first), and iterates until one returns a non-`Skip` result. On `Success`, it stores the `AuthenticationContext` as a request property. On `Failure`, it aborts with the provider's specified status code (typically 401 or 403). If all providers skip and the request reaches the end of the chain, it aborts with 401 Unauthorized.
-
-The filter can be scoped to admin paths only (`aussie.auth.admin-paths-only=true`, the default), in which case non-admin requests pass through without authentication.
-
-**What it modifies:** On success, sets the `aussie.auth.context` request property with the `AuthenticationContext`.
-
-**Short-circuit conditions:**
-- Legacy filter disabled (`use-legacy-filter=false`, the default): returns without action.
-- Admin-paths-only enabled and request is not to an admin path: returns without action.
-- Auth disabled entirely: returns without action (logs a warning).
-- No providers available: aborts with 500 Internal Server Error.
-- Provider returns `Failure`: aborts with the failure's status code (typically 401 or 403).
-- All providers return `Skip`: aborts with 401 Unauthorized.
+The dispatcher reads the transport once. Duplicate `Authorization` headers or an Authorization/session-cookie conflict fail before validation. `aussie_v1_` credentials go only to the API-key identity provider, compact three-part tokens go only to JWT validation, and session cookies go only to the session repository. All successful paths use the same `SecurityIdentity` construction helper.
 
 ### AccessControlFilter (Priority 5000; default, Priorities.USER)
 
@@ -366,10 +330,8 @@ The following table lists every filter in numeric execution order across both la
 |------|----------|---------------------|-------|---------|-----------------|
 | 5 | 900 | `AUTH - 100` | `AuthRateLimitFilter` | `system.filter` | Yes (429 on lockout) |
 | 6 | 900 | `AUTH - 100` | `RequestValidationFilter` | `system.filter` | Yes (413, 431, 400) |
-| 7 | 900 | `AUTH - 100` | `ConflictingAuthFilter` | `adapter.in.auth` | Yes (400 on conflict) |
-| 8 | 950 | `AUTH - 50` | `RateLimitFilter` | `system.filter` | Yes (429 on rate limit) |
-| 9 | 1000 | `AUTH` | `AuthenticationFilter` | `system.filter` | Yes (401, 403, 500) |
-| 10 | 5000 | (default) | `AccessControlFilter` | `system.filter` | Yes (404 on denied) |
+| 7 | 950 | `AUTH - 50` | `RateLimitFilter` | `system.filter` | Yes (429 on rate limit) |
+| 8 | 5000 | (default) | `AccessControlFilter` | `system.filter` | Yes (404 on denied) |
 
 Note: Filters at the same priority (900) have no guaranteed relative ordering. The container may execute them in any order. In practice, Quarkus tends to order them by discovery order (classpath scanning), but this is an implementation detail, not a contract.
 
@@ -423,9 +385,8 @@ When a request is rejected and you need to identify which filter is responsible,
 
 1. **Check the HTTP status code.** Each filter produces a characteristic status:
    - 200 with CORS headers only: `CorsFilter` (preflight)
-   - 400 with `conflicting_authentication`: `ConflictingAuthFilter`
+   - 401 with authentication challenge: `CredentialAuthenticationMechanism`
    - 400/413/431 with Problem Details: `RequestValidationFilter`
-   - 401/403 with auth error: `AuthenticationFilter`
    - 404 with "Not found": `AccessControlFilter`
    - 429 with `Retry-After`: `RateLimitFilter`, `AuthRateLimitFilter`, or `WebSocketRateLimitFilter`
 
@@ -433,6 +394,6 @@ When a request is rejected and you need to identify which filter is responsible,
 
 3. **Check OpenTelemetry spans.** The `aussie.rate_limit.limited`, `aussie.rate_limit.type`, and `aussie.auth.rate_limited` span attributes indicate which rate limiter made the decision.
 
-4. **Check the response body format.** `AccessControlFilter`, `RateLimitFilter`, and `RequestValidationFilter` use RFC 9457 Problem Details format (JSON with `type`, `title`, `status`, `detail` fields). `AuthenticationFilter` and `ConflictingAuthFilter` use a simpler `{"error": "..."}` format. `CorsFilter` and `SecurityHeadersFilter` never generate response bodies on their own.
+4. **Check the response body format.** `AccessControlFilter`, `RateLimitFilter`, and `RequestValidationFilter` use RFC 9457 Problem Details format (JSON with `type`, `title`, `status`, `detail` fields). Quarkus Security supplies authentication challenges. `CorsFilter` and `SecurityHeadersFilter` never generate response bodies on their own.
 
 5. **Enable DEBUG logging** for the relevant filter class. Every filter logs its decision at DEBUG or TRACE level, including the reason for pass-through or rejection.

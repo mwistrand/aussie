@@ -7,11 +7,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.quarkus.security.AuthenticationFailedException;
-import io.quarkus.security.StringPermission;
 import io.quarkus.security.identity.AuthenticationRequestContext;
 import io.quarkus.security.identity.IdentityProvider;
 import io.quarkus.security.identity.SecurityIdentity;
-import io.quarkus.security.runtime.QuarkusSecurityIdentity;
 import io.smallrye.mutiny.Uni;
 
 import aussie.adapter.out.telemetry.GatewayMetrics;
@@ -63,7 +61,7 @@ public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthentica
                     if (optApiKey.isEmpty()) {
                         // Record the authentication failure
                         metrics.recordAuthFailure("invalid_key", null);
-                        securityMonitor.recordAuthFailure("api_key", "Invalid API key", null);
+                        securityMonitor.recordAuthFailure(null, "invalid_key", "api_key");
                         throw new AuthenticationFailedException("Invalid API key");
                     }
                     return optApiKey.get();
@@ -72,33 +70,20 @@ public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthentica
     }
 
     private SecurityIdentity buildIdentity(ApiKey apiKey) {
-        // Map permissions to Quarkus Security roles for @RolesAllowed checks
-        var roles = Permission.toRoles(apiKey.permissions());
-
         // Build effective permissions for service-level authorization
         var effectivePermissions = buildEffectivePermissions(apiKey);
-
-        // Build the security identity
-        var builder = QuarkusSecurityIdentity.builder()
-                .setPrincipal(new ApiKeyPrincipal(apiKey.id(), apiKey.name()))
-                .addRoles(roles)
-                .addAttribute("keyId", apiKey.id())
-                .addAttribute("permissions", effectivePermissions);
-
-        // Add StringPermission objects for @PermissionsAllowed checks
-        for (String permission : roles) {
-            builder.addPermission(new StringPermission(permission));
-        }
-
-        if (apiKey.teamId() != null) {
-            builder.addAttribute("teamId", apiKey.teamId());
-        }
-
-        if (apiKey.expiresAt() != null) {
-            builder.addAttribute("expiresAt", apiKey.expiresAt());
-        }
-
-        return builder.build();
+        return SecurityIdentityFactory.create(
+                new ApiKeyPrincipal(apiKey.id(), apiKey.name()),
+                effectivePermissions,
+                SecurityIdentityFactory.attributes(
+                        "keyId",
+                        apiKey.id(),
+                        "teamId",
+                        apiKey.teamId(),
+                        "expiresAt",
+                        apiKey.expiresAt(),
+                        "authenticationMethod",
+                        "api_key"));
     }
 
     /**

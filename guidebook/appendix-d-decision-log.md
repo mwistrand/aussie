@@ -58,13 +58,13 @@ These are not hypothetical decisions. Every one of them is enforced by running c
 
 **Status:** Accepted
 
-**Context:** A gateway has many operations with multiple possible outcomes that are not exceptional. Authentication can succeed, fail, or be skipped. A route lookup can match exactly, match a service but no endpoint, or match nothing. Token validation can produce a valid result, an invalid result, or a "no token present" result. Using exceptions for these cases conflates control flow with error handling, obscures the set of possible outcomes, and makes it easy to forget to handle a case.
+**Context:** A gateway has many operations with multiple possible outcomes that are not exceptional. A route lookup can match exactly, match a service but no endpoint, or match nothing. Token validation can produce a valid result, an invalid result, or a "no token present" result. Using exceptions for these cases conflates control flow with error handling, obscures the set of possible outcomes, and makes it easy to forget to handle a case.
 
 **Decision:** Use Java 21 sealed interfaces to model operation results as algebraic data types. Each sealed interface enumerates its permitted implementations as records. Consumers use pattern matching (switch expressions or `instanceof` patterns) to handle each case.
 
 **Consequences:**
 - The compiler enforces exhaustiveness. If a new variant is added to `GatewayResult`, every `switch` statement over it will fail to compile until it handles the new case.
-- The set of possible outcomes is documented in the type system. Opening `AuthenticationResult.java` shows exactly three possibilities: `Success`, `Failure`, `Skip`. There is no need to search for `throws` clauses or catch blocks.
+- The set of possible domain outcomes is documented in the type system. There is no need to search for `throws` clauses or catch blocks.
 - Exception-based control flow is eliminated for expected outcomes. Exceptions are reserved for truly exceptional situations (SHA-256 algorithm not available, null pointer bugs).
 - Pattern matching syntax in Java 21 is less ergonomic than languages with native sum types. Some switch expressions become verbose.
 - Stack traces are not generated for expected failures, which is a performance benefit in a high-throughput gateway.
@@ -72,7 +72,6 @@ These are not hypothetical decisions. Every one of them is enforced by running c
 **Evidence in code:**
 
 - `api/src/main/java/aussie/core/model/gateway/GatewayResult.java`: Eight variants: `Success`, `RouteNotFound`, `ServiceNotFound`, `ReservedPath`, `Error`, `Unauthorized`, `Forbidden`, `BadRequest` (lines 6-36)
-- `api/src/main/java/aussie/core/model/auth/AuthenticationResult.java`: Three variants: `Success(AuthenticationContext)`, `Failure(String reason, int statusCode)`, `Skip()` with singleton pattern (lines 11-61)
 - `api/src/main/java/aussie/core/model/auth/TokenValidationResult.java`: Three variants: `Valid`, `Invalid`, `NoToken` (lines 9-45)
 - `api/src/main/java/aussie/core/model/gateway/RouteAuthResult.java`: Five variants: `Authenticated`, `NotRequired`, `Unauthorized`, `Forbidden`, `BadRequest` (lines 10-53)
 - `api/src/main/java/aussie/core/model/service/RegistrationResult.java`: Two variants: `Success(ServiceRegistration)`, `Failure(String reason, int statusCode)` (lines 8-45)

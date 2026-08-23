@@ -74,8 +74,6 @@ Pure domain objects. Records, sealed interfaces, enums, value types. No framewor
 | `ApiKey` | Record representing a stored API key with ID, hash, permissions, and metadata. |
 | `ApiKeyCreateResult` | Record returned after key creation; carries the one-time plaintext key. |
 | `AussieToken` | Record representing a signed gateway token forwarded to backend services. |
-| `AuthenticationContext` | Record holding the authenticated principal, permissions, and auth method. |
-| `AuthenticationResult` | Sealed interface with `Success`, `Failure`, and `Skip` variants. |
 | `ClaimTranslator` | Interface for transforming token claims during translation. |
 | `GatewaySecurityConfig` | Interface for gateway-wide security settings (SSRF protection, header stripping). |
 | `KeyStatus` | Enum for signing key lifecycle: `PENDING`, `ACTIVE`, `DEPRECATED`, `RETIRED`. |
@@ -430,7 +428,6 @@ The `spi` package contains interfaces that platform teams implement to extend th
 
 | Interface | Factory Method | Produces | Discovery |
 |---|---|---|---|
-| `AuthenticationProvider` | `authenticate(headers, path)` | `AuthenticationResult` | CDI bean |
 | `AuthKeyCacheProvider` | `createCache(config)` | `AuthKeyCache` | ServiceLoader |
 | `AuthKeyStorageProvider` | `createRepository(config)` | `ApiKeyRepository` | ServiceLoader |
 | `ConfigurationCacheProvider` | `createCache(config)` | `ConfigurationCache` | ServiceLoader |
@@ -468,17 +465,13 @@ These packages translate HTTP, WebSocket, and lifecycle events into calls on cor
 
 | Class | Description |
 |---|---|
-| `ApiKeyAuthenticationMechanism` | Extracts `X-API-Key` header and delegates to `ApiKeyIdentityProvider`. |
+| `CredentialAuthenticationMechanism` | Parses Authorization/session credentials once, rejects conflicts, and dispatches typed credentials. |
 | `ApiKeyAuthenticationRequest` | Quarkus security credential wrapping a plaintext API key. |
-| `ApiKeyAuthProvider` | Implements `AuthenticationProvider` SPI for API key validation (priority 100). |
 | `ApiKeyIdentityProvider` | Quarkus `IdentityProvider` that validates API keys via `ApiKeyManagement`. |
-| `ConflictingAuthFilter` | Detects and rejects requests with both API key and Bearer token. |
-| `JwtAuthenticationMechanism` | Extracts Bearer token and delegates to `JwtIdentityProvider`. |
 | `JwtAuthenticationRequest` | Quarkus security credential wrapping a JWT. |
 | `JwtIdentityProvider` | Quarkus `IdentityProvider` that validates JWTs via `TokenValidationService`. |
 | `NoopAuthGuard` | Startup guard that prevents `dangerous-noop` auth mode in production profiles. |
-| `NoopAuthProvider` | Development-only auth provider that allows all requests (priority `Integer.MIN_VALUE`). |
-| `SessionAuthenticationMechanism` | Extracts session cookie and validates via `SessionManagement`. |
+| `SecurityIdentityFactory` | Builds the common principal, permission, role, and attribute shape. |
 | `SessionCookieManager` | Manages session cookie creation and extraction with SameSite and Secure flags. |
 
 **Allowed dependencies:** `core/port/in`, `core/model/auth`, `core/service/auth`, `spi`.
@@ -810,7 +803,6 @@ JAX-RS server filters that intercept requests before they reach resource classes
 | `AuthRateLimitFilter` | `AUTHENTICATION - 100` | Checks if the client IP is locked out due to brute-force attempts. Build-time conditional on `aussie.auth.rate-limit.enabled`. |
 | `RateLimitFilter` | `@ServerRequestFilter` | Enforces per-service and per-endpoint rate limits. Adds `X-RateLimit-*` response headers. Runs before authentication to reject floods cheaply. |
 | `AccessControlFilter` | `@ServerRequestFilter` | Evaluates IP allowlists/denylists and endpoint visibility. Blocks requests to private endpoints and denied IPs. |
-| `AuthenticationFilter` | `AUTHENTICATION` | **Deprecated.** Legacy authentication filter retained for backward compatibility with custom `AuthenticationProvider` SPIs. Superseded by Quarkus Security integration (`ApiKeyAuthenticationMechanism`, `JwtAuthenticationMechanism`). Disabled by default. |
 
 **Allowed dependencies:** `common/context`, `core/service`, `core/model`, `core/config`, `core/port/out`, `core/util`, `spi`, `adapter/in/context`, `adapter/in/problem`, `adapter/out/telemetry`, `system/context`.
 

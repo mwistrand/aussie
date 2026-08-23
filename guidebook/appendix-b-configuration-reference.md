@@ -150,13 +150,11 @@ Services can override individual security headers by including a `securityHeader
 ### 4.1 Core Auth Properties
 
 **Prefix:** `aussie.auth`
-**Interface:** None (`@ConfigProperty` reads via `ConfigProvider.getConfig()`)
-**Source:** `api/src/main/java/aussie/system/filter/AuthenticationFilter.java`, `api/src/main/java/aussie/adapter/in/auth/NoopAuthProvider.java`
+**Interface:** `aussie.core.config.ApiKeyConfig` plus runtime guard properties
+**Source:** `api/src/main/java/aussie/adapter/in/auth/CredentialAuthenticationMechanism.java`, `api/src/main/java/aussie/adapter/in/auth/NoopAuthGuard.java`
 
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
-| `aussie.auth.enabled` | `boolean` | `true` | `AUSSIE_AUTH_ENABLED` | Enable/disable authentication globally. |
-| `aussie.auth.admin-paths-only` | `boolean` | `true` | `AUSSIE_AUTH_ADMIN_PATHS_ONLY` | When true, only `/admin/*` paths require authentication. Gateway and pass-through routes remain open. |
 | `aussie.auth.dangerous-noop` | `boolean` | `false` | `AUSSIE_AUTH_DANGEROUS_NOOP` | Disable authentication entirely. **Application refuses to start if enabled in production mode** (`LaunchMode.NORMAL`). |
 
 **Profile overrides:** None in properties. The `NoopAuthGuard` enforces that `dangerous-noop=true` is rejected in production.
@@ -165,18 +163,7 @@ Services can override individual security headers by including a `securityHeader
 
 ### 4.2 JWT Authentication
 
-**Prefix:** `aussie.auth.jwt`
-**Interface:** None (read via `@ConfigProperty`)
-
-| Property | Type | Default | Env Variable | Description |
-|----------|------|---------|--------------|-------------|
-| `aussie.auth.jwt.issuer` | `String` | _(not set)_ | `AUSSIE_AUTH_JWT_ISSUER` | Expected JWT issuer (e.g., `https://auth.example.com`). |
-| `aussie.auth.jwt.audience` | `String` | _(not set)_ | `AUSSIE_AUTH_JWT_AUDIENCE` | Expected JWT audience (e.g., `aussie-api`). |
-| `aussie.auth.jwt.jwks-uri` | `String` | _(not set)_ | `AUSSIE_AUTH_JWT_JWKS_URI` | JWKS endpoint for JWT signature verification. |
-
-**Profile overrides:** None.
-
-**Security considerations:** The `jwks-uri` must point to the identity provider's actual JWKS endpoint. A misconfigured URI could cause all JWT validation to fail (if unreachable) or accept tokens from the wrong issuer (if pointed at an attacker-controlled endpoint).
+JWT validation uses the provider-bound `aussie.auth.route-auth.providers.*` configuration documented in [OIDC token exchange](../docs/platform/oidc-token-exchange.md). The removed `aussie.auth.jwt.*` properties are not compatibility aliases.
 
 ### 4.3 Auth Key Encryption
 
@@ -202,6 +189,7 @@ Services can override individual security headers by including a `securityHeader
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
 | `aussie.auth.api-keys.max-ttl` | `Optional<Duration>` | _(not set)_ | `AUSSIE_AUTH_API_KEYS_MAX_TTL` | Maximum TTL for API keys. Creation fails if requested TTL exceeds this. Examples: `P90D`, `P365D`. |
+| `aussie.auth.api-keys.accept-legacy-format` | `boolean` | `false` | `AUSSIE_AUTH_API_KEYS_ACCEPT_LEGACY_FORMAT` | Temporary migration window for unprefixed API keys. |
 
 **Profile overrides:** None.
 
@@ -479,7 +467,7 @@ The test profile disables auth rate limiting because test suites exercising auth
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
 | `aussie.bootstrap.enabled` | `boolean` | `false` | `AUSSIE_BOOTSTRAP_ENABLED` | Enable bootstrap mode for first-time admin setup. |
-| `aussie.bootstrap.key` | `Optional<String>` | _(not set)_ | `AUSSIE_BOOTSTRAP_KEY` | Bootstrap key. Must be at least 32 characters. Required when bootstrap is enabled. |
+| `aussie.bootstrap.key` | `Optional<String>` | _(not set)_ | `AUSSIE_BOOTSTRAP_KEY` | Bootstrap key. Must be `aussie_v1_` plus 43 Base64URL characters. Required when bootstrap is enabled. |
 | `aussie.bootstrap.ttl` | `Duration` | `PT24H` | `AUSSIE_BOOTSTRAP_TTL` | Bootstrap key TTL. Maximum allowed is 24 hours; values exceeding this are capped. |
 | `aussie.bootstrap.recovery-mode` | `boolean` | `false` | `AUSSIE_BOOTSTRAP_RECOVERY_MODE` | Allow bootstrap even when admin keys exist. For emergency recovery only. |
 
@@ -1037,7 +1025,7 @@ The following values must be injected at runtime from a secrets manager or secur
 |--------|-------------|--------|---------|------------------|
 | JWS Signing Key | `AUSSIE_JWS_SIGNING_KEY` | RSA PKCS#8 PEM | Signs session and route-auth JWS tokens | Quarterly (or automated via key rotation) |
 | API Key Encryption Key | `AUTH_ENCRYPTION_KEY` | Base64-encoded 256-bit | Encrypts API key records at rest | Annually |
-| Bootstrap Key | `AUSSIE_BOOTSTRAP_KEY` | String (min 32 chars) | First-time admin setup | Single-use |
+| Bootstrap Key | `AUSSIE_BOOTSTRAP_KEY` | `aussie_v1_` plus 43 Base64URL characters | First-time admin setup | Single-use |
 | OIDC Client Secret | `OIDC_CLIENT_SECRET` | String | OAuth2 client authentication | Per IdP policy |
 | Cassandra Username | `CASSANDRA_USERNAME` | String | Database authentication | Per org policy |
 | Cassandra Password | `CASSANDRA_PASSWORD` | String | Database authentication | Per org policy |

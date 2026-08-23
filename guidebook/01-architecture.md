@@ -380,7 +380,7 @@ public sealed interface GatewayResult {
 
 `GatewayResult` has eight variants. Because the interface is sealed, the compiler knows all possible subtypes. When `GatewayService` returns a `GatewayResult`, the calling code (typically a REST resource or filter) must handle every variant or the `switch` expression will produce a compile-time warning (or error, with the right compiler flags).
 
-This pattern is used consistently for `RouteAuthResult` (five variants: `Authenticated`, `NotRequired`, `Unauthorized`, `Forbidden`, `BadRequest`), `AuthenticationResult` (three variants: `Success`, `Failure`, `Skip`), `TokenValidationResult` (three variants: `Valid`, `Invalid`, `NoToken`), `RegistrationResult` (two variants: `Success`, `Failure`), `ValidationResult` (two variants: `Valid`, `Invalid`), and others.
+This pattern is used consistently for `RouteAuthResult` (five variants: `Authenticated`, `NotRequired`, `Unauthorized`, `Forbidden`, `BadRequest`), `TokenValidationResult` (three variants: `Valid`, `Invalid`, `NoToken`), `RegistrationResult` (two variants: `Success`, `Failure`), `ValidationResult` (two variants: `Valid`, `Invalid`), and others.
 
 ### Pattern Matching Over Sealed Types
 

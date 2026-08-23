@@ -18,11 +18,12 @@ import org.junit.jupiter.api.Test;
 import aussie.adapter.out.storage.memory.InMemoryApiKeyRepository;
 import aussie.core.config.ApiKeyConfig;
 import aussie.core.model.auth.Permission;
-import aussie.core.service.auth.*;
+import aussie.core.service.auth.ApiKeyService;
 
 @DisplayName("ApiKeyService")
 class ApiKeyServiceTest {
 
+    private static final String VERSIONED_KEY = ApiKeyService.API_KEY_PREFIX + "A".repeat(43);
     private ApiKeyService apiKeyService;
     private InMemoryApiKeyRepository repository;
 
@@ -30,8 +31,22 @@ class ApiKeyServiceTest {
     void setUp() {
         repository = new InMemoryApiKeyRepository();
         // Create a config that has no max TTL restriction
-        ApiKeyConfig config = () -> Optional.empty();
+        ApiKeyConfig config = config(Optional.empty());
         apiKeyService = new ApiKeyService(repository, config);
+    }
+
+    private ApiKeyConfig config(Optional<Duration> maxTtl) {
+        return new ApiKeyConfig() {
+            @Override
+            public boolean acceptLegacyFormat() {
+                return false;
+            }
+
+            @Override
+            public Optional<Duration> maxTtl() {
+                return maxTtl;
+            }
+        };
     }
 
     @Nested
@@ -59,6 +74,7 @@ class ApiKeyServiceTest {
 
             assertNotNull(result.keyId());
             assertNotNull(result.plaintextKey());
+            assertTrue(ApiKeyService.isVersionedKey(result.plaintextKey()));
             assertEquals("test-key", result.metadata().name());
             assertEquals("Test description", result.metadata().description());
             assertEquals("test-creator", result.metadata().createdBy());
@@ -307,7 +323,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should create key with specified plaintext key")
         void shouldCreateKeyWithSpecifiedPlaintextKey() {
-            String specifiedKey = "my-specified-key-that-is-at-least-32-chars";
+            String specifiedKey = VERSIONED_KEY;
 
             var result = apiKeyService
                     .createWithKey(
@@ -336,7 +352,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should validate key against provided plaintext")
         void shouldValidateKeyAgainstProvidedPlaintext() {
-            String specifiedKey = "my-bootstrap-key-that-is-at-least-32-characters";
+            String specifiedKey = VERSIONED_KEY;
 
             apiKeyService
                     .createWithKey(
@@ -357,7 +373,7 @@ class ApiKeyServiceTest {
         }
 
         @Test
-        @DisplayName("should reject key shorter than 32 characters")
+        @DisplayName("should reject an unversioned key")
         void shouldRejectShortKey() {
             String shortKey = "too-short-key";
 
@@ -366,7 +382,18 @@ class ApiKeyServiceTest {
                     () -> apiKeyService.createWithKey(
                             "short-key-test", null, null, Set.of(), null, shortKey, "bootstrap"));
 
-            assertTrue(exception.getMessage().contains("32"));
+            assertTrue(exception.getMessage().contains("aussie_v1_"));
+        }
+
+        @Test
+        @DisplayName("should reject non-Base64URL characters")
+        void shouldRejectNonBase64UrlCharacters() {
+            final var malformedKey = ApiKeyService.API_KEY_PREFIX + "A".repeat(42) + "é";
+
+            org.junit.jupiter.api.Assertions.assertThrows(
+                    IllegalArgumentException.class,
+                    () -> apiKeyService.createWithKey(
+                            "malformed-key-test", null, null, Set.of(), null, malformedKey, "bootstrap"));
         }
 
         @Test
@@ -389,7 +416,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should create key with TTL")
         void shouldCreateKeyWithTtl() {
-            String specifiedKey = "my-ttl-key-that-is-at-least-32-characters";
+            String specifiedKey = VERSIONED_KEY;
 
             var result = apiKeyService
                     .createWithKey("ttl-bootstrap", null, null, Set.of(), Duration.ofDays(7), specifiedKey, "bootstrap")
@@ -408,7 +435,7 @@ class ApiKeyServiceTest {
         @DisplayName("should enforce max TTL when configured")
         void shouldEnforceMaxTtlWhenConfigured() {
             // Create service with max TTL of 30 days
-            ApiKeyConfig restrictedConfig = () -> Optional.of(Duration.ofDays(30));
+            ApiKeyConfig restrictedConfig = config(Optional.of(Duration.ofDays(30)));
             var restrictedService = new ApiKeyService(repository, restrictedConfig);
 
             // Request TTL longer than max should fail
@@ -422,7 +449,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should allow TTL within max")
         void shouldAllowTtlWithinMax() {
-            ApiKeyConfig restrictedConfig = () -> Optional.of(Duration.ofDays(30));
+            ApiKeyConfig restrictedConfig = config(Optional.of(Duration.ofDays(30)));
             var restrictedService = new ApiKeyService(repository, restrictedConfig);
 
             // Request TTL shorter than max should succeed
@@ -437,7 +464,7 @@ class ApiKeyServiceTest {
         @Test
         @DisplayName("should require TTL when max is configured")
         void shouldRequireTtlWhenMaxIsConfigured() {
-            ApiKeyConfig restrictedConfig = () -> Optional.of(Duration.ofDays(30));
+            ApiKeyConfig restrictedConfig = config(Optional.of(Duration.ofDays(30)));
             var restrictedService = new ApiKeyService(repository, restrictedConfig);
 
             // Null TTL should fail when max is configured

@@ -125,11 +125,13 @@ export async function POST(request: NextRequest) {
     // The aussie gateway will validate this token and create a session
     const aussieCallback = `/auth/callback?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(redirectUrl)}`;
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       callbackUrl: aussieCallback,
       token, // Include token for debugging/testing
     });
+    response.cookies.delete('aussie_session');
+    return response;
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json({ error: 'Login failed' }, { status: 500 });

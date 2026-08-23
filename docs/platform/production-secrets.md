@@ -7,7 +7,7 @@ The optional `.env` file in the repository root contains demo keys for local dev
 | Secret | Env Variable | Format | Purpose | Rotation Cadence |
 |--------|-------------|--------|---------|------------------|
 | JWS Signing Key | `AUSSIE_JWS_SIGNING_KEY` | RSA PKCS#8 PEM | Signs session JWS tokens | Quarterly (see [Key Rotation](#key-rotation)) |
-| Bootstrap Key | `AUSSIE_BOOTSTRAP_KEY` | String (min 32 chars) | First-time admin setup | Single-use; disable after bootstrap |
+| Bootstrap Key | `AUSSIE_BOOTSTRAP_KEY` | `aussie_v1_` plus 43 Base64URL characters | First-time admin setup | Single-use; disable after bootstrap |
 | Encryption Key | `AUTH_ENCRYPTION_KEY` | Base64-encoded 256-bit | Encrypts API key records at rest | Annually |
 | Cassandra Credentials | `CASSANDRA_USERNAME`, `CASSANDRA_PASSWORD` | String | Database authentication | Per org policy |
 | Redis Password | `REDIS_PASSWORD` | String | Redis authentication | Per org policy |

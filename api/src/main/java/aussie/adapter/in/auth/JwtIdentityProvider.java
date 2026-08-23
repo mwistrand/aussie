@@ -10,15 +10,12 @@ import java.util.Set;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import io.quarkus.security.StringPermission;
 import io.quarkus.security.identity.AuthenticationRequestContext;
 import io.quarkus.security.identity.IdentityProvider;
 import io.quarkus.security.identity.SecurityIdentity;
-import io.quarkus.security.runtime.QuarkusSecurityIdentity;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
-import aussie.core.model.auth.Permission;
 import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.port.in.RoleManagement;
 import aussie.core.service.auth.TokenTranslationService;
@@ -99,28 +96,22 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
                 final var allPermissions = new HashSet<String>(directPermissions);
                 allPermissions.addAll(rolePermissions);
 
-                // Map permissions to Quarkus Security roles
-                final Set<String> securityRoles = Permission.toRoles(allPermissions);
-
-                // Build security identity
-                final var builder = QuarkusSecurityIdentity.builder()
-                        .setPrincipal(new JwtPrincipal(subject, claims))
-                        .addRoles(securityRoles)
-                        .addAttribute("claims", claims)
-                        .addAttribute("roles", tokenRoles)
-                        .addAttribute("permissions", allPermissions)
-                        .addAttribute("expiresAt", expiry);
-
-                // Add StringPermission objects for @PermissionsAllowed checks
-                for (var role : securityRoles) {
-                    builder.addPermission(new StringPermission(role));
-                }
-
                 LOG.debugv(
                         "JWT authenticated: subject={0}, roles={1}, permissions={2}",
                         subject, tokenRoles, allPermissions);
 
-                return builder.build();
+                return SecurityIdentityFactory.create(
+                        new JwtPrincipal(subject, claims),
+                        allPermissions,
+                        SecurityIdentityFactory.attributes(
+                                "claims",
+                                claims,
+                                "roles",
+                                List.copyOf(tokenRoles),
+                                "expiresAt",
+                                expiry,
+                                "authenticationMethod",
+                                "jwt"));
             });
         });
     }

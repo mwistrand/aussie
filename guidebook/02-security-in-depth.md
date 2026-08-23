@@ -237,7 +237,7 @@ if (!isAllowed) {
 
 This hides the existence of private resources from unauthorized users. A 403 response confirms the resource exists; a 404 reveals nothing.
 
-PUBLIC visibility also short-circuits authentication entirely. `RouteResolutionFilter` resolves the route once and sets a `aussie.route.public` flag on the `RoutingContext`; `JwtAuthenticationMechanism`, `ApiKeyAuthenticationMechanism`, `SessionAuthenticationMechanism`, and `ConflictingAuthFilter` each return early when the flag is set. PUBLIC endpoints therefore ignore Authorization headers and session cookies (no validation is performed and no `SecurityIdentity` is produced). This is intentional: a PUBLIC endpoint must not depend on caller identity, so paying the cost of validating an optional credential would be wasted work and could leak signals about which tokens are valid.
+PUBLIC visibility also short-circuits authentication entirely. `RouteResolutionFilter` resolves the route once and sets a `aussie.route.public` flag on the `RoutingContext`; `CredentialAuthenticationMechanism` returns early when the flag is set. PUBLIC endpoints therefore ignore Authorization headers and session cookies (no validation is performed and no `SecurityIdentity` is produced). This is intentional: a PUBLIC endpoint must not depend on caller identity, so paying the cost of validating an optional credential would be wasted work and could leak signals about which tokens are valid.
 
 ### What a Senior Might Skip
 

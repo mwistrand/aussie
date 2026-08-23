@@ -1,6 +1,7 @@
 package aussie.adapter.in.auth;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -17,8 +18,10 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
+import io.quarkus.security.AuthenticationFailedException;
 import io.quarkus.security.identity.IdentityProviderManager;
 import io.smallrye.mutiny.Uni;
+import io.vertx.core.MultiMap;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.ext.web.RoutingContext;
 import org.junit.jupiter.api.AfterEach;
@@ -26,8 +29,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.adapter.out.telemetry.SecurityMonitor;
+import aussie.common.context.ClientContext;
+import aussie.core.config.ApiKeyConfig;
 import aussie.core.config.SessionConfig;
 import aussie.core.model.session.Session;
 import aussie.core.port.in.SessionManagement;
@@ -36,8 +42,9 @@ import aussie.core.port.in.SessionManagement;
 class SessionLogRedactionTest {
 
     private static final String RAW_SESSION_ID = "super-secret-session-cookie-value-do-not-leak";
+    private static final String NOOP_PROPERTY = "aussie.auth.dangerous-noop";
 
-    private SessionAuthenticationMechanism mechanism;
+    private CredentialAuthenticationMechanism mechanism;
     private RoutingContext routingContext;
     private HttpServerRequest httpRequest;
     private SessionCookieManager cookieManager;
@@ -47,28 +54,44 @@ class SessionLogRedactionTest {
     private Logger jul;
     private Level previousLevel;
     private CapturingHandler handler;
+    private String previousNoopProperty;
 
     @BeforeEach
     void setUp() {
+        previousNoopProperty = System.setProperty(NOOP_PROPERTY, "false");
         var config = mock(SessionConfig.class);
         cookieManager = mock(SessionCookieManager.class);
         sessionManagement = mock(SessionManagement.class);
         var metrics = mock(GatewayMetrics.class);
         var securityMonitor = mock(SecurityMonitor.class);
+        var clientContextResolver = mock(ClientContextResolver.class);
+        var apiKeyConfig = mock(ApiKeyConfig.class);
         identityProviderManager = mock(IdentityProviderManager.class);
         routingContext = mock(RoutingContext.class);
         httpRequest = mock(HttpServerRequest.class);
 
         when(routingContext.request()).thenReturn(httpRequest);
+        var headers = mock(MultiMap.class);
+        when(httpRequest.headers()).thenReturn(headers);
+        when(headers.getAll("Authorization")).thenReturn(List.of());
         when(httpRequest.path()).thenReturn("/api/test");
         when(config.enabled()).thenReturn(true);
         when(config.slidingExpiration()).thenReturn(false);
-        when(cookieManager.getCookieName()).thenReturn("aussie_session");
+        when(cookieManager.hasSessionCookie(httpRequest)).thenReturn(true);
+        when(clientContextResolver.getOrCompute(routingContext))
+                .thenReturn(new ClientContext("127.0.0.1", false, null));
 
-        mechanism =
-                new SessionAuthenticationMechanism(config, cookieManager, sessionManagement, metrics, securityMonitor);
+        mechanism = new CredentialAuthenticationMechanism(
+                mock(aussie.core.service.auth.TokenValidationService.class),
+                config,
+                cookieManager,
+                sessionManagement,
+                metrics,
+                securityMonitor,
+                clientContextResolver,
+                apiKeyConfig);
 
-        jul = Logger.getLogger(SessionAuthenticationMechanism.class.getName());
+        jul = Logger.getLogger(CredentialAuthenticationMechanism.class.getName());
         previousLevel = jul.getLevel();
         jul.setLevel(Level.ALL);
         handler = new CapturingHandler();
@@ -78,6 +101,11 @@ class SessionLogRedactionTest {
 
     @AfterEach
     void tearDown() {
+        if (previousNoopProperty == null) {
+            System.clearProperty(NOOP_PROPERTY);
+        } else {
+            System.setProperty(NOOP_PROPERTY, previousNoopProperty);
+        }
         if (jul != null && handler != null) {
             jul.removeHandler(handler);
             jul.setLevel(previousLevel);
@@ -107,7 +135,10 @@ class SessionLogRedactionTest {
         when(sessionManagement.getSession(RAW_SESSION_ID))
                 .thenReturn(Uni.createFrom().item(Optional.empty()));
 
-        mechanism.authenticate(routingContext, identityProviderManager).await().atMost(Duration.ofSeconds(1));
+        assertThrows(AuthenticationFailedException.class, () -> mechanism
+                .authenticate(routingContext, identityProviderManager)
+                .await()
+                .atMost(Duration.ofSeconds(1)));
 
         for (String line : handler.snapshot()) {
             assertFalse(line.contains(RAW_SESSION_ID), "log line leaked raw session id: " + line);

@@ -52,7 +52,6 @@ And the `spi/` package provides the discovery and registration layer:
 
 ```
 api/src/main/java/aussie/spi/
-    AuthenticationProvider.java
     AuthKeyCacheProvider.java
     AuthKeyStorageProvider.java
     ConfigurationCacheProvider.java
@@ -801,7 +800,6 @@ The service at `api/src/main/java/aussie/core/service/common/BootstrapService.ja
 
 ```java
 private static final Duration MAX_BOOTSTRAP_TTL = Duration.ofHours(24);
-private static final int MIN_KEY_LENGTH = 32;
 ```
 
 The `enforceTtlLimit` method (lines 131-149) is where the 24-hour cap is enforced:
@@ -828,16 +826,16 @@ private Duration enforceTtlLimit(Duration requestedTtl) {
 }
 ```
 
-Note the design decision: instead of rejecting TTL values over 24 hours, it caps them with a warning. This is operator-friendly: a misconfigured 48-hour TTL does not prevent startup, it just gets silently capped. But the minimum key length (32 characters) is a hard failure at lines 63-66:
+Note the design decision: instead of rejecting TTL values over 24 hours, it caps them with a warning. This is operator-friendly: a misconfigured 48-hour TTL does not prevent startup, it just gets silently capped. The versioned key grammar is a hard failure:
 
 ```java
-if (plaintextKey.length() < MIN_KEY_LENGTH) {
-    throw new BootstrapException("Bootstrap key must be at least " + MIN_KEY_LENGTH + " characters. "
-            + "Received: " + plaintextKey.length() + " characters.");
+if (!ApiKeyService.isVersionedKey(plaintextKey)) {
+    throw new BootstrapException(
+            "Bootstrap key must use the aussie_v1_ prefix followed by 43 Base64URL characters.");
 }
 ```
 
-This asymmetry is deliberate: a short key is a security vulnerability that should not be worked around. A slightly-too-long TTL is an operational preference that the system can safely override.
+This asymmetry is deliberate: an ambiguous key is a security vulnerability that should not be worked around. A slightly-too-long TTL is an operational preference that the system can safely override.
 
 ### The Bootstrap Initializer
 

@@ -19,7 +19,7 @@ public interface BootstrapManagement {
      * <p>The operation will:
      * <ul>
      *   <li>Validate that a bootstrap key is configured</li>
-     *   <li>Validate the key meets minimum length requirements (32 chars)</li>
+     *   <li>Validate the key uses the current versioned API-key grammar</li>
      *   <li>Create a time-limited admin key with full permissions</li>
      * </ul>
      *

@@ -22,8 +22,8 @@ import aussie.core.config.BootstrapConfig;
 import aussie.core.model.auth.ApiKey;
 import aussie.core.model.auth.Permission;
 import aussie.core.port.in.BootstrapManagement.BootstrapException;
-import aussie.core.service.auth.*;
-import aussie.core.service.common.*;
+import aussie.core.service.auth.ApiKeyService;
+import aussie.core.service.common.BootstrapService;
 
 @DisplayName("BootstrapService")
 class BootstrapServiceTest {
@@ -32,14 +32,23 @@ class BootstrapServiceTest {
     private InMemoryApiKeyRepository repository;
     private ApiKeyService apiKeyService;
 
-    // Test key that meets the minimum length requirement (32 chars)
-    private static final String VALID_BOOTSTRAP_KEY = "test-bootstrap-key-at-least-32-chars!";
+    private static final String VALID_BOOTSTRAP_KEY = ApiKeyService.API_KEY_PREFIX + "B".repeat(43);
     private static final String SHORT_KEY = "short";
 
     @BeforeEach
     void setUp() {
         repository = new InMemoryApiKeyRepository();
-        ApiKeyConfig apiKeyConfig = () -> Optional.empty();
+        ApiKeyConfig apiKeyConfig = new ApiKeyConfig() {
+            @Override
+            public boolean acceptLegacyFormat() {
+                return false;
+            }
+
+            @Override
+            public Optional<Duration> maxTtl() {
+                return Optional.empty();
+            }
+        };
         apiKeyService = new ApiKeyService(repository, apiKeyConfig);
     }
 

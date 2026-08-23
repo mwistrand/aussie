@@ -24,9 +24,9 @@ import aussie.core.port.in.ApiKeyManagement;
  * Integration tests for API key-based authentication with auth actually enforced.
  *
  * <p>This test runs with {@code dangerous-noop=false} so the
- * {@code AuthenticationFilter} actually rejects unauthenticated and
+ * HTTP authentication dispatcher actually rejects unauthenticated and
  * insufficiently-permissioned requests. Branch coverage of the filter logic
- * lives in {@link aussie.system.filter.AuthenticationFilterTest}.
+ * lives in {@link aussie.adapter.in.auth.CredentialAuthenticationMechanismTest}.
  */
 @QuarkusTest
 @TestProfile(AuthenticationIntegrationTest.AuthEnforcedProfile.class)

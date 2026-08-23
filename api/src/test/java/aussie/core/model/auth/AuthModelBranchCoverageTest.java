@@ -11,7 +11,6 @@ import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Instant;
-import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.BeforeAll;
@@ -21,102 +20,6 @@ import org.junit.jupiter.api.Test;
 
 @DisplayName("Auth model behavioral tests")
 class AuthModelBranchCoverageTest {
-
-    @Nested
-    @DisplayName("AuthenticationContext")
-    class AuthenticationContextTest {
-
-        private final Principal principal = Principal.user("u1", "User");
-
-        @Test
-        @DisplayName("Should return true when principal has exact permission")
-        void shouldReturnTrueWhenHasExactPermission() {
-            var ctx = new AuthenticationContext(principal, Set.of("read", "write"), Map.of(), Instant.now(), null);
-            assertTrue(ctx.hasPermission("read"));
-        }
-
-        @Test
-        @DisplayName("Should return false when principal is missing permission")
-        void shouldReturnFalseWhenMissingPermission() {
-            var ctx = new AuthenticationContext(principal, Set.of("read"), Map.of(), Instant.now(), null);
-            assertFalse(ctx.hasPermission("write"));
-        }
-
-        @Test
-        @DisplayName("Should grant any permission when wildcard is present")
-        void shouldReturnTrueWhenWildcardPermission() {
-            var ctx = new AuthenticationContext(principal, Set.of("*"), Map.of(), Instant.now(), null);
-            assertTrue(ctx.hasPermission("anything"));
-        }
-
-        @Test
-        @DisplayName("Should not be expired when expiresAt is null")
-        void shouldReturnFalseWhenNotExpiredWithNullExpiresAt() {
-            var ctx = new AuthenticationContext(principal, Set.of(), Map.of(), Instant.now(), null);
-            assertFalse(ctx.isExpired());
-        }
-
-        @Test
-        @DisplayName("Should not be expired when expiresAt is in the future")
-        void shouldReturnFalseWhenNotExpiredWithFutureExpiresAt() {
-            var ctx = new AuthenticationContext(
-                    principal, Set.of(), Map.of(), Instant.now(), Instant.now().plusSeconds(3600));
-            assertFalse(ctx.isExpired());
-        }
-
-        @Test
-        @DisplayName("Should be expired when expiresAt is in the past")
-        void shouldReturnTrueWhenExpired() {
-            var ctx = new AuthenticationContext(
-                    principal, Set.of(), Map.of(), Instant.now(), Instant.now().minusSeconds(10));
-            assertTrue(ctx.isExpired());
-        }
-
-        @Test
-        @DisplayName("Should build context with all fields via builder")
-        void shouldBuildWithAllFields() {
-            var now = Instant.now();
-            var expires = now.plusSeconds(60);
-            var ctx = AuthenticationContext.builder(principal)
-                    .permissions(Set.of("p1"))
-                    .claims(Map.of("k", "v"))
-                    .authenticatedAt(now)
-                    .expiresAt(expires)
-                    .build();
-
-            assertEquals(principal, ctx.principal());
-            assertEquals(Set.of("p1"), ctx.permissions());
-            assertEquals(Map.of("k", "v"), ctx.claims());
-            assertEquals(now, ctx.authenticatedAt());
-            assertEquals(expires, ctx.expiresAt());
-        }
-
-        @Test
-        @DisplayName("Should default to empty permissions and claims when using builder defaults")
-        void shouldBuildWithDefaults() {
-            var ctx = AuthenticationContext.builder(principal).build();
-            assertNotNull(ctx.authenticatedAt());
-            assertTrue(ctx.permissions().isEmpty());
-            assertTrue(ctx.claims().isEmpty());
-        }
-
-        @Test
-        @DisplayName("Should throw on null principal")
-        void shouldThrowOnNullPrincipal() {
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> new AuthenticationContext(null, Set.of(), Map.of(), Instant.now(), null));
-        }
-
-        @Test
-        @DisplayName("Should default null permissions, claims, and authenticatedAt")
-        void shouldDefaultNullFields() {
-            var ctx = new AuthenticationContext(principal, null, null, null, null);
-            assertTrue(ctx.permissions().isEmpty());
-            assertTrue(ctx.claims().isEmpty());
-            assertNotNull(ctx.authenticatedAt());
-        }
-    }
 
     @Nested
     @DisplayName("ApiKey")
@@ -215,94 +118,6 @@ class AuthModelBranchCoverageTest {
             assertTrue(key.permissions().isEmpty());
             assertEquals("unknown", key.createdBy());
             assertNotNull(key.createdAt());
-        }
-    }
-
-    @Nested
-    @DisplayName("AuthenticationResult")
-    class AuthenticationResultTest {
-
-        @Nested
-        @DisplayName("Success")
-        class SuccessTest {
-
-            @Test
-            @DisplayName("Should throw on null context")
-            void shouldThrowOnNullContext() {
-                assertThrows(IllegalArgumentException.class, () -> new AuthenticationResult.Success(null));
-            }
-
-            @Test
-            @DisplayName("Should wrap valid context")
-            void shouldWrapValidContext() {
-                var principal = Principal.user("u1", "User");
-                var ctx = AuthenticationContext.builder(principal).build();
-                var success = new AuthenticationResult.Success(ctx);
-                assertEquals(ctx, success.context());
-            }
-        }
-
-        @Nested
-        @DisplayName("Failure")
-        class FailureTest {
-
-            @Test
-            @DisplayName("Should default status code to 401 when given code below 400")
-            void shouldDefaultStatusCodeWhenBelow400() {
-                var failure = new AuthenticationResult.Failure("reason", 200);
-                assertEquals(401, failure.statusCode());
-            }
-
-            @Test
-            @DisplayName("Should default status code to 401 when given code at or above 500")
-            void shouldDefaultStatusCodeWhenAtOrAbove500() {
-                var failure = new AuthenticationResult.Failure("reason", 500);
-                assertEquals(401, failure.statusCode());
-            }
-
-            @Test
-            @DisplayName("Should accept valid 4xx status code")
-            void shouldAcceptValidStatusCode() {
-                var failure = new AuthenticationResult.Failure("reason", 403);
-                assertEquals(403, failure.statusCode());
-            }
-
-            @Test
-            @DisplayName("Should accept status code 499 as valid upper bound")
-            void shouldAcceptStatusCode499() {
-                var failure = new AuthenticationResult.Failure("reason", 499);
-                assertEquals(499, failure.statusCode());
-            }
-
-            @Test
-            @DisplayName("Should default null reason to 'Authentication failed'")
-            void shouldDefaultNullReason() {
-                var failure = new AuthenticationResult.Failure(null, 401);
-                assertEquals("Authentication failed", failure.reason());
-            }
-
-            @Test
-            @DisplayName("Should default blank reason to 'Authentication failed'")
-            void shouldDefaultBlankReason() {
-                var failure = new AuthenticationResult.Failure("  ", 403);
-                assertEquals("Authentication failed", failure.reason());
-            }
-
-            @Test
-            @DisplayName("Should create unauthorized failure with 401 status")
-            void shouldCreateUnauthorized() {
-                var failure = AuthenticationResult.Failure.unauthorized("bad token");
-                assertEquals(401, failure.statusCode());
-                assertEquals("bad token", failure.reason());
-            }
-
-            @Test
-            @DisplayName("Should create forbidden failure with 403 status")
-            void shouldCreateForbidden() {
-                var failure = AuthenticationResult.Failure.forbidden("no access");
-                assertEquals(403, failure.statusCode());
-                assertEquals("no access", failure.reason());
-            }
         }
     }
 

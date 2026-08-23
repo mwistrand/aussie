@@ -87,7 +87,7 @@ public interface ApiKeyManagement {
      * @param teamId       team identifier for traffic attribution (null = unaffiliated)
      * @param permissions  set of permissions to grant
      * @param ttl          time-to-live for the key (null = never expires)
-     * @param plaintextKey the specific key value to use (min 32 chars)
+     * @param plaintextKey the versioned key value ({@code aussie_v1_} plus 43 Base64URL characters)
      * @param createdBy    identifier of the principal creating this key (e.g., "bootstrap")
      * @return Uni with result containing the key ID and metadata
      * @throws IllegalArgumentException if the key is too short or TTL exceeds max

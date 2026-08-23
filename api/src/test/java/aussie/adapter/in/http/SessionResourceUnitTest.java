@@ -28,7 +28,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import aussie.adapter.in.auth.SessionAuthenticationMechanism.SessionPrincipal;
+import aussie.adapter.in.auth.CredentialAuthenticationMechanism.SessionPrincipal;
 import aussie.adapter.in.auth.SessionCookieManager;
 import aussie.core.config.SessionConfig;
 import aussie.core.model.auth.TokenValidationResult;
