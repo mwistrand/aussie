@@ -62,8 +62,15 @@ public class LoggingSecurityEventHandler implements SecurityEventHandler {
                     e.lockoutCount());
 
             case SecurityEvent.AccessDenied e -> String.format(
-                    "ACCESS_DENIED: client=%s service=%s path=%s reason=%s",
-                    e.clientIdentifier(), e.serviceId(), e.path(), e.reason());
+                    "ACCESS_DENIED: client=%s source=%s direct_peer=%s trust_path=%s service=%s route=%s reason=%s policy_version=%d",
+                    e.clientIdentifier(),
+                    e.source(),
+                    e.directPeerIdentifier(),
+                    e.trustPath(),
+                    e.serviceId(),
+                    e.path(),
+                    e.reason(),
+                    e.policyVersion());
 
             case SecurityEvent.RateLimitExceeded e -> String.format(
                     "RATE_LIMIT: client=%s service=%s requests=%d threshold=%d window=%ds",

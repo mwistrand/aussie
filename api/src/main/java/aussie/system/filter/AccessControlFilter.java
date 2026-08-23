@@ -16,6 +16,7 @@ import aussie.core.model.common.SourceIdentifier;
 import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.ServicePath;
+import aussie.core.port.out.SecurityMonitoring;
 import aussie.core.service.auth.AccessControlEvaluator;
 import aussie.core.service.routing.ServiceRegistry;
 
@@ -32,15 +33,18 @@ public class AccessControlFilter {
     private final ServiceRegistry serviceRegistry;
     private final ClientContextResolver clientContextResolver;
     private final AccessControlEvaluator accessEvaluator;
+    private final SecurityMonitoring securityMonitoring;
 
     @Inject
     public AccessControlFilter(
             ServiceRegistry serviceRegistry,
             ClientContextResolver clientContextResolver,
-            AccessControlEvaluator accessEvaluator) {
+            AccessControlEvaluator accessEvaluator,
+            SecurityMonitoring securityMonitoring) {
         this.serviceRegistry = serviceRegistry;
         this.clientContextResolver = clientContextResolver;
         this.accessEvaluator = accessEvaluator;
+        this.securityMonitoring = securityMonitoring;
     }
 
     @ServerRequestFilter
@@ -105,11 +109,19 @@ public class AccessControlFilter {
 
     private Uni<Response> checkAccessControl(
             ContainerRequestContext requestContext, HttpServerRequest vertxRequest, RouteLookupResult route) {
-        var source = SourceIdentifier.of(
-                clientContextResolver.getOrCompute(requestContext, vertxRequest).resolvedIp());
+        final var clientContext = clientContextResolver.getOrCompute(requestContext, vertxRequest);
+        var source = SourceIdentifier.of(clientContext.resolvedIp());
         var isAllowed = accessEvaluator.isAllowed(source, route, route.service().accessConfig());
 
         if (!isAllowed) {
+            final var routePattern =
+                    route.endpoint().map(endpoint -> endpoint.path()).orElse("/**");
+            securityMonitoring.recordAccessDenied(
+                    clientContext,
+                    route.service().serviceId(),
+                    routePattern,
+                    "network_policy_denied",
+                    route.service().version());
             // Return 404 to hide resource existence from unauthorized users
             throw GatewayProblem.notFound("Not found");
         }

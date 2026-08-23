@@ -37,6 +37,7 @@ import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.ServiceRegistration;
+import aussie.core.port.out.SecurityMonitoring;
 import aussie.core.service.auth.AccessControlEvaluator;
 import aussie.core.service.routing.ServiceRegistry;
 
@@ -56,6 +57,9 @@ class AccessControlFilterTest {
     private AccessControlEvaluator accessEvaluator;
 
     @Mock
+    private SecurityMonitoring securityMonitoring;
+
+    @Mock
     private ContainerRequestContext requestContext;
 
     @Mock
@@ -71,7 +75,7 @@ class AccessControlFilterTest {
 
     @BeforeEach
     void setUp() {
-        filter = new AccessControlFilter(serviceRegistry, clientContextResolver, accessEvaluator);
+        filter = new AccessControlFilter(serviceRegistry, clientContextResolver, accessEvaluator, securityMonitoring);
     }
 
     private ServiceRegistration createService(String serviceId) {
@@ -140,14 +144,17 @@ class AccessControlFilterTest {
             when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.of(routeResult));
 
             var source = SourceIdentifier.of("192.168.1.1");
+            final var clientContext = new ClientContext("192.168.1.1", false, null);
             when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
-                    .thenReturn(new ClientContext("192.168.1.1", false, null));
+                    .thenReturn(clientContext);
             when(accessEvaluator.isAllowed(source, routeResult, service.accessConfig()))
                     .thenReturn(false);
 
             assertThrows(
                     HttpProblem.class,
                     () -> filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT));
+            verify(securityMonitoring)
+                    .recordAccessDenied(clientContext, "test-service", "/api/users", "network_policy_denied", 1);
         }
 
         @Test
@@ -238,6 +245,29 @@ class AccessControlFilterTest {
             var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
 
             assertNull(result);
+        }
+
+        @Test
+        @DisplayName("should audit service-wide denials without the requested path")
+        void serviceFoundNoRouteMatchAndDenied() {
+            setupPath("/my-service/private/customer-123", "GET");
+
+            var service = createService("my-service");
+            var clientContext = new ClientContext("10.0.0.1", false, null);
+
+            when(serviceRegistry.getService("my-service"))
+                    .thenReturn(Uni.createFrom().item(Optional.of(service)));
+            when(serviceRegistry.findRoute("/private/customer-123", "GET")).thenReturn(Optional.empty());
+            when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
+                    .thenReturn(clientContext);
+            when(accessEvaluator.isAllowed(any(), any(ServiceOnlyMatch.class), eq(service.accessConfig())))
+                    .thenReturn(false);
+
+            assertThrows(
+                    HttpProblem.class,
+                    () -> filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT));
+            verify(securityMonitoring)
+                    .recordAccessDenied(clientContext, "my-service", "/**", "network_policy_denied", 1);
         }
 
         @Test

@@ -114,11 +114,28 @@ public sealed interface SecurityEvent {
      * @param timestamp when access was denied
      * @param clientIdentifier hashed client IP
      * @param serviceId the target service
-     * @param path the requested path
+     * @param path the configured route pattern
      * @param reason denial reason (e.g., "ip_blocked", "visibility_private")
+     * @param source how the effective client identity was selected
+     * @param directPeerIdentifier hashed direct peer IP
+     * @param trustPath bounded forwarding trust decisions, without raw addresses
+     * @param policyVersion service policy version used for the decision
      */
-    record AccessDenied(Instant timestamp, String clientIdentifier, String serviceId, String path, String reason)
+    record AccessDenied(
+            Instant timestamp,
+            String clientIdentifier,
+            String serviceId,
+            String path,
+            String reason,
+            String source,
+            String directPeerIdentifier,
+            String trustPath,
+            long policyVersion)
             implements SecurityEvent {
+
+        public AccessDenied(Instant timestamp, String clientIdentifier, String serviceId, String path, String reason) {
+            this(timestamp, clientIdentifier, serviceId, path, reason, "unknown", "unknown", "none", 0);
+        }
 
         @Override
         public Severity severity() {

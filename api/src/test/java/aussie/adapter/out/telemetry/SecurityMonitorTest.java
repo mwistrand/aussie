@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import aussie.common.context.ClientContext;
 import aussie.spi.SecurityEvent;
 
 @DisplayName("SecurityMonitor")
@@ -175,6 +176,54 @@ class SecurityMonitorTest {
             assertEquals("svc-1", event.serviceId());
             assertEquals("/admin", event.path());
             assertEquals("ip_blocked", event.reason());
+        }
+
+        @Test
+        @DisplayName("should audit the canonical source and bounded proxy trust path")
+        void shouldAuditCanonicalTrustPath() {
+            var monitor = createEnabled();
+            var clientContext = new ClientContext(
+                    "10.0.0.2",
+                    true,
+                    "198.51.100.7",
+                    "https",
+                    443,
+                    java.util.List.of(
+                            new ClientContext.ForwardingHop("198.51.100.7", false),
+                            new ClientContext.ForwardingHop("10.0.0.3", true)),
+                    "gateway.example",
+                    null,
+                    null,
+                    null,
+                    "correlation-id");
+
+            monitor.recordAccessDenied(clientContext, "svc-1", "/admin/**", "network_policy_denied", 7);
+
+            var captor = ArgumentCaptor.forClass(SecurityEvent.class);
+            verify(dispatcher).dispatch(captor.capture());
+            var event = (SecurityEvent.AccessDenied) captor.getValue();
+            assertEquals("forwarded", event.source());
+            assertEquals("untrusted>trusted>peer-trusted", event.trustPath());
+            assertEquals(7, event.policyVersion());
+            assertEquals(16, event.clientIdentifier().length());
+            assertEquals(16, event.directPeerIdentifier().length());
+        }
+
+        @Test
+        @DisplayName("should preserve unknown network identifiers")
+        void shouldPreserveUnknownNetworkIdentifiers() {
+            var monitor = createEnabled();
+
+            monitor.recordAccessDenied(
+                    new ClientContext(null, false, null), "svc-1", "/admin/**", "network_policy_denied", 7);
+
+            var captor = ArgumentCaptor.forClass(SecurityEvent.class);
+            verify(dispatcher).dispatch(captor.capture());
+            var event = (SecurityEvent.AccessDenied) captor.getValue();
+            assertEquals("unknown", event.clientIdentifier());
+            assertEquals("unknown", event.directPeerIdentifier());
+            assertEquals("unknown", event.source());
+            assertEquals("peer-unknown", event.trustPath());
         }
 
         @Test

@@ -12,7 +12,9 @@ import jakarta.inject.Inject;
 
 import org.jboss.logging.Logger;
 
+import aussie.common.context.ClientContext;
 import aussie.core.port.out.SecurityMonitoring;
+import aussie.core.util.SecureHash;
 import aussie.spi.SecurityEvent;
 
 /**
@@ -135,6 +137,35 @@ public class SecurityMonitor implements SecurityMonitoring {
         dispatcher.dispatch(event);
     }
 
+    @Override
+    public void recordAccessDenied(
+            ClientContext clientContext, String serviceId, String routePattern, String reason, long policyVersion) {
+        if (!enabled) {
+            return;
+        }
+
+        final var source = clientContext.forwardedClientIp() != null
+                ? "forwarded"
+                : clientContext.socketIp() != null ? "socket" : "unknown";
+        final var peerTrust = clientContext.socketIp() == null
+                ? "peer-unknown"
+                : clientContext.trustForwardingHeaders() ? "peer-trusted" : "peer-untrusted";
+        final var trustPath = java.util.stream.Stream.concat(
+                        clientContext.forwardingChain().stream().map(hop -> hop.trusted() ? "trusted" : "untrusted"),
+                        java.util.stream.Stream.of(peerTrust))
+                .collect(java.util.stream.Collectors.joining(">"));
+        dispatcher.dispatch(new SecurityEvent.AccessDenied(
+                Instant.now(),
+                hashIp(clientContext.resolvedIp()),
+                serviceId,
+                routePattern,
+                reason,
+                source,
+                hashIp(clientContext.socketIp()),
+                trustPath,
+                policyVersion));
+    }
+
     /**
      * Record a session invalidation.
      *
@@ -231,11 +262,10 @@ public class SecurityMonitor implements SecurityMonitoring {
     }
 
     private String hashIp(String ip) {
-        if (ip == null) {
+        if (ip == null || "unknown".equals(ip)) {
             return "unknown";
         }
-        var hash = Integer.toHexString(ip.hashCode());
-        return hash.substring(0, Math.min(8, hash.length()));
+        return SecureHash.truncatedSha256(ip, 16);
     }
 
     private String hashSessionId(String sessionId) {

@@ -1,5 +1,7 @@
 package aussie.core.port.out;
 
+import aussie.common.context.ClientContext;
+
 /**
  * Port interface for security monitoring and anomaly detection.
  *
@@ -42,4 +44,18 @@ public interface SecurityMonitoring {
      * @param reason the reason for denial
      */
     void recordAccessDenied(String clientIp, String serviceId, String path, String reason);
+
+    /**
+     * Record an access denial with the canonical request trust context.
+     *
+     * @param clientContext the canonical client and forwarding context
+     * @param serviceId the target service ID
+     * @param routePattern the configured route pattern
+     * @param reason the stable denial reason
+     * @param policyVersion the service policy version used for the decision
+     */
+    default void recordAccessDenied(
+            ClientContext clientContext, String serviceId, String routePattern, String reason, long policyVersion) {
+        recordAccessDenied(clientContext.resolvedIp(), serviceId, routePattern, reason);
+    }
 }
