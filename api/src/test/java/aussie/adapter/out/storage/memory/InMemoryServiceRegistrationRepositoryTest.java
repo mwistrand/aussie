@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,6 +36,59 @@ class InMemoryServiceRegistrationRepositoryTest {
     @Nested
     @DisplayName("save()")
     class SaveTests {
+
+        @Test
+        @DisplayName("Should apply only matching conditional writes")
+        void shouldApplyOnlyMatchingConditionalWrites() {
+            var version1 = createService("test-service");
+            var version2 = version1.withIncrementedVersion();
+
+            assertTrue(
+                    repository.createIfAbsent(version1).await().atMost(TIMEOUT).applied());
+            assertFalse(
+                    repository.createIfAbsent(version1).await().atMost(TIMEOUT).applied());
+            assertFalse(repository
+                    .replaceIfVersion(version2, 2)
+                    .await()
+                    .atMost(TIMEOUT)
+                    .applied());
+            assertTrue(repository
+                    .replaceIfVersion(version2, 1)
+                    .await()
+                    .atMost(TIMEOUT)
+                    .applied());
+            assertFalse(repository
+                    .deleteIfVersion("test-service", 1)
+                    .await()
+                    .atMost(TIMEOUT)
+                    .applied());
+            assertTrue(repository
+                    .deleteIfVersion("test-service", 2)
+                    .await()
+                    .atMost(TIMEOUT)
+                    .applied());
+        }
+
+        @Test
+        @DisplayName("Should allow exactly one concurrent replacement")
+        void shouldAllowExactlyOneConcurrentReplacement() {
+            var version1 = createService("test-service");
+            var version2 = version1.withIncrementedVersion();
+            repository.save(version1).await().atMost(TIMEOUT);
+
+            try (var executor = Executors.newFixedThreadPool(2)) {
+                var first = CompletableFuture.supplyAsync(
+                        () -> repository.replaceIfVersion(version2, 1).await().atMost(TIMEOUT), executor);
+                var second = CompletableFuture.supplyAsync(
+                        () -> repository.replaceIfVersion(version2, 1).await().atMost(TIMEOUT), executor);
+
+                assertEquals(
+                        1,
+                        List.of(first.join(), second.join()).stream()
+                                .filter(result -> result.applied())
+                                .count());
+            }
+        }
 
         @Test
         @DisplayName("Should save a new registration")

@@ -23,6 +23,7 @@ import aussie.core.model.common.ValidationResult;
 import aussie.core.model.routing.GatewaySnapshot;
 import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.ServiceOnlyMatch;
+import aussie.core.model.service.ConditionalWriteResult;
 import aussie.core.model.service.RegistrationResult;
 import aussie.core.model.service.ServiceConfigEvent;
 import aussie.core.model.service.ServicePath;
@@ -359,18 +360,24 @@ public class ServiceRegistry {
                 return Uni.createFrom().item(RegistrationResult.failure(conflict.getMessage(), 409));
             }
 
-            return repository
-                    .save(service)
-                    .invoke(() -> publishService(service))
-                    .call(() -> eventPublisher.publishServiceChanged(service.serviceId()))
-                    .call(() -> cache.put(service)
-                            .onFailure()
-                            .invoke(err ->
-                                    LOG.warnf(err, "Failed to update cache for service: %s", service.serviceId()))
-                            .onFailure()
-                            .recoverWithNull())
-                    .map(v -> RegistrationResult.success(service));
+            final Uni<ConditionalWriteResult> write = existingOpt.isEmpty()
+                    ? repository.createIfAbsent(service)
+                    : repository.replaceIfVersion(service, existingOpt.get().version());
+            return write.flatMap(result -> {
+                if (!result.applied()) {
+                    return Uni.createFrom().item(versionConflict(result));
+                }
+                return publishChange(service).replaceWith(RegistrationResult.success(service));
+            });
         });
+    }
+
+    private RegistrationResult versionConflict(ConditionalWriteResult result) {
+        final var reason = result.currentVersion().isPresent()
+                ? "Version conflict: service changed concurrently; current version is "
+                        + result.currentVersion().getAsLong()
+                : "Version conflict: service no longer exists";
+        return RegistrationResult.failure(reason, 409);
     }
 
     /**
@@ -410,20 +417,15 @@ public class ServiceRegistry {
      */
     public Uni<Boolean> unregister(String serviceId) {
         return repository.findById(serviceId).flatMap(opt -> {
-            opt.ifPresent(service -> removeService(service.serviceId()));
-            return repository
-                    .delete(serviceId)
-                    .call(deleted -> {
-                        if (deleted) {
-                            return eventPublisher.publishServiceRemoved(serviceId);
-                        }
-                        return Uni.createFrom().voidItem();
-                    })
-                    .call(() -> cache.invalidate(serviceId)
-                            .onFailure()
-                            .invoke(err -> LOG.warnf(err, "Failed to invalidate cache for service: %s", serviceId))
-                            .onFailure()
-                            .recoverWithNull());
+            if (opt.isEmpty()) {
+                return Uni.createFrom().item(false);
+            }
+            return repository.deleteIfVersion(serviceId, opt.get().version()).flatMap(result -> {
+                if (!result.applied()) {
+                    return Uni.createFrom().item(false);
+                }
+                return publishRemoval(serviceId).replaceWith(true);
+            });
         });
     }
 
@@ -449,16 +451,12 @@ public class ServiceRegistry {
                         .item(RegistrationResult.failure("Not authorized to delete service: " + serviceId, 403));
             }
 
-            removeService(existing.serviceId());
-            return repository
-                    .delete(serviceId)
-                    .call(() -> eventPublisher.publishServiceRemoved(serviceId))
-                    .call(() -> cache.invalidate(serviceId)
-                            .onFailure()
-                            .invoke(err -> LOG.warnf(err, "Failed to invalidate cache for service: %s", serviceId))
-                            .onFailure()
-                            .recoverWithNull())
-                    .map(deleted -> RegistrationResult.success(existing));
+            return repository.deleteIfVersion(serviceId, existing.version()).flatMap(result -> {
+                if (!result.applied()) {
+                    return Uni.createFrom().item(versionConflict(result));
+                }
+                return publishRemoval(serviceId).replaceWith(RegistrationResult.success(existing));
+            });
         });
     }
 
@@ -520,23 +518,38 @@ public class ServiceRegistry {
      * {@link #register(ServiceRegistration)}.
      *
      * @param service The updated service registration
-     * @return Uni completing when the update is persisted
+     * @return Uni with the update result
      */
-    public Uni<Void> update(ServiceRegistration service) {
+    public Uni<RegistrationResult> update(ServiceRegistration service) {
         final var validationResult = validator.validate(service);
         if (validationResult instanceof ValidationResult.Invalid invalid) {
-            return Uni.createFrom().failure(new IllegalArgumentException(invalid.reason()));
+            return Uni.createFrom().item(RegistrationResult.failure(invalid.reason(), invalid.suggestedStatusCode()));
         }
         snapshot.get().with(service);
-        return repository
-                .save(service)
-                .invoke(() -> publishService(service))
-                .call(() -> eventPublisher.publishServiceChanged(service.serviceId()))
-                .call(() -> cache.put(service)
-                        .onFailure()
-                        .invoke(err -> LOG.warnf(err, "Failed to update cache for service: %s", service.serviceId()))
-                        .onFailure()
-                        .recoverWithNull());
+        return repository.replaceIfVersion(service, service.version() - 1).flatMap(result -> {
+            if (!result.applied()) {
+                return Uni.createFrom().item(versionConflict(result));
+            }
+            return publishChange(service).replaceWith(RegistrationResult.success(service));
+        });
+    }
+
+    private Uni<Void> publishChange(ServiceRegistration service) {
+        publishService(service);
+        return eventPublisher.publishServiceChanged(service.serviceId()).call(() -> cache.put(service)
+                .onFailure()
+                .invoke(err -> LOG.warnf(err, "Failed to update cache for service: %s", service.serviceId()))
+                .onFailure()
+                .recoverWithNull());
+    }
+
+    private Uni<Void> publishRemoval(String serviceId) {
+        removeService(serviceId);
+        return eventPublisher.publishServiceRemoved(serviceId).call(() -> cache.invalidate(serviceId)
+                .onFailure()
+                .invoke(err -> LOG.warnf(err, "Failed to invalidate cache for service: %s", serviceId))
+                .onFailure()
+                .recoverWithNull());
     }
 
     /**

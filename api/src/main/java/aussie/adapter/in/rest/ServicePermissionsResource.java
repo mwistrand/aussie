@@ -21,6 +21,7 @@ import io.smallrye.mutiny.Uni;
 import aussie.adapter.in.dto.ServicePermissionPolicyDto;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.model.auth.Permission;
+import aussie.core.model.service.RegistrationResult;
 import aussie.core.service.auth.ServiceAuthorizationService;
 import aussie.core.service.routing.ServiceRegistry;
 
@@ -129,15 +130,20 @@ public class ServicePermissionsResource {
                 var newPolicy = policyDto != null ? policyDto.toModel() : null;
                 var updatedService = service.withPermissionPolicy(newPolicy).withIncrementedVersion();
 
-                return serviceRegistry.update(updatedService).map(v -> {
-                    var responsePolicyDto = updatedService
-                            .permissionPolicy()
-                            .map(ServicePermissionPolicyDto::fromModel)
-                            .orElse(null);
-
-                    return Response.ok(new PermissionPolicyResponse(responsePolicyDto, updatedService.version()))
-                            .header("ETag", updatedService.version())
-                            .build();
+                return serviceRegistry.update(updatedService).map(result -> switch (result) {
+                    case RegistrationResult.Success ignored -> {
+                        var responsePolicyDto = updatedService
+                                .permissionPolicy()
+                                .map(ServicePermissionPolicyDto::fromModel)
+                                .orElse(null);
+                        yield Response.ok(new PermissionPolicyResponse(responsePolicyDto, updatedService.version()))
+                                .header("ETag", updatedService.version())
+                                .build();
+                    }
+                    case RegistrationResult.Failure failure -> throw switch (failure.statusCode()) {
+                        case 409 -> GatewayProblem.conflict(failure.reason());
+                        default -> GatewayProblem.badRequest(failure.reason());
+                    };
                 });
             });
         });

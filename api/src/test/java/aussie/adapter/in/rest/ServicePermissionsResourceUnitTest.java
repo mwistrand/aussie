@@ -32,6 +32,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.adapter.in.dto.ServicePermissionPolicyDto;
 import aussie.core.model.auth.ServicePermissionPolicy;
+import aussie.core.model.service.RegistrationResult;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.service.auth.ServiceAuthorizationService;
 import aussie.core.service.routing.ServiceRegistry;
@@ -224,7 +225,7 @@ class ServicePermissionsResourceUnitTest {
             when(authService.isAuthorizedForService(eq(service), anyString(), eq(permissions)))
                     .thenReturn(true);
             when(serviceRegistry.update(any(ServiceRegistration.class)))
-                    .thenReturn(Uni.createFrom().voidItem());
+                    .thenReturn(Uni.createFrom().item(RegistrationResult.success(service.withIncrementedVersion())));
 
             var response = resource.updatePermissions("svc1", 5L, null).await().atMost(Duration.ofSeconds(5));
 
@@ -242,7 +243,7 @@ class ServicePermissionsResourceUnitTest {
             when(authService.isAuthorizedForService(eq(service), anyString(), eq(permissions)))
                     .thenReturn(true);
             when(serviceRegistry.update(any(ServiceRegistration.class)))
-                    .thenReturn(Uni.createFrom().voidItem());
+                    .thenReturn(Uni.createFrom().item(RegistrationResult.success(service.withIncrementedVersion())));
 
             var policyDto = new ServicePermissionPolicyDto(Map.of());
             var response =
@@ -261,7 +262,7 @@ class ServicePermissionsResourceUnitTest {
             when(authService.isAuthorizedForService(eq(service), anyString(), eq(permissions)))
                     .thenReturn(true);
             when(serviceRegistry.update(any(ServiceRegistration.class)))
-                    .thenReturn(Uni.createFrom().voidItem());
+                    .thenReturn(Uni.createFrom().item(RegistrationResult.success(service.withIncrementedVersion())));
 
             var response = resource.updatePermissions("svc1", 5L, null).await().atMost(Duration.ofSeconds(5));
 

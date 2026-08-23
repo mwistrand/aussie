@@ -1,5 +1,6 @@
 package aussie.core.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -9,7 +10,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import io.smallrye.mutiny.Uni;
@@ -26,6 +29,8 @@ import aussie.core.config.RateLimitingConfig;
 import aussie.core.model.auth.GatewaySecurityConfig;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.service.ConditionalWriteResult;
+import aussie.core.model.service.RegistrationResult;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.ServiceRegistrationRepository;
 import aussie.core.service.auth.*;
@@ -267,6 +272,45 @@ class ServiceRegistryMultiInstanceTest {
     class LocalConsistency {
 
         @Test
+        @DisplayName("Concurrent updates across instances should have exactly one winner")
+        void concurrentUpdatesShouldHaveExactlyOneWinner() {
+            var initial = ServiceRegistration.builder("cas-service")
+                    .baseUrl("http://192.0.2.10:8080")
+                    .build();
+            assertTrue(instanceA.register(initial).await().atMost(TIMEOUT) instanceof RegistrationResult.Success);
+
+            var updateA = ServiceRegistration.builder("cas-service")
+                    .baseUrl("http://192.0.2.10:8081")
+                    .version(2)
+                    .build();
+            var updateB = ServiceRegistration.builder("cas-service")
+                    .baseUrl("http://192.0.2.10:8082")
+                    .version(2)
+                    .build();
+
+            try (var executor = Executors.newFixedThreadPool(2)) {
+                var resultA = CompletableFuture.supplyAsync(
+                        () -> instanceA.register(updateA).await().atMost(TIMEOUT), executor);
+                var resultB = CompletableFuture.supplyAsync(
+                        () -> instanceB.register(updateB).await().atMost(TIMEOUT), executor);
+
+                assertEquals(
+                        1,
+                        List.of(resultA.join(), resultB.join()).stream()
+                                .filter(result -> result instanceof RegistrationResult.Success)
+                                .count());
+            }
+            assertEquals(
+                    2,
+                    sharedRepository
+                            .findById("cas-service")
+                            .await()
+                            .atMost(TIMEOUT)
+                            .orElseThrow()
+                            .version());
+        }
+
+        @Test
         @DisplayName("Local registration should be immediately visible")
         void localRegistrationShouldBeImmediatelyVisible() {
             instanceA.initialize().await().atMost(TIMEOUT);
@@ -487,6 +531,16 @@ class ServiceRegistryMultiInstanceTest {
         }
 
         @Override
+        public Uni<ConditionalWriteResult> createIfAbsent(ServiceRegistration registration) {
+            return delegate.createIfAbsent(registration);
+        }
+
+        @Override
+        public Uni<ConditionalWriteResult> replaceIfVersion(ServiceRegistration registration, long expectedVersion) {
+            return delegate.replaceIfVersion(registration, expectedVersion);
+        }
+
+        @Override
         public Uni<Optional<ServiceRegistration>> findById(String serviceId) {
             return delegate.findById(serviceId);
         }
@@ -494,6 +548,11 @@ class ServiceRegistryMultiInstanceTest {
         @Override
         public Uni<Boolean> delete(String serviceId) {
             return delegate.delete(serviceId);
+        }
+
+        @Override
+        public Uni<ConditionalWriteResult> deleteIfVersion(String serviceId, long expectedVersion) {
+            return delegate.deleteIfVersion(serviceId, expectedVersion);
         }
 
         @Override
@@ -533,6 +592,16 @@ class ServiceRegistryMultiInstanceTest {
         }
 
         @Override
+        public Uni<ConditionalWriteResult> createIfAbsent(ServiceRegistration registration) {
+            return delegate.createIfAbsent(registration);
+        }
+
+        @Override
+        public Uni<ConditionalWriteResult> replaceIfVersion(ServiceRegistration registration, long expectedVersion) {
+            return delegate.replaceIfVersion(registration, expectedVersion);
+        }
+
+        @Override
         public Uni<Optional<ServiceRegistration>> findById(String serviceId) {
             return delegate.findById(serviceId);
         }
@@ -540,6 +609,11 @@ class ServiceRegistryMultiInstanceTest {
         @Override
         public Uni<Boolean> delete(String serviceId) {
             return delegate.delete(serviceId);
+        }
+
+        @Override
+        public Uni<ConditionalWriteResult> deleteIfVersion(String serviceId, long expectedVersion) {
+            return delegate.deleteIfVersion(serviceId, expectedVersion);
         }
 
         @Override

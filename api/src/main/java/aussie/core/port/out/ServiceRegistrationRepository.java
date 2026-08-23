@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
 
+import aussie.core.model.service.ConditionalWriteResult;
 import aussie.core.model.service.ServiceRegistration;
 
 /**
@@ -26,6 +27,12 @@ public interface ServiceRegistrationRepository {
      */
     Uni<Void> save(ServiceRegistration registration);
 
+    /** Atomically create a registration only when its service ID is absent. */
+    Uni<ConditionalWriteResult> createIfAbsent(ServiceRegistration registration);
+
+    /** Atomically replace a registration only when its stored version matches. */
+    Uni<ConditionalWriteResult> replaceIfVersion(ServiceRegistration registration, long expectedVersion);
+
     /**
      * Find a service registration by its unique identifier.
      *
@@ -41,6 +48,9 @@ public interface ServiceRegistrationRepository {
      * @return Uni with true if deleted, false if not found
      */
     Uni<Boolean> delete(String serviceId);
+
+    /** Atomically delete a registration only when its stored version matches. */
+    Uni<ConditionalWriteResult> deleteIfVersion(String serviceId, long expectedVersion);
 
     /**
      * Retrieve all service registrations.

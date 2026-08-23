@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.concurrent.Executor;
 
 import com.datastax.oss.driver.api.core.CqlSession;
+import com.datastax.oss.driver.api.core.cql.AsyncResultSet;
 import com.datastax.oss.driver.api.core.cql.BoundStatement;
 import com.datastax.oss.driver.api.core.cql.PreparedStatement;
 import com.datastax.oss.driver.api.core.cql.Row;
@@ -27,6 +28,7 @@ import aussie.core.model.ratelimit.ServiceRateLimitConfig;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.sampling.ServiceSamplingConfig;
+import aussie.core.model.service.ConditionalWriteResult;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.model.timeout.ServiceTimeoutConfig;
 import aussie.core.port.out.ServiceRegistrationRepository;
@@ -43,8 +45,12 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     private final ObjectMapper objectMapper;
     private final CqlSession session;
     private final PreparedStatement insertStmt;
+    private final PreparedStatement insertIfAbsentStmt;
+    private final PreparedStatement updateIfVersionStmt;
+    private final PreparedStatement initializeLegacyVersionStmt;
     private final PreparedStatement selectByIdStmt;
     private final PreparedStatement deleteStmt;
+    private final PreparedStatement deleteIfVersionStmt;
     private final PreparedStatement selectAllStmt;
     private final PreparedStatement countStmt;
     private final PreparedStatement existsStmt;
@@ -53,8 +59,12 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
         this.objectMapper = objectMapper;
         this.session = session;
         this.insertStmt = prepareInsert();
+        this.insertIfAbsentStmt = prepareInsertIfAbsent();
+        this.updateIfVersionStmt = prepareUpdateIfVersion();
+        this.initializeLegacyVersionStmt = prepareInitializeLegacyVersion();
         this.selectByIdStmt = prepareSelectById();
         this.deleteStmt = prepareDelete();
+        this.deleteIfVersionStmt = prepareDeleteIfVersion();
         this.selectAllStmt = prepareSelectAll();
         this.countStmt = prepareCount();
         this.existsStmt = prepareExists();
@@ -72,12 +82,49 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                         """);
     }
 
+    private PreparedStatement prepareInsertIfAbsent() {
+        return session.prepare(
+                """
+                        INSERT INTO service_registrations
+                        (service_id, display_name, base_url, route_prefix,
+                         default_visibility, default_auth_required, visibility_rules, endpoints, access_config,
+                         cors_config, permission_policy, rate_limit_config, sampling_config, security_headers_config,
+                         timeout_config, version, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, toTimestamp(now()), toTimestamp(now()))
+                        IF NOT EXISTS
+                        """);
+    }
+
+    private PreparedStatement prepareUpdateIfVersion() {
+        return session.prepare(
+                """
+                        UPDATE service_registrations SET
+                        display_name = ?, base_url = ?, route_prefix = ?, default_visibility = ?,
+                        default_auth_required = ?, visibility_rules = ?, endpoints = ?, access_config = ?,
+                        cors_config = ?, permission_policy = ?, rate_limit_config = ?, sampling_config = ?,
+                        security_headers_config = ?, timeout_config = ?, version = ?, updated_at = toTimestamp(now())
+                        WHERE service_id = ? IF version = ?
+                        """);
+    }
+
+    private PreparedStatement prepareInitializeLegacyVersion() {
+        return session.prepare(
+                """
+                        UPDATE service_registrations SET version = 1
+                        WHERE service_id = ? IF version = NULL AND display_name != NULL
+                        """);
+    }
+
     private PreparedStatement prepareSelectById() {
         return session.prepare("SELECT * FROM service_registrations WHERE service_id = ?");
     }
 
     private PreparedStatement prepareDelete() {
         return session.prepare("DELETE FROM service_registrations WHERE service_id = ?");
+    }
+
+    private PreparedStatement prepareDeleteIfVersion() {
+        return session.prepare("DELETE FROM service_registrations WHERE service_id = ? IF version = ?");
     }
 
     private PreparedStatement prepareSelectAll() {
@@ -96,9 +143,28 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     public Uni<Void> save(ServiceRegistration registration) {
         Executor executor = getContextExecutor();
         return Uni.createFrom()
+                .completionStage(() -> session.executeAsync(bindInsert(insertStmt, registration))
+                        .toCompletableFuture())
+                .emitOn(executor)
+                .replaceWithVoid();
+    }
+
+    @Override
+    public Uni<ConditionalWriteResult> createIfAbsent(ServiceRegistration registration) {
+        final var executor = getContextExecutor();
+        return Uni.createFrom()
+                .completionStage(() -> session.executeAsync(bindInsert(insertIfAbsentStmt, registration))
+                        .toCompletableFuture())
+                .emitOn(executor)
+                .map(this::createResult);
+    }
+
+    @Override
+    public Uni<ConditionalWriteResult> replaceIfVersion(ServiceRegistration registration, long expectedVersion) {
+        final var executor = getContextExecutor();
+        final var mutation = Uni.createFrom()
                 .completionStage(() -> {
-                    BoundStatement bound = insertStmt.bind(
-                            registration.serviceId(),
+                    final var bound = updateIfVersionStmt.bind(
                             registration.displayName(),
                             registration.baseUrl().toString(),
                             registration.routePrefix(),
@@ -116,11 +182,14 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                                     .map(this::toJson)
                                     .orElse(null),
                             registration.timeoutConfig().map(this::toJson).orElse(null),
-                            registration.version());
+                            registration.version(),
+                            registration.serviceId(),
+                            expectedVersion);
                     return session.executeAsync(bound).toCompletableFuture();
                 })
                 .emitOn(executor)
-                .replaceWithVoid();
+                .map(this::conditionalResult);
+        return retryAfterLegacyVersionInitialization(registration.serviceId(), expectedVersion, mutation);
     }
 
     @Override
@@ -153,6 +222,17 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                     .emitOn(executor)
                     .map(rs -> true);
         });
+    }
+
+    @Override
+    public Uni<ConditionalWriteResult> deleteIfVersion(String serviceId, long expectedVersion) {
+        final var executor = getContextExecutor();
+        final var mutation = Uni.createFrom()
+                .completionStage(() -> session.executeAsync(deleteIfVersionStmt.bind(serviceId, expectedVersion))
+                        .toCompletableFuture())
+                .emitOn(executor)
+                .map(this::conditionalResult);
+        return retryAfterLegacyVersionInitialization(serviceId, expectedVersion, mutation);
     }
 
     @Override
@@ -191,6 +271,62 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                     Row row = rs.one();
                     return row != null ? row.getLong(0) : 0L;
                 });
+    }
+
+    private BoundStatement bindInsert(PreparedStatement statement, ServiceRegistration registration) {
+        return statement.bind(
+                registration.serviceId(),
+                registration.displayName(),
+                registration.baseUrl().toString(),
+                registration.routePrefix(),
+                registration.defaultVisibility().name(),
+                registration.defaultAuthRequired(),
+                toJson(registration.visibilityRules()),
+                toJson(registration.endpoints()),
+                registration.accessConfig().map(this::toJson).orElse(null),
+                registration.corsConfig().map(this::toJson).orElse(null),
+                registration.permissionPolicy().map(this::toJson).orElse(null),
+                registration.rateLimitConfig().map(this::toJson).orElse(null),
+                registration.samplingConfig().map(this::toJson).orElse(null),
+                registration.securityHeadersConfig().map(this::toJson).orElse(null),
+                registration.timeoutConfig().map(this::toJson).orElse(null),
+                registration.version());
+    }
+
+    private Uni<ConditionalWriteResult> retryAfterLegacyVersionInitialization(
+            String serviceId, long expectedVersion, Uni<ConditionalWriteResult> mutation) {
+        return mutation.flatMap(result -> {
+            if (expectedVersion != 1L
+                    || result.applied()
+                    || result.currentVersion().isPresent()) {
+                return Uni.createFrom().item(result);
+            }
+            final var executor = getContextExecutor();
+            return Uni.createFrom()
+                    .completionStage(() -> session.executeAsync(initializeLegacyVersionStmt.bind(serviceId))
+                            .toCompletableFuture())
+                    .emitOn(executor)
+                    .map(this::conditionalResult)
+                    .flatMap(initialized -> initialized.applied()
+                                    || initialized.currentVersion().orElse(-1L) == expectedVersion
+                            ? mutation
+                            : Uni.createFrom().item(initialized));
+        });
+    }
+
+    private ConditionalWriteResult createResult(AsyncResultSet resultSet) {
+        final var result = conditionalResult(resultSet);
+        return result.applied() || result.currentVersion().isPresent() ? result : ConditionalWriteResult.rejected(1L);
+    }
+
+    private ConditionalWriteResult conditionalResult(AsyncResultSet resultSet) {
+        if (resultSet.wasApplied()) {
+            return ConditionalWriteResult.appliedResult();
+        }
+        final var row = resultSet.one();
+        return row == null || row.isNull("version")
+                ? ConditionalWriteResult.missing()
+                : ConditionalWriteResult.rejected(row.getLong("version"));
     }
 
     private ServiceRegistration fromRow(Row row) {
