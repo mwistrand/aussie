@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -145,16 +144,15 @@ class WebSocketRateLimitServiceTest {
     class CleanupConnection {
 
         @Test
-        @DisplayName("should call removeKeysMatching with correct pattern")
-        void shouldCallRemoveKeysMatchingWithCorrectPattern() {
-            when(rateLimiter.removeKeysMatching(any()))
-                    .thenReturn(Uni.createFrom().voidItem());
+        @DisplayName("should reset the connection bucket")
+        void shouldResetConnectionBucket() {
+            when(rateLimiter.reset(any())).thenReturn(Uni.createFrom().voidItem());
 
             service.cleanupConnection("test-service", "client-123", "conn-456")
                     .await()
                     .atMost(Duration.ofSeconds(5));
 
-            verify(rateLimiter).removeKeysMatching(eq("ws_message:client-123:test-service:conn-456"));
+            verify(rateLimiter).reset(RateLimitKey.wsMessage("client-123", "test-service", "conn-456"));
         }
     }
 

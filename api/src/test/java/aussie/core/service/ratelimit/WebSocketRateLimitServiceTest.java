@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import aussie.core.config.RateLimitingConfig;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
 import aussie.core.model.ratelimit.RateLimitDecision;
+import aussie.core.model.ratelimit.RateLimitKey;
 import aussie.core.port.out.RateLimiter;
 import aussie.core.service.routing.ServiceRegistry;
 
@@ -177,14 +178,13 @@ class WebSocketRateLimitServiceTest {
     class CleanupConnectionTests {
 
         @Test
-        @DisplayName("should remove keys matching connection pattern")
-        void shouldRemoveKeysMatchingPattern() {
-            when(rateLimiter.removeKeysMatching(any()))
-                    .thenReturn(Uni.createFrom().voidItem());
+        @DisplayName("should reset the connection bucket")
+        void shouldResetConnectionBucket() {
+            when(rateLimiter.reset(any())).thenReturn(Uni.createFrom().voidItem());
 
             service.cleanupConnection("svc", "client-1", "conn-1").await().atMost(TIMEOUT);
 
-            verify(rateLimiter).removeKeysMatching("ws_message:client-1:svc:conn-1");
+            verify(rateLimiter).reset(RateLimitKey.wsMessage("client-1", "svc", "conn-1"));
         }
     }
 

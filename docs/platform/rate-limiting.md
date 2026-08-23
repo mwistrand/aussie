@@ -11,20 +11,24 @@ Rate limiting protects the Aussie API Gateway from abuse and ensures fair resour
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `AUSSIE_RATE_LIMITING_ENABLED` | Enable/disable rate limiting | `true` |
-| `AUSSIE_RATE_LIMITING_ALGORITHM` | Algorithm: `BUCKET`, `FIXED_WINDOW`, `SLIDING_WINDOW` | `BUCKET` |
+| `AUSSIE_RATE_LIMITING_ALGORITHM` | Algorithm (`BUCKET`; other values are rejected until implemented) | `BUCKET` |
 | `AUSSIE_RATE_LIMITING_PLATFORM_MAX_REQUESTS_PER_WINDOW` | Maximum rate limit ceiling | `Long.MAX_VALUE` |
 | `AUSSIE_RATE_LIMITING_PLATFORM_MAX_WINDOW_SECONDS` | Maximum window duration in seconds | `Long.MAX_VALUE` |
 | `AUSSIE_RATE_LIMITING_DEFAULT_REQUESTS_PER_WINDOW` | Default for unconfigured services | `100` |
 | `AUSSIE_RATE_LIMITING_WINDOW_SECONDS` | Time window duration | `60` |
 | `AUSSIE_RATE_LIMITING_BURST_CAPACITY` | Burst capacity (bucket algorithm) | `100` |
+| `AUSSIE_RATE_LIMITING_REDIS_ENABLED` | Require Redis for distributed rate limiting | `false` |
+| `AUSSIE_RATE_LIMITING_FALLBACK_BEHAVIOR` | Runtime Redis failure policy: `DENY`, `LOCAL_BUCKET`, or `ALLOW` | `DENY` |
 
 ### Algorithm Selection
 
 | Algorithm | Best For | Behavior |
 |-----------|----------|----------|
 | `BUCKET` | General use | Allows controlled bursts, smooth refill |
-| `FIXED_WINDOW` | Strict limits | Hard cutoff at window boundary |
-| `SLIDING_WINDOW` | Smooth limits | More even distribution |
+| `FIXED_WINDOW` | Not implemented | Gateway startup is rejected |
+| `SLIDING_WINDOW` | Not implemented | Gateway startup is rejected |
+
+Unsupported algorithms fail startup; they never fall back to token-bucket semantics.
 
 ### Setting the Platform Maximum
 
@@ -107,13 +111,30 @@ Suitable for single-instance deployments or development:
 
 For multi-instance deployments:
 - Atomic Lua scripts for correctness
+- Redis `TIME` is authoritative, so gateway clock skew cannot change decisions
 - Automatic key expiration
 - Shared state across all gateway instances
+- Versioned keys (`v1:bucket`) prevent deployments from reinterpreting old state
+- Cursor-based cleanup; production paths do not use Redis `KEYS`
+- Authentication-abuse keys use a base64url identity inside a Redis Cluster
+  hash tag, so failed-attempt, lockout, and escalation state share one slot;
+  legacy TTL-backed keys remain readable and clearable during upgrades
 
 Configure via:
 ```properties
 aussie.rate-limiting.redis.enabled=true
+aussie.rate-limiting.fallback.behavior=DENY
 ```
+
+`DENY` is the default backend-outage policy. `LOCAL_BUCKET` is an explicitly
+weaker, per-instance emergency mode; `ALLOW` is intended only for development.
+When Redis is configured but cannot be constructed, startup fails instead of
+silently switching the cluster to independent in-memory quotas.
+
+Pre-authentication HTTP and WebSocket buckets use only the canonical network
+identity. Service quotas use the resolved route's service ID, including
+`/gateway/...` routes; unverified cookie, bearer, and API-key values never select
+a bucket.
 
 ## Troubleshooting
 

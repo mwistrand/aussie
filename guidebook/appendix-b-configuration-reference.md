@@ -549,13 +549,14 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
 | `aussie.rate-limiting.enabled` | `boolean` | `true` | `AUSSIE_RATE_LIMITING_ENABLED` | Master toggle for rate limiting. |
-| `aussie.rate-limiting.algorithm` | `RateLimitAlgorithm` | `BUCKET` | `AUSSIE_RATE_LIMITING_ALGORITHM` | Algorithm. Options: `BUCKET`, `FIXED_WINDOW`, `SLIDING_WINDOW`. **Platform teams only.** |
+| `aussie.rate-limiting.algorithm` | `RateLimitAlgorithm` | `BUCKET` | `AUSSIE_RATE_LIMITING_ALGORITHM` | Algorithm. Only `BUCKET` is implemented; other enum values fail startup. **Platform teams only.** |
 | `aussie.rate-limiting.platform-max-requests-per-window` | `long` | `9223372036854775807` (`Long.MAX_VALUE`) | `AUSSIE_RATE_LIMITING_PLATFORM_MAX_REQUESTS_PER_WINDOW` | Platform-wide ceiling. Service/endpoint limits are capped to this value. **Platform teams only.** |
 | `aussie.rate-limiting.default-requests-per-window` | `long` | `100` | `AUSSIE_RATE_LIMITING_DEFAULT_REQUESTS_PER_WINDOW` | Default requests per window for services without explicit configuration. |
 | `aussie.rate-limiting.window-seconds` | `long` | `60` | `AUSSIE_RATE_LIMITING_WINDOW_SECONDS` | Default time window in seconds. |
 | `aussie.rate-limiting.burst-capacity` | `long` | `100` | `AUSSIE_RATE_LIMITING_BURST_CAPACITY` | Default burst capacity for token bucket algorithm. |
 | `aussie.rate-limiting.include-headers` | `boolean` | `true` | `AUSSIE_RATE_LIMITING_INCLUDE_HEADERS` | Include `X-RateLimit-*` headers in responses. |
-| `aussie.rate-limiting.redis.enabled` | `boolean` | `false` | `AUSSIE_RATE_LIMITING_REDIS_ENABLED` | Enable Redis for distributed rate limiting. Falls back to in-memory when disabled or unavailable. |
+| `aussie.rate-limiting.redis.enabled` | `boolean` | `false` | `AUSSIE_RATE_LIMITING_REDIS_ENABLED` | Require Redis for distributed rate limiting. A missing provider fails startup. |
+| `aussie.rate-limiting.fallback.behavior` | `RateLimitFallbackBehavior` | `DENY` | `AUSSIE_RATE_LIMITING_FALLBACK_BEHAVIOR` | Runtime Redis failure policy: `DENY`, `LOCAL_BUCKET`, or `ALLOW`. |
 
 ### 14.2 WebSocket Rate Limiting
 
@@ -585,6 +586,7 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 |---------|----------|-------|
 | `%dev` | `aussie.rate-limiting.default-requests-per-window` | `1000` |
 | `%dev` | `aussie.rate-limiting.burst-capacity` | `500` |
+| `%prod` | `aussie.rate-limiting.fallback.behavior` | `DENY` |
 
 **Security considerations:** The `algorithm` and `platform-max-requests-per-window` are platform-team-only settings. Service teams can configure per-service and per-endpoint limits through the admin API, but those limits are always capped at `platform-max-requests-per-window`. Disabling rate limiting (`enabled=false`) removes all traffic protection. The Redis backend is required for distributed rate limiting across multiple Aussie instances; in-memory rate limiting is per-instance only.
 
@@ -755,10 +757,10 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | JWKS Fetch | Falls back to cached keys if available. |
 | Session Operations | Propagates error (critical). |
 | Cache Reads | Returns empty (treated as cache miss). |
-| Rate Limiting | Fails open (allows request through). |
+| Rate Limiting | Uses `DENY` by default; `LOCAL_BUCKET` and `ALLOW` are explicit alternatives. |
 | Token Revocation | Fails closed (denies request for security). |
 
-These fail-open and fail-closed semantics are security decisions. Rate limiting fails open to avoid blocking legitimate traffic during transient Redis outages. Token revocation fails closed because accepting a revoked token is a security breach; a brief service disruption is preferable.
+These failure semantics are security decisions. Rate limiting and token revocation fail closed by default; platform teams may explicitly choose weaker local-bucket or fail-open rate-limit behavior when availability requirements justify it.
 
 ## 19. Storage
 

@@ -109,16 +109,21 @@ public class AuthRateLimitFilter {
 
     private void dispatchLockoutEvent(AuthRateLimitService.RateLimitResult result, String ip) {
         // Get lockout count for the event
-        failedAttemptRepository.getLockoutCount(result.key()).subscribe().with(lockoutCount -> {
-            final var event = new SecurityEvent.AuthenticationLockout(
-                    Instant.now(),
-                    hashClientId(ip),
-                    result.key(),
-                    0, // Will be filled by getLockoutInfo if needed
-                    result.retryAfterSeconds(),
-                    lockoutCount);
-            securityEventDispatcher.dispatch(event);
-        });
+        failedAttemptRepository
+                .getLockoutCount(result.key())
+                .onFailure()
+                .recoverWithItem(0)
+                .subscribe()
+                .with(lockoutCount -> {
+                    final var event = new SecurityEvent.AuthenticationLockout(
+                            Instant.now(),
+                            hashClientId(ip),
+                            result.key(),
+                            0, // Will be filled by getLockoutInfo if needed
+                            result.retryAfterSeconds(),
+                            lockoutCount);
+                    securityEventDispatcher.dispatch(event);
+                });
     }
 
     private Response buildLockoutResponse(AuthRateLimitService.RateLimitResult result) {

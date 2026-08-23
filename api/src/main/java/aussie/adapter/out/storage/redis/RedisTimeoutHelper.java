@@ -22,8 +22,8 @@ import aussie.core.port.out.Metrics;
  *       propagates other failures. Use for critical operations (e.g., session management).</li>
  *   <li>{@link #withTimeoutGraceful} - Fail-soft: returns empty Optional on timeout or any failure.
  *       Use for cache reads where missing data is acceptable.</li>
- *   <li>{@link #withTimeoutFallback} - Fail-open: returns custom fallback on timeout or any failure.
- *       Use for rate limiting where failure should allow the request.</li>
+ *   <li>{@link #withTimeoutFallback} - Returns a caller-defined fallback on timeout or any failure.
+ *       Use when an operation has an explicit fallback value.</li>
  *   <li>{@link #withTimeoutSilent} - Fire-and-forget: logs but ignores timeout or any failure.
  *       Use for cache writes that are not critical.</li>
  * </ul>
@@ -67,11 +67,21 @@ public class RedisTimeoutHelper {
      * @return a Uni that fails with RedisTimeoutException on timeout; other failures propagate
      */
     public <T> Uni<T> withTimeout(Uni<T> operation, String operationName) {
-        return operation.ifNoItem().after(timeout).failWith(() -> {
-            LOG.warnv("Redis operation timeout: {0} in {1} after {2}", operationName, repositoryName, timeout);
-            recordTimeout(operationName);
-            return new RedisTimeoutException(operationName, repositoryName);
-        });
+        return operation
+                .onFailure()
+                .invoke(error -> {
+                    LOG.warnv(
+                            "Redis operation failure: {0} in {1}: {2}",
+                            operationName, repositoryName, error.getMessage());
+                    recordFailure(operationName);
+                })
+                .ifNoItem()
+                .after(timeout)
+                .failWith(() -> {
+                    LOG.warnv("Redis operation timeout: {0} in {1} after {2}", operationName, repositoryName, timeout);
+                    recordTimeout(operationName);
+                    return new RedisTimeoutException(operationName, repositoryName);
+                });
     }
 
     /**
@@ -111,8 +121,8 @@ public class RedisTimeoutHelper {
     /**
      * Apply timeout with graceful degradation to custom fallback.
      *
-     * <p>Use this for operations with specific fallback behavior, like rate limiting
-     * that should fail-open on timeout or any operational failure.
+     * <p>Use this for operations with an explicit fallback value on timeout or
+     * any operational failure.
      *
      * @param operation the Redis operation
      * @param operationName name for logging and metrics

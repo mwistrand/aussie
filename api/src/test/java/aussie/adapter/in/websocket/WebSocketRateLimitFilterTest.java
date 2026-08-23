@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -40,6 +41,8 @@ import aussie.core.config.RateLimitingConfig;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
 import aussie.core.model.ratelimit.RateLimitDecision;
 import aussie.core.model.ratelimit.RateLimitKey;
+import aussie.core.model.routing.RouteMatch;
+import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.RateLimiter;
 import aussie.core.service.ratelimit.RateLimitResolver;
 import aussie.core.service.routing.ServiceRegistry;
@@ -334,6 +337,31 @@ class WebSocketRateLimitFilterTest {
         }
 
         @Test
+        @DisplayName("Should use the resolved service ID for gateway routes")
+        void shouldUseResolvedServiceIdForGatewayRoutes() {
+            mockWebSocketUpgrade();
+            mockRateLimitingEnabled();
+            when(request.path()).thenReturn("/gateway/ws/echo");
+            mockDefaultClientId();
+            final var route = mock(RouteMatch.class);
+            final var registration = mock(ServiceRegistration.class);
+            when(registration.serviceId()).thenReturn("chat-service");
+            when(route.service()).thenReturn(registration);
+            when(serviceRegistry.findRoute("/gateway/ws/echo", "GET")).thenReturn(Optional.of(route));
+            when(rateLimitResolver.resolveWebSocketConnectionLimit(Optional.of(registration)))
+                    .thenReturn(EffectiveRateLimit.of(10, 60));
+            when(rateLimiter.checkAndConsume(any(), any()))
+                    .thenReturn(Uni.createFrom().item(RateLimitDecision.allow()));
+
+            filter.checkWebSocketRateLimit(ctx);
+
+            final var keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
+            verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
+            assertEquals("chat-service", keyCaptor.getValue().serviceId());
+            verify(serviceRegistry, never()).getServiceForRateLimiting(anyString());
+        }
+
+        @Test
         @DisplayName("Should extract service ID from pass-through path")
         void shouldExtractPassThroughServiceId() {
             mockWebSocketUpgrade();
@@ -509,8 +537,8 @@ class WebSocketRateLimitFilterTest {
     class ErrorHandlingTests {
 
         @Test
-        @DisplayName("Should allow request when rate limit check fails")
-        void shouldAllowOnError() {
+        @DisplayName("Should fail closed when rate limit check fails")
+        void shouldFailClosedOnError() {
             mockWebSocketUpgrade();
             mockRateLimitingEnabled();
             when(request.path()).thenReturn("/my-service/ws");
@@ -521,7 +549,12 @@ class WebSocketRateLimitFilterTest {
 
             filter.checkWebSocketRateLimit(ctx);
 
-            verify(ctx).next();
+            verify(ctx, never()).next();
+            verify(errorWriter)
+                    .write(
+                            eq(ctx),
+                            eq(ProblemDetail.serviceUnavailable("Rate limit service unavailable")),
+                            eq("my-service"));
         }
     }
 

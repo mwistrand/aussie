@@ -219,7 +219,7 @@ public interface ResiliencyConfig {
          * <ul>
          *   <li>Session operations: propagate error (critical)</li>
          *   <li>Cache reads: return empty (treat as cache miss)</li>
-         *   <li>Rate limiting: allow request (fail-open)</li>
+         *   <li>Rate limiting: use the configured fallback behavior (fail-closed by default)</li>
          *   <li>Token revocation: deny request (fail-closed for security)</li>
          * </ul>
          *

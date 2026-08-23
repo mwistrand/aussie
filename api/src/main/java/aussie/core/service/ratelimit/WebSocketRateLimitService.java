@@ -81,8 +81,7 @@ public class WebSocketRateLimitService {
      * @return completion signal
      */
     public Uni<Void> cleanupConnection(String serviceId, String clientId, String connectionId) {
-        final var pattern = "ws_message:" + clientId + ":" + serviceId + ":" + connectionId;
-        return rateLimiter.removeKeysMatching(pattern);
+        return rateLimiter.reset(RateLimitKey.wsMessage(clientId, serviceId, connectionId));
     }
 
     /**

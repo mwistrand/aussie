@@ -3,6 +3,7 @@ package aussie.core.model;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -37,25 +38,15 @@ class AlgorithmRegistryTest {
         }
 
         @Test
-        @DisplayName("should fall back to default for unavailable algorithms")
-        void shouldFallBackToDefaultForUnavailableAlgorithms() {
-            // FIXED_WINDOW is not yet implemented
-            var handler = registry.getHandler(RateLimitAlgorithm.FIXED_WINDOW);
-
-            assertNotNull(handler);
-            // Should fall back to BUCKET
-            assertEquals(RateLimitAlgorithm.BUCKET, handler.algorithm());
+        @DisplayName("should reject unavailable algorithms")
+        void shouldRejectUnavailableAlgorithms() {
+            assertThrows(IllegalArgumentException.class, () -> registry.getHandler(RateLimitAlgorithm.FIXED_WINDOW));
         }
 
         @Test
-        @DisplayName("should fall back to default for SLIDING_WINDOW")
-        void shouldFallBackToDefaultForSlidingWindow() {
-            // SLIDING_WINDOW is not yet implemented
-            var handler = registry.getHandler(RateLimitAlgorithm.SLIDING_WINDOW);
-
-            assertNotNull(handler);
-            // Should fall back to BUCKET
-            assertEquals(RateLimitAlgorithm.BUCKET, handler.algorithm());
+        @DisplayName("should reject unavailable sliding window")
+        void shouldRejectUnavailableSlidingWindow() {
+            assertThrows(IllegalArgumentException.class, () -> registry.getHandler(RateLimitAlgorithm.SLIDING_WINDOW));
         }
     }
 
@@ -119,17 +110,9 @@ class AlgorithmRegistryTest {
         }
 
         @Test
-        @DisplayName("should handle null algorithm gracefully")
-        void shouldHandleNullAlgorithmGracefully() {
-            // EnumMap throws NullPointerException for null keys
-            // This tests the behavior - either handle it or let it throw
-            try {
-                var handler = registry.getHandler(null);
-                // If it doesn't throw, should return default
-                assertEquals(RateLimitAlgorithm.BUCKET, handler.algorithm());
-            } catch (NullPointerException e) {
-                // Expected behavior for EnumMap
-            }
+        @DisplayName("should reject null algorithm")
+        void shouldRejectNullAlgorithm() {
+            assertThrows(IllegalArgumentException.class, () -> registry.getHandler(null));
         }
     }
 }

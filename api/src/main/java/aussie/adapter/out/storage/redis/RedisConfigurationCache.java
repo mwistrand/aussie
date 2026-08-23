@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
+import io.quarkus.redis.datasource.keys.KeyScanArgs;
 import io.quarkus.redis.datasource.keys.ReactiveKeyCommands;
 import io.quarkus.redis.datasource.value.ReactiveValueCommands;
 import io.smallrye.mutiny.Uni;
@@ -71,15 +72,14 @@ public class RedisConfigurationCache implements ConfigurationCache {
 
     @Override
     public Uni<Void> invalidateAll() {
-        // Use SCAN to find and delete all keys with our prefix
-        // For safety, we use KEYS pattern match - in production with large datasets,
-        // consider using SCAN in batches
-        var operation = keyCommands.keys(KEY_PREFIX + "*").flatMap(keys -> {
-            if (keys.isEmpty()) {
-                return Uni.createFrom().voidItem();
-            }
-            return keyCommands.del(keys.toArray(new String[0])).replaceWithVoid();
-        });
+        var operation = keyCommands
+                .scan(new KeyScanArgs().match(KEY_PREFIX + "*").count(100))
+                .toMulti()
+                .onItem()
+                .transformToUniAndConcatenate(key -> keyCommands.del(key).replaceWithVoid())
+                .collect()
+                .last()
+                .replaceWithVoid();
         return timeoutHelper.withTimeoutSilent(operation, "invalidateAll");
     }
 

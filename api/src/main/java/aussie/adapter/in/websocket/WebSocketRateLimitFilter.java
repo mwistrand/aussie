@@ -11,6 +11,7 @@ import jakarta.inject.Inject;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
 import io.quarkus.vertx.web.RouteFilter;
+import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
@@ -100,15 +101,17 @@ public class WebSocketRateLimitFilter {
             return;
         }
 
-        final var serviceId = extractServiceId(path);
+        final var route = serviceRegistry.findRoute(path, "GET");
+        final var serviceId = route.map(match -> match.service().serviceId()).orElseGet(() -> extractServiceId(path));
         final var clientId = extractClientId(ctx);
 
         LOG.debugv("Checking WebSocket connection rate limit for service={0}, client={1}", serviceId, clientId);
 
         // Look up service and check rate limit
-        serviceRegistry
-                .getServiceForRateLimiting(serviceId)
-                .flatMap(serviceOpt -> {
+        final Uni<Optional<ServiceRegistration>> service = route.map(
+                        match -> Uni.createFrom().item(Optional.of(match.service())))
+                .orElseGet(() -> serviceRegistry.getServiceForRateLimiting(serviceId));
+        service.flatMap(serviceOpt -> {
                     final var limit = rateLimitResolver.resolveWebSocketConnectionLimit(serviceOpt);
                     final var key = RateLimitKey.wsConnection(clientId, serviceId);
                     return rateLimiter
@@ -117,8 +120,9 @@ public class WebSocketRateLimitFilter {
                 })
                 .subscribe()
                 .with(result -> handleDecision(ctx, result.decision(), serviceId, clientId), error -> {
-                    LOG.warnv(error, "WebSocket rate limit check failed, allowing request");
-                    ctx.next();
+                    LOG.warnv(error, "WebSocket rate limit check failed closed");
+                    errorWriter.write(
+                            ctx, ProblemDetail.serviceUnavailable("Rate limit service unavailable"), serviceId);
                 });
     }
 

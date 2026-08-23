@@ -13,6 +13,7 @@ import org.jboss.logging.Logger;
 
 import aussie.adapter.out.ratelimit.memory.InMemoryRateLimiter;
 import aussie.adapter.out.ratelimit.memory.InMemoryRateLimiterProvider;
+import aussie.adapter.out.ratelimit.redis.RedisRateLimiter;
 import aussie.adapter.out.ratelimit.redis.RedisRateLimiterProvider;
 import aussie.core.config.RateLimitingConfig;
 import aussie.core.model.ratelimit.AlgorithmRegistry;
@@ -24,10 +25,10 @@ import aussie.spi.RateLimiterProvider;
  * CDI producer for the rate limiter.
  *
  * <p>Selects the appropriate rate limiter implementation based on configuration
- * and availability:
+ * and configuration:
  * <ul>
- *   <li>Redis (priority 10) - Used when Redis is configured and available</li>
- *   <li>In-memory (priority 0) - Fallback, always available</li>
+ *   <li>Redis (priority 10) - Used when Redis is configured</li>
+ *   <li>In-memory (priority 0) - Used otherwise and for an explicit local fallback</li>
  * </ul>
  *
  * <p>When rate limiting is disabled, returns a no-op implementation.
@@ -67,6 +68,10 @@ public class RateLimiterProviderLoader {
             return NoOpRateLimiter.getInstance();
         }
 
+        if (!algorithmRegistry.isAvailable(config.algorithm())) {
+            throw new IllegalStateException("Unsupported rate-limit algorithm: " + config.algorithm());
+        }
+
         final var rateLimiter = createRateLimiter();
         LOG.infov(
                 "Rate limiting enabled with algorithm={0}, defaultLimit={1}/{2}s",
@@ -81,28 +86,28 @@ public class RateLimiterProviderLoader {
     void disposeRateLimiter(@Disposes RateLimiter rateLimiter) {
         if (rateLimiter instanceof InMemoryRateLimiter inMemory) {
             inMemory.shutdown();
+        } else if (rateLimiter instanceof RedisRateLimiter redis) {
+            redis.shutdown();
         }
     }
 
     private RateLimiter createRateLimiter() {
-        // Try Redis first if configured. The in-memory limiter is always built so it can
-        // serve as the local-bucket fallback bulkhead when Redis is unreachable.
-        final var inMemoryProvider = createInMemoryProvider();
-        final var inMemoryLimiter = inMemoryProvider.createRateLimiter();
-
-        final var redisProvider = createRedisProvider(inMemoryLimiter);
-        if (redisProvider.isPresent() && redisProvider.get().isAvailable()) {
+        if (config.redis().enabled()) {
+            final var redisProvider = createRedisProvider()
+                    .filter(RateLimiterProvider::isAvailable)
+                    .orElseThrow(() -> new IllegalStateException("Redis rate limiting is configured but unavailable"));
             LOG.infov(
                     "Using rate limiter provider: {0} (fallback={1})",
-                    redisProvider.get().name(), config.fallback().behavior());
-            return redisProvider.get().createRateLimiter();
+                    redisProvider.name(), config.fallback().behavior());
+            return redisProvider.createRateLimiter();
         }
 
+        final var inMemoryProvider = createInMemoryProvider();
         LOG.infov("Using rate limiter provider: {0}", inMemoryProvider.name());
-        return inMemoryLimiter;
+        return inMemoryProvider.createRateLimiter();
     }
 
-    private Optional<RateLimiterProvider> createRedisProvider(RateLimiter fallback) {
+    private Optional<RateLimiterProvider> createRedisProvider() {
         if (!config.redis().enabled()) {
             LOG.debug("Redis rate limiting not enabled in configuration");
             return Optional.empty();
@@ -116,11 +121,20 @@ public class RateLimiterProviderLoader {
         try {
             final var ds = redisDataSource.get();
             final var metrics = metricsInstance.isResolvable() ? metricsInstance.get() : null;
+            final var fallback =
+                    config.fallback().behavior() == RateLimitingConfig.RateLimitFallbackBehavior.LOCAL_BUCKET
+                            ? createInMemoryProvider().createRateLimiter()
+                            : null;
             return Optional.of(RedisRateLimiterProvider.configured(
-                    ds, config.enabled(), true, fallback, config.fallback().behavior(), metrics));
+                    ds,
+                    config.enabled(),
+                    true,
+                    config.algorithm(),
+                    fallback,
+                    config.fallback().behavior(),
+                    metrics));
         } catch (Exception e) {
-            LOG.warnv(e, "Failed to initialize Redis rate limiter, falling back to in-memory");
-            return Optional.empty();
+            throw new IllegalStateException("Failed to initialize Redis rate limiter", e);
         }
     }
 

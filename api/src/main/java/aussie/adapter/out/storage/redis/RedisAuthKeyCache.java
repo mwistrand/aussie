@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
+import io.quarkus.redis.datasource.keys.KeyScanArgs;
 import io.quarkus.redis.datasource.keys.ReactiveKeyCommands;
 import io.quarkus.redis.datasource.value.ReactiveValueCommands;
 import io.smallrye.mutiny.Uni;
@@ -69,12 +70,14 @@ public class RedisAuthKeyCache implements AuthKeyCache {
 
     @Override
     public Uni<Void> invalidateAll() {
-        var operation = keyCommands.keys(KEY_PREFIX + "*").flatMap(keys -> {
-            if (keys.isEmpty()) {
-                return Uni.createFrom().voidItem();
-            }
-            return keyCommands.del(keys.toArray(new String[0])).replaceWithVoid();
-        });
+        var operation = keyCommands
+                .scan(new KeyScanArgs().match(KEY_PREFIX + "*").count(100))
+                .toMulti()
+                .onItem()
+                .transformToUniAndConcatenate(key -> keyCommands.del(key).replaceWithVoid())
+                .collect()
+                .last()
+                .replaceWithVoid();
         return timeoutHelper.withTimeoutSilent(operation, "invalidateAll");
     }
 

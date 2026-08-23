@@ -2,6 +2,7 @@ package aussie.adapter.out.ratelimit.redis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import aussie.core.config.RateLimitingConfig.RateLimitFallbackBehavior;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
+import aussie.core.model.ratelimit.RateLimitAlgorithm;
 import aussie.core.model.ratelimit.RateLimitDecision;
 import aussie.core.model.ratelimit.RateLimitKey;
 import aussie.core.port.out.Metrics;
@@ -34,6 +36,20 @@ class RedisRateLimiterFallbackTest {
     private ReactiveRedisDataSource redisDataSource;
     private Metrics metrics;
     private RateLimiter localFallback;
+
+    @Test
+    @DisplayName("rejects algorithms without Redis semantics")
+    void rejectsUnsupportedAlgorithms() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new RedisRateLimiter(
+                        mock(ReactiveRedisDataSource.class),
+                        true,
+                        RateLimitAlgorithm.FIXED_WINDOW,
+                        null,
+                        RateLimitFallbackBehavior.DENY,
+                        null));
+    }
 
     private RedisRateLimiter newLimiter(RateLimitFallbackBehavior behavior, RateLimiter fallback) {
         // Default answer: all execute(...) calls fail with a synthetic Redis error so the
@@ -91,6 +107,17 @@ class RedisRateLimiterFallbackTest {
     @Nested
     @DisplayName("DENY")
     class Deny {
+
+        @Test
+        @DisplayName("is also the safe default when no behavior is supplied")
+        void nullBehaviorDeniesRequest() {
+            final var limiter = newLimiter(null, null);
+
+            final var decision = limiter.checkAndConsume(KEY, LIMIT).await().atMost(Duration.ofSeconds(1));
+
+            assertFalse(decision.allowed());
+            verify(metrics).recordRateLimitFallback("service-a", "deny");
+        }
 
         @Test
         @DisplayName("rejects the request and emits a 429-style decision")

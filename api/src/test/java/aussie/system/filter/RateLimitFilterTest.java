@@ -820,6 +820,22 @@ class RateLimitFilterTest {
         }
 
         @Test
+        @DisplayName("should use the resolved service ID for gateway routes")
+        void shouldUseResolvedServiceIdForGatewayRoutes() {
+            setupRequest("/gateway/orders", "10.0.0.1");
+            when(serviceRegistry.findRoute("/gateway/orders", "GET"))
+                    .thenReturn(Optional.of(createRouteMatch("orders-service", "/orders")));
+            when(rateLimiter.checkAndConsume(any(), any()))
+                    .thenReturn(Uni.createFrom().item(RateLimitDecision.allow()));
+
+            filter.filterRequest(requestContext, request).await().atMost(TIMEOUT);
+
+            final var keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
+            verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
+            assertEquals("orders-service", keyCaptor.getValue().serviceId());
+        }
+
+        @Test
         @DisplayName("should use 'unknown' when path is empty")
         void shouldUseUnknownWhenPathIsEmpty() {
             setupRequest("/", "10.0.0.1");

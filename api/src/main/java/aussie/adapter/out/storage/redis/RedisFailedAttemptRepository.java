@@ -1,8 +1,9 @@
 package aussie.adapter.out.storage.redis;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
+import java.util.Base64;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -29,10 +30,12 @@ import aussie.spi.FailedAttemptRepository;
  *
  * <p>Key format:
  * <ul>
- *   <li>Failed attempts: {@code aussie:auth:failed:{key}}</li>
- *   <li>Lockout: {@code aussie:auth:lockout:{key}} (hash with lockedAt, expiresAt, reason, failedAttempts)</li>
- *   <li>Lockout count: {@code aussie:auth:lockout-count:{key}}</li>
+ *   <li>Failed attempts: {@code aussie:auth:failed:{base64url(key)}}</li>
+ *   <li>Lockout: {@code aussie:auth:lockout:{base64url(key)}} (hash with lockedAt, expiresAt, reason, failedAttempts)</li>
+ *   <li>Lockout count: {@code aussie:auth:lockout-count:{base64url(key)}}</li>
  * </ul>
+ * The braces are Redis Cluster hash tags, keeping every atomic transition for
+ * one identity in the same slot.
  *
  * <p>Platform teams can provide custom implementations via CDI:
  * <pre>{@code
@@ -59,7 +62,38 @@ public class RedisFailedAttemptRepository implements FailedAttemptRepository {
     private static final String FIELD_EXPIRES_AT = "expiresAt";
     private static final String FIELD_REASON = "reason";
     private static final String FIELD_FAILED_ATTEMPTS = "failedAttempts";
+    static final String RECORD_ATTEMPT_SCRIPT =
+            """
+            local initialized = redis.call('EXISTS', KEYS[1]) == 0
+            if initialized then redis.call('SET', KEYS[1], ARGV[2]) end
+            local count = redis.call('INCR', KEYS[1])
+            if initialized then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+            return count
+            """;
+    static final String RECORD_LOCKOUT_SCRIPT =
+            """
+            if redis.call('EXISTS', KEYS[1]) == 1 then
+                return tonumber(redis.call('GET', KEYS[2])) or 0
+            end
+            local redis_time = redis.call('TIME')
+            local now_ms = (redis_time[1] * 1000) + math.floor(redis_time[2] / 1000)
+            local expires_at = now_ms + (tonumber(ARGV[1]) * 1000)
+            local failed = tonumber(redis.call('GET', KEYS[3])) or 0
+            redis.call('HSET', KEYS[1],
+                'lockedAt', now_ms,
+                'expiresAt', expires_at,
+                'reason', ARGV[2],
+                'failedAttempts', failed)
+            redis.call('EXPIRE', KEYS[1], ARGV[1])
+            local count_initialized = redis.call('EXISTS', KEYS[2]) == 0
+            if count_initialized then redis.call('SET', KEYS[2], ARGV[4]) end
+            local lockouts = redis.call('INCR', KEYS[2])
+            if count_initialized then redis.call('EXPIRE', KEYS[2], ARGV[3]) end
+            redis.call('DEL', KEYS[3])
+            return lockouts
+            """;
 
+    private final ReactiveRedisDataSource redisDataSource;
     private final ReactiveValueCommands<String, String> valueCommands;
     private final ReactiveHashCommands<String, String, String> hashCommands;
     private final ReactiveKeyCommands<String> keyCommands;
@@ -71,6 +105,7 @@ public class RedisFailedAttemptRepository implements FailedAttemptRepository {
         this.valueCommands = redisDataSource.value(String.class, String.class);
         this.hashCommands = redisDataSource.hash(String.class, String.class, String.class);
         this.keyCommands = redisDataSource.key(String.class);
+        this.redisDataSource = redisDataSource;
         this.timeoutHelper =
                 new RedisTimeoutHelper(resiliencyConfig.redis().operationTimeout(), metrics, "FailedAttemptRepository");
         LOG.info("Initialized Redis failed attempt repository");
@@ -78,101 +113,102 @@ public class RedisFailedAttemptRepository implements FailedAttemptRepository {
 
     @Override
     public Uni<Long> recordFailedAttempt(String key, Duration windowDuration) {
-        final var redisKey = FAILED_PREFIX + key;
+        final var redisKey = redisKey(FAILED_PREFIX, key);
         final var ttlSeconds = windowDuration.toSeconds();
+        validateTtl(ttlSeconds);
 
-        // INCR + EXPIRE in a pipeline for atomicity
-        var operation = valueCommands
-                .incr(redisKey)
-                .call(count -> keyCommands.expire(redisKey, ttlSeconds))
+        var operation = getValueWithLegacyFallback(FAILED_PREFIX, key)
+                .map(value -> value != null ? Long.parseLong(value) : 0L)
+                .flatMap(initialCount -> redisDataSource.execute(
+                        "EVAL",
+                        RECORD_ATTEMPT_SCRIPT,
+                        "1",
+                        redisKey,
+                        String.valueOf(ttlSeconds),
+                        String.valueOf(initialCount)))
+                .map(response -> response.toLong())
                 .invoke(count -> LOG.debugf("Recorded failed attempt for %s: count=%d", key, count));
-        // Fail-open: return 0 on timeout (allow request)
-        return timeoutHelper.withTimeoutFallback(operation, "recordFailedAttempt", () -> 0L);
+        return timeoutHelper.withTimeout(operation, "recordFailedAttempt");
     }
 
     @Override
     public Uni<Long> getFailedAttemptCount(String key) {
-        final var redisKey = FAILED_PREFIX + key;
-        var operation = valueCommands.get(redisKey).map(value -> value != null ? Long.parseLong(value) : 0L);
-        // Fail-open: return 0 on timeout (no failed attempts = allow)
-        return timeoutHelper.withTimeoutFallback(operation, "getFailedAttemptCount", () -> 0L);
+        var operation =
+                getValueWithLegacyFallback(FAILED_PREFIX, key).map(value -> value != null ? Long.parseLong(value) : 0L);
+        return timeoutHelper.withTimeout(operation, "getFailedAttemptCount");
     }
 
     @Override
     public Uni<Void> clearFailedAttempts(String key) {
-        final var redisKey = FAILED_PREFIX + key;
-        var operation = keyCommands
-                .del(redisKey)
-                .replaceWithVoid()
+        var operation = deleteCurrentAndLegacy(FAILED_PREFIX, key)
                 .invoke(() -> LOG.debugf("Cleared failed attempts for %s", key));
-        return timeoutHelper.withTimeoutSilent(operation, "clearFailedAttempts");
+        return timeoutHelper.withTimeout(operation, "clearFailedAttempts");
     }
 
     @Override
     public Uni<Void> recordLockout(String key, Duration lockoutDuration, String reason) {
-        final var lockoutKey = LOCKOUT_PREFIX + key;
-        final var countKey = LOCKOUT_COUNT_PREFIX + key;
+        final var lockoutKey = redisKey(LOCKOUT_PREFIX, key);
+        final var countKey = redisKey(LOCKOUT_COUNT_PREFIX, key);
         final var ttlSeconds = lockoutDuration.toSeconds();
-        final var now = Instant.now();
-        final var expiresAt = now.plus(lockoutDuration);
-
-        // Get failed attempt count first
-        var operation = getFailedAttemptCount(key).flatMap(failedCount -> {
-            // Store lockout info as a hash
-            final var fields = Map.of(
-                    FIELD_LOCKED_AT, String.valueOf(now.toEpochMilli()),
-                    FIELD_EXPIRES_AT, String.valueOf(expiresAt.toEpochMilli()),
-                    FIELD_REASON, reason != null ? reason : "max_failed_attempts",
-                    FIELD_FAILED_ATTEMPTS, String.valueOf(failedCount));
-
-            // Use setex for atomic set+expire on lockout count
-            final var countTtl = Duration.ofDays(30).toSeconds();
-            return hashCommands
-                    .hset(lockoutKey, fields)
-                    .call(() -> keyCommands.expire(lockoutKey, ttlSeconds))
-                    .call(() -> getLockoutCount(key))
-                    .call(currentCount -> valueCommands.setex(countKey, countTtl, String.valueOf(currentCount + 1)))
-                    .replaceWithVoid()
-                    .invoke(() -> LOG.infof("Recorded lockout for %s: reason=%s, expires=%s", key, reason, expiresAt));
-        });
-        return timeoutHelper.withTimeoutSilent(operation, "recordLockout");
+        final var storedReason = reason != null ? reason : "max_failed_attempts";
+        validateTtl(ttlSeconds);
+        if (storedReason.length() > 256) {
+            throw new IllegalArgumentException("Lockout reason exceeds 256 characters");
+        }
+        final var operation = getValueWithLegacyFallback(LOCKOUT_COUNT_PREFIX, key)
+                .map(value -> value != null ? Integer.parseInt(value) : 0)
+                .flatMap(initialCount -> redisDataSource.execute(
+                        "EVAL",
+                        RECORD_LOCKOUT_SCRIPT,
+                        "3",
+                        lockoutKey,
+                        countKey,
+                        redisKey(FAILED_PREFIX, key),
+                        String.valueOf(ttlSeconds),
+                        storedReason,
+                        String.valueOf(Duration.ofDays(30).toSeconds()),
+                        String.valueOf(initialCount)))
+                .call(() -> keyCommands.del(legacyKey(FAILED_PREFIX, key)))
+                .replaceWithVoid()
+                .invoke(() -> LOG.infof("Recorded lockout for %s: reason=%s", key, reason));
+        return timeoutHelper.withTimeout(operation, "recordLockout");
     }
 
     @Override
     public Uni<Boolean> isLockedOut(String key) {
-        final var lockoutKey = LOCKOUT_PREFIX + key;
-        var operation = keyCommands.exists(lockoutKey);
-        // Fail-open: return false on timeout (not locked out = allow)
-        return timeoutHelper.withTimeoutFallback(operation, "isLockedOut", () -> false);
+        final var lockoutKey = redisKey(LOCKOUT_PREFIX, key);
+        var operation = keyCommands
+                .exists(lockoutKey)
+                .flatMap(exists ->
+                        exists ? Uni.createFrom().item(true) : keyCommands.exists(legacyKey(LOCKOUT_PREFIX, key)));
+        return timeoutHelper.withTimeout(operation, "isLockedOut");
     }
 
     @Override
     public Uni<Instant> getLockoutExpiry(String key) {
-        final var lockoutKey = LOCKOUT_PREFIX + key;
-        var operation = hashCommands.hget(lockoutKey, FIELD_EXPIRES_AT).map(value -> {
-            if (value == null) {
-                return null;
+        final var currentKey = redisKey(LOCKOUT_PREFIX, key);
+        var operation = keyCommands.ttl(currentKey).flatMap(ttl -> {
+            if (ttl >= 0) {
+                return Uni.createFrom().item(Instant.now().plusSeconds(ttl));
             }
-            return Instant.ofEpochMilli(Long.parseLong(value));
+            return getHashValueWithLegacyFallback(LOCKOUT_PREFIX, key, FIELD_EXPIRES_AT)
+                    .map(value -> value != null ? Instant.ofEpochMilli(Long.parseLong(value)) : null);
         });
-        // Fail-open: return null on timeout (no expiry = allow)
-        return timeoutHelper.withTimeoutFallback(operation, "getLockoutExpiry", () -> null);
+        return timeoutHelper.withTimeout(operation, "getLockoutExpiry");
     }
 
     @Override
     public Uni<Void> clearLockout(String key) {
-        final var lockoutKey = LOCKOUT_PREFIX + key;
         var operation =
-                keyCommands.del(lockoutKey).replaceWithVoid().invoke(() -> LOG.infof("Cleared lockout for %s", key));
-        return timeoutHelper.withTimeoutSilent(operation, "clearLockout");
+                deleteCurrentAndLegacy(LOCKOUT_PREFIX, key).invoke(() -> LOG.infof("Cleared lockout for %s", key));
+        return timeoutHelper.withTimeout(operation, "clearLockout");
     }
 
     @Override
     public Uni<Integer> getLockoutCount(String key) {
-        final var countKey = LOCKOUT_COUNT_PREFIX + key;
-        var operation = valueCommands.get(countKey).map(value -> value != null ? Integer.parseInt(value) : 0);
-        // Fail-open: return 0 on timeout
-        return timeoutHelper.withTimeoutFallback(operation, "getLockoutCount", () -> 0);
+        var operation = getValueWithLegacyFallback(LOCKOUT_COUNT_PREFIX, key)
+                .map(value -> value != null ? Integer.parseInt(value) : 0);
+        return timeoutHelper.withTimeout(operation, "getLockoutCount");
     }
 
     @Override
@@ -188,8 +224,20 @@ public class RedisFailedAttemptRepository implements FailedAttemptRepository {
     }
 
     private Uni<LockoutInfo> loadLockoutInfo(String redisKey) {
-        final var key = redisKey.substring(LOCKOUT_PREFIX.length());
-        return hashCommands.hgetall(redisKey).flatMap(fields -> {
+        final var storedKey = redisKey.substring(LOCKOUT_PREFIX.length());
+        final var legacy = !storedKey.startsWith("{") || !storedKey.endsWith("}");
+        final String key;
+        try {
+            key = legacy
+                    ? storedKey
+                    : new String(
+                            Base64.getUrlDecoder().decode(storedKey.substring(1, storedKey.length() - 1)),
+                            StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException error) {
+            LOG.warnv(error, "Ignoring malformed authentication lockout key: {0}", redisKey);
+            return Uni.createFrom().nullItem();
+        }
+        final Uni<LockoutInfo> operation = hashCommands.hgetall(redisKey).flatMap(fields -> {
             if (fields == null || fields.isEmpty()) {
                 return Uni.createFrom().nullItem();
             }
@@ -207,8 +255,8 @@ public class RedisFailedAttemptRepository implements FailedAttemptRepository {
             final var expiresAt = Instant.ofEpochMilli(Long.parseLong(expiresAtStr));
             final var failedAttempts = failedAttemptsStr != null ? Integer.parseInt(failedAttemptsStr) : 0;
 
-            // Check if still valid
-            if (Instant.now().isAfter(expiresAt)) {
+            // Legacy timestamps came from gateway clocks; current keys expire against Redis time.
+            if (legacy && Instant.now().isAfter(expiresAt)) {
                 return Uni.createFrom().nullItem();
             }
 
@@ -216,5 +264,52 @@ public class RedisFailedAttemptRepository implements FailedAttemptRepository {
                     .map(lockoutCount ->
                             new LockoutInfo(key, lockedAt, expiresAt, reason, failedAttempts, lockoutCount));
         });
+        if (!legacy) {
+            return operation;
+        }
+        return keyCommands
+                .exists(redisKey(LOCKOUT_PREFIX, key))
+                .flatMap(currentExists -> currentExists ? Uni.createFrom().nullItem() : operation);
+    }
+
+    private String redisKey(String prefix, String key) {
+        if (key == null || key.isBlank() || key.length() > 256) {
+            throw new IllegalArgumentException("Invalid authentication rate-limit key");
+        }
+        final var encoded =
+                Base64.getUrlEncoder().withoutPadding().encodeToString(key.getBytes(StandardCharsets.UTF_8));
+        return prefix + "{" + encoded + "}";
+    }
+
+    private String legacyKey(String prefix, String key) {
+        return prefix + key;
+    }
+
+    private Uni<String> getValueWithLegacyFallback(String prefix, String key) {
+        return valueCommands
+                .get(redisKey(prefix, key))
+                .flatMap(value ->
+                        value != null ? Uni.createFrom().item(value) : valueCommands.get(legacyKey(prefix, key)));
+    }
+
+    private Uni<String> getHashValueWithLegacyFallback(String prefix, String key, String field) {
+        return hashCommands
+                .hget(redisKey(prefix, key), field)
+                .flatMap(value -> value != null
+                        ? Uni.createFrom().item(value)
+                        : hashCommands.hget(legacyKey(prefix, key), field));
+    }
+
+    private Uni<Void> deleteCurrentAndLegacy(String prefix, String key) {
+        return keyCommands
+                .del(redisKey(prefix, key))
+                .call(() -> keyCommands.del(legacyKey(prefix, key)))
+                .replaceWithVoid();
+    }
+
+    private void validateTtl(long ttlSeconds) {
+        if (ttlSeconds <= 0 || ttlSeconds > Duration.ofDays(365).toSeconds()) {
+            throw new IllegalArgumentException("Redis TTL must be between 1 second and 365 days");
+        }
     }
 }

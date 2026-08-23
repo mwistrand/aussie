@@ -16,7 +16,7 @@ import aussie.core.model.ratelimit.RateLimitAlgorithm;
  * <h2>Environment Variables</h2>
  * <ul>
  *   <li>{@code AUSSIE_RATE_LIMITING_ENABLED} - Enable/disable rate limiting</li>
- *   <li>{@code AUSSIE_RATE_LIMITING_ALGORITHM} - Algorithm: BUCKET, FIXED_WINDOW, SLIDING_WINDOW</li>
+ *   <li>{@code AUSSIE_RATE_LIMITING_ALGORITHM} - Algorithm (currently BUCKET)</li>
  *   <li>{@code AUSSIE_RATE_LIMITING_PLATFORM_MAX_REQUESTS_PER_WINDOW} - Maximum ceiling</li>
  *   <li>{@code AUSSIE_RATE_LIMITING_PLATFORM_MAX_WINDOW_SECONDS} - Maximum window duration</li>
  * </ul>
@@ -120,9 +120,9 @@ public interface RateLimitingConfig {
         /**
          * Enable Redis as the rate limiting backend.
          *
-         * <p>When enabled and Redis is available, Redis will be used for
-         * distributed rate limiting. When disabled or unavailable, falls
-         * back to in-memory.
+         * <p>When enabled, Redis is required for distributed rate limiting.
+         * Failure to construct the Redis provider prevents startup; runtime
+         * failures use {@link FallbackConfig#behavior()}.
          *
          * @return true to use Redis backend (default: false)
          */
@@ -139,15 +139,15 @@ public interface RateLimitingConfig {
         /**
          * Behavior when the Redis backend errors.
          *
-         * <p>{@code LOCAL_BUCKET} (default) keeps coarse local protection by
+         * <p>{@code LOCAL_BUCKET} keeps coarse local protection by
          * routing the request through the in-memory limiter using the same
          * effective rate limit. {@code DENY} fails the request closed (429).
          * {@code ALLOW} preserves the legacy fail-open behavior and is intended
          * only for dev/test profiles.
          *
-         * @return the fallback behavior (default: {@code LOCAL_BUCKET})
+         * @return the fallback behavior (default: {@code DENY})
          */
-        @WithDefault("LOCAL_BUCKET")
+        @WithDefault("DENY")
         RateLimitFallbackBehavior behavior();
     }
 

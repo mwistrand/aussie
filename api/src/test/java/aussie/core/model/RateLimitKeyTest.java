@@ -55,6 +55,15 @@ class RateLimitKeyTest {
         }
 
         @Test
+        @DisplayName("should reject blank and oversized key parts")
+        void shouldRejectUnsafeKeyParts() {
+            assertThrows(IllegalArgumentException.class, () -> RateLimitKey.http(" ", "service", null));
+            assertThrows(IllegalArgumentException.class, () -> RateLimitKey.http("client", " ", null));
+            assertThrows(IllegalArgumentException.class, () -> RateLimitKey.http("client", "service", " "));
+            assertThrows(IllegalArgumentException.class, () -> RateLimitKey.http("client", "s".repeat(513), null));
+        }
+
+        @Test
         @DisplayName("should default endpointId to empty Optional when null")
         void shouldDefaultEndpointIdToEmptyWhenNull() {
             var key = new RateLimitKey(RateLimitKeyType.HTTP, "client", "service", null);

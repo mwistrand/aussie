@@ -71,6 +71,20 @@ class RedisTimeoutHelperTest {
             assertTrue(exception.getMessage().contains(REPOSITORY_NAME));
             verify(metrics).recordRedisTimeout(eq(REPOSITORY_NAME), eq(OPERATION_NAME));
         }
+
+        @Test
+        @DisplayName("should record and propagate operation failures")
+        void shouldRecordAndPropagateOperationFailures() {
+            final var failure = new RuntimeException("Connection refused");
+            final var operation = Uni.createFrom().<String>failure(failure);
+
+            final var actual = assertThrows(
+                    RuntimeException.class,
+                    () -> helper.withTimeout(operation, OPERATION_NAME).await().atMost(Duration.ofSeconds(5)));
+
+            assertEquals(failure, actual);
+            verify(metrics).recordRedisFailure(eq(REPOSITORY_NAME), eq(OPERATION_NAME));
+        }
     }
 
     @Nested

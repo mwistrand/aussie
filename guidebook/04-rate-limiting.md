@@ -1,4 +1,4 @@
-# Chapter 4: Rate Limiting (Algorithm Selection, Multi-Layer Client Identification, and Platform Guardrails)
+# Chapter 4: Rate Limiting (Algorithm Selection, Network Identity, and Platform Guardrails)
 
 Rate limiting in a shared API gateway is deceptively difficult. The individual algorithms are well-understood. Any senior engineer can describe a token bucket. The hard parts are everything around the algorithm: how you identify the client, how you prevent service teams from shooting themselves in the foot, how you handle the impedance mismatch between HTTP and WebSocket traffic, and how you make it all work across multiple gateway instances without blocking threads. This chapter traces those decisions through the Aussie codebase.
 
@@ -50,23 +50,22 @@ default RateLimitDecision getStatus(
 }
 ```
 
-The `AlgorithmRegistry` (line 28 of `api/src/main/java/aussie/core/model/ratelimit/AlgorithmRegistry.java`) stores handlers in an `EnumMap` and falls back to the token bucket when a requested algorithm is unavailable:
+The `AlgorithmRegistry` (line 28 of `api/src/main/java/aussie/core/model/ratelimit/AlgorithmRegistry.java`) stores handlers in an `EnumMap` and rejects unavailable algorithms rather than silently changing their semantics:
 
 ```java
 public RateLimitAlgorithmHandler getHandler(RateLimitAlgorithm algorithm) {
     final var handler = handlers.get(algorithm);
-    if (handler != null) {
-        return handler;
+    if (handler == null) {
+        throw new IllegalArgumentException(
+            "Unsupported rate-limit algorithm: " + algorithm);
     }
-    LOG.warnv("Algorithm {0} not available, falling back to {1}",
-        algorithm, defaultHandler.algorithm());
-    return defaultHandler;
+    return handler;
 }
 ```
 
-Currently only `BucketAlgorithm` is registered (the fixed window and sliding window implementations are stubbed as future work at lines 43-44 of `AlgorithmRegistry.java`). But the infrastructure is in place: adding a new algorithm means implementing `RateLimitAlgorithmHandler`, adding a new `RateLimitState` implementation to the sealed interface, and registering it in the `AlgorithmRegistry` constructor. No filter code changes. No storage code changes.
+Currently only `BucketAlgorithm` is registered. Selecting `FIXED_WINDOW` or `SLIDING_WINDOW` fails gateway startup until a handler and matching backend implementation exist. Adding an algorithm means implementing `RateLimitAlgorithmHandler`, adding any required `RateLimitState` implementation, registering the handler, and implementing equivalent Redis semantics.
 
-**What a senior engineer might do differently.** A common alternative is to skip the strategy pattern entirely and hardcode token bucket. If you only ever plan one algorithm, this avoids the indirection. The trade-off is that the strategy pattern costs almost nothing in runtime performance (one `EnumMap` lookup) but saves significant refactoring if requirements change. In a gateway that multiple platform teams operate, the ability to switch algorithms via an environment variable (`AUSSIE_RATE_LIMITING_ALGORITHM`) without redeploying code is worth the small structural investment.
+Rejecting an unavailable algorithm is deliberate: falling back to token bucket could enforce materially different quotas than the platform team configured.
 
 ## 2. Token Bucket Internals: How the Algorithm Actually Works
 
@@ -185,7 +184,7 @@ Although only the token bucket is currently implemented, the enum and interface 
 
 The fixed window's boundary problem is worth understanding concretely. If the limit is 100 requests per 60 seconds and the window resets at :00, a client can send 100 requests at :59 and 100 more at :01 (200 requests in 2 seconds). The sliding window solves this by weighting the previous window's count: if the current position is 20% into the new window, the effective count is `(current_count) + (previous_count * 0.8)`. This prevents the boundary spike at the cost of slightly more state.
 
-## 4. Multi-Layer Client Identification
+## 4. Pre-Authentication Client Identification
 
 A rate limiter is only as good as its identity boundary. Aussie's admission filter runs before authentication, so it uses only the canonical network identity implemented in `RateLimitFilter.extractClientId` (`api/src/main/java/aussie/system/filter/RateLimitFilter.java`):
 
@@ -352,8 +351,8 @@ When a WebSocket connection closes, the service cleans up its message rate limit
 ```java
 public Uni<Void> cleanupConnection(
         String serviceId, String clientId, String connectionId) {
-    final var pattern = "ws_message:" + clientId + ":" + serviceId + ":" + connectionId;
-    return rateLimiter.removeKeysMatching(pattern);
+    return rateLimiter.reset(
+        RateLimitKey.wsMessage(clientId, serviceId, connectionId));
 }
 ```
 
@@ -440,8 +439,9 @@ The `RedisRateLimiter` at `api/src/main/java/aussie/adapter/out/ratelimit/redis/
 local key = KEYS[1]
 local capacity = tonumber(ARGV[1])
 local refill_rate = tonumber(ARGV[2])
-local now_ms = tonumber(ARGV[3])
-local window_seconds = tonumber(ARGV[4])
+local window_seconds = tonumber(ARGV[3])
+local redis_time = redis.call('TIME')
+local now_ms = (redis_time[1] * 1000) + math.floor(redis_time[2] / 1000)
 
 -- Get current state
 local data = redis.call('HMGET', key, 'tokens', 'last_refill_ms')
@@ -455,7 +455,7 @@ if tokens == nil then
 end
 
 -- Calculate token refill
-local elapsed_ms = now_ms - last_refill_ms
+local elapsed_ms = math.max(0, now_ms - last_refill_ms)
 local refill = (elapsed_ms / 1000.0) * refill_rate
 tokens = math.min(capacity, tokens + refill)
 
@@ -466,34 +466,36 @@ if tokens >= 1 then
     allowed = 1
 end
 
+local tokens_needed = capacity - tokens
+local seconds_to_full = refill_rate > 0
+    and (tokens_needed / refill_rate) or window_seconds
+local reset_at = math.floor(now_ms / 1000) + math.ceil(seconds_to_full)
+local retry_after = allowed == 1 and 0 or (refill_rate > 0
+    and math.max(1, math.ceil((1 - tokens) / refill_rate))
+    or window_seconds)
+
 -- Save state with TTL
 redis.call('HSET', key, 'tokens', tokens, 'last_refill_ms', now_ms)
 redis.call('EXPIRE', key, window_seconds * 2)
 
 local remaining = math.floor(tokens)
 local request_count = math.floor(capacity - tokens)
-return {allowed, remaining, request_count, reset_at}
+return {allowed, remaining, request_count, reset_at, retry_after}
 ```
 
 **Why Lua scripts, not MULTI/EXEC.** A Redis transaction (`MULTI/EXEC`) does not allow reading a value and then making a decision based on it. Instead, all commands are queued and executed together without conditional logic. The token bucket requires reading current state, computing refill, checking token count, and conditionally decrementing. Lua scripts execute atomically on the Redis server with full access to conditional logic.
 
+**Why Redis supplies the clock.** Every gateway instance evaluates elapsed time from Redis `TIME`, so host clock skew cannot grant or remove tokens. Negative elapsed time from pre-existing state is clamped to zero.
+
 **Key expiration.** The `EXPIRE` call with `window_seconds * 2` mirrors the in-memory cleanup strategy. If a client disappears, their rate limit state will be automatically cleaned up by Redis after two window durations.
 
-### Fail-Open on Redis Failure
+### Redis Failure Policy
 
-The `checkAndConsume` method in `RedisRateLimiter` (line 139) recovers from Redis failures by allowing the request:
+`RedisRateLimiter` applies the configured `aussie.rate-limiting.fallback.behavior` when an operation fails:
 
-```java
-return executeTokenBucketScript(cacheKey, capacity, refillRate, nowMs, windowSeconds)
-        .map(result -> parseDecision(result, limit))
-        .onFailure()
-        .recoverWithItem(error -> {
-            LOG.warnv(error, "Redis rate limit check failed, allowing request");
-            return RateLimitDecision.allow();
-        });
-```
-
-This is a **fail-open** strategy. When Redis is unavailable, all requests are allowed. The alternative--fail-closed, rejecting all requests when Redis is down--would make a Redis outage equivalent to a complete gateway outage. For most use cases, temporarily losing rate limiting is preferable to losing all traffic. The warning log ensures the operations team is alerted.
+- `DENY` (default) rejects the request with 429.
+- `LOCAL_BUCKET` delegates to a per-instance in-memory limiter and therefore provides weaker cluster-wide enforcement.
+- `ALLOW` preserves fail-open behavior for development or explicitly accepted risk.
 
 ### Provider Selection
 
@@ -513,7 +515,7 @@ public RateLimiter produceRateLimiter() {
 }
 ```
 
-Redis is attempted first if configured. If Redis initialization fails, the system falls back to in-memory. If rate limiting is disabled entirely, a `NoOpRateLimiter` that allows everything is used. This three-tier fallback ensures the gateway always starts, even if Redis is misconfigured.
+When Redis rate limiting is configured, failure to resolve or construct its provider fails startup rather than silently switching a cluster to independent in-memory quotas. Runtime Redis errors use the configured failure policy above. If Redis is disabled, the in-memory provider is used; if rate limiting itself is disabled, a `NoOpRateLimiter` allows everything.
 
 **Trade-off: consistency vs. availability.** With in-memory rate limiting, each gateway instance maintains independent state. A client could send 100 requests to instance A (hitting the limit) and then send 100 more to instance B (which has no state for that client). In the worst case, the effective limit is `N * configured_limit` where N is the number of gateway instances. Redis eliminates this by sharing state. The trade-off is an additional network hop on every request. For most deployments, Redis latency (sub-millisecond on the same network) is negligible, and the consistency guarantee is worth it.
 
@@ -668,10 +670,10 @@ The `endpointId` parameter is nullable (wrapped in `Optional.ofNullable`), but `
 The rate limiting system in Aussie layers multiple concerns on top of a straightforward algorithm:
 
 1. **Algorithm selection** is abstracted behind a strategy interface, making it possible to change algorithms without touching filter or storage code.
-2. **Client identification** uses a four-layer priority chain that degrades gracefully from session-specific to IP-based identification.
+2. **Client identification** uses the canonical network identity before authentication, so unverified credentials cannot select a fresh bucket.
 3. **The platform maximum** prevents service teams from configuring limits that could endanger the shared infrastructure, while the hierarchical resolution (endpoint > service > platform) gives service teams flexibility within that boundary.
 4. **WebSocket traffic** is handled with two independent dimensions (connection rate and message rate) because the resource consumption model is fundamentally different from HTTP.
-5. **Storage** is pluggable between in-memory and Redis, with fail-open semantics on Redis failure and stale entry cleanup for the in-memory path.
+5. **Storage** is pluggable between in-memory and Redis, with an explicit failure policy and stale entry cleanup for the in-memory path.
 6. **Filter ordering** ensures cheap rejection happens before expensive authentication.
 7. **Telemetry** treats rate limiting as expected behavior (`StatusCode.OK`), not an error, preventing false alarms while maintaining full observability through custom span attributes.
 

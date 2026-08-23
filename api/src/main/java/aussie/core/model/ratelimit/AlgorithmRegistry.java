@@ -10,8 +10,8 @@ import org.jboss.logging.Logger;
 /**
  * Registry for rate limiting algorithm handlers.
  *
- * <p>Provides lookup of algorithm handlers by type. Falls back to the token
- * bucket algorithm if the requested algorithm is not available.
+ * <p>Provides lookup of algorithm handlers by type. Unsupported algorithms are
+ * rejected so backend selection cannot silently change configured semantics.
  *
  * <p>Currently supported algorithms:
  * <ul>
@@ -49,20 +49,15 @@ public class AlgorithmRegistry {
     /**
      * Get the handler for the specified algorithm.
      *
-     * <p>If the requested algorithm is not available, falls back to the
-     * default (token bucket) algorithm with a warning.
-     *
      * @param algorithm the algorithm type
      * @return the algorithm handler
      */
     public RateLimitAlgorithmHandler getHandler(RateLimitAlgorithm algorithm) {
         final var handler = handlers.get(algorithm);
-        if (handler != null) {
-            return handler;
+        if (handler == null) {
+            throw new IllegalArgumentException("Unsupported rate-limit algorithm: " + algorithm);
         }
-
-        LOG.warnv("Algorithm {0} not available, falling back to {1}", algorithm, defaultHandler.algorithm());
-        return defaultHandler;
+        return handler;
     }
 
     /**

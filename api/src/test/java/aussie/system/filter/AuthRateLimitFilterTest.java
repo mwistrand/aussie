@@ -33,6 +33,7 @@ import aussie.core.config.AuthRateLimitConfig;
 import aussie.core.service.auth.AuthRateLimitService;
 import aussie.core.service.common.TrustedProxyValidator;
 import aussie.spi.FailedAttemptRepository;
+import aussie.spi.SecurityEvent;
 
 @DisplayName("AuthRateLimitFilter")
 class AuthRateLimitFilterTest {
@@ -436,6 +437,27 @@ class AuthRateLimitFilterTest {
             assertNotNull(response);
             assertEquals(429, response.getStatus());
             assertNotNull(response.getHeaderString("Retry-After"));
+        }
+
+        @Test
+        @DisplayName("should still dispatch the lockout event when its count lookup fails")
+        void shouldDispatchLockoutEventWhenCountLookupFails() {
+            setupRequestContext("/auth/login", null, "192.168.1.1");
+            when(rateLimitService.checkAuthLimit(anyString(), any()))
+                    .thenReturn(Uni.createFrom()
+                            .item(AuthRateLimitService.RateLimitResult.blocked(
+                                    "ip:192.168.1.1", 60, Instant.now().plusSeconds(60))));
+            when(failedAttemptRepository.getLockoutCount(anyString()))
+                    .thenReturn(Uni.createFrom().failure(new RuntimeException("Redis unavailable")));
+
+            final var response =
+                    filter.filter(requestContext, vertxRequest).await().atMost(Duration.ofSeconds(5));
+
+            assertEquals(429, response.getStatus());
+            final var eventCaptor = ArgumentCaptor.forClass(SecurityEvent.class);
+            verify(securityEventDispatcher).dispatch(eventCaptor.capture());
+            final var event = (SecurityEvent.AuthenticationLockout) eventCaptor.getValue();
+            assertEquals(0, event.lockoutCount());
         }
 
         @Test

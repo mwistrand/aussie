@@ -52,7 +52,8 @@ class RedisRateLimiterIntegrationTest {
 
     /**
      * Lua script for atomic token bucket rate limiting.
-     * This is the same script used in RedisRateLimiter.
+     * Deterministic model used for explicit time-progression tests.
+     * The production script has a separate Redis-backed regression test below.
      */
     private static final String TOKEN_BUCKET_SCRIPT =
             """
@@ -173,6 +174,19 @@ class RedisRateLimiterIntegrationTest {
                         .arg(String.valueOf(capacity)) // ARGV[1]
                         .arg(String.valueOf(refillRate)) // ARGV[2]
                         .arg(String.valueOf(nowMs))) // ARGV[3]
+                .await()
+                .atMost(Duration.ofSeconds(5));
+    }
+
+    private Response executeProductionTokenBucket(String key, long capacity, double refillRate, long windowSeconds) {
+        return redisClient
+                .send(Request.cmd(Command.EVAL)
+                        .arg(RedisRateLimiter.TOKEN_BUCKET_SCRIPT)
+                        .arg("1")
+                        .arg(key)
+                        .arg(String.valueOf(capacity))
+                        .arg(String.valueOf(refillRate))
+                        .arg(String.valueOf(windowSeconds)))
                 .await()
                 .atMost(Duration.ofSeconds(5));
     }
@@ -482,6 +496,26 @@ class RedisRateLimiterIntegrationTest {
     @Nested
     @DisplayName("Decision metadata")
     class DecisionMetadataTests {
+
+        @Test
+        @DisplayName("production script should account for a fractional token in retry-after")
+        void productionScriptShouldAccountForFractionalTokenInRetryAfter() {
+            final var key = "test:fractional-retry";
+            redisClient
+                    .send(Request.cmd(Command.HSET)
+                            .arg(key)
+                            .arg("tokens")
+                            .arg("0.75")
+                            .arg("last_refill_ms")
+                            .arg("9000000000000000"))
+                    .await()
+                    .atMost(Duration.ofSeconds(5));
+
+            final var response = executeProductionTokenBucket(key, 10, 0.5, 60);
+
+            assertFalse(isAllowed(response));
+            assertEquals(1, response.get(4).toLong());
+        }
 
         @Test
         @DisplayName("should include correct request count")

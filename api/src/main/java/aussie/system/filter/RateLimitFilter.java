@@ -104,11 +104,11 @@ public class RateLimitFilter {
         final var path = request.path();
         final var method = request.method().name();
         final var servicePath = ServicePath.parse(path);
-        final var serviceId = servicePath.serviceId();
         final var clientId = extractClientId(requestContext, request);
 
         final RouteLookupResult routeResult =
                 serviceRegistry.findRoute(path, method).orElse(null);
+        final var serviceId = routeResult != null ? routeResult.service().serviceId() : servicePath.serviceId();
 
         final EffectiveRateLimit effectiveLimit =
                 routeResult != null ? resolveEffectiveLimit(routeResult) : rateLimitResolver.resolvePlatformDefaults();

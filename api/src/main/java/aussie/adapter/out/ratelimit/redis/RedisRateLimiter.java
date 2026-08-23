@@ -2,8 +2,10 @@ package aussie.adapter.out.ratelimit.redis;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
+import io.quarkus.redis.datasource.keys.KeyScanArgs;
 import io.quarkus.redis.datasource.keys.ReactiveKeyCommands;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
@@ -11,6 +13,7 @@ import org.jboss.logging.Logger;
 import aussie.core.config.RateLimitingConfig.RateLimitFallbackBehavior;
 import aussie.core.model.ratelimit.BucketState;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
+import aussie.core.model.ratelimit.RateLimitAlgorithm;
 import aussie.core.model.ratelimit.RateLimitDecision;
 import aussie.core.model.ratelimit.RateLimitKey;
 import aussie.core.port.out.Metrics;
@@ -27,14 +30,15 @@ import aussie.core.port.out.RateLimiter;
  *   <li>Token bucket algorithm implemented atomically in Lua</li>
  *   <li>Automatic key expiration based on window duration</li>
  *   <li>Shared state across all gateway instances</li>
- *   <li>Graceful degradation on Redis failures (allows requests)</li>
+ *   <li>Configurable fail-closed, local-bucket, or fail-open behavior on Redis failures</li>
  * </ul>
  *
- * <p>Key format: {@code aussie:ratelimit:{type}:{serviceId}:{endpointId}:{clientId}}
+ * <p>Keys use the {@code aussie:ratelimit:} namespace and include a schema version and algorithm suffix.
  */
 public final class RedisRateLimiter implements RateLimiter {
 
     private static final Logger LOG = Logger.getLogger(RedisRateLimiter.class);
+    private static final long MAX_EXACT_REDIS_NUMBER = 9_007_199_254_740_991L;
 
     /**
      * Lua script for atomic token bucket rate limiting.
@@ -44,19 +48,19 @@ public final class RedisRateLimiter implements RateLimiter {
      *   <li>KEYS[1] - the rate limit key</li>
      *   <li>ARGV[1] - bucket capacity (max tokens)</li>
      *   <li>ARGV[2] - refill rate (tokens per second)</li>
-     *   <li>ARGV[3] - current timestamp in milliseconds</li>
-     *   <li>ARGV[4] - window duration in seconds (for TTL)</li>
+     *   <li>ARGV[3] - window duration in seconds (for TTL)</li>
      * </ol>
      *
-     * <p>Returns array: [allowed (0/1), remaining, tokens_used, reset_at_epoch_seconds]
+     * <p>Returns array: [allowed (0/1), remaining, tokens_used, reset_at_epoch_seconds, retry_after_seconds]
      */
-    private static final String TOKEN_BUCKET_SCRIPT =
+    static final String TOKEN_BUCKET_SCRIPT =
             """
             local key = KEYS[1]
             local capacity = tonumber(ARGV[1])
             local refill_rate = tonumber(ARGV[2])
-            local now_ms = tonumber(ARGV[3])
-            local window_seconds = tonumber(ARGV[4])
+            local window_seconds = tonumber(ARGV[3])
+            local redis_time = redis.call('TIME')
+            local now_ms = (redis_time[1] * 1000) + math.floor(redis_time[2] / 1000)
 
             -- Get current state
             local data = redis.call('HMGET', key, 'tokens', 'last_refill_ms')
@@ -70,7 +74,7 @@ public final class RedisRateLimiter implements RateLimiter {
             end
 
             -- Calculate token refill
-            local elapsed_ms = now_ms - last_refill_ms
+            local elapsed_ms = math.max(0, now_ms - last_refill_ms)
             local refill = (elapsed_ms / 1000.0) * refill_rate
             tokens = math.min(capacity, tokens + refill)
 
@@ -83,8 +87,9 @@ public final class RedisRateLimiter implements RateLimiter {
 
             -- Calculate reset time (when bucket would be full again)
             local tokens_needed = capacity - tokens
-            local seconds_to_full = tokens_needed / refill_rate
+            local seconds_to_full = refill_rate > 0 and (tokens_needed / refill_rate) or window_seconds
             local reset_at = math.floor(now_ms / 1000) + math.ceil(seconds_to_full)
+            local retry_after = allowed == 1 and 0 or (refill_rate > 0 and math.max(1, math.ceil((1 - tokens) / refill_rate)) or window_seconds)
 
             -- Save state with TTL
             redis.call('HSET', key, 'tokens', tokens, 'last_refill_ms', now_ms)
@@ -93,49 +98,52 @@ public final class RedisRateLimiter implements RateLimiter {
             -- Return: allowed, remaining, request_count (capacity - remaining), reset_at
             local remaining = math.floor(tokens)
             local request_count = math.floor(capacity - tokens)
-            return {allowed, remaining, request_count, reset_at}
+            return {allowed, remaining, request_count, reset_at, retry_after}
             """;
 
     /**
      * Lua script for getting rate limit status without consuming.
      */
-    private static final String STATUS_SCRIPT =
+    static final String STATUS_SCRIPT =
             """
             local key = KEYS[1]
             local capacity = tonumber(ARGV[1])
             local refill_rate = tonumber(ARGV[2])
-            local now_ms = tonumber(ARGV[3])
+            local window_seconds = tonumber(ARGV[3])
+            local redis_time = redis.call('TIME')
+            local now_ms = (redis_time[1] * 1000) + math.floor(redis_time[2] / 1000)
 
             local data = redis.call('HMGET', key, 'tokens', 'last_refill_ms')
             local tokens = tonumber(data[1])
             local last_refill_ms = tonumber(data[2])
 
             if tokens == nil then
-                return {1, capacity, 0, 0}
+                return {1, capacity, 0, math.floor(now_ms / 1000) + window_seconds, 0}
             end
 
-            local elapsed_ms = now_ms - last_refill_ms
+            local elapsed_ms = math.max(0, now_ms - last_refill_ms)
             local refill = (elapsed_ms / 1000.0) * refill_rate
             tokens = math.min(capacity, tokens + refill)
 
             local remaining = math.floor(tokens)
             local request_count = math.floor(capacity - tokens)
             local tokens_needed = capacity - tokens
-            local seconds_to_full = tokens_needed / refill_rate
+            local seconds_to_full = refill_rate > 0 and (tokens_needed / refill_rate) or window_seconds
             local reset_at = math.floor(now_ms / 1000) + math.ceil(seconds_to_full)
 
-            return {1, remaining, request_count, reset_at}
+            return {1, remaining, request_count, reset_at, 0}
             """;
 
     private final ReactiveRedisDataSource redisDataSource;
     private final ReactiveKeyCommands<String> keyCommands;
     private final boolean enabled;
+    private final RateLimitAlgorithm algorithm;
     private final RateLimiter fallback;
     private final RateLimitFallbackBehavior fallbackBehavior;
     private final Metrics metrics;
 
     public RedisRateLimiter(ReactiveRedisDataSource redisDataSource, boolean enabled) {
-        this(redisDataSource, enabled, null, RateLimitFallbackBehavior.ALLOW, null);
+        this(redisDataSource, enabled, RateLimitAlgorithm.BUCKET, null, RateLimitFallbackBehavior.DENY, null);
     }
 
     public RedisRateLimiter(
@@ -144,11 +152,26 @@ public final class RedisRateLimiter implements RateLimiter {
             RateLimiter fallback,
             RateLimitFallbackBehavior fallbackBehavior,
             Metrics metrics) {
+        this(redisDataSource, enabled, RateLimitAlgorithm.BUCKET, fallback, fallbackBehavior, metrics);
+    }
+
+    public RedisRateLimiter(
+            ReactiveRedisDataSource redisDataSource,
+            boolean enabled,
+            RateLimitAlgorithm algorithm,
+            RateLimiter fallback,
+            RateLimitFallbackBehavior fallbackBehavior,
+            Metrics metrics) {
+        final var resolvedAlgorithm = Objects.requireNonNull(algorithm, "algorithm must not be null");
+        if (resolvedAlgorithm != RateLimitAlgorithm.BUCKET) {
+            throw new IllegalArgumentException("Unsupported Redis rate-limit algorithm: " + resolvedAlgorithm);
+        }
         this.redisDataSource = redisDataSource;
         this.keyCommands = redisDataSource.key(String.class);
         this.enabled = enabled;
+        this.algorithm = resolvedAlgorithm;
         this.fallback = fallback;
-        this.fallbackBehavior = fallbackBehavior == null ? RateLimitFallbackBehavior.ALLOW : fallbackBehavior;
+        this.fallbackBehavior = fallbackBehavior == null ? RateLimitFallbackBehavior.DENY : fallbackBehavior;
         this.metrics = metrics;
     }
 
@@ -157,14 +180,14 @@ public final class RedisRateLimiter implements RateLimiter {
         if (!enabled) {
             return Uni.createFrom().item(RateLimitDecision.allow());
         }
+        validateLimit(limit);
 
-        final var cacheKey = key.toCacheKey();
+        final var cacheKey = cacheKey(key);
         final var capacity = limit.burstCapacity();
         final var refillRate = limit.refillRatePerSecond();
-        final var nowMs = System.currentTimeMillis();
         final var windowSeconds = limit.windowSeconds();
 
-        return executeTokenBucketScript(cacheKey, capacity, refillRate, nowMs, windowSeconds)
+        return executeTokenBucketScript(cacheKey, capacity, refillRate, windowSeconds)
                 .map(result -> parseDecision(result, limit))
                 .onFailure()
                 .recoverWithUni(error -> handleBackendFailure(key, limit, error, true));
@@ -175,13 +198,13 @@ public final class RedisRateLimiter implements RateLimiter {
         if (!enabled) {
             return Uni.createFrom().item(RateLimitDecision.allow());
         }
+        validateLimit(limit);
 
-        final var cacheKey = key.toCacheKey();
+        final var cacheKey = cacheKey(key);
         final var capacity = limit.burstCapacity();
         final var refillRate = limit.refillRatePerSecond();
-        final var nowMs = System.currentTimeMillis();
 
-        return executeStatusScript(cacheKey, capacity, refillRate, nowMs)
+        return executeStatusScript(cacheKey, capacity, refillRate, limit.windowSeconds())
                 .map(result -> parseDecision(result, limit))
                 .onFailure()
                 .recoverWithUni(error -> handleBackendFailure(key, limit, error, false));
@@ -203,7 +226,7 @@ public final class RedisRateLimiter implements RateLimiter {
     private Uni<RateLimitDecision> handleBackendFailure(
             RateLimitKey key, EffectiveRateLimit limit, Throwable error, boolean consume) {
         final var serviceId = key.serviceId();
-        switch (fallbackBehavior) {
+        return switch (fallbackBehavior) {
             case LOCAL_BUCKET -> {
                 if (fallback != null) {
                     LOG.warnv(
@@ -211,19 +234,19 @@ public final class RedisRateLimiter implements RateLimiter {
                             "Redis rate limit unavailable; routing through local fallback bucket for service={0}",
                             serviceId);
                     recordFallback(serviceId, "local-bucket");
-                    return consume ? fallback.checkAndConsume(key, limit) : fallback.getStatus(key, limit);
+                    yield consume ? fallback.checkAndConsume(key, limit) : fallback.getStatus(key, limit);
                 }
                 LOG.warnv(
                         error,
                         "Redis rate limit unavailable and no fallback bucket wired; failing closed for service={0}",
                         serviceId);
                 recordFallback(serviceId, "deny");
-                return Uni.createFrom().item(buildDenyDecision(limit));
+                yield Uni.createFrom().item(buildDenyDecision(limit));
             }
             case DENY -> {
                 LOG.warnv(error, "Redis rate limit unavailable; failing closed for service={0}", serviceId);
                 recordFallback(serviceId, "deny");
-                return Uni.createFrom().item(buildDenyDecision(limit));
+                yield Uni.createFrom().item(buildDenyDecision(limit));
             }
             case ALLOW -> {
                 LOG.warnv(
@@ -232,10 +255,9 @@ public final class RedisRateLimiter implements RateLimiter {
                                 + "This is the legacy behavior; switch to LOCAL_BUCKET or DENY in production.",
                         serviceId);
                 recordFallback(serviceId, "allow");
-                return Uni.createFrom().item(RateLimitDecision.allow());
+                yield Uni.createFrom().item(RateLimitDecision.allow());
             }
-        }
-        return Uni.createFrom().item(RateLimitDecision.allow());
+        };
     }
 
     /**
@@ -254,7 +276,7 @@ public final class RedisRateLimiter implements RateLimiter {
     private RateLimitDecision buildDenyDecision(EffectiveRateLimit limit) {
         final var resetAt = Instant.now().plusSeconds(limit.windowSeconds());
         return RateLimitDecision.rejected(
-                limit.burstCapacity(),
+                limit.requestsPerWindow(),
                 limit.windowSeconds(),
                 resetAt,
                 limit.windowSeconds(),
@@ -264,23 +286,24 @@ public final class RedisRateLimiter implements RateLimiter {
 
     @Override
     public Uni<Void> reset(RateLimitKey key) {
-        final var cacheKey = key.toCacheKey();
+        final var cacheKey = cacheKey(key);
         return keyCommands.del(cacheKey).replaceWithVoid();
     }
 
     @Override
     public Uni<Void> removeKeysMatching(String pattern) {
-        // Use SCAN to find matching keys and delete them
+        if (pattern == null || pattern.isBlank() || pattern.length() > 128 || pattern.matches(".*[\\*?\\[\\]].*")) {
+            return Uni.createFrom().failure(new IllegalArgumentException("Unsafe rate-limit key pattern"));
+        }
         final var fullPattern = "*" + pattern + "*";
-
         return keyCommands
-                .keys(fullPattern)
-                .flatMap(keys -> {
-                    if (keys.isEmpty()) {
-                        return Uni.createFrom().voidItem();
-                    }
-                    return keyCommands.del(keys.toArray(new String[0])).replaceWithVoid();
-                })
+                .scan(new KeyScanArgs().match(fullPattern).count(100))
+                .toMulti()
+                .onItem()
+                .transformToUniAndConcatenate(key -> keyCommands.del(key).replaceWithVoid())
+                .collect()
+                .last()
+                .replaceWithVoid()
                 .onFailure()
                 .recoverWithItem(error -> {
                     LOG.warnv(error, "Failed to remove keys matching pattern: {0}", pattern);
@@ -293,8 +316,26 @@ public final class RedisRateLimiter implements RateLimiter {
         return enabled;
     }
 
+    public void shutdown() {
+        if (fallback instanceof aussie.adapter.out.ratelimit.memory.InMemoryRateLimiter inMemory) {
+            inMemory.shutdown();
+        }
+    }
+
+    private String cacheKey(RateLimitKey key) {
+        return key.toCacheKey() + ":v1:" + algorithm.name().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private void validateLimit(EffectiveRateLimit limit) {
+        if (limit.requestsPerWindow() > MAX_EXACT_REDIS_NUMBER
+                || limit.burstCapacity() > MAX_EXACT_REDIS_NUMBER
+                || limit.windowSeconds() > MAX_EXACT_REDIS_NUMBER / 2) {
+            throw new IllegalArgumentException("Rate limit exceeds Redis numeric bounds");
+        }
+    }
+
     private Uni<List<Object>> executeTokenBucketScript(
-            String key, long capacity, double refillRate, long nowMs, long windowSeconds) {
+            String key, long capacity, double refillRate, long windowSeconds) {
 
         // EVAL script numkeys key [key...] arg [arg...]
         return redisDataSource
@@ -305,13 +346,12 @@ public final class RedisRateLimiter implements RateLimiter {
                         key, // KEYS[1]
                         String.valueOf(capacity), // ARGV[1]
                         String.valueOf(refillRate), // ARGV[2]
-                        String.valueOf(nowMs), // ARGV[3]
-                        String.valueOf(windowSeconds) // ARGV[4]
+                        String.valueOf(windowSeconds) // ARGV[3]
                         )
                 .map(this::parseArrayResponse);
     }
 
-    private Uni<List<Object>> executeStatusScript(String key, long capacity, double refillRate, long nowMs) {
+    private Uni<List<Object>> executeStatusScript(String key, long capacity, double refillRate, long windowSeconds) {
 
         // EVAL script numkeys key [key...] arg [arg...]
         return redisDataSource
@@ -322,7 +362,7 @@ public final class RedisRateLimiter implements RateLimiter {
                         key, // KEYS[1]
                         String.valueOf(capacity), // ARGV[1]
                         String.valueOf(refillRate), // ARGV[2]
-                        String.valueOf(nowMs) // ARGV[3]
+                        String.valueOf(windowSeconds) // ARGV[3]
                         )
                 .map(this::parseArrayResponse);
     }
@@ -332,8 +372,7 @@ public final class RedisRateLimiter implements RateLimiter {
             throw new IllegalStateException("Null response from Redis");
         }
 
-        // Response should be an array with 4 elements: [allowed, remaining, request_count, reset_at]
-        final var result = new java.util.ArrayList<Object>(4);
+        final var result = new java.util.ArrayList<Object>(5);
         for (var i = 0; i < response.size(); i++) {
             result.add(response.get(i).toLong());
         }
@@ -345,21 +384,20 @@ public final class RedisRateLimiter implements RateLimiter {
         final var remaining = toLong(result.get(1));
         final var requestCount = (int) toLong(result.get(2));
         final var resetAtEpochSeconds = toLong(result.get(3));
+        final var retryAfter = toLong(result.get(4));
         final var resetAt = Instant.ofEpochSecond(resetAtEpochSeconds);
 
         if (allowed) {
             return RateLimitDecision.allow(
                     remaining,
-                    limit.burstCapacity(),
+                    limit.requestsPerWindow(),
                     limit.windowSeconds(),
                     resetAt,
                     requestCount,
                     new BucketState(remaining, System.currentTimeMillis()));
         } else {
-            final var retryAfter =
-                    Math.max(1, resetAtEpochSeconds - Instant.now().getEpochSecond());
             return RateLimitDecision.rejected(
-                    limit.burstCapacity(),
+                    limit.requestsPerWindow(),
                     limit.windowSeconds(),
                     resetAt,
                     retryAfter,

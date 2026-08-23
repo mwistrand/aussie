@@ -26,9 +26,10 @@ public record RateLimitKey(RateLimitKeyType keyType, String clientId, String ser
      */
     public RateLimitKey {
         Objects.requireNonNull(keyType, "keyType must not be null");
-        Objects.requireNonNull(clientId, "clientId must not be null");
-        Objects.requireNonNull(serviceId, "serviceId must not be null");
+        validatePart(clientId, "clientId");
+        validatePart(serviceId, "serviceId");
         endpointId = Objects.requireNonNullElse(endpointId, Optional.empty());
+        endpointId.ifPresent(value -> validatePart(value, "endpointId"));
     }
 
     /**
@@ -90,5 +91,12 @@ public record RateLimitKey(RateLimitKeyType keyType, String clientId, String ser
 
     private String buildWsMessageKey() {
         return "aussie:ratelimit:ws:msg:" + serviceId + ":" + clientId + ":" + endpointId.orElse("unknown");
+    }
+
+    private static void validatePart(String value, String name) {
+        Objects.requireNonNull(value, name + " must not be null");
+        if (value.isBlank() || value.length() > 512) {
+            throw new IllegalArgumentException(name + " must contain 1-512 characters");
+        }
     }
 }
