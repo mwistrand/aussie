@@ -573,7 +573,17 @@ An absent or empty allowlist denies all upstream routing. Exact hosts and explic
 
 Private network addresses (`10.x`, `172.16-31.x`, `192.168.x`) are denied by default even when their host is allowlisted. Internal deployments must explicitly set `AUSSIE_GATEWAY_SECURITY_ALLOW_PRIVATE_UPSTREAMS=true`.
 
-This host allowlist is an emergency containment boundary, not a complete DNS-rebinding defense. Until connection-time DNS authorization is implemented, also enforce network-level egress policy and permit only operator-controlled DNS names.
+Every connection resolves and validates the complete bounded A/AAAA answer set, then connects to that approved address while retaining the registered hostname for HTTP authority, TLS SNI, and certificate verification. Redirect following is disabled. Keep network-level egress policy as an independent second boundary.
+
+HTTPS and WSS use the JVM trust store, hostname verification, TLS 1.2+, a bounded handshake timeout, and application-owned connection pools. Private CAs and mTLS use PEM files:
+
+```properties
+aussie.resiliency.http.tls.trust-certificates=/etc/aussie/tls/upstream-ca.pem
+aussie.resiliency.http.tls.client-certificate=/etc/aussie/tls/client.pem
+aussie.resiliency.http.tls.client-key=/etc/aussie/tls/client-key.pem
+```
+
+Setting `trust-certificates` replaces the JVM trust roots for outbound connections. The client certificate and key must be configured together. TLS material is loaded at startup; replace the files and restart instances safely to rotate it.
 
 ## Request Forwarding
 

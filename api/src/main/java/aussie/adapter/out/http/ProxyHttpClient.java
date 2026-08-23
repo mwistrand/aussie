@@ -4,10 +4,10 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
-import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -19,8 +19,6 @@ import io.opentelemetry.context.propagation.TextMapPropagator;
 import io.opentelemetry.context.propagation.TextMapSetter;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpMethod;
-import io.vertx.ext.web.client.WebClientOptions;
-import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.buffer.Buffer;
 import io.vertx.mutiny.ext.web.client.HttpRequest;
 import io.vertx.mutiny.ext.web.client.HttpResponse;
@@ -33,6 +31,7 @@ import aussie.core.config.ResiliencyConfig;
 import aussie.core.model.gateway.PreparedProxyRequest;
 import aussie.core.model.gateway.ProxyResponse;
 import aussie.core.port.out.Metrics;
+import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.port.out.ProxyClient;
 import aussie.core.service.gateway.ProxyRequestPreparer;
 import aussie.core.service.routing.UpstreamAddressResolver;
@@ -51,7 +50,6 @@ public class ProxyHttpClient implements ProxyClient {
     private static final TextMapSetter<HttpRequest<Buffer>> HEADER_SETTER =
             (carrier, key, value) -> carrier.putHeader(key, value);
 
-    private final Vertx vertx;
     private final ProxyRequestPreparer requestPreparer;
     private final Tracer tracer;
     private final TextMapPropagator propagator;
@@ -59,11 +57,11 @@ public class ProxyHttpClient implements ProxyClient {
     private final ResiliencyConfig.HttpConfig httpConfig;
     private final Metrics metrics;
     private final UpstreamAddressResolver addressResolver;
-    private WebClient webClient;
+    private final WebClient webClient;
 
     @Inject
     public ProxyHttpClient(
-            Vertx vertx,
+            OutboundHttpClients outboundClient,
             ProxyRequestPreparer requestPreparer,
             Tracer tracer,
             TextMapPropagator propagator,
@@ -71,7 +69,7 @@ public class ProxyHttpClient implements ProxyClient {
             ResiliencyConfig resiliencyConfig,
             Metrics metrics,
             UpstreamAddressResolver addressResolver) {
-        this.vertx = vertx;
+        this.webClient = outboundClient.webClient();
         this.requestPreparer = requestPreparer;
         this.tracer = tracer;
         this.propagator = propagator;
@@ -79,32 +77,6 @@ public class ProxyHttpClient implements ProxyClient {
         this.httpConfig = resiliencyConfig.http();
         this.metrics = metrics;
         this.addressResolver = addressResolver;
-    }
-
-    @PostConstruct
-    void init() {
-        var options = new WebClientOptions()
-                .setConnectTimeout((int) httpConfig.connectTimeout().toMillis())
-                // Per-upstream-host pool. Vert.x defaults this to 5, which queues requests
-                // on connection acquisition under any meaningful concurrency. Apply the
-                // configured value (`aussie.resiliency.http.max-connections-per-host`).
-                .setMaxPoolSize(httpConfig.maxConnectionsPerHost())
-                // Reuse connections across requests. Default is true; set explicitly so
-                // intent survives future Vert.x default changes.
-                .setKeepAlive(true)
-                // Close idle keep-alive connections after this many seconds to free
-                // upstream sockets when load tapers off.
-                .setIdleTimeout(75)
-                // Disable Nagle's algorithm: latency-sensitive proxy traffic does not
-                // benefit from coalescing small writes.
-                .setTcpNoDelay(true)
-                // SO_REUSEPORT lets multiple event-loop threads bind the client socket
-                // pool on platforms that support it (Linux). Silently ignored elsewhere.
-                .setReusePort(true);
-        this.webClient = WebClient.create(vertx, options);
-        LOG.infov(
-                "ProxyHttpClient initialized with connect timeout: {0}, request timeout: {1}, max conns/host: {2}",
-                httpConfig.connectTimeout(), httpConfig.requestTimeout(), httpConfig.maxConnectionsPerHost());
     }
 
     /**
@@ -204,20 +176,29 @@ public class ProxyHttpClient implements ProxyClient {
     }
 
     private String classifyConnectionError(Throwable error) {
-        var message = error.getMessage() != null ? error.getMessage().toLowerCase() : "";
-        var className = error.getClass().getSimpleName().toLowerCase();
+        for (var current = error; current != null; current = current.getCause()) {
+            final var message =
+                    current.getMessage() != null ? current.getMessage().toLowerCase(Locale.ROOT) : "";
+            final var className = current.getClass().getSimpleName().toLowerCase(Locale.ROOT);
 
-        if (message.contains("refused") || className.contains("refused")) {
-            return "connection_refused";
-        }
-        if (message.contains("reset") || className.contains("reset")) {
-            return "connection_reset";
-        }
-        if (message.contains("unreachable") || className.contains("unreachable")) {
-            return "host_unreachable";
-        }
-        if (message.contains("resolve") || message.contains("unknown host") || className.contains("unknownhost")) {
-            return "dns_resolution_failed";
+            if (message.contains("ssl")
+                    || message.contains("tls")
+                    || message.contains("certificate")
+                    || className.contains("ssl")) {
+                return "tls_handshake_failed";
+            }
+            if (message.contains("refused") || className.contains("refused")) {
+                return "connection_refused";
+            }
+            if (message.contains("reset") || className.contains("reset")) {
+                return "connection_reset";
+            }
+            if (message.contains("unreachable") || className.contains("unreachable")) {
+                return "host_unreachable";
+            }
+            if (message.contains("resolve") || message.contains("unknown host") || className.contains("unknownhost")) {
+                return "dns_resolution_failed";
+            }
         }
         return "connection_error";
     }

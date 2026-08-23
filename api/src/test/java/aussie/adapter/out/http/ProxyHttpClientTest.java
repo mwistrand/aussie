@@ -34,7 +34,6 @@ import io.opentelemetry.context.propagation.TextMapPropagator;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.mutiny.core.MultiMap;
-import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.buffer.Buffer;
 import io.vertx.mutiny.core.net.SocketAddress;
 import io.vertx.mutiny.ext.web.client.HttpRequest;
@@ -52,6 +51,7 @@ import aussie.adapter.out.telemetry.TelemetryHelper;
 import aussie.core.config.ResiliencyConfig;
 import aussie.core.model.gateway.PreparedProxyRequest;
 import aussie.core.port.out.Metrics;
+import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.service.gateway.ProxyRequestPreparer;
 import aussie.core.service.routing.UpstreamAddressResolver;
 
@@ -60,7 +60,7 @@ import aussie.core.service.routing.UpstreamAddressResolver;
 class ProxyHttpClientTest {
 
     @Mock
-    private Vertx vertx;
+    private OutboundHttpClients outboundClient;
 
     @Mock
     private ProxyRequestPreparer requestPreparer;
@@ -100,6 +100,7 @@ class ProxyHttpClientTest {
     @BeforeEach
     void setUp() throws Exception {
         lenient().when(resiliencyConfig.http()).thenReturn(httpConfig);
+        lenient().when(outboundClient.webClient()).thenReturn(webClient);
         lenient().when(httpConfig.connectTimeout()).thenReturn(java.time.Duration.ofSeconds(5));
         lenient().when(httpConfig.requestTimeout()).thenReturn(java.time.Duration.ofSeconds(30));
         lenient()
@@ -108,7 +109,7 @@ class ProxyHttpClientTest {
                         Uni.createFrom().item(io.vertx.core.net.SocketAddress.inetSocketAddress(443, "203.0.113.1")));
 
         proxyHttpClient = new ProxyHttpClient(
-                vertx,
+                outboundClient,
                 requestPreparer,
                 tracer,
                 propagator,
@@ -116,11 +117,6 @@ class ProxyHttpClientTest {
                 resiliencyConfig,
                 metrics,
                 addressResolver);
-
-        // Inject the mock WebClient via reflection since init() requires a real Vertx
-        var webClientField = ProxyHttpClient.class.getDeclaredField("webClient");
-        webClientField.setAccessible(true);
-        webClientField.set(proxyHttpClient, webClient);
     }
 
     private void setupSpanBuilder() {
@@ -589,6 +585,13 @@ class ProxyHttpClientTest {
         void shouldReturnConnectionRefusedWhenMessageContainsRefused() throws Exception {
             var error = new ConnectException("Connection refused");
             assertEquals("connection_refused", invokeClassifyConnectionError(error));
+        }
+
+        @Test
+        @DisplayName("shouldReturnTlsHandshakeFailedForNestedTlsError")
+        void shouldReturnTlsHandshakeFailed() throws Exception {
+            var error = new RuntimeException("request failed", new javax.net.ssl.SSLHandshakeException("handshake"));
+            assertEquals("tls_handshake_failed", invokeClassifyConnectionError(error));
         }
 
         @Test

@@ -14,7 +14,6 @@ import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpMethod;
-import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.buffer.Buffer;
 import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
@@ -26,6 +25,7 @@ import aussie.core.config.OidcConfig;
 import aussie.core.model.auth.OidcTokenExchangeRequest;
 import aussie.core.model.auth.OidcTokenExchangeRequest.ClientAuthMethod;
 import aussie.core.model.auth.OidcTokenExchangeResponse;
+import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.service.routing.UpstreamAddressResolver;
 import aussie.spi.OidcTokenExchangeProvider;
 
@@ -53,8 +53,9 @@ public class DefaultOidcTokenExchangeProvider implements OidcTokenExchangeProvid
     private final UpstreamAddressResolver addressResolver;
 
     @Inject
-    public DefaultOidcTokenExchangeProvider(Vertx vertx, OidcConfig config, UpstreamAddressResolver addressResolver) {
-        this.webClient = WebClient.create(vertx);
+    public DefaultOidcTokenExchangeProvider(
+            OutboundHttpClients outboundClient, OidcConfig config, UpstreamAddressResolver addressResolver) {
+        this.webClient = outboundClient.webClient();
         this.config = config;
         this.addressResolver = addressResolver;
     }
@@ -131,7 +132,7 @@ public class DefaultOidcTokenExchangeProvider implements OidcTokenExchangeProvid
                 .onFailure()
                 .transform(error -> {
                     LOG.errorf(error, "Token exchange failed");
-                    return GatewayProblem.badGateway("Token exchange with IdP failed: " + error.getMessage());
+                    return GatewayProblem.badGateway("Token exchange with IdP failed");
                 });
     }
 

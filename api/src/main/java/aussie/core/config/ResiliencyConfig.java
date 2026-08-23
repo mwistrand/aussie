@@ -1,6 +1,8 @@
 package aussie.core.config;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
 
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
@@ -91,6 +93,29 @@ public interface ResiliencyConfig {
          */
         @WithDefault("200")
         int maxConnections();
+
+        /** TLS policy shared by every HTTP and WebSocket egress path. */
+        TlsConfig tls();
+
+        interface TlsConfig {
+
+            /** PEM CA certificate files. Empty uses the JVM system trust store. */
+            Optional<List<String>> trustCertificates();
+
+            /** PEM client certificate file for upstream mTLS. */
+            Optional<String> clientCertificate();
+
+            /** PEM client private-key file for upstream mTLS. */
+            Optional<String> clientKey();
+
+            /** Enabled TLS protocol versions. */
+            @WithDefault("TLSv1.3,TLSv1.2")
+            List<String> protocols();
+
+            /** Maximum TLS handshake duration. */
+            @WithDefault("PT10S")
+            Duration handshakeTimeout();
+        }
     }
 
     /**

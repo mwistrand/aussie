@@ -14,7 +14,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonObject;
-import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.ext.web.client.WebClient;
 import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.jboss.logging.Logger;
@@ -23,6 +22,7 @@ import aussie.adapter.out.telemetry.TokenTranslationMetrics;
 import aussie.core.config.TokenTranslationConfig;
 import aussie.core.config.TokenTranslationConfig.Remote.FailMode;
 import aussie.core.model.auth.TranslatedClaims;
+import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.service.routing.UpstreamAddressResolver;
 import aussie.spi.TokenTranslatorProvider;
 
@@ -68,12 +68,12 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
 
     @Inject
     public RemoteTokenTranslatorProvider(
-            Vertx vertx,
+            OutboundHttpClients outboundClient,
             TokenTranslationConfig config,
             TokenTranslationMetrics metrics,
             ObjectMapper objectMapper,
             UpstreamAddressResolver addressResolver) {
-        this.webClient = WebClient.create(vertx);
+        this.webClient = outboundClient.webClient();
         this.config = config;
         this.metrics = metrics;
         this.objectMapper = objectMapper;

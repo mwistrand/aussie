@@ -15,7 +15,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpMethod;
-import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.buffer.Buffer;
 import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
@@ -27,6 +26,7 @@ import org.jose4j.lang.JoseException;
 import aussie.core.config.ResiliencyConfig;
 import aussie.core.port.out.JwksCache;
 import aussie.core.port.out.Metrics;
+import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.service.routing.UpstreamAddressResolver;
 
 /**
@@ -57,12 +57,12 @@ public class JwksCacheService implements JwksCache {
 
     @Inject
     public JwksCacheService(
-            Vertx vertx,
+            OutboundHttpClients outboundClient,
             ResiliencyConfig resiliencyConfig,
             MeterRegistry meterRegistry,
             Metrics metrics,
             UpstreamAddressResolver addressResolver) {
-        this.webClient = WebClient.create(vertx);
+        this.webClient = outboundClient.jwksWebClient();
         this.jwksConfig = resiliencyConfig.jwks();
         this.metrics = metrics;
         this.addressResolver = addressResolver;

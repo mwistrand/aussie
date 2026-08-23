@@ -44,6 +44,7 @@ import aussie.core.model.websocket.WebSocketProxySession;
 import aussie.core.model.websocket.WebSocketUpgradeRequest;
 import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
+import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.service.auth.JwksCacheService.JwksFetchException;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
 import aussie.core.service.routing.UpstreamAddressResolver;
@@ -60,6 +61,9 @@ class WebSocketGatewayUnitTest {
 
     @Mock
     private Vertx vertx;
+
+    @Mock
+    private OutboundHttpClients outboundClient;
 
     @Mock
     private GatewayMetrics metrics;
@@ -93,6 +97,7 @@ class WebSocketGatewayUnitTest {
                 gatewayUseCase,
                 config,
                 vertx,
+                outboundClient,
                 metrics,
                 rateLimitService,
                 errorWriter,

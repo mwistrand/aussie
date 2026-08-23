@@ -192,7 +192,7 @@ class GatewayServiceTest {
 
             assertInstanceOf(GatewayResult.Error.class, result);
             var error = (GatewayResult.Error) result;
-            assertEquals("Connection refused", error.message());
+            assertEquals("Upstream request failed", error.message());
         }
 
         @Test

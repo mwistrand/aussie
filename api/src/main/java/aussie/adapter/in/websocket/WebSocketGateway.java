@@ -16,6 +16,7 @@ import jakarta.inject.Inject;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.MultiMap;
 import io.vertx.core.Vertx;
+import io.vertx.core.http.HttpClient;
 import io.vertx.core.http.WebSocketConnectOptions;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
@@ -32,6 +33,7 @@ import aussie.core.model.websocket.WebSocketProxySession;
 import aussie.core.model.websocket.WebSocketUpgradeRequest;
 import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
+import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.service.auth.JwksCacheService.JwksFetchException;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
 import aussie.core.service.routing.UpstreamAddressResolver;
@@ -59,6 +61,7 @@ public class WebSocketGateway {
     private final WebSocketGatewayUseCase gatewayUseCase;
     private final WebSocketConfig config;
     private final Vertx vertx;
+    private final HttpClient httpClient;
     private final GatewayMetrics metrics;
     private final WebSocketRateLimitService rateLimitService;
     private final ProxyErrorWriter errorWriter;
@@ -70,6 +73,7 @@ public class WebSocketGateway {
             WebSocketGatewayUseCase gatewayUseCase,
             WebSocketConfig config,
             Vertx vertx,
+            OutboundHttpClients outboundClient,
             GatewayMetrics metrics,
             WebSocketRateLimitService rateLimitService,
             ProxyErrorWriter errorWriter,
@@ -78,6 +82,7 @@ public class WebSocketGateway {
         this.gatewayUseCase = gatewayUseCase;
         this.config = config;
         this.vertx = vertx;
+        this.httpClient = outboundClient.httpClient();
         this.metrics = metrics;
         this.rateLimitService = rateLimitService;
         this.errorWriter = errorWriter;
@@ -204,7 +209,7 @@ public class WebSocketGateway {
                 .with(
                         serverAddress -> {
                             options.setServer(serverAddress);
-                            vertx.createHttpClient()
+                            httpClient
                                     .webSocket(options)
                                     .onSuccess(backendWs -> {
                                         // Backend connected - now upgrade client connection (non-blocking)

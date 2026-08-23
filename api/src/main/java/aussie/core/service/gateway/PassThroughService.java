@@ -134,7 +134,7 @@ public class PassThroughService implements PassThroughUseCase {
                 .forward(preparedRequest)
                 .map(response -> (GatewayResult) GatewayResult.Success.from(response))
                 .onFailure()
-                .recoverWithItem(error -> new GatewayResult.Error(error.getMessage()));
+                .recoverWithItem(error -> new GatewayResult.Error("Upstream request failed"));
     }
 
     private Uni<GatewayResult> forwardWithoutToken(GatewayRequest request, RouteMatch routeMatch) {
@@ -144,7 +144,7 @@ public class PassThroughService implements PassThroughUseCase {
                 .forward(preparedRequest)
                 .map(response -> (GatewayResult) GatewayResult.Success.from(response))
                 .onFailure()
-                .recoverWithItem(error -> new GatewayResult.Error(error.getMessage()));
+                .recoverWithItem(error -> new GatewayResult.Error("Upstream request failed"));
     }
 
     private RouteMatch createRouteMatch(ServiceRegistration service, String targetPath, String method) {

@@ -235,7 +235,7 @@ class GatewayServiceTest {
             var result = gatewayService.forward(testRequest()).await().atMost(Duration.ofSeconds(1));
 
             assertInstanceOf(GatewayResult.Error.class, result);
-            assertEquals("connection refused", ((GatewayResult.Error) result).message());
+            assertEquals("Upstream request failed", ((GatewayResult.Error) result).message());
         }
     }
 }

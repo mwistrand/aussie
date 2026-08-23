@@ -37,6 +37,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import aussie.adapter.out.telemetry.TokenTranslationMetrics;
 import aussie.core.config.TokenTranslationConfig;
 import aussie.core.config.TokenTranslationConfig.Remote.FailMode;
+import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.service.routing.UpstreamAddressResolver;
 
 /**
@@ -63,6 +64,7 @@ class RemoteTokenTranslatorProviderTest {
     private ObjectMapper objectMapper;
     private RemoteTokenTranslatorProvider provider;
     private UpstreamAddressResolver addressResolver;
+    private OutboundHttpClients outboundClient;
 
     @BeforeEach
     void setUp() {
@@ -75,6 +77,8 @@ class RemoteTokenTranslatorProviderTest {
         lenient().when(remoteConfig.timeout()).thenReturn(Duration.ofSeconds(5));
         lenient().when(remoteConfig.failMode()).thenReturn(FailMode.deny);
         addressResolver = mock(UpstreamAddressResolver.class);
+        outboundClient = mock(OutboundHttpClients.class);
+        lenient().when(outboundClient.webClient()).thenReturn(io.vertx.mutiny.ext.web.client.WebClient.create(vertx));
     }
 
     @AfterEach
@@ -96,7 +100,7 @@ class RemoteTokenTranslatorProviderTest {
                     .thenReturn(Uni.createFrom()
                             .item(io.vertx.core.net.SocketAddress.inetSocketAddress(uri.getPort(), "127.0.0.1")));
         }
-        provider = new RemoteTokenTranslatorProvider(vertx, config, metrics, objectMapper, addressResolver);
+        provider = new RemoteTokenTranslatorProvider(outboundClient, config, metrics, objectMapper, addressResolver);
     }
 
     @Nested

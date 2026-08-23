@@ -22,7 +22,6 @@ import java.util.Optional;
 import io.quarkiverse.resteasy.problem.HttpProblem;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
-import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.buffer.Buffer;
 import io.vertx.mutiny.core.net.SocketAddress;
 import io.vertx.mutiny.ext.web.client.HttpRequest;
@@ -40,6 +39,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import aussie.core.config.OidcConfig;
 import aussie.core.model.auth.OidcTokenExchangeRequest;
 import aussie.core.model.auth.OidcTokenExchangeRequest.ClientAuthMethod;
+import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.service.routing.UpstreamAddressResolver;
 
 @DisplayName("DefaultOidcTokenExchangeProvider")
@@ -58,6 +58,9 @@ class DefaultOidcTokenExchangeProviderTest {
     @Mock
     private UpstreamAddressResolver addressResolver;
 
+    @Mock
+    private OutboundHttpClients outboundClient;
+
     private DefaultOidcTokenExchangeProvider provider;
 
     @BeforeEach
@@ -65,18 +68,11 @@ class DefaultOidcTokenExchangeProviderTest {
         lenient().when(oidcConfig.tokenExchange()).thenReturn(tokenExchangeConfig);
         lenient().when(tokenExchangeConfig.timeout()).thenReturn(Duration.ofSeconds(10));
 
-        // Use Vertx.vertx() to create a real (lightweight) Vertx for WebClient construction,
-        // then replace with mock WebClient via reflection
-        var realVertx = Vertx.vertx();
+        lenient().when(outboundClient.webClient()).thenReturn(webClient);
         lenient()
                 .when(addressResolver.resolve(any(URI.class)))
                 .thenReturn(Uni.createFrom().item(io.vertx.core.net.SocketAddress.inetSocketAddress(443, "192.0.2.1")));
-        provider = new DefaultOidcTokenExchangeProvider(realVertx, oidcConfig, addressResolver);
-
-        // Inject mock WebClient via reflection
-        var webClientField = DefaultOidcTokenExchangeProvider.class.getDeclaredField("webClient");
-        webClientField.setAccessible(true);
-        webClientField.set(provider, webClient);
+        provider = new DefaultOidcTokenExchangeProvider(outboundClient, oidcConfig, addressResolver);
     }
 
     @Nested

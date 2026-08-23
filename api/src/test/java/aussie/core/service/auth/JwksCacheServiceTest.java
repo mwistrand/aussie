@@ -11,7 +11,6 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -21,7 +20,6 @@ import java.time.Duration;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.smallrye.mutiny.Uni;
-import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.buffer.Buffer;
 import io.vertx.mutiny.core.net.SocketAddress;
 import io.vertx.mutiny.ext.web.client.HttpRequest;
@@ -41,6 +39,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.core.config.ResiliencyConfig;
 import aussie.core.port.out.Metrics;
+import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.service.routing.UpstreamAddressResolver;
 
 @DisplayName("JwksCacheService")
@@ -56,7 +55,7 @@ class JwksCacheServiceTest {
     private static String secondKeyId;
 
     @Mock
-    private Vertx vertx;
+    private OutboundHttpClients outboundClient;
 
     @Mock
     private WebClient webClient;
@@ -99,15 +98,13 @@ class JwksCacheServiceTest {
         lenient().when(jwksConfig.maxCacheEntries()).thenReturn(100);
         lenient().when(jwksConfig.cacheTtl()).thenReturn(Duration.ofHours(1));
         lenient().when(resiliencyConfig.jwks()).thenReturn(jwksConfig);
+        lenient().when(outboundClient.jwksWebClient()).thenReturn(webClient);
         lenient()
                 .when(addressResolver.resolve(any(URI.class)))
                 .thenReturn(Uni.createFrom().item(io.vertx.core.net.SocketAddress.inetSocketAddress(443, "192.0.2.1")));
 
-        try (var mockedWebClient = mockStatic(WebClient.class)) {
-            mockedWebClient.when(() -> WebClient.create(any(Vertx.class))).thenReturn(webClient);
-            service =
-                    new JwksCacheService(vertx, resiliencyConfig, new SimpleMeterRegistry(), metrics, addressResolver);
-        }
+        service = new JwksCacheService(
+                outboundClient, resiliencyConfig, new SimpleMeterRegistry(), metrics, addressResolver);
     }
 
     @SuppressWarnings("unchecked")
@@ -460,11 +457,8 @@ class JwksCacheServiceTest {
             // Use a very short timeout config
             when(jwksConfig.fetchTimeout()).thenReturn(Duration.ofMillis(1));
 
-            try (var mockedWebClient = mockStatic(WebClient.class)) {
-                mockedWebClient.when(() -> WebClient.create(any(Vertx.class))).thenReturn(webClient);
-                service = new JwksCacheService(
-                        vertx, resiliencyConfig, new SimpleMeterRegistry(), metrics, addressResolver);
-            }
+            service = new JwksCacheService(
+                    outboundClient, resiliencyConfig, new SimpleMeterRegistry(), metrics, addressResolver);
 
             // Mock a response that never arrives (Uni that never emits)
             @SuppressWarnings("unchecked")

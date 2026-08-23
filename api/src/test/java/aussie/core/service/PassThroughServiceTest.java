@@ -267,7 +267,7 @@ class PassThroughServiceTest {
 
             assertInstanceOf(GatewayResult.Error.class, result);
             var error = (GatewayResult.Error) result;
-            assertEquals("Connection timeout", error.message());
+            assertEquals("Upstream request failed", error.message());
         }
     }
 
