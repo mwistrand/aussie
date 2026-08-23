@@ -54,8 +54,16 @@ class Rfc7239ForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should build Forwarded header with all components")
         void shouldBuildForwardedHeaderWithAllComponents() {
-            var request = createRequest(
-                    Map.of("Host", "api.example.com"), URI.create("https://gateway:8080/api/test"), "192.168.1.100");
+            var request = new GatewayRequest(
+                    "GET",
+                    "/api/test",
+                    Map.of(),
+                    URI.create("https://gateway:8080/api/test"),
+                    null,
+                    "192.168.1.100",
+                    "https",
+                    "api.example.com",
+                    null);
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api/test"));
 
@@ -89,14 +97,34 @@ class Rfc7239ForwardedHeaderBuilderTest {
         }
 
         @Test
-        @DisplayName("Should include 'host' parameter from Host header")
-        void shouldIncludeHostParameter() {
-            var request = createRequest(Map.of("Host", "api.example.com"));
+        @DisplayName("Should omit an unvalidated Host header")
+        void shouldOmitUnvalidatedHost() {
+            var request = createRequest(Map.of("Host", "invalid host"));
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
             var forwarded = headers.get("Forwarded");
-            assertTrue(forwarded.contains("host="));
+            assertTrue(!forwarded.contains("host="));
+        }
+
+        @Test
+        @DisplayName("Should prefer the canonical external authority over the socket Host")
+        void shouldUseCanonicalExternalAuthority() {
+            final var request = new GatewayRequest(
+                    "GET",
+                    "/api/test",
+                    Map.of("Host", List.of("internal-gateway:8080")),
+                    null,
+                    null,
+                    "198.51.100.5",
+                    "https",
+                    "api.example.com",
+                    9443);
+
+            final var forwarded = builder.buildHeaders(request, URI.create("http://backend:9090/api"))
+                    .get("Forwarded");
+
+            assertTrue(forwarded.contains("host=\"api.example.com:9443\""));
         }
 
         @Test
@@ -143,7 +171,8 @@ class Rfc7239ForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should quote host with port")
         void shouldQuoteHostWithPort() {
-            var request = createRequest(Map.of("Host", "api.example.com:8443"));
+            var request =
+                    new GatewayRequest("GET", "/api/test", Map.of(), null, null, null, null, "api.example.com", 8443);
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 

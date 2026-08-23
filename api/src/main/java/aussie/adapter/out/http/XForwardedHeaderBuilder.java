@@ -29,8 +29,8 @@ public class XForwardedHeaderBuilder implements ForwardedHeaderBuilder {
             headers.put("X-Forwarded-For", clientIp);
         }
 
-        // X-Forwarded-Host - original host
-        var host = originalRequest.getHeaderString("Host");
+        // X-Forwarded-Host - authority validated at the inbound trust boundary
+        var host = originalRequest.externalAuthority();
         if (host != null) {
             headers.put("X-Forwarded-Host", host);
         }

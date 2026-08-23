@@ -56,7 +56,7 @@ Framework-free values shared across architectural layers.
 
 | Class | Description |
 |---|---|
-| `ClientContext` | Immutable per-request value holding the socket IP, trusted-proxy decision, forwarded client IP, and canonical resolved IP. |
+| `ClientContext` | Immutable per-request value holding direct peer metadata, bounded forwarding hops and trust decisions, canonical external authority/correlation metadata, and post-verification principal identifiers. |
 
 **Allowed dependencies:** `java.*` only.
 
@@ -590,7 +590,7 @@ These packages translate HTTP, WebSocket, and lifecycle events into calls on cor
 
 | Class | Description |
 |---|---|
-| `ClientContextResolver` | Validates bounded forwarding chains from trusted socket peers, selects the rightmost untrusted address, and shares one `ClientContext` through Vert.x and JAX-RS request contexts. |
+| `ClientContextResolver` | Validates bounded forwarding and external-address metadata from trusted socket peers, selects the rightmost untrusted address, and shares one `ClientContext` through Vert.x and JAX-RS request contexts. |
 
 **Allowed dependencies:** `common/context`, `core/service/common`, Vert.x, JAX-RS.
 

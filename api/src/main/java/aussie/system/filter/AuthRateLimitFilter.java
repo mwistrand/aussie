@@ -85,9 +85,8 @@ public class AuthRateLimitFilter {
         }
 
         final var ip = extractClientIp(requestContext, vertxRequest);
-        final var identifier = extractIdentifier(requestContext);
 
-        return rateLimitService.checkAuthLimit(ip, identifier).map(result -> {
+        return rateLimitService.checkAuthLimit(ip, null).map(result -> {
             requestContext.setProperty(AUTH_RATE_LIMIT_RESULT, result);
             setSpanAttributes(result);
 
@@ -159,32 +158,6 @@ public class AuthRateLimitFilter {
 
     private String extractClientIp(ContainerRequestContext ctx, HttpServerRequest vertxRequest) {
         return clientContextResolver.getOrCompute(ctx, vertxRequest).resolvedIp();
-    }
-
-    private String extractIdentifier(ContainerRequestContext ctx) {
-        // Try to extract identifier from request body or headers
-        // For login requests, this would be username/email
-        // For API key requests, this would be the key prefix
-
-        // Check for API key header
-        final var apiKey = ctx.getHeaderString("X-API-Key");
-        if (apiKey != null && apiKey.length() >= 8) {
-            return apiKey.substring(0, 8);
-        }
-
-        // Check for authorization header (bearer token)
-        final var auth = ctx.getHeaderString("Authorization");
-        if (auth != null && auth.startsWith("Bearer ")) {
-            // Use first 8 chars of token as identifier
-            final var token = auth.substring(7);
-            if (token.length() >= 8) {
-                return token.substring(0, 8);
-            }
-        }
-
-        // For other cases, identifier will be extracted from request body
-        // by the authentication mechanism and recorded after failed attempt
-        return null;
     }
 
     private String hashClientId(String clientId) {

@@ -325,22 +325,6 @@ class WebSocketGatewayUnitTest {
     }
 
     @Nested
-    @DisplayName("canonical network identity")
-    class ExtractClientIdTests {
-
-        @Test
-        @DisplayName("ignores caller-supplied credentials and forwarding headers")
-        void shouldUseResolvedClientContext() throws Exception {
-            when(clientContextResolver.getOrCompute(ctx)).thenReturn(new ClientContext("192.0.2.20", false, null));
-
-            final var method = WebSocketGateway.class.getDeclaredMethod("extractClientId", RoutingContext.class);
-            method.setAccessible(true);
-
-            assertEquals("ip:192.0.2.20", method.invoke(gateway, ctx));
-        }
-    }
-
-    @Nested
     @DisplayName("handleGatewayUpgrade path edge cases")
     class GatewayUpgradePathTests {
 

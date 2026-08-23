@@ -11,7 +11,9 @@ public record GatewayRequest(
         URI requestUri,
         byte[] body,
         String clientIp,
-        String externalScheme) {
+        String externalScheme,
+        String externalHost,
+        Integer externalPort) {
 
     public GatewayRequest(
             String method,
@@ -20,7 +22,18 @@ public record GatewayRequest(
             URI requestUri,
             byte[] body,
             String clientIp) {
-        this(method, path, headers, requestUri, body, clientIp, null);
+        this(method, path, headers, requestUri, body, clientIp, null, null, null);
+    }
+
+    public GatewayRequest(
+            String method,
+            String path,
+            Map<String, List<String>> headers,
+            URI requestUri,
+            byte[] body,
+            String clientIp,
+            String externalScheme) {
+        this(method, path, headers, requestUri, body, clientIp, externalScheme, null, null);
     }
 
     public GatewayRequest {
@@ -44,5 +57,13 @@ public record GatewayRequest(
             return null;
         }
         return values.get(0);
+    }
+
+    public String externalAuthority() {
+        if (externalHost == null) {
+            return null;
+        }
+        final var host = externalHost.indexOf(':') >= 0 ? "[" + externalHost + "]" : externalHost;
+        return externalPort == null ? host : host + ":" + externalPort;
     }
 }

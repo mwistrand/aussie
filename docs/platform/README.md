@@ -497,7 +497,10 @@ therefore cannot override the effective client. `X-Real-IP` is accepted only as 
 single-hop fallback when neither chain header is present. Malformed, obfuscated,
 oversized, or overlong chains fall back to the direct socket peer. A trusted
 `Forwarded: proto=` or `X-Forwarded-Proto` value is restricted to `http` or `https`
-and preserved when Aussie rebuilds forwarding metadata for the upstream.
+and trusted external host/port metadata is syntax-checked before Aussie rebuilds
+forwarding headers. The same immutable request context carries the peer port, per-hop
+trust decisions, bounded correlation ID, and identifiers attached only after successful
+authentication.
 
 **Important:** If you enable trusted proxy validation without configuring any proxy addresses, *all* forwarding headers will be rejected and the socket IP will always be used directly.
 
@@ -733,7 +736,7 @@ Set `cookie.domain` if Aussie is accessed from multiple subdomains. For local de
 
 ## Auth Rate Limiting (Brute Force Protection)
 
-Aussie includes built-in brute force protection for authentication endpoints. After repeated failed attempts, the offending IP or credential is temporarily locked out.
+Aussie includes built-in brute force protection for authentication endpoints. Admission checks run before authentication, so only the canonical network identity can select the lockout bucket; unverified credential bytes are never used as identifiers.
 
 ### Configuration
 
@@ -746,9 +749,8 @@ aussie.auth.rate-limit.max-failed-attempts=5
 aussie.auth.rate-limit.failed-attempt-window=PT1H
 aussie.auth.rate-limit.lockout-duration=PT15M
 
-# Track by IP and/or credential identifier
+# Track by canonical network identity
 aussie.auth.rate-limit.track-by-ip=true
-aussie.auth.rate-limit.track-by-identifier=true
 
 # Progressive lockout: each subsequent lockout is 1.5x longer
 aussie.auth.rate-limit.progressive-lockout-multiplier=1.5
@@ -762,7 +764,7 @@ aussie.auth.rate-limit.include-headers=true
 
 When a client exceeds `max-failed-attempts` within `failed-attempt-window`, subsequent authentication attempts receive a 429 response with a `Retry-After` header. Each subsequent lockout is multiplied by `progressive-lockout-multiplier`, up to `max-lockout-duration`.
 
-Tracking can be by IP address, credential identifier (API key ID, username), or both. When both are enabled, either dimension triggering a lockout blocks the attempt.
+The pre-authentication lockout is always network-based. A future post-authentication quota may additionally use a verified principal or API-key ID, but it must not replace this network boundary.
 
 ## Local Caching
 
@@ -1303,7 +1305,7 @@ This health check always reports UP since configuration is validated at startup.
 | `AUSSIE_AUTH_RATE_LIMIT_LOCKOUT_DURATION` | `PT15M` | Initial lockout duration |
 | `AUSSIE_AUTH_RATE_LIMIT_FAILED_ATTEMPT_WINDOW` | `PT1H` | Window for tracking failed attempts |
 | `AUSSIE_AUTH_RATE_LIMIT_TRACK_BY_IP` | `true` | Track failed attempts by IP address |
-| `AUSSIE_AUTH_RATE_LIMIT_TRACK_BY_IDENTIFIER` | `true` | Track failed attempts by credential identifier |
+| `AUSSIE_AUTH_RATE_LIMIT_TRACK_BY_IDENTIFIER` | `true` | Reserved for post-authentication verified identifiers; never reads raw credential bytes |
 | `AUSSIE_AUTH_RATE_LIMIT_PROGRESSIVE_LOCKOUT_MULTIPLIER` | `1.5` | Multiplier for progressive lockout duration |
 | `AUSSIE_AUTH_RATE_LIMIT_MAX_LOCKOUT_DURATION` | `PT24H` | Maximum lockout duration |
 | `AUSSIE_AUTH_RATE_LIMIT_INCLUDE_HEADERS` | `true` | Include rate limit headers in auth error responses |

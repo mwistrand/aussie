@@ -14,6 +14,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
+
 import jakarta.ws.rs.container.ContainerRequestContext;
 
 import io.vertx.core.http.HttpServerRequest;
@@ -52,8 +54,11 @@ class ClientContextResolverTest {
         @DisplayName("ignores forwarded headers when proxy is not trusted")
         void ignoresForwardedHeadersWhenProxyNotTrusted() {
             when(socketAddress.host()).thenReturn("203.0.113.99");
+            when(socketAddress.port()).thenReturn(43123);
             when(trustedProxyValidator.shouldTrustForwardingHeaders("203.0.113.99"))
                     .thenReturn(false);
+            when(request.getHeader("Host")).thenReturn("Gateway.Example:8443");
+            when(request.getHeader("X-Request-ID")).thenReturn("request-123");
             when(request.getHeader("Forwarded")).thenReturn("for=1.2.3.4");
             when(request.getHeader("X-Forwarded-For")).thenReturn("1.2.3.4");
             when(request.getHeader("X-Real-IP")).thenReturn("1.2.3.4");
@@ -64,7 +69,11 @@ class ClientContextResolverTest {
             assertEquals("203.0.113.99", ctx.socketIp());
             assertFalse(ctx.trustForwardingHeaders());
             assertNull(ctx.forwardedClientIp());
-            assertNull(ctx.externalScheme());
+            assertEquals("http", ctx.externalScheme());
+            assertEquals(43123, ctx.socketPort());
+            assertEquals("gateway.example", ctx.externalHost());
+            assertEquals(8443, ctx.externalPort());
+            assertEquals("request-123", ctx.correlationId());
             assertEquals("203.0.113.99", ctx.resolvedIp());
         }
 
@@ -151,6 +160,12 @@ class ClientContextResolverTest {
 
             assertEquals("203.0.113.10", ctx.forwardedClientIp());
             assertEquals("203.0.113.10", ctx.resolvedIp());
+            assertEquals(
+                    List.of(
+                            new ClientContext.ForwardingHop("198.51.100.66", false),
+                            new ClientContext.ForwardingHop("203.0.113.10", false),
+                            new ClientContext.ForwardingHop("10.0.0.2", true)),
+                    ctx.forwardingChain());
         }
 
         @Test
@@ -226,7 +241,48 @@ class ClientContextResolverTest {
 
             final var ctx = resolver.resolve(request);
 
-            assertNull(ctx.externalScheme());
+            assertEquals("http", ctx.externalScheme());
+        }
+
+        @Test
+        @DisplayName("captures canonical external authority only from a trusted proxy")
+        void capturesCanonicalExternalAuthority() {
+            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.0.0.1")).thenReturn(true);
+            when(request.getHeader("Forwarded")).thenReturn("for=198.51.100.5;proto=https;host=Api.Example:9443");
+
+            final var ctx = resolver.resolve(request);
+
+            assertEquals("api.example", ctx.externalHost());
+            assertEquals(9443, ctx.externalPort());
+            assertEquals("api.example:9443", ctx.externalAuthority());
+        }
+
+        @Test
+        @DisplayName("uses the external entries from X-Forwarded host and port chains")
+        void capturesXForwardedAuthorityChain() {
+            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.0.0.1")).thenReturn(true);
+            when(request.getHeader("X-Forwarded-Host")).thenReturn("api.example, internal-proxy");
+            when(request.getHeader("X-Forwarded-Port")).thenReturn("443, 8080");
+
+            final var ctx = resolver.resolve(request);
+
+            assertEquals("api.example", ctx.externalHost());
+            assertEquals(443, ctx.externalPort());
+        }
+
+        @Test
+        @DisplayName("canonicalizes equivalent IPv6 forwarding identities")
+        void canonicalizesIpv6Identity() {
+            when(socketAddress.host()).thenReturn("10.0.0.1");
+            when(trustedProxyValidator.shouldTrustForwardingHeaders("10.0.0.1")).thenReturn(true);
+            when(request.getHeader("X-Forwarded-For")).thenReturn("2001:0DB8:0000:0000:0000:0000:0000:0001");
+
+            final var ctx = resolver.resolve(request);
+
+            assertEquals("2001:db8::1", ctx.resolvedIp());
+            assertEquals(List.of(new ClientContext.ForwardingHop("2001:db8::1", false)), ctx.forwardingChain());
         }
 
         @Test

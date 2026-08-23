@@ -496,111 +496,18 @@ class AuthRateLimitFilterTest {
         }
     }
 
-    @Nested
-    @DisplayName("Identifier extraction")
-    class IdentifierExtractionTests {
+    @Test
+    @DisplayName("unverified credentials cannot select an authentication quota namespace")
+    void unverifiedCredentialsCannotSelectQuotaNamespace() {
+        setupRequestContext("/auth/login", null, "192.168.1.1");
+        when(requestContext.getHeaderString("X-API-Key")).thenReturn("rotating-api-key");
+        when(requestContext.getHeaderString("Authorization")).thenReturn("Bearer rotating-token");
+        when(rateLimitService.checkAuthLimit(anyString(), any()))
+                .thenReturn(Uni.createFrom().item(AuthRateLimitService.RateLimitResult.allow()));
 
-        @Test
-        @DisplayName("should extract API key prefix when key is long enough")
-        void shouldExtractApiKeyPrefix() {
-            setupRequestContext("/auth/login", null, "192.168.1.1");
-            when(requestContext.getHeaderString("X-API-Key")).thenReturn("abcdefgh12345678");
+        filter.filter(requestContext, vertxRequest).await().atMost(Duration.ofSeconds(5));
 
-            var rateLimitResult = AuthRateLimitService.RateLimitResult.allow();
-            when(rateLimitService.checkAuthLimit(anyString(), any()))
-                    .thenReturn(Uni.createFrom().item(rateLimitResult));
-
-            filter.filter(requestContext, vertxRequest).await().atMost(Duration.ofSeconds(5));
-
-            ArgumentCaptor<String> idCaptor = ArgumentCaptor.forClass(String.class);
-            verify(rateLimitService).checkAuthLimit(anyString(), idCaptor.capture());
-            assertEquals("abcdefgh", idCaptor.getValue());
-        }
-
-        @Test
-        @DisplayName("should skip short API key and try Bearer token")
-        void shouldSkipShortApiKey() {
-            setupRequestContext("/auth/login", null, "192.168.1.1");
-            when(requestContext.getHeaderString("X-API-Key")).thenReturn("short");
-            when(requestContext.getHeaderString("Authorization")).thenReturn("Bearer longtokenvalue123");
-
-            var rateLimitResult = AuthRateLimitService.RateLimitResult.allow();
-            when(rateLimitService.checkAuthLimit(anyString(), any()))
-                    .thenReturn(Uni.createFrom().item(rateLimitResult));
-
-            filter.filter(requestContext, vertxRequest).await().atMost(Duration.ofSeconds(5));
-
-            ArgumentCaptor<String> idCaptor = ArgumentCaptor.forClass(String.class);
-            verify(rateLimitService).checkAuthLimit(anyString(), idCaptor.capture());
-            assertEquals("longtoke", idCaptor.getValue());
-        }
-
-        @Test
-        @DisplayName("should extract Bearer token prefix when token is long enough")
-        void shouldExtractBearerTokenPrefix() {
-            setupRequestContext("/auth/login", null, "192.168.1.1");
-            when(requestContext.getHeaderString("Authorization")).thenReturn("Bearer mytoken12345");
-
-            var rateLimitResult = AuthRateLimitService.RateLimitResult.allow();
-            when(rateLimitService.checkAuthLimit(anyString(), any()))
-                    .thenReturn(Uni.createFrom().item(rateLimitResult));
-
-            filter.filter(requestContext, vertxRequest).await().atMost(Duration.ofSeconds(5));
-
-            ArgumentCaptor<String> idCaptor = ArgumentCaptor.forClass(String.class);
-            verify(rateLimitService).checkAuthLimit(anyString(), idCaptor.capture());
-            assertEquals("mytoken1", idCaptor.getValue());
-        }
-
-        @Test
-        @DisplayName("should skip short Bearer token")
-        void shouldSkipShortBearerToken() {
-            setupRequestContext("/auth/login", null, "192.168.1.1");
-            when(requestContext.getHeaderString("Authorization")).thenReturn("Bearer short");
-
-            var rateLimitResult = AuthRateLimitService.RateLimitResult.allow();
-            when(rateLimitService.checkAuthLimit(anyString(), any()))
-                    .thenReturn(Uni.createFrom().item(rateLimitResult));
-
-            filter.filter(requestContext, vertxRequest).await().atMost(Duration.ofSeconds(5));
-
-            ArgumentCaptor<String> idCaptor = ArgumentCaptor.forClass(String.class);
-            verify(rateLimitService).checkAuthLimit(anyString(), idCaptor.capture());
-            assertNull(idCaptor.getValue());
-        }
-
-        @Test
-        @DisplayName("should skip non-Bearer Authorization header")
-        void shouldSkipNonBearerAuth() {
-            setupRequestContext("/auth/login", null, "192.168.1.1");
-            when(requestContext.getHeaderString("Authorization")).thenReturn("Basic dXNlcjpwYXNz");
-
-            var rateLimitResult = AuthRateLimitService.RateLimitResult.allow();
-            when(rateLimitService.checkAuthLimit(anyString(), any()))
-                    .thenReturn(Uni.createFrom().item(rateLimitResult));
-
-            filter.filter(requestContext, vertxRequest).await().atMost(Duration.ofSeconds(5));
-
-            ArgumentCaptor<String> idCaptor = ArgumentCaptor.forClass(String.class);
-            verify(rateLimitService).checkAuthLimit(anyString(), idCaptor.capture());
-            assertNull(idCaptor.getValue());
-        }
-
-        @Test
-        @DisplayName("should return null identifier when no headers present")
-        void shouldReturnNullIdentifierWhenNoHeaders() {
-            setupRequestContext("/auth/login", null, "192.168.1.1");
-
-            var rateLimitResult = AuthRateLimitService.RateLimitResult.allow();
-            when(rateLimitService.checkAuthLimit(anyString(), any()))
-                    .thenReturn(Uni.createFrom().item(rateLimitResult));
-
-            filter.filter(requestContext, vertxRequest).await().atMost(Duration.ofSeconds(5));
-
-            ArgumentCaptor<String> idCaptor = ArgumentCaptor.forClass(String.class);
-            verify(rateLimitService).checkAuthLimit(anyString(), idCaptor.capture());
-            assertNull(idCaptor.getValue());
-        }
+        verify(rateLimitService).checkAuthLimit("192.168.1.1", null);
     }
 
     @Nested

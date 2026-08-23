@@ -104,6 +104,8 @@ class JwtIdentityProviderTest {
                     "test-user",
                     "name",
                     "Test User",
+                    "jti",
+                    "token-1",
                     "roles",
                     List.of("demo-service.admin"),
                     "permissions",
@@ -127,6 +129,8 @@ class JwtIdentityProviderTest {
             assertEquals("Test User", result.getPrincipal().getName());
             assertTrue(result.getAttribute("roles") instanceof List);
             assertTrue(result.getAttribute("permissions") instanceof Set);
+            assertEquals("test-user", result.getAttribute("principalId"));
+            assertEquals("token-1", result.getAttribute("credentialId"));
         }
 
         @Test

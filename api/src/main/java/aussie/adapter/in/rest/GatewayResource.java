@@ -108,7 +108,9 @@ public class GatewayResource {
                 requestContext.getUriInfo().getRequestUri(),
                 body,
                 clientContext.resolvedIp(),
-                clientContext.externalScheme());
+                clientContext.externalScheme(),
+                clientContext.externalHost(),
+                clientContext.externalPort());
     }
 
     private Response toResponse(GatewayResult result) {

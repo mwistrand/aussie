@@ -127,6 +127,8 @@ class CredentialAuthenticationMechanismTest {
     void dispatchesVersionedApiKey() {
         when(headers.getAll("Authorization")).thenReturn(List.of("Bearer " + VERSIONED_KEY));
         final var expected = mock(SecurityIdentity.class);
+        when(expected.getAttribute("principalId")).thenReturn("key-1");
+        when(expected.getAttribute("credentialId")).thenReturn("key-1");
         when(identityProviderManager.authenticate(any(ApiKeyAuthenticationRequest.class)))
                 .thenReturn(Uni.createFrom().item(expected));
 
@@ -139,6 +141,7 @@ class CredentialAuthenticationMechanismTest {
         final var requestCaptor = ArgumentCaptor.forClass(ApiKeyAuthenticationRequest.class);
         verify(identityProviderManager).authenticate(requestCaptor.capture());
         assertEquals(VERSIONED_KEY, requestCaptor.getValue().getApiKey());
+        verify(clientContextResolver).attachVerifiedIdentity(routingContext, "key-1", "key-1");
     }
 
     @Test
@@ -241,6 +244,7 @@ class CredentialAuthenticationMechanismTest {
         assertEquals(Set.of("service.config.read"), identity.getAttribute("permissions"));
         assertEquals("session", identity.getAttribute("authenticationMethod"));
         assertTrue(identity.getRoles().contains("service.config.read"));
+        verify(clientContextResolver).attachVerifiedIdentity(routingContext, "user-1", "session-1");
     }
 
     @Test

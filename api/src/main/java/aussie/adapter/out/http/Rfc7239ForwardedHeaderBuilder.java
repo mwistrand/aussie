@@ -32,8 +32,8 @@ public class Rfc7239ForwardedHeaderBuilder implements ForwardedHeaderBuilder {
             parts.add("proto=" + proto);
         }
 
-        // host - original Host header
-        var host = originalRequest.getHeaderString("Host");
+        // host - authority validated at the inbound trust boundary
+        var host = originalRequest.externalAuthority();
         if (host != null) {
             parts.add("host=" + quoteIfNeeded(host));
         }

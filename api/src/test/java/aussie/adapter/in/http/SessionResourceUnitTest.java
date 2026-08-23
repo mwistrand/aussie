@@ -4,11 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.lang.reflect.Field;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -22,6 +22,7 @@ import io.quarkiverse.resteasy.problem.HttpProblem;
 import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpServerRequest;
+import io.vertx.ext.web.RoutingContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +31,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.adapter.in.auth.CredentialAuthenticationMechanism.SessionPrincipal;
 import aussie.adapter.in.auth.SessionCookieManager;
+import aussie.adapter.in.context.ClientContextResolver;
+import aussie.common.context.ClientContext;
 import aussie.core.config.SessionConfig;
 import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.model.auth.ValidatedIdentity;
@@ -58,15 +61,28 @@ class SessionResourceUnitTest {
     @Mock
     private HttpServerRequest request;
 
+    @Mock
+    private RoutingContext routingContext;
+
+    @Mock
+    private ClientContextResolver clientContextResolver;
+
     private SessionResource resource;
 
     @BeforeEach
-    void setUp() throws ReflectiveOperationException {
-        resource =
-                new SessionResource(sessionManagement, cookieManager, config, securityIdentity, tokenValidationService);
-        final Field requestField = SessionResource.class.getDeclaredField("request");
-        requestField.setAccessible(true);
-        requestField.set(resource, request);
+    void setUp() {
+        lenient().when(routingContext.request()).thenReturn(request);
+        lenient()
+                .when(clientContextResolver.getOrCompute(routingContext))
+                .thenReturn(new ClientContext(null, false, null));
+        resource = new SessionResource(
+                sessionManagement,
+                cookieManager,
+                config,
+                securityIdentity,
+                tokenValidationService,
+                routingContext,
+                clientContextResolver);
     }
 
     @Test
@@ -90,12 +106,11 @@ class SessionResourceUnitTest {
         when(config.enabled()).thenReturn(true);
         when(config.publicCreationEnabled()).thenReturn(true);
         when(request.getHeader("User-Agent")).thenReturn("test-agent");
-        when(request.remoteAddress()).thenReturn(null);
         final var identity = identity();
         when(tokenValidationService.validate("signed-token"))
                 .thenReturn(Uni.createFrom().item(new TokenValidationResult.Valid(identity)));
         final var session = session();
-        when(sessionManagement.createSession(eq(identity), eq("test-agent"), eq(null)))
+        when(sessionManagement.createSession(eq(identity), eq("test-agent"), eq("unknown")))
                 .thenReturn(Uni.createFrom().item(session));
         when(cookieManager.createResponseCookie(session))
                 .thenReturn(new NewCookie.Builder("aussie_session")
@@ -107,7 +122,7 @@ class SessionResourceUnitTest {
                 .atMost(Duration.ofSeconds(5));
 
         assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
-        verify(sessionManagement).createSession(identity, "test-agent", null);
+        verify(sessionManagement).createSession(identity, "test-agent", "unknown");
     }
 
     @Test
@@ -118,7 +133,7 @@ class SessionResourceUnitTest {
         when(tokenValidationService.validate("signed-token"))
                 .thenReturn(Uni.createFrom().item(new TokenValidationResult.Valid(identity)));
         final var session = session();
-        when(sessionManagement.createSession(identity, null, null))
+        when(sessionManagement.createSession(identity, null, "unknown"))
                 .thenReturn(Uni.createFrom().item(session));
         when(cookieManager.createResponseCookie(session))
                 .thenReturn(new NewCookie.Builder("aussie_session")
@@ -210,7 +225,7 @@ class SessionResourceUnitTest {
         when(tokenValidationService.validate("signed-token"))
                 .thenReturn(Uni.createFrom().item(new TokenValidationResult.Valid(identity)));
         final var session = session();
-        when(sessionManagement.createSession(identity, null, null))
+        when(sessionManagement.createSession(identity, null, "unknown"))
                 .thenReturn(Uni.createFrom().item(session));
         when(cookieManager.createResponseCookie(session))
                 .thenReturn(new NewCookie.Builder("aussie_session")

@@ -95,9 +95,11 @@ public ClientContext resolve(HttpServerRequest request) {
     final var remoteAddress = request.remoteAddress();
     final var socketIp = remoteAddress != null ? remoteAddress.host() : null;
     final var trust = trustedProxyValidator.shouldTrustForwardingHeaders(socketIp);
-    final var forwardedClientIp = trust ? extractForwardedClientIp(request) : null;
-    final var externalScheme = trust ? extractExternalScheme(request) : null;
-    return new ClientContext(socketIp, trust, forwardedClientIp, externalScheme);
+    if (!trust) {
+        return context(socketIp, socketPort, false, List.of(), null,
+                directScheme, directAuthority, correlationId);
+    }
+    return resolveTrusted(/* bounded forwarding and external metadata */);
 }
 ```
 
@@ -105,9 +107,10 @@ When proxy trust is disabled, or when the socket IP is not in the trusted proxy 
 
 When neither forwarding chain is present, a trusted `X-Real-IP` is validated as a
 single literal IP fallback. The resolver also canonicalizes `Forwarded: proto=` or
-`X-Forwarded-Proto` to `http` or `https`, preserving the public scheme across TLS
-termination while rejecting arbitrary caller-controlled protocol values. Both outbound
-header formats consume this canonical value when rebuilding forwarding metadata.
+`X-Forwarded-Proto` to `http` or `https` and validates the external host/port before
+rebuilding outbound forwarding metadata. The context also records the direct peer port,
+per-hop trust decisions, and a bounded correlation ID. A stable principal and credential
+ID are added by copying the immutable context only after authentication succeeds.
 
 The CIDR matching itself is carefully implemented. Line 153 of `TrustedProxyValidator.java` shows the IP parsing function refuses to resolve hostnames:
 
@@ -451,7 +454,9 @@ private boolean isAuthEndpoint(String path) {
 }
 ```
 
-The `AuthRateLimitService` tracks failed attempts by both IP and identifier (username or API key prefix), implementing progressive lockout:
+The admission filter passes only the canonical network identity to `AuthRateLimitService`.
+Bearer strings, cookies, and API-key bytes are unverified at this phase and therefore
+cannot select a quota namespace. The service implements progressive lockout:
 
 ```java
 // AuthRateLimitService.java, lines 239-255
@@ -483,15 +488,17 @@ With the default configuration (`AuthRateLimitConfig.java`), the progression is:
 | ... | ... | ... | ... |
 | cap | -- | 24 hours | maxLockoutDuration |
 
-The dual tracking (IP + identifier) is important for defending against distributed attacks. An attacker rotating through a botnet of IPs but targeting the same username will trigger the identifier-based lockout even though no single IP exceeds the threshold.
-
-After successful authentication, the service clears failed attempt counters (line 264, `clearFailedAttempts`), so legitimate users are not penalized for past mistakes.
+Verified-principal quotas can be added after authentication, but they supplement rather
+than replace the network bucket. This avoids the more immediate bypass where an attacker
+rotates arbitrary credential bytes to create fresh pre-authentication buckets.
 
 ### What a Senior Might Skip
 
 A senior would implement a fixed lockout duration without progressive escalation. The progressive multiplier seems like unnecessary complexity until you observe an actual credential stuffing attack, where the attacker waits out the lockout and retries. Progressive lockout makes each retry more expensive for the attacker while the cap at 24 hours prevents permanent lockout (which becomes a denial-of-service vector against the account owner).
 
-The separation of auth rate limiting from HTTP rate limiting is the more fundamental thing a senior would skip. It requires two separate filter registrations at two different priorities, two different configuration interfaces, and two different storage strategies. But without it, you cannot answer the question "how many failed logins has this account had?" separately from "how many requests has this IP sent?"
+The separation of auth admission limiting from general HTTP limiting is the more
+fundamental distinction: authentication endpoints can use a stricter network lockout
+without tightening ordinary API traffic.
 
 ### Consistent Trusted Proxy Validation
 
@@ -508,15 +515,17 @@ public Uni<Response> filter(ContainerRequestContext requestContext, HttpServerRe
 
 // ClientContextResolver.resolve consults TrustedProxyValidator once:
 final var trust = trustedProxyValidator.shouldTrustForwardingHeaders(socketIp);
-final var forwardedClientIp = trust ? extractForwardedClientIp(request) : null;
-final var externalScheme = trust ? extractExternalScheme(request) : null;
+final var context = trust
+        ? resolveTrusted(/* bounded forwarding and external metadata */)
+        : context(socketIp, socketPort, false, List.of(), null,
+                directScheme, directAuthority, correlationId);
 ```
 
 For trusted peers, the resolver caps the header size and hop count, accepts only IP literals, and walks from the right edge past configured proxy hops to the first untrusted address. Without these checks, an attacker could rotate the leftmost `X-Forwarded-For` entry and evade IP-based lockout tracking.
 
 ### Trade-offs
 
-`ClientContextResolver` lives in `aussie.adapter.in.context`; its immutable `ClientContext` value lives in `aussie.common.context`. HTTP filters, REST resources, access control, forwarding builders, and WebSocket admission all consume that value rather than parsing forwarding headers independently.
+`ClientContextResolver` lives in `aussie.adapter.in.context`; its immutable `ClientContext` value lives in `aussie.common.context`. HTTP filters, REST resources, session creation, access control, forwarding builders, and WebSocket admission all consume that value rather than parsing forwarding headers independently.
 
 ## 2.8 CORS at the Vert.x Layer
 

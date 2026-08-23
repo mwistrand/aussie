@@ -86,16 +86,27 @@ public class CredentialAuthenticationMechanism implements HttpAuthenticationMech
         final var authorizationHeaders = request.headers().getAll(AUTHORIZATION);
         final var hasSessionCookie = sessionConfig.enabled() && cookieManager.hasSessionCookie(request);
 
+        final Uni<SecurityIdentity> result;
         if (authorizationHeaders.size() > 1 || (!authorizationHeaders.isEmpty() && hasSessionCookie)) {
-            return reject(context, "conflicting_authentication", "multiple");
+            result = reject(context, "conflicting_authentication", "multiple");
+        } else if (!authorizationHeaders.isEmpty()) {
+            result = authenticateAuthorization(context, authorizationHeaders.getFirst(), identityProviderManager);
+        } else if (hasSessionCookie) {
+            result = authenticateSession(context);
+        } else {
+            result = Uni.createFrom().nullItem();
         }
-        if (!authorizationHeaders.isEmpty()) {
-            return authenticateAuthorization(context, authorizationHeaders.getFirst(), identityProviderManager);
+        return result.invoke(identity -> attachVerifiedIdentity(context, identity));
+    }
+
+    private void attachVerifiedIdentity(RoutingContext context, SecurityIdentity identity) {
+        if (identity == null || identity.isAnonymous()) {
+            return;
         }
-        if (hasSessionCookie) {
-            return authenticateSession(context);
+        final String principalId = identity.getAttribute("principalId");
+        if (principalId != null) {
+            clientContextResolver.attachVerifiedIdentity(context, principalId, identity.getAttribute("credentialId"));
         }
-        return Uni.createFrom().nullItem();
     }
 
     private Uni<SecurityIdentity> authenticateAuthorization(
@@ -177,6 +188,10 @@ public class CredentialAuthenticationMechanism implements HttpAuthenticationMech
                 session.permissions(),
                 SecurityIdentityFactory.attributes(
                         "sessionId",
+                        session.id(),
+                        "principalId",
+                        session.userId(),
+                        "credentialId",
                         session.id(),
                         "userId",
                         session.userId(),

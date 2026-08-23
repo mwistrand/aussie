@@ -396,22 +396,6 @@ class WebSocketGatewayTest {
     }
 
     @Nested
-    @DisplayName("canonical network identity")
-    class ExtractClientIdTests {
-
-        @Test
-        @DisplayName("uses the request-scoped resolved client context")
-        void shouldUseResolvedClientContext() throws Exception {
-            when(clientContextResolver.getOrCompute(ctx)).thenReturn(new ClientContext("198.51.100.8", false, null));
-
-            final var method = WebSocketGateway.class.getDeclaredMethod("extractClientId", RoutingContext.class);
-            method.setAccessible(true);
-
-            assertEquals("ip:198.51.100.8", method.invoke(gateway, ctx));
-        }
-    }
-
-    @Nested
     @DisplayName("getActiveSessionCount")
     class ActiveSessionCountTests {
 

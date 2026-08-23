@@ -16,10 +16,12 @@ public final class IpNetwork {
 
     private final byte[] networkBytes;
     private final int prefixLength;
+    private final String canonicalAddress;
 
-    private IpNetwork(byte[] networkBytes, int prefixLength) {
+    private IpNetwork(byte[] networkBytes, int prefixLength, String canonicalAddress) {
         this.networkBytes = networkBytes;
         this.prefixLength = prefixLength;
+        this.canonicalAddress = canonicalAddress;
     }
 
     /**
@@ -36,7 +38,8 @@ public final class IpNetwork {
             return Optional.empty();
         }
 
-        final var addressBytes = InetAddresses.forString(parts[0]).getAddress();
+        final var address = InetAddresses.forString(parts[0]);
+        final var addressBytes = address.getAddress();
         final var maxPrefixLength = addressBytes.length * Byte.SIZE;
         final int prefixLength;
         if (parts.length == 1) {
@@ -52,7 +55,7 @@ public final class IpNetwork {
             }
         }
 
-        return Optional.of(new IpNetwork(addressBytes, prefixLength));
+        return Optional.of(new IpNetwork(addressBytes, prefixLength, InetAddresses.toAddrString(address)));
     }
 
     /** Return whether this network contains the supplied IP literal. */
@@ -85,6 +88,11 @@ public final class IpNetwork {
 
     public boolean isExactAddress() {
         return prefixLength == networkBytes.length * Byte.SIZE;
+    }
+
+    /** Return the address in a stable textual form without DNS resolution. */
+    public String canonicalAddress() {
+        return canonicalAddress;
     }
 
     @Override

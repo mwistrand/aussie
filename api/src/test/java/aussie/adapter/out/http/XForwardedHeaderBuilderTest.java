@@ -93,24 +93,43 @@ class XForwardedHeaderBuilderTest {
     class XForwardedHostTests {
 
         @Test
-        @DisplayName("Should set X-Forwarded-Host from Host header")
-        void shouldSetXForwardedHostFromHostHeader() {
-            var request = createRequest(Map.of("Host", "api.example.com"));
+        @DisplayName("Should omit an unvalidated Host header")
+        void shouldOmitUnvalidatedHost() {
+            var request = createRequest(Map.of("Host", "invalid host"));
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
-            assertTrue(headers.containsKey("X-Forwarded-Host"));
-            assertEquals("api.example.com", headers.get("X-Forwarded-Host"));
+            assertTrue(!headers.containsKey("X-Forwarded-Host"));
         }
 
         @Test
         @DisplayName("Should preserve port in X-Forwarded-Host")
         void shouldPreservePortInXForwardedHost() {
-            var request = createRequest(Map.of("Host", "api.example.com:8443"));
+            var request =
+                    new GatewayRequest("GET", "/api/test", Map.of(), null, null, null, null, "api.example.com", 8443);
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 
             assertEquals("api.example.com:8443", headers.get("X-Forwarded-Host"));
+        }
+
+        @Test
+        @DisplayName("Should prefer the canonical external authority over the socket Host")
+        void shouldUseCanonicalExternalAuthority() {
+            final var request = new GatewayRequest(
+                    "GET",
+                    "/api/test",
+                    Map.of("Host", List.of("internal-gateway:8080")),
+                    null,
+                    null,
+                    "198.51.100.5",
+                    "https",
+                    "api.example.com",
+                    9443);
+
+            final var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
+
+            assertEquals("api.example.com:9443", headers.get("X-Forwarded-Host"));
         }
 
         @Test
@@ -180,11 +199,16 @@ class XForwardedHeaderBuilderTest {
         @Test
         @DisplayName("Should set all three X-Forwarded headers")
         void shouldSetAllThreeHeaders() {
-            Map<String, List<String>> headerMap = new HashMap<>();
-            headerMap.put("Host", List.of("api.example.com"));
-            headerMap.put("X-Forwarded-Proto", List.of("https"));
             var request = new GatewayRequest(
-                    "GET", "/api/test", headerMap, URI.create("http://gateway:8080/api/test"), null, "192.168.1.100");
+                    "GET",
+                    "/api/test",
+                    Map.of(),
+                    URI.create("http://gateway:8080/api/test"),
+                    null,
+                    "192.168.1.100",
+                    "https",
+                    "api.example.com",
+                    null);
 
             var headers = builder.buildHeaders(request, URI.create("http://backend:9090/api"));
 

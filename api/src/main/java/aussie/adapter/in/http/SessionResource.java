@@ -12,17 +12,17 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
-import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
-import io.vertx.core.http.HttpServerRequest;
+import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
 import aussie.adapter.in.auth.CredentialAuthenticationMechanism.SessionPrincipal;
 import aussie.adapter.in.auth.SessionCookieManager;
+import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.config.SessionConfig;
 import aussie.core.model.auth.TokenValidationResult;
@@ -45,9 +45,8 @@ public class SessionResource {
     private final SessionConfig config;
     private final SecurityIdentity securityIdentity;
     private final TokenValidationService tokenValidationService;
-
-    @Context
-    HttpServerRequest request;
+    private final RoutingContext routingContext;
+    private final ClientContextResolver clientContextResolver;
 
     @Inject
     public SessionResource(
@@ -55,12 +54,16 @@ public class SessionResource {
             SessionCookieManager cookieManager,
             SessionConfig config,
             SecurityIdentity securityIdentity,
-            TokenValidationService tokenValidationService) {
+            TokenValidationService tokenValidationService,
+            RoutingContext routingContext,
+            ClientContextResolver clientContextResolver) {
         this.sessionManagement = sessionManagement;
         this.cookieManager = cookieManager;
         this.config = config;
         this.securityIdentity = securityIdentity;
         this.tokenValidationService = tokenValidationService;
+        this.routingContext = routingContext;
+        this.clientContextResolver = clientContextResolver;
     }
 
     /**
@@ -257,9 +260,9 @@ public class SessionResource {
             if (!(result instanceof TokenValidationResult.Valid valid)) {
                 throw GatewayProblem.unauthorized("Invalid token");
             }
-            final var userAgent = request.getHeader("User-Agent");
+            final var userAgent = routingContext.request().getHeader("User-Agent");
             final var ipAddress =
-                    request.remoteAddress() != null ? request.remoteAddress().host() : null;
+                    clientContextResolver.getOrCompute(routingContext).resolvedIp();
             return sessionManagement.createSession(valid.identity(), userAgent, ipAddress);
         });
     }

@@ -78,6 +78,10 @@ public class ApiKeyIdentityProvider implements IdentityProvider<ApiKeyAuthentica
                 SecurityIdentityFactory.attributes(
                         "keyId",
                         apiKey.id(),
+                        "principalId",
+                        apiKey.id(),
+                        "credentialId",
+                        apiKey.id(),
                         "teamId",
                         apiKey.teamId(),
                         "expiresAt",

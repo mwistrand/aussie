@@ -85,6 +85,8 @@ class ApiKeyIdentityProviderTest {
             assertTrue(identity.getRoles().contains("service.config.read"));
             assertTrue(identity.getRoles().contains("service.config.update"));
             assertEquals("key-1", identity.getAttribute("keyId"));
+            assertEquals("key-1", identity.getAttribute("principalId"));
+            assertEquals("key-1", identity.getAttribute("credentialId"));
             assertEquals("team-1", identity.getAttribute("teamId"));
         }
 

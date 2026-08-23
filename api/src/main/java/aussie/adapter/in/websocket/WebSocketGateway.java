@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -163,8 +164,16 @@ public class WebSocketGateway {
         final var sessionId = UUID.randomUUID().toString();
         final var serviceId = auth.route().service().serviceId();
         final var clientId = auth.token()
-                .map(token -> "principal:" + SecureHash.truncatedSha256(token.subject(), 16))
-                .orElseGet(() -> extractClientId(ctx));
+                .map(token -> {
+                    clientContextResolver.attachVerifiedIdentity(
+                            ctx,
+                            token.subject(),
+                            auth.authSessionId()
+                                    .orElseGet(() ->
+                                            Objects.toString(token.claims().get("jti"), token.subject())));
+                    return "principal:" + SecureHash.truncatedSha256(token.subject(), 16);
+                })
+                .orElseGet(() -> "ip:" + clientContextResolver.getOrCompute(ctx).resolvedIp());
 
         // Extract auth session ID and user ID for logout tracking
         final var authSessionId = auth.authSessionId();
@@ -263,11 +272,6 @@ public class WebSocketGateway {
                     return null;
                 })
                 .replaceWithVoid();
-    }
-
-    /** Network identity used before authentication or when a public route has no principal. */
-    private String extractClientId(RoutingContext ctx) {
-        return "ip:" + clientContextResolver.getOrCompute(ctx).resolvedIp();
     }
 
     /**
