@@ -1,5 +1,6 @@
 package aussie.adapter.out.storage;
 
+import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
@@ -24,7 +25,7 @@ public class StorageInitializer {
         this.serviceRegistry = serviceRegistry;
     }
 
-    void onStart(@Observes StartupEvent event) {
+    void onStart(@Observes @Priority(1) StartupEvent event) {
         LOG.info("Initializing service registry from persistent storage...");
         serviceRegistry
                 .initialize()

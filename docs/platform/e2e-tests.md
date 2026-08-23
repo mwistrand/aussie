@@ -39,9 +39,8 @@ per test JVM:
 
 1. Starts Cassandra, Redis, the demo, and the API container on a shared Docker
    network with aliases `cassandra`, `redis`, `demo`, `api`.
-2. Applies Cassandra migrations directly via `cqlsh` exec on the Cassandra
-   container (not via the app's in-process runner; that runs as a CDI
-   `@Startup` hook and would race the rest of init).
+2. Lets the API apply the ordered, checksummed Cassandra migration manifest
+   before bootstrap and the other startup observers run.
 3. Registers the demo service through `POST /admin/services` using a per-run
    bootstrap key (`AUSSIE_BOOTSTRAP_KEY`), overwriting `baseUrl` to the
    in-network hostname.
@@ -86,9 +85,9 @@ image elsewhere.
 | `DEMO_APP_URL` | `http://demo:3000` (harness-set). |
 | `AUSSIE_BOOTSTRAP_ENABLED` | `true`. |
 | `AUSSIE_BOOTSTRAP_KEY` | Random per-run, used as the bearer for service registration. |
-| `AUSSIE_JWS_SIGNING_KEY` | 32 random bytes, base64-encoded. |
+| `AUSSIE_JWS_SIGNING_KEY` | Per-run 2048-bit RSA private key, base64-encoded in PKCS#8 format. |
 | `AUSSIE_AUTH_ROUTE_AUTH_ENABLED` | `false` so the bootstrap key isn't interpreted as a JWT. Per-test overrides flip this on. |
-| `CASSANDRA_RUN_MIGRATIONS` | `false`; migrations are pre-applied by the harness. |
+| `CASSANDRA_RUN_MIGRATIONS` | `true`; the API applies migrations during startup. |
 
 ## Adding tests
 

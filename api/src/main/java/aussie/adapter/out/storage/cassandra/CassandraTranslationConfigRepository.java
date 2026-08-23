@@ -1,6 +1,5 @@
 package aussie.adapter.out.storage.cassandra;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -8,7 +7,9 @@ import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 
 import com.datastax.oss.driver.api.core.CqlSession;
+import com.datastax.oss.driver.api.core.cql.BatchStatement;
 import com.datastax.oss.driver.api.core.cql.BoundStatement;
+import com.datastax.oss.driver.api.core.cql.DefaultBatchType;
 import com.datastax.oss.driver.api.core.cql.PreparedStatement;
 import com.datastax.oss.driver.api.core.cql.Row;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -62,10 +63,13 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
 
     private final CqlSession session;
     private final PreparedStatement insertVersionStmt;
+    private final PreparedStatement insertVersionByNumberStmt;
     private final PreparedStatement selectByIdStmt;
     private final PreparedStatement selectByVersionStmt;
+    private final PreparedStatement selectLegacyByVersionStmt;
     private final PreparedStatement selectAllStmt;
     private final PreparedStatement deleteStmt;
+    private final PreparedStatement deleteVersionByNumberStmt;
     private final PreparedStatement getMetadataStmt;
     private final PreparedStatement setMetadataStmt;
     private final PreparedStatement casMetadataStmt;
@@ -74,10 +78,13 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
     public CassandraTranslationConfigRepository(CqlSession session) {
         this.session = session;
         this.insertVersionStmt = prepareInsertVersion();
+        this.insertVersionByNumberStmt = prepareInsertVersionByNumber();
         this.selectByIdStmt = prepareSelectById();
         this.selectByVersionStmt = prepareSelectByVersion();
+        this.selectLegacyByVersionStmt = prepareSelectLegacyByVersion();
         this.selectAllStmt = prepareSelectAll();
         this.deleteStmt = prepareDelete();
+        this.deleteVersionByNumberStmt = prepareDeleteVersionByNumber();
         this.getMetadataStmt = prepareGetMetadata();
         this.setMetadataStmt = prepareSetMetadata();
         this.casMetadataStmt = prepareCasMetadata();
@@ -92,11 +99,24 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
                 """);
     }
 
+    private PreparedStatement prepareInsertVersionByNumber() {
+        return session.prepare(
+                """
+                INSERT INTO translation_config_versions_by_number
+                    (version, id, config_json, created_by, created_at, comment)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """);
+    }
+
     private PreparedStatement prepareSelectById() {
         return session.prepare("SELECT * FROM translation_config_versions WHERE id = ?");
     }
 
     private PreparedStatement prepareSelectByVersion() {
+        return session.prepare("SELECT * FROM translation_config_versions_by_number WHERE version = ?");
+    }
+
+    private PreparedStatement prepareSelectLegacyByVersion() {
         return session.prepare("SELECT * FROM translation_config_versions WHERE version = ?");
     }
 
@@ -106,6 +126,10 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
 
     private PreparedStatement prepareDelete() {
         return session.prepare("DELETE FROM translation_config_versions WHERE id = ?");
+    }
+
+    private PreparedStatement prepareDeleteVersionByNumber() {
+        return session.prepare("DELETE FROM translation_config_versions_by_number WHERE version = ?");
     }
 
     private PreparedStatement prepareGetMetadata() {
@@ -145,14 +169,23 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
         return Uni.createFrom()
                 .completionStage(() -> {
                     final var configJson = serializeConfig(version.config());
-                    final var bound = insertVersionStmt.bind(
-                            version.id(),
-                            version.version(),
-                            configJson,
-                            version.createdBy(),
-                            version.createdAt(),
-                            version.comment());
-                    return session.executeAsync(bound).toCompletableFuture();
+                    final var batch = BatchStatement.builder(DefaultBatchType.LOGGED)
+                            .addStatement(insertVersionStmt.bind(
+                                    version.id(),
+                                    version.version(),
+                                    configJson,
+                                    version.createdBy(),
+                                    version.createdAt(),
+                                    version.comment()))
+                            .addStatement(insertVersionByNumberStmt.bind(
+                                    version.version(),
+                                    version.id(),
+                                    configJson,
+                                    version.createdBy(),
+                                    version.createdAt(),
+                                    version.comment()))
+                            .build();
+                    return session.executeAsync(batch).toCompletableFuture();
                 })
                 .emitOn(executor)
                 .replaceWithVoid();
@@ -191,9 +224,23 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
     @Override
     public Uni<Optional<TranslationConfigVersion>> findByVersion(int versionNumber) {
         final var executor = getContextExecutor();
-        return getMetadataValue(ACTIVE_VERSION_KEY).flatMap(activeId -> Uni.createFrom()
+        return getMetadataValue(ACTIVE_VERSION_KEY).flatMap(activeId -> findByVersion(
+                        selectByVersionStmt, versionNumber, activeId, executor)
+                .flatMap(indexed -> indexed.isEmpty()
+                        ? findByVersion(selectLegacyByVersionStmt, versionNumber, activeId, executor)
+                        : findById(indexed.get().id())
+                                .flatMap(current -> current.filter(version -> version.version() == versionNumber)
+                                                .isPresent()
+                                        ? Uni.createFrom().item(current)
+                                        : findByVersion(
+                                                selectLegacyByVersionStmt, versionNumber, activeId, executor))));
+    }
+
+    private Uni<Optional<TranslationConfigVersion>> findByVersion(
+            PreparedStatement statement, int versionNumber, Optional<String> activeId, Executor executor) {
+        return Uni.createFrom()
                 .completionStage(() -> {
-                    final var bound = selectByVersionStmt.bind(versionNumber);
+                    final var bound = statement.bind(versionNumber);
                     return session.executeAsync(bound).toCompletableFuture();
                 })
                 .emitOn(executor)
@@ -205,24 +252,22 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
                     final var version = fromRow(row);
                     final var isActive = activeId.isPresent() && activeId.get().equals(version.id());
                     return Optional.of(isActive ? version.activate() : version.deactivate());
-                }));
+                });
     }
 
     @Override
     public Uni<List<TranslationConfigVersion>> listVersions() {
         final var executor = getContextExecutor();
         return getMetadataValue(ACTIVE_VERSION_KEY).flatMap(activeId -> Uni.createFrom()
-                .completionStage(
-                        () -> session.executeAsync(selectAllStmt.bind()).toCompletableFuture())
+                .completionStage(() -> CassandraPageReader.readAll(
+                        session.executeAsync(selectAllStmt.bind()).toCompletableFuture(), row -> {
+                            final var version = fromRow(row);
+                            final var isActive =
+                                    activeId.isPresent() && activeId.get().equals(version.id());
+                            return isActive ? version.activate() : version.deactivate();
+                        }))
                 .emitOn(executor)
-                .map(rs -> {
-                    final List<TranslationConfigVersion> versions = new ArrayList<>();
-                    for (var row : rs.currentPage()) {
-                        final var version = fromRow(row);
-                        final var isActive =
-                                activeId.isPresent() && activeId.get().equals(version.id());
-                        versions.add(isActive ? version.activate() : version.deactivate());
-                    }
+                .map(versions -> {
                     versions.sort(Comparator.comparing(TranslationConfigVersion::version)
                             .reversed());
                     return versions;
@@ -311,8 +356,12 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
                 final var executor = getContextExecutor();
                 return Uni.createFrom()
                         .completionStage(() -> {
-                            final var bound = deleteStmt.bind(versionId);
-                            return session.executeAsync(bound).toCompletableFuture();
+                            final var version = opt.get();
+                            final var batch = BatchStatement.builder(DefaultBatchType.LOGGED)
+                                    .addStatement(deleteStmt.bind(versionId))
+                                    .addStatement(deleteVersionByNumberStmt.bind(version.version()))
+                                    .build();
+                            return session.executeAsync(batch).toCompletableFuture();
                         })
                         .emitOn(executor)
                         .map(rs -> true);

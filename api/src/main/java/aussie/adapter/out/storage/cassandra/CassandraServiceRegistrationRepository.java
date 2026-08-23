@@ -1,7 +1,6 @@
 package aussie.adapter.out.storage.cassandra;
 
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Executor;
@@ -141,7 +140,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     }
 
     private PreparedStatement prepareCount() {
-        return session.prepare("SELECT COUNT(*) FROM service_registrations");
+        return session.prepare("SELECT service_id FROM service_registrations");
     }
 
     private PreparedStatement prepareExists() {
@@ -259,14 +258,9 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     public Uni<List<ServiceRegistration>> findAll() {
         Executor executor = getContextExecutor();
         return Uni.createFrom()
-                .completionStage(
-                        () -> session.executeAsync(selectAllStmt.bind()).toCompletableFuture())
-                .emitOn(executor)
-                .map(rs -> {
-                    List<ServiceRegistration> registrations = new ArrayList<>();
-                    rs.currentPage().forEach(row -> registrations.add(fromRow(row)));
-                    return registrations;
-                });
+                .completionStage(() -> CassandraPageReader.readAll(
+                        session.executeAsync(selectAllStmt.bind()).toCompletableFuture(), this::fromRow))
+                .emitOn(executor);
     }
 
     @Override
@@ -285,12 +279,9 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     public Uni<Long> count() {
         Executor executor = getContextExecutor();
         return Uni.createFrom()
-                .completionStage(() -> session.executeAsync(countStmt.bind()).toCompletableFuture())
-                .emitOn(executor)
-                .map(rs -> {
-                    Row row = rs.one();
-                    return row != null ? row.getLong(0) : 0L;
-                });
+                .completionStage(() -> CassandraPageReader.countAll(
+                        session.executeAsync(countStmt.bind()).toCompletableFuture()))
+                .emitOn(executor);
     }
 
     @Override

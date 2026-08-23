@@ -1,12 +1,13 @@
 package aussie.adapter.out.storage.cassandra;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 
 import com.datastax.oss.driver.api.core.CqlSession;
+import com.datastax.oss.driver.api.core.cql.BatchStatement;
 import com.datastax.oss.driver.api.core.cql.BoundStatement;
+import com.datastax.oss.driver.api.core.cql.DefaultBatchType;
 import com.datastax.oss.driver.api.core.cql.PreparedStatement;
 import com.datastax.oss.driver.api.core.cql.Row;
 import io.smallrye.mutiny.Uni;
@@ -34,7 +35,13 @@ import aussie.core.service.auth.ApiKeyEncryptionService;
  *     created_at timestamp,
  *     updated_at timestamp
  * );
- * CREATE INDEX IF NOT EXISTS api_keys_hash_idx ON api_keys (key_hash);
+ * CREATE TABLE IF NOT EXISTS api_keys_by_hash (
+ *     key_hash text PRIMARY KEY,
+ *     key_id text,
+ *     encrypted_data text,
+ *     created_at timestamp,
+ *     updated_at timestamp
+ * );
  * </pre>
  */
 public class CassandraApiKeyRepository implements ApiKeyRepository {
@@ -42,9 +49,12 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
     private final CqlSession session;
     private final ApiKeyEncryptionService encryptionService;
     private final PreparedStatement insertStmt;
+    private final PreparedStatement insertByHashStmt;
     private final PreparedStatement selectByIdStmt;
     private final PreparedStatement selectByHashStmt;
+    private final PreparedStatement selectLegacyByHashStmt;
     private final PreparedStatement deleteStmt;
+    private final PreparedStatement deleteByHashStmt;
     private final PreparedStatement selectAllStmt;
     private final PreparedStatement existsStmt;
 
@@ -52,9 +62,12 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
         this.session = session;
         this.encryptionService = encryptionService;
         this.insertStmt = prepareInsert();
+        this.insertByHashStmt = prepareInsertByHash();
         this.selectByIdStmt = prepareSelectById();
         this.selectByHashStmt = prepareSelectByHash();
+        this.selectLegacyByHashStmt = prepareSelectLegacyByHash();
         this.deleteStmt = prepareDelete();
+        this.deleteByHashStmt = prepareDeleteByHash();
         this.selectAllStmt = prepareSelectAll();
         this.existsStmt = prepareExists();
     }
@@ -67,16 +80,32 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
                 """);
     }
 
+    private PreparedStatement prepareInsertByHash() {
+        return session.prepare(
+                """
+                INSERT INTO api_keys_by_hash (key_hash, key_id, encrypted_data, created_at, updated_at)
+                VALUES (?, ?, ?, toTimestamp(now()), toTimestamp(now()))
+                """);
+    }
+
     private PreparedStatement prepareSelectById() {
         return session.prepare("SELECT * FROM api_keys WHERE key_id = ?");
     }
 
     private PreparedStatement prepareSelectByHash() {
+        return session.prepare("SELECT * FROM api_keys_by_hash WHERE key_hash = ?");
+    }
+
+    private PreparedStatement prepareSelectLegacyByHash() {
         return session.prepare("SELECT * FROM api_keys WHERE key_hash = ?");
     }
 
     private PreparedStatement prepareDelete() {
         return session.prepare("DELETE FROM api_keys WHERE key_id = ?");
+    }
+
+    private PreparedStatement prepareDeleteByHash() {
+        return session.prepare("DELETE FROM api_keys_by_hash WHERE key_hash = ?");
     }
 
     private PreparedStatement prepareSelectAll() {
@@ -90,12 +119,16 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
     @Override
     public Uni<Void> save(ApiKey apiKey) {
         Executor executor = getContextExecutor();
-        return Uni.createFrom()
-                .completionStage(() -> {
-                    String encryptedData = encryptionService.encrypt(apiKey);
-                    BoundStatement bound = insertStmt.bind(apiKey.id(), apiKey.keyHash(), encryptedData);
-                    return session.executeAsync(bound).toCompletableFuture();
-                })
+        return findById(apiKey.id())
+                .flatMap(existing -> Uni.createFrom().completionStage(() -> {
+                    final var encryptedData = encryptionService.encrypt(apiKey);
+                    final var batch = BatchStatement.builder(DefaultBatchType.LOGGED)
+                            .addStatement(insertStmt.bind(apiKey.id(), apiKey.keyHash(), encryptedData))
+                            .addStatement(insertByHashStmt.bind(apiKey.keyHash(), apiKey.id(), encryptedData));
+                    existing.filter(previous -> !previous.keyHash().equals(apiKey.keyHash()))
+                            .ifPresent(previous -> batch.addStatement(deleteByHashStmt.bind(previous.keyHash())));
+                    return session.executeAsync(batch.build()).toCompletableFuture();
+                }))
                 .emitOn(executor)
                 .replaceWithVoid();
     }
@@ -117,30 +150,47 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
 
     @Override
     public Uni<Optional<ApiKey>> findByHash(String keyHash) {
+        return findByHash(selectByHashStmt, keyHash)
+                .flatMap(indexed -> indexed.isEmpty()
+                        ? findByHash(selectLegacyByHashStmt, keyHash)
+                        : findById(indexed.get().id())
+                                .flatMap(current -> current.filter(key -> keyHash.equals(key.keyHash()))
+                                                .isPresent()
+                                        ? Uni.createFrom().item(current)
+                                        : findByHash(selectLegacyByHashStmt, keyHash)));
+    }
+
+    private Uni<Optional<ApiKey>> findByHash(PreparedStatement statement, String keyHash) {
         Executor executor = getContextExecutor();
         return Uni.createFrom()
                 .completionStage(() -> {
-                    BoundStatement bound = selectByHashStmt.bind(keyHash);
+                    BoundStatement bound = statement.bind(keyHash);
                     return session.executeAsync(bound).toCompletableFuture();
                 })
                 .emitOn(executor)
                 .map(rs -> {
                     Row row = rs.one();
-                    return row != null ? Optional.of(fromRow(row)) : Optional.empty();
+                    return row != null
+                            ? Optional.of(fromRow(row)).filter(key -> keyHash.equals(key.keyHash()))
+                            : Optional.empty();
                 });
     }
 
     @Override
     public Uni<Boolean> delete(String keyId) {
         Executor executor = getContextExecutor();
-        return exists(keyId).flatMap(existed -> {
-            if (!existed) {
+        return findById(keyId).flatMap(existing -> {
+            if (existing.isEmpty()) {
                 return Uni.createFrom().item(false);
             }
+            final var apiKey = existing.get();
             return Uni.createFrom()
                     .completionStage(() -> {
-                        BoundStatement bound = deleteStmt.bind(keyId);
-                        return session.executeAsync(bound).toCompletableFuture();
+                        final var batch = BatchStatement.builder(DefaultBatchType.LOGGED)
+                                .addStatement(deleteStmt.bind(keyId))
+                                .addStatement(deleteByHashStmt.bind(apiKey.keyHash()))
+                                .build();
+                        return session.executeAsync(batch).toCompletableFuture();
                     })
                     .emitOn(executor)
                     .map(rs -> true);
@@ -151,14 +201,9 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
     public Uni<List<ApiKey>> findAll() {
         Executor executor = getContextExecutor();
         return Uni.createFrom()
-                .completionStage(
-                        () -> session.executeAsync(selectAllStmt.bind()).toCompletableFuture())
-                .emitOn(executor)
-                .map(rs -> {
-                    List<ApiKey> keys = new ArrayList<>();
-                    rs.currentPage().forEach(row -> keys.add(fromRow(row)));
-                    return keys;
-                });
+                .completionStage(() -> CassandraPageReader.readAll(
+                        session.executeAsync(selectAllStmt.bind()).toCompletableFuture(), this::fromRow))
+                .emitOn(executor);
     }
 
     @Override

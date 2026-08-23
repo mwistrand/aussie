@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.ServiceLoader;
 
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
@@ -112,6 +113,22 @@ public class AuthKeyStorageProviderLoader {
         getCacheProvider().flatMap(p -> p.createHealthIndicator(config)).ifPresent(indicators::add);
 
         return indicators;
+    }
+
+    @PreDestroy
+    void shutdown() {
+        close(storageProvider);
+        close(cacheProvider);
+    }
+
+    private void close(Object provider) {
+        if (provider instanceof AutoCloseable closeable) {
+            try {
+                closeable.close();
+            } catch (Exception e) {
+                LOG.warn("Error closing auth storage provider", e);
+            }
+        }
     }
 
     private synchronized AuthKeyStorageProvider getStorageProvider() {

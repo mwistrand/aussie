@@ -37,7 +37,7 @@ import aussie.spi.StorageRepositoryProvider;
  *   <li>aussie.storage.cassandra.password - Password for authentication (optional)</li>
  * </ul>
  */
-public class CassandraStorageProvider implements StorageRepositoryProvider {
+public class CassandraStorageProvider implements StorageRepositoryProvider, AutoCloseable {
 
     private static final Logger LOG = Logger.getLogger(CassandraStorageProvider.class);
 
@@ -93,8 +93,6 @@ public class CassandraStorageProvider implements StorageRepositoryProvider {
             // Run V1 (keyspace creation) with session without keyspace
             var keyspaceMigrationRunner = new CassandraMigrationRunner(noKeyspaceSession, keyspace);
             keyspaceMigrationRunner.runKeyspaceMigration();
-        } catch (Exception e) {
-            LOG.warnv("Keyspace migration check failed (may already exist): {0}", e.getMessage());
         }
 
         // Then connect with keyspace for all other migrations
@@ -175,6 +173,13 @@ public class CassandraStorageProvider implements StorageRepositoryProvider {
             return builder.build();
         } catch (Exception e) {
             throw new StorageProviderException("Failed to connect to Cassandra", e);
+        }
+    }
+
+    @Override
+    public void close() {
+        if (session != null && !session.isClosed()) {
+            session.close();
         }
     }
 

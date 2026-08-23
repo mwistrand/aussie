@@ -11,43 +11,12 @@ services:
       - MAX_HEAP_SIZE=512M
     volumes:
       - cassandra-data:/var/lib/cassandra
-      - ./api/src/main/resources/db/cassandra:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
-
-  cassandra-init:
-    image: cassandra:4.1
-    container_name: aussie-cassandra-init
-    depends_on:
-      cassandra:
-        condition: service_healthy
-    volumes:
-      - ./api/src/main/resources/db/cassandra:/scripts:ro
-    entrypoint: ["/bin/bash", "-c"]
-    command:
-      - |
-        echo "Waiting for Cassandra to be ready..."
-        until cqlsh cassandra -e "describe keyspaces"; do
-          sleep 5
-        done
-        echo "Running schema initialization..."
-        shopt -s nullglob
-        scripts=(/scripts/V*.cql)
-        if [ $${#scripts[@]} -eq 0 ]; then
-          echo "No migration scripts found in /scripts/"
-        else
-          for script in "$${scripts[@]}"; do
-            if [ -f "$$script" ]; then
-              echo "Applying $$script..."
-              cqlsh cassandra -f "$$script" || true
-            fi
-          done
-        fi
-        echo "Schema initialization complete"
 
   redis:
     image: redis:7-alpine
@@ -73,8 +42,6 @@ services:
     depends_on:
       cassandra:
         condition: service_healthy
-      cassandra-init:
-        condition: service_completed_successfully
       redis:
         condition: service_healthy
     volumes:
@@ -82,6 +49,7 @@ services:
     environment:
       - QUARKUS_PROFILE=dev
       - CASSANDRA_CONTACT_POINTS=cassandra:9042
+      - CASSANDRA_RUN_MIGRATIONS=true
       - QUARKUS_REDIS_HOSTS=redis://redis:6379
       # Demo app URL for JWKS fetching (Docker hostname)
       - DEMO_APP_URL=http://demo:3000

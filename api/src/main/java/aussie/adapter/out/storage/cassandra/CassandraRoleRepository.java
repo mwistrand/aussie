@@ -1,6 +1,5 @@
 package aussie.adapter.out.storage.cassandra;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -132,14 +131,9 @@ public class CassandraRoleRepository implements RoleRepository {
     public Uni<List<Role>> findAll() {
         final Executor executor = getContextExecutor();
         return Uni.createFrom()
-                .completionStage(
-                        () -> session.executeAsync(selectAllStmt.bind()).toCompletableFuture())
-                .emitOn(executor)
-                .map(rs -> {
-                    final List<Role> roles = new ArrayList<>();
-                    rs.currentPage().forEach(row -> roles.add(fromRow(row)));
-                    return roles;
-                });
+                .completionStage(() -> CassandraPageReader.readAll(
+                        session.executeAsync(selectAllStmt.bind()).toCompletableFuture(), this::fromRow))
+                .emitOn(executor);
     }
 
     @Override

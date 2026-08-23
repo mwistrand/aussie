@@ -3,8 +3,7 @@ COMPOSE=docker compose
 .PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage reset demo-deps e2e e2e-logs
 
 up:
-	# Bring up cassandra/redis and force-rerun the migration sidecar first so
-	# new V*.cql files always apply before any dependent service (api) starts.
+	# The API owns Cassandra migrations and runs them before serving traffic.
 	$(MAKE) storage
 	$(COMPOSE) up -d --build
 
@@ -20,12 +19,8 @@ otel-down:
 
 storage:
 	$(COMPOSE) up -d --build cassandra redis
-	# Force-recreate the one-shot migration sidecar so new V*.cql files apply
-	# on every invocation (otherwise a previously-exited container is left as-is
-	# and new migrations silently skip). --no-deps avoids restarting Cassandra.
-	$(COMPOSE) up -d --force-recreate --no-deps cassandra-init
 storage-down:
-	$(COMPOSE) stop cassandra cassandra-init redis || true
+	$(COMPOSE) stop cassandra redis || true
 
 # Start everything except the demo app
 api:
@@ -66,14 +61,17 @@ coverage:
 	@echo "  CLI: cli/coverage.html"
 
 migrate:
-	@echo "Running Cassandra migrations..."
-	@docker exec -i aussie-cassandra cqlsh -e "describe keyspaces" > /dev/null 2>&1 || \
-		(echo "Error: Cassandra is not running. Start it with 'make api' first." && exit 1)
-	@for script in api/src/main/resources/db/cassandra/V*.cql; do \
-		echo "Applying $$script..."; \
-		docker exec -i aussie-cassandra cqlsh < "$$script" || true; \
-	done
-	@echo "Migrations complete"
+	@echo "Migrations run by the API's checked, checksummed migration runner..."
+	$(COMPOSE) up -d --build --force-recreate api
+	@for attempt in $$(seq 1 120); do \
+		if curl -fsS http://localhost:1234/q/health/ready > /dev/null; then \
+			echo "Migrations complete"; \
+			exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	$(COMPOSE) logs api; \
+	exit 1
 
 # Install demo dependencies. Prefer `npm ci` when a lockfile is present so
 # repeated runs match the committed lockfile exactly; fall back to `npm install`

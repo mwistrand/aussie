@@ -34,7 +34,7 @@ import aussie.spi.StorageProviderException;
  * <p>This provider shares the same Cassandra cluster as other storage providers
  * but uses a separate roles table.
  */
-public class CassandraRoleStorageProvider implements RoleStorageProvider {
+public class CassandraRoleStorageProvider implements RoleStorageProvider, AutoCloseable {
 
     private CqlSession session;
     private RoleEncryptionService encryptionService;
@@ -139,6 +139,13 @@ public class CassandraRoleStorageProvider implements RoleStorageProvider {
         final Optional<String> encryptionKey = config.get("aussie.auth.encryption.key");
         final String keyId = config.getOrDefault("aussie.auth.encryption.key-id", "v1");
         return new RoleEncryptionService(encryptionKey, keyId, false);
+    }
+
+    @Override
+    public void close() {
+        if (session != null && !session.isClosed()) {
+            session.close();
+        }
     }
 
     /**

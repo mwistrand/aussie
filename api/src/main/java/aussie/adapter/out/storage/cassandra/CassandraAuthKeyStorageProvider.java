@@ -35,7 +35,7 @@ import aussie.spi.StorageProviderException;
  * but uses separate configuration keys under aussie.auth.storage.* namespace.
  * If auth-specific config is not provided, it falls back to aussie.storage.cassandra.* config.
  */
-public class CassandraAuthKeyStorageProvider implements AuthKeyStorageProvider {
+public class CassandraAuthKeyStorageProvider implements AuthKeyStorageProvider, AutoCloseable {
 
     private CqlSession session;
     private ApiKeyEncryptionService encryptionService;
@@ -143,6 +143,13 @@ public class CassandraAuthKeyStorageProvider implements AuthKeyStorageProvider {
         boolean allowPlaintextReads =
                 Boolean.parseBoolean(config.getOrDefault("aussie.auth.encryption.allow-plaintext-reads", "false"));
         return new ApiKeyEncryptionService(encryptionKey, keyId, profile, allowPlaintextReads);
+    }
+
+    @Override
+    public void close() {
+        if (session != null && !session.isClosed()) {
+            session.close();
+        }
     }
 
     /**

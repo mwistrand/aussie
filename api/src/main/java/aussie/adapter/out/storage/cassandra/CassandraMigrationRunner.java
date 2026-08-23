@@ -5,11 +5,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
+import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -17,86 +22,62 @@ import java.util.stream.Collectors;
 import com.datastax.oss.driver.api.core.CqlSession;
 import org.jboss.logging.Logger;
 
-/**
- * Runs CQL migrations on application startup.
- *
- * <p>Migration files are read from the classpath at db/cassandra/ and must follow
- * the naming convention: V{version}__{description}.cql (e.g., V1__create_keyspace.cql)
- *
- * <p>Applied migrations are tracked in the schema_migrations table to ensure
- * each migration is only applied once.
- */
+/** Runs the ordered, checksummed CQL migration manifest on application startup. */
 public class CassandraMigrationRunner {
 
     private static final Logger LOG = Logger.getLogger(CassandraMigrationRunner.class);
     private static final String MIGRATIONS_PATH = "db/cassandra/";
+    private static final String MANIFEST = MIGRATIONS_PATH + "migrations.manifest";
     private static final Pattern MIGRATION_PATTERN = Pattern.compile("V(\\d+)__.*\\.cql");
+    private static final Pattern KEYSPACE_PATTERN = Pattern.compile("[A-Za-z][A-Za-z0-9_]{0,47}");
 
     private final CqlSession session;
     private final String keyspace;
 
     public CassandraMigrationRunner(CqlSession session, String keyspace) {
         this.session = session;
-        this.keyspace = keyspace;
+        this.keyspace = validateKeyspace(keyspace);
     }
 
-    /**
-     * Run the keyspace creation migration (V1) without requiring a keyspace connection.
-     * This should be called with a session that is not connected to any keyspace.
-     */
+    /** Creates the configured keyspace without depending on a keyspace-bound session. */
     public void runKeyspaceMigration() {
         try {
-            String content = readMigrationFile("V1__create_keyspace.cql");
-            LOG.info("Ensuring keyspace exists...");
-
-            String[] statements = content.split(";");
-            for (String statement : statements) {
-                String trimmed = statement.trim();
-                if (trimmed.isEmpty() || trimmed.startsWith("--")) {
-                    continue;
-                }
-                try {
-                    session.execute(trimmed);
-                } catch (Exception e) {
-                    // Keyspace may already exist, which is fine
-                    LOG.debugv("Statement result: {0}", e.getMessage());
-                }
+            for (var statement : splitStatements(readMigrationFile("V1__create_keyspace.cql"))) {
+                session.execute(statement.replace("aussie", keyspace));
             }
         } catch (IOException e) {
-            LOG.warnv("Could not read keyspace migration: {0}", e.getMessage());
+            throw new IllegalStateException("Could not read keyspace migration", e);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("Keyspace migration failed", e);
         }
     }
 
-    /**
-     * Run all pending migrations (V2 onwards).
-     * This should be called with a session connected to the target keyspace.
-     *
-     * @return the number of migrations applied
-     */
+    /** Applies every pending manifest entry and rejects changed applied scripts. */
     public int runMigrations() {
         ensureMigrationTableExists();
-        var appliedVersions = getAppliedVersions();
-        var migrations = discoverMigrations();
+        final var migrations = discoverMigrations();
+        final var applied = getAppliedMigrations();
+        var count = 0;
 
-        int applied = 0;
         for (var migration : migrations) {
-            // Skip V1 - it's handled separately via runKeyspaceMigration()
             if (migration.version() == 1) {
                 continue;
             }
-            if (!appliedVersions.contains(migration.version())) {
-                applyMigration(migration);
-                applied++;
+            if (applied.containsKey(migration.version())) {
+                final var checksum = applied.get(migration.version());
+                if (checksum == null) {
+                    recordChecksum(migration);
+                } else if (!migration.checksum().equals(checksum)) {
+                    throw new IllegalStateException("Checksum mismatch for migration V" + migration.version());
+                }
+                continue;
             }
+            applyMigration(migration);
+            count++;
         }
 
-        if (applied > 0) {
-            LOG.infov("Applied {0} migration(s)", applied);
-        } else {
-            LOG.debug("No pending migrations");
-        }
-
-        return applied;
+        LOG.infov("Applied {0} migration(s)", count);
+        return count;
     }
 
     private void ensureMigrationTableExists() {
@@ -105,138 +86,197 @@ public class CassandraMigrationRunner {
                 CREATE TABLE IF NOT EXISTS %s.schema_migrations (
                     version int PRIMARY KEY,
                     script_name text,
+                    checksum text,
                     applied_at timestamp
                 )
                 """
                         .formatted(keyspace));
+
+        session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS checksum text".formatted(keyspace));
     }
 
-    private Set<Integer> getAppliedVersions() {
-        var rs = session.execute("SELECT version FROM %s.schema_migrations".formatted(keyspace));
-        return rs.all().stream().map(row -> row.getInt("version")).collect(Collectors.toSet());
+    private Map<Integer, String> getAppliedMigrations() {
+        final var applied = new HashMap<Integer, String>();
+        session.execute("SELECT version, checksum FROM %s.schema_migrations".formatted(keyspace))
+                .forEach(row -> applied.put(row.getInt("version"), row.getString("checksum")));
+        return applied;
     }
 
     private List<Migration> discoverMigrations() {
-        List<Migration> migrations = new ArrayList<>();
-
         try {
-            var migrationFiles = listMigrationFiles();
-            for (var filename : migrationFiles) {
-                Matcher matcher = MIGRATION_PATTERN.matcher(filename);
-                if (matcher.matches()) {
-                    int version = Integer.parseInt(matcher.group(1));
-                    String content = readMigrationFile(filename);
-                    migrations.add(new Migration(version, filename, content));
+            final var migrations = new ArrayList<Migration>();
+            final var versions = new HashSet<Integer>();
+            for (var entry : readManifest()) {
+                final Matcher matcher = MIGRATION_PATTERN.matcher(entry.filename());
+                if (!matcher.matches()) {
+                    throw new IllegalStateException("Invalid migration name: " + entry.filename());
                 }
+                final var version = Integer.parseInt(matcher.group(1));
+                if (!versions.add(version)) {
+                    throw new IllegalStateException("Duplicate migration version: V" + version);
+                }
+                final var content = readMigrationFile(entry.filename());
+                final var checksum = sha256(content);
+                if (!checksum.equals(entry.checksum())) {
+                    throw new IllegalStateException("Migration manifest checksum mismatch: " + entry.filename());
+                }
+                migrations.add(new Migration(version, entry.filename(), content, checksum));
             }
+            migrations.sort(Comparator.comparingInt(Migration::version));
+            return migrations;
         } catch (IOException e) {
-            LOG.warnv("Failed to discover migrations: {0}", e.getMessage());
+            throw new IllegalStateException("Failed to discover migrations", e);
         }
-
-        migrations.sort(Comparator.comparingInt(Migration::version));
-        return migrations;
     }
 
-    private List<String> listMigrationFiles() throws IOException {
-        List<String> files = new ArrayList<>();
-
-        // Read from classpath using the class loader
-        try (InputStream is = getClass().getClassLoader().getResourceAsStream(MIGRATIONS_PATH);
-                BufferedReader reader =
-                        is != null ? new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8)) : null) {
-            if (reader != null) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (line.endsWith(".cql")) {
-                        files.add(line);
-                    }
-                }
+    private List<ManifestEntry> readManifest() throws IOException {
+        try (InputStream input = getClass().getClassLoader().getResourceAsStream(MANIFEST)) {
+            if (input == null) {
+                throw new IOException("Migration manifest not found: " + MANIFEST);
+            }
+            try (var reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
+                return reader.lines()
+                        .map(String::trim)
+                        .filter(line -> !line.isEmpty() && !line.startsWith("#"))
+                        .map(line -> line.split("\\|", -1))
+                        .map(parts -> {
+                            if (parts.length != 2) {
+                                throw new IllegalStateException("Invalid migration manifest entry");
+                            }
+                            return new ManifestEntry(parts[0], parts[1]);
+                        })
+                        .toList();
             }
         }
-
-        // Fallback: try to list known migration files if directory listing doesn't work
-        if (files.isEmpty()) {
-            files = listKnownMigrations();
-        }
-
-        return files;
-    }
-
-    private List<String> listKnownMigrations() {
-        // Fallback list of known migrations - update this when adding new migrations
-        List<String> known = new ArrayList<>();
-        String[] candidates = {
-            "V1__create_keyspace.cql",
-            "V2__create_tables.cql",
-            "V3__create_api_keys_table.cql",
-            "V4__add_default_auth_required.cql",
-            "V5__add_cors_config.cql",
-            "V6__add_permission_policy.cql",
-            "V7__add_rate_limit_config.cql",
-            "V8__create_roles_table.cql",
-            "V9__create_translation_config_tables.cql",
-            "V10__remove_active_column.cql",
-            "V11__add_sampling_config.cql",
-            "V12__add_security_headers_config.cql",
-            "V13__add_timeout_config.cql",
-            "V14__create_service_config_generation.cql"
-        };
-
-        for (String candidate : candidates) {
-            if (getClass().getClassLoader().getResource(MIGRATIONS_PATH + candidate) != null) {
-                known.add(candidate);
-            }
-        }
-
-        return known;
     }
 
     private String readMigrationFile(String filename) throws IOException {
-        String path = MIGRATIONS_PATH + filename;
-        try (InputStream is = getClass().getClassLoader().getResourceAsStream(path)) {
-            if (is == null) {
+        final var path = MIGRATIONS_PATH + filename;
+        try (InputStream input = getClass().getClassLoader().getResourceAsStream(path)) {
+            if (input == null) {
                 throw new IOException("Migration file not found: " + path);
             }
-            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
         }
     }
 
     private void applyMigration(Migration migration) {
         LOG.infov("Applying migration V{0}: {1}", migration.version(), migration.filename());
-
-        // Split by semicolons and execute each statement
-        String[] statements = migration.content().split(";");
-        for (String statement : statements) {
-            String trimmed = statement.trim();
-            // Skip empty statements and comments
-            if (trimmed.isEmpty() || trimmed.startsWith("--")) {
-                continue;
-            }
-            // Skip USE statements - we're already connected to the keyspace
-            if (trimmed.toUpperCase().startsWith("USE ")) {
+        for (var statement : splitStatements(migration.content())) {
+            final var executable = migrationStatement(migration.version(), statement);
+            if (executable.isEmpty() || executable.toUpperCase(Locale.ROOT).startsWith("USE ")) {
                 continue;
             }
             try {
-                session.execute(trimmed);
+                session.execute(executable);
             } catch (Exception e) {
-                LOG.errorv("Failed to execute statement in {0}: {1}", migration.filename(), e.getMessage());
-                throw new RuntimeException("Migration failed: " + migration.filename(), e);
+                throw new IllegalStateException("Migration failed: " + migration.filename(), e);
             }
         }
 
-        // Record the migration
+        if (migration.version() == 17) {
+            backfillApiKeyHashLookup();
+            backfillTranslationConfigVersionLookup();
+        }
+
         session.execute(
                 """
-                INSERT INTO %s.schema_migrations (version, script_name, applied_at)
-                VALUES (?, ?, ?)
+                INSERT INTO %s.schema_migrations (version, script_name, checksum, applied_at)
+                VALUES (?, ?, ?, ?)
                 """
                         .formatted(keyspace),
                 migration.version(),
                 migration.filename(),
+                migration.checksum(),
                 Instant.now());
-
-        LOG.infov("Migration V{0} applied successfully", migration.version());
     }
 
-    private record Migration(int version, String filename, String content) {}
+    private void recordChecksum(Migration migration) {
+        session.execute(
+                "UPDATE %s.schema_migrations SET checksum = ? WHERE version = ?".formatted(keyspace),
+                migration.checksum(),
+                migration.version());
+    }
+
+    static String migrationStatement(int version, String statement) {
+        final var uppercase = statement.toUpperCase(Locale.ROOT);
+        if (version <= 13 && uppercase.startsWith("ALTER TABLE ")) {
+            final var addIfMissing = statement.replaceFirst("(?i)\\bADD\\s+", "ADD IF NOT EXISTS ");
+            return addIfMissing.equals(statement)
+                    ? statement.replaceFirst("(?i)\\bDROP\\s+", "DROP IF EXISTS ")
+                    : addIfMissing;
+        }
+        if ((version == 15 || version == 16) && uppercase.startsWith("DROP INDEX ")) {
+            return "";
+        }
+        return statement;
+    }
+
+    void backfillApiKeyHashLookup() {
+        for (var row :
+                session.execute("SELECT key_id, key_hash, encrypted_data, created_at, updated_at FROM api_keys")) {
+            session.execute(
+                    """
+                        INSERT INTO api_keys_by_hash (key_hash, key_id, encrypted_data, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                    row.getString("key_hash"),
+                    row.getString("key_id"),
+                    row.getString("encrypted_data"),
+                    row.getInstant("created_at"),
+                    row.getInstant("updated_at"));
+        }
+    }
+
+    void backfillTranslationConfigVersionLookup() {
+        for (var row : session.execute(
+                """
+                SELECT id, version, config_json, created_by, created_at, comment
+                FROM translation_config_versions
+                """)) {
+            session.execute(
+                    """
+                        INSERT INTO translation_config_versions_by_number
+                            (version, id, config_json, created_by, created_at, comment)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                    row.getInt("version"),
+                    row.getString("id"),
+                    row.getString("config_json"),
+                    row.getString("created_by"),
+                    row.getInstant("created_at"),
+                    row.getString("comment"));
+        }
+    }
+
+    private List<String> splitStatements(String content) {
+        final var withoutComments = content.lines()
+                .map(String::trim)
+                .filter(line -> !line.isEmpty() && !line.startsWith("--"))
+                .collect(Collectors.joining("\n"));
+        return java.util.Arrays.stream(withoutComments.split(";"))
+                .map(String::trim)
+                .filter(statement -> !statement.isEmpty())
+                .toList();
+    }
+
+    private static String validateKeyspace(String keyspace) {
+        if (keyspace == null || !KEYSPACE_PATTERN.matcher(keyspace).matches()) {
+            throw new IllegalArgumentException("Invalid Cassandra keyspace name");
+        }
+        return keyspace;
+    }
+
+    private String sha256(String content) {
+        try {
+            final var digest = MessageDigest.getInstance("SHA-256").digest(content.getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
+    }
+
+    private record ManifestEntry(String filename, String checksum) {}
+
+    private record Migration(int version, String filename, String content, String checksum) {}
 }

@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.ServiceLoader;
 
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
@@ -63,6 +64,17 @@ public class RoleStorageProviderLoader {
         final List<StorageHealthIndicator> indicators = new ArrayList<>();
         getStorageProvider().createHealthIndicator(config).ifPresent(indicators::add);
         return indicators;
+    }
+
+    @PreDestroy
+    void shutdown() {
+        if (storageProvider instanceof AutoCloseable closeable) {
+            try {
+                closeable.close();
+            } catch (Exception e) {
+                LOG.warn("Error closing role storage provider", e);
+            }
+        }
     }
 
     private synchronized RoleStorageProvider getStorageProvider() {

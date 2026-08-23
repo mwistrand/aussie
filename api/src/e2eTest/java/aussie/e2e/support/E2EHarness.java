@@ -5,22 +5,20 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.GeneralSecurityException;
+import java.security.KeyPairGenerator;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Comparator;
 import java.util.List;
-import java.util.UUID;
-import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.cassandra.CassandraContainer;
 import org.testcontainers.containers.BindMode;
-import org.testcontainers.containers.Container;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.output.Slf4jLogConsumer;
@@ -50,12 +48,8 @@ import org.testcontainers.utility.MountableFile;
 public final class E2EHarness {
 
     private static final Logger LOG = LoggerFactory.getLogger(E2EHarness.class);
-    private static final String BOOTSTRAP_KEY = "e2e-bootstrap-key-" + UUID.randomUUID();
-    // 32 random bytes, base64-encoded. Sufficient entropy for HS256 and anything
-    // weaker; if a future route-auth test needs an asymmetric key, it should
-    // override AUSSIE_JWS_SIGNING_KEY at the test boundary rather than reuse
-    // this constant.
-    private static final String JWS_SIGNING_KEY = generateRandomSecret(32);
+    private static final String BOOTSTRAP_KEY = "aussie_v1_" + generateRandomSecret(32);
+    private static final String JWS_SIGNING_KEY = generateSigningKey();
     // Per-run shared secret expected by the demo's /__test__/* endpoints in the
     // X-Test-Auth header. Defence-in-depth against DEMO_TEST_API_ENABLED leaking
     // into a non-test environment.
@@ -95,7 +89,6 @@ public final class E2EHarness {
 
         this.network = Network.newNetwork();
 
-        Path migrationsDir = apiProjectDir.resolve("src/main/resources/db/cassandra");
         this.cassandra = new CassandraContainer(DockerImageName.parse("cassandra:4.1"))
                 .withNetwork(network)
                 .withNetworkAliases("cassandra")
@@ -103,7 +96,6 @@ public final class E2EHarness {
                 .withEnv("CASSANDRA_CLUSTER_NAME", "aussie-cluster")
                 .withEnv("HEAP_NEWSIZE", "128M")
                 .withEnv("MAX_HEAP_SIZE", "512M")
-                .withCopyFileToContainer(MountableFile.forHostPath(migrationsDir), "/migrations")
                 .withStartupTimeout(Duration.ofMinutes(3))
                 .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("e2e.cassandra")));
 
@@ -157,9 +149,7 @@ public final class E2EHarness {
                 // bootstrap API key as a JWT and short-circuit with 401. Later
                 // steps that actually exercise route-auth flip this on per-test.
                 .withEnv("AUSSIE_AUTH_ROUTE_AUTH_ENABLED", "false")
-                // Migrations are pre-applied by the harness via cqlsh exec; the
-                // in-app runner would otherwise race CDI init of auth storage.
-                .withEnv("CASSANDRA_RUN_MIGRATIONS", "false")
+                .withEnv("CASSANDRA_RUN_MIGRATIONS", "true")
                 .waitingFor(
                         Wait.forHttp("/q/health/ready").forStatusCode(200).withStartupTimeout(Duration.ofMinutes(2)))
                 .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("e2e.api")));
@@ -177,8 +167,6 @@ public final class E2EHarness {
             LOG.info("E2EHarness: starting cassandra + redis...");
             harness.cassandra.start();
             harness.redis.start();
-            LOG.info("E2EHarness: applying Cassandra migrations...");
-            harness.applyCassandraMigrations();
             LOG.info("E2EHarness: starting demo...");
             harness.demo.start();
             LOG.info("E2EHarness: starting api...");
@@ -260,47 +248,6 @@ public final class E2EHarness {
         LOG.info("E2EHarness: container logs written to {}", outDir);
     }
 
-    private void applyCassandraMigrations() {
-        Path migrationsDir = resolveApiProjectDir().resolve("src/main/resources/db/cassandra");
-        List<Path> migrations;
-        try (Stream<Path> files = Files.list(migrationsDir)) {
-            migrations = files.filter(p -> p.getFileName().toString().matches("V\\d+__.*\\.cql"))
-                    .sorted(Comparator.comparingInt(E2EHarness::migrationVersion))
-                    .toList();
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to list migrations at " + migrationsDir, e);
-        }
-        if (migrations.isEmpty()) {
-            throw new IllegalStateException("No V*.cql migrations found at " + migrationsDir);
-        }
-        for (Path migration : migrations) {
-            String name = migration.getFileName().toString();
-            // V1 creates the keyspace; everything after must be applied with the
-            // keyspace bound (some files do "USE aussie;", others don't).
-            String[] cmd = migrationVersion(migration) == 1
-                    ? new String[] {"cqlsh", "-f", "/migrations/" + name}
-                    : new String[] {"cqlsh", "-k", "aussie", "-f", "/migrations/" + name};
-            try {
-                Container.ExecResult result = cassandra.execInContainer(cmd);
-                if (result.getExitCode() != 0) {
-                    throw new IllegalStateException("cqlsh failed on " + name + ": exit=" + result.getExitCode()
-                            + " stdout=" + result.getStdout() + " stderr=" + result.getStderr());
-                }
-                LOG.debug("Applied migration {}", name);
-            } catch (IOException | InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("Failed to apply migration " + name, e);
-            }
-        }
-        LOG.info("E2EHarness: applied {} Cassandra migration(s)", migrations.size());
-    }
-
-    private static int migrationVersion(Path file) {
-        String name = file.getFileName().toString();
-        int underscore = name.indexOf("__");
-        return Integer.parseInt(name.substring(1, underscore));
-    }
-
     private static void clearNextDevState(Path nextDevDir) {
         if (!Files.exists(nextDevDir)) {
             return;
@@ -339,5 +286,16 @@ public final class E2EHarness {
         byte[] buf = new byte[byteLength];
         new SecureRandom().nextBytes(buf);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
+    }
+
+    private static String generateSigningKey() {
+        try {
+            var generator = KeyPairGenerator.getInstance("RSA");
+            generator.initialize(2048);
+            return Base64.getEncoder()
+                    .encodeToString(generator.generateKeyPair().getPrivate().getEncoded());
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Unable to generate the E2E signing key", e);
+        }
     }
 }
