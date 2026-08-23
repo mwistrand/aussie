@@ -167,11 +167,22 @@ public class OidcTokenValidator implements TokenValidatorProvider {
     private JwtConsumer getOrBuildConsumer(IssuerState state, JsonWebKey key) {
         // Audiences are already canonicalized on the IssuerState, so reusing the same
         // immutable Set here keeps the cache key allocation-free for the hot path.
-        final var cacheKey = new ConsumerKey(state.issuer(), state.audiences(), key.getKeyId());
+        final var cacheKey = new ConsumerKey(
+                state.issuer(),
+                state.audiences(),
+                state.allowedAlgorithms(),
+                key.getAlgorithm(),
+                key.calculateBase64urlEncodedThumbprint("SHA-256"));
         return consumerCache.get(cacheKey, k -> buildConsumer(state, key));
     }
 
     private JwtConsumer buildConsumer(IssuerState state, JsonWebKey key) {
+        final var keyAlgorithm = key.getAlgorithm();
+        if (keyAlgorithm != null && !state.allowedAlgorithms().contains(keyAlgorithm)) {
+            throw new IllegalStateException("JWKS key algorithm is not allowed for the token provider");
+        }
+        final var allowedAlgorithms =
+                keyAlgorithm == null ? state.allowedAlgorithms().toArray(new String[0]) : new String[] {keyAlgorithm};
         return new JwtConsumerBuilder()
                 .setRequireSubject()
                 .setRequireExpirationTime()
@@ -179,8 +190,7 @@ public class OidcTokenValidator implements TokenValidatorProvider {
                 .setAllowedClockSkewInSeconds(CLOCK_SKEW_SECONDS)
                 .setExpectedIssuer(state.issuer())
                 .setExpectedAudience(true, state.expectedAudience())
-                .setJwsAlgorithmConstraints(new AlgorithmConstraints(
-                        ConstraintType.PERMIT, state.allowedAlgorithms().toArray(new String[0])))
+                .setJwsAlgorithmConstraints(new AlgorithmConstraints(ConstraintType.PERMIT, allowedAlgorithms))
                 .setVerificationKey(key.getKey())
                 .build();
     }
@@ -264,10 +274,15 @@ public class OidcTokenValidator implements TokenValidatorProvider {
     /**
      * Cache key for {@link JwtConsumer} instances.
      *
-     * <p>A consumer is functionally identical for the same (issuer, audiences, kid) triple,
-     * so we share one across requests instead of rebuilding the validator chain per call.
+     * <p>The public-key thumbprint prevents reused key IDs from retaining old verification
+     * material after a provider rotation.
      */
-    private record ConsumerKey(String issuer, Set<String> audiences, String kid) {}
+    private record ConsumerKey(
+            String issuer,
+            Set<String> audiences,
+            Set<String> allowedAlgorithms,
+            String keyAlgorithm,
+            String publicKeyThumbprint) {}
 
     /**
      * Per-{@link TokenProviderConfig} pre-computed validator state. Builds the canonical

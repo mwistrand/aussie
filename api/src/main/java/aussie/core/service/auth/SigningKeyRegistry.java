@@ -13,10 +13,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
-import io.quarkus.runtime.StartupEvent;
 import io.quarkus.scheduler.Scheduled;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
@@ -79,27 +77,6 @@ public class SigningKeyRegistry {
     }
 
     /**
-     * Initialize the registry by loading keys from the repository.
-     *
-     * <p>
-     * Initialization is asynchronous. Callers should check {@link #isReady()}
-     * or use readiness probes before relying on key availability.
-     */
-    void init(@Observes StartupEvent event) {
-        if (!config.enabled()) {
-            LOG.info("Key rotation disabled, using static key configuration");
-            return;
-        }
-
-        LOG.info("Initializing signing key registry...");
-        refreshCache()
-                .subscribe()
-                .with(
-                        success -> LOG.info("Signing key registry initialized"),
-                        failure -> LOG.error("Failed to initialize signing key registry", failure));
-    }
-
-    /**
      * Get the current active signing key.
      *
      * <p>
@@ -110,15 +87,11 @@ public class SigningKeyRegistry {
      * @throws IllegalStateException if no active key is configured
      */
     public SigningKeyRecord getCurrentSigningKey() {
-        if (!config.enabled()) {
-            throw new IllegalStateException("Key rotation not enabled - use static key configuration");
-        }
-
-        final var key = cache.activeKey();
-        if (key == null) {
+        final var state = cache;
+        if (!isReady(state, Instant.now())) {
             throw new IllegalStateException("No active signing key configured");
         }
-        return key;
+        return state.activeKey();
     }
 
     /**
@@ -132,14 +105,11 @@ public class SigningKeyRegistry {
      * @return The key if found and valid for verification
      */
     public Optional<SigningKeyRecord> getVerificationKey(String keyId) {
-        if (!config.enabled()) {
-            return Optional.empty();
-        }
         return Optional.ofNullable(cache.verificationKeyMap().get(keyId));
     }
 
     /**
-     * Get all keys valid for verification (ACTIVE + DEPRECATED).
+     * Get all published keys (PENDING + ACTIVE + DEPRECATED).
      *
      * <p>
      * Used to populate the JWKS endpoint so clients can
@@ -155,8 +125,19 @@ public class SigningKeyRegistry {
      * Check if the registry is initialized and has an active key.
      */
     public boolean isReady() {
-        final var state = cache;
-        return config.enabled() && state.initialized() && state.activeKey() != null;
+        return isReady(cache, Instant.now());
+    }
+
+    private boolean isReady(CacheState state, Instant now) {
+        return (!config.enabled()
+                        || (state.lastRefresh() != null
+                                && state.lastRefresh()
+                                        .plus(config.cacheRefreshInterval().multipliedBy(2))
+                                        .isAfter(now)))
+                && state.initialized()
+                && state.activeKey() != null
+                && state.activeKey().canSign()
+                && state.verificationKeyMap().containsKey(state.activeKey().keyId());
     }
 
     /**
@@ -178,14 +159,20 @@ public class SigningKeyRegistry {
      * @return Uni with the created key record
      */
     public Uni<SigningKeyRecord> registerKey(RSAPrivateKey privateKey, RSAPublicKey publicKey) {
+        if (!config.enabled()) {
+            return Uni.createFrom().failure(new IllegalStateException("Key rotation not enabled"));
+        }
         final var keyId = generateKeyId();
         final var key = SigningKeyRecord.pending(keyId, privateKey, publicKey);
 
         LOG.infov("Registering new signing key: {0}", keyId);
 
         return repository
-                .store(key)
-                .replaceWith(key)
+                .storePendingIfAbsent(key)
+                .flatMap(stored -> stored
+                        ? Uni.createFrom().item(key)
+                        : Uni.createFrom()
+                                .failure(new IllegalStateException("A signing-key rotation is already pending")))
                 .invoke(k -> LOG.infov("Key {0} registered with PENDING status", k.keyId()));
     }
 
@@ -218,14 +205,13 @@ public class SigningKeyRegistry {
 
         return repository
                 .findActive()
-                .flatMap(currentActive -> {
-                    // Deprecate current active key if exists
-                    Uni<Void> deprecateOld = currentActive
-                            .map(old -> deprecateKey(old.keyId()))
-                            .orElse(Uni.createFrom().voidItem());
-
-                    return deprecateOld.flatMap(v -> repository.updateStatus(keyId, KeyStatus.ACTIVE, Instant.now()));
-                })
+                .flatMap(currentActive ->
+                        repository.activate(keyId, currentActive.map(SigningKeyRecord::keyId), Instant.now()))
+                .flatMap(activated -> activated
+                        ? Uni.createFrom().voidItem()
+                        : Uni.createFrom()
+                                .failure(new IllegalStateException(
+                                        "Signing key activation conflicted or key is not pending")))
                 .invoke(() -> LOG.infov("Key {0} activated", keyId))
                 .flatMap(v -> refreshCache());
     }
@@ -267,31 +253,36 @@ public class SigningKeyRegistry {
      * This is called periodically based on the configured interval.
      * If the refresh fails, the cached keys continue to be used.
      */
-    @Scheduled(
-            every = "${aussie.auth.key-rotation.cache-refresh-interval:5m}",
-            concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     public Uni<Void> refreshCache() {
-        if (!config.enabled()) {
-            return Uni.createFrom().voidItem();
-        }
-
         LOG.info("Refreshing signing key cache...");
 
-        return Uni.combine()
-                .all()
-                .unis(repository.findActive(), repository.findAllForVerification())
-                .asTuple()
-                .invoke(tuple -> {
-                    final var newActiveKey = tuple.getItem1().orElse(null);
-                    final var newVerificationKeys = tuple.getItem2();
-
-                    // Build verification key map
+        return repository
+                .findAllForVerification()
+                .invoke(newVerificationKeys -> {
                     final var newMap = new HashMap<String, SigningKeyRecord>();
+                    SigningKeyRecord newActiveKey = null;
+                    var pendingKeyCount = 0;
                     for (var key : newVerificationKeys) {
-                        newMap.put(key.keyId(), key);
+                        if (key.status() == KeyStatus.RETIRED) {
+                            throw new IllegalStateException("Signing key repository returned a retired key");
+                        }
+                        if (newMap.put(key.keyId(), key) != null) {
+                            throw new IllegalStateException("Signing key repository returned duplicate key IDs");
+                        }
+                        if (key.status() == KeyStatus.PENDING && ++pendingKeyCount > 1) {
+                            throw new IllegalStateException("Signing key repository returned multiple pending keys");
+                        }
+                        if (key.status() == KeyStatus.ACTIVE) {
+                            if (newActiveKey != null) {
+                                throw new IllegalStateException("Signing key repository returned multiple active keys");
+                            }
+                            newActiveKey = key;
+                        }
+                    }
+                    if (newActiveKey != null && !newActiveKey.canSign()) {
+                        throw new IllegalStateException("Active signing key has no private key");
                     }
 
-                    // Atomic swap of entire cache state
                     this.cache = new CacheState(
                             newActiveKey, Map.copyOf(newMap), List.copyOf(newVerificationKeys), Instant.now(), true);
 
@@ -302,6 +293,13 @@ public class SigningKeyRegistry {
                 .replaceWithVoid()
                 .onFailure()
                 .invoke(e -> LOG.error("Failed to refresh signing key cache", e));
+    }
+
+    @Scheduled(
+            every = "${aussie.auth.key-rotation.cache-refresh-interval:5m}",
+            concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
+    Uni<Void> refreshRotatingCache() {
+        return config.enabled() ? refreshCache() : Uni.createFrom().voidItem();
     }
 
     /**

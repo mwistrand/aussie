@@ -46,6 +46,11 @@ import aussie.core.model.auth.SigningKeyRecord;
  */
 public interface SigningKeyRepository {
 
+    /** Whether key state is durable and shared across gateway instances. */
+    default boolean isDurable() {
+        return false;
+    }
+
     /**
      * Store a new signing key.
      *
@@ -57,6 +62,9 @@ public interface SigningKeyRepository {
      * @return Uni completing when stored
      */
     Uni<Void> store(SigningKeyRecord key);
+
+    /** Atomically store a new pending key only when its ID and the pending slot are unused. */
+    Uni<Boolean> storePendingIfAbsent(SigningKeyRecord key);
 
     /**
      * Get a key by its ID.
@@ -78,10 +86,10 @@ public interface SigningKeyRepository {
     Uni<Optional<SigningKeyRecord>> findActive();
 
     /**
-     * Get all keys valid for verification (ACTIVE + DEPRECATED).
+     * Get all keys that must be published (PENDING + ACTIVE + DEPRECATED).
      *
-     * <p>These keys should be included in the JWKS endpoint
-     * so that tokens signed with any of them can be verified.
+     * <p>Pending keys are published during their grace period but cannot sign or
+     * verify tokens until activation.
      *
      * @return Uni with list of verification keys (may be empty)
      */
@@ -94,6 +102,20 @@ public interface SigningKeyRepository {
      * @return Uni with list of keys with the given status
      */
     Uni<List<SigningKeyRecord>> findByStatus(KeyStatus status);
+
+    /**
+     * Atomically replace the expected active key with a pending key.
+     *
+     * <p>The repository must perform the comparison, old-key deprecation, and
+     * new-key activation in one transaction. Returning {@code false} reports a
+     * concurrent activation or stale expectation; no key state may change.
+     *
+     * @param keyId pending key to activate
+     * @param expectedActiveKeyId active key observed by the caller, if any
+     * @param transitionTime time applied to both state transitions
+     * @return whether the compare-and-set succeeded
+     */
+    Uni<Boolean> activate(String keyId, Optional<String> expectedActiveKeyId, Instant transitionTime);
 
     /**
      * Update a key's status.

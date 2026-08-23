@@ -161,6 +161,18 @@ public interface ResiliencyConfig {
          */
         @WithDefault("10")
         int maxConnections();
+
+        /** Maximum decoded JWKS response size in bytes. */
+        @WithDefault("262144")
+        int maxResponseBytes();
+
+        /** Maximum number of public keys accepted from one JWKS document. */
+        @WithDefault("32")
+        int maxKeys();
+
+        /** Maximum time an expired JWKS may be used during a fetch outage. */
+        @WithDefault("PT15M")
+        Duration maximumStale();
     }
 
     /**

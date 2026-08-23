@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
@@ -27,53 +29,49 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.config.RouteAuthConfig;
 import aussie.core.config.SessionConfig;
+import aussie.core.model.auth.SigningKeyRecord;
 import aussie.core.model.session.Session;
+import aussie.core.service.auth.SigningKeyRegistry;
 
 @DisplayName("SessionTokenService")
 class SessionTokenServiceTest {
 
     private static KeyPair testKeyPair;
-    private static String testKeyPem;
 
     private SessionConfig config;
     private SessionConfig.JwsConfig jwsConfig;
-    private RouteAuthConfig routeAuthConfig;
-    private RouteAuthConfig.JwsProperties jwsProperties;
+    private SigningKeyRegistry keyRegistry;
 
     @BeforeAll
     static void generateKey() throws Exception {
         var generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(2048);
         testKeyPair = generator.generateKeyPair();
-        testKeyPem = Base64.getEncoder().encodeToString(testKeyPair.getPrivate().getEncoded());
     }
 
     @BeforeEach
     void setUp() {
         config = mock(SessionConfig.class);
         jwsConfig = mock(SessionConfig.JwsConfig.class);
-        routeAuthConfig = mock(RouteAuthConfig.class);
-        jwsProperties = mock(RouteAuthConfig.JwsProperties.class);
+        keyRegistry = mock(SigningKeyRegistry.class);
 
         when(config.jws()).thenReturn(jwsConfig);
-        when(routeAuthConfig.jws()).thenReturn(jwsProperties);
 
         when(jwsConfig.enabled()).thenReturn(true);
         when(jwsConfig.ttl()).thenReturn(Duration.ofMinutes(5));
         when(jwsConfig.issuer()).thenReturn("aussie-gateway");
-        when(jwsConfig.audience()).thenReturn(Optional.empty());
+        when(jwsConfig.audience()).thenReturn(Optional.of("downstream-services"));
         when(jwsConfig.includeClaims()).thenReturn(List.of("sub", "email", "name", "roles"));
 
-        when(jwsProperties.signingKey()).thenReturn(Optional.of(testKeyPem));
-        when(jwsProperties.keyId()).thenReturn("test-key-v1");
+        final var signingKey = SigningKeyRecord.active(
+                "test-key-v1", (RSAPrivateKey) testKeyPair.getPrivate(), (RSAPublicKey) testKeyPair.getPublic());
+        when(keyRegistry.isReady()).thenReturn(true);
+        when(keyRegistry.getCurrentSigningKey()).thenReturn(signingKey);
     }
 
-    private SessionTokenService createAndInit() {
-        var service = new SessionTokenService(config, routeAuthConfig);
-        service.init();
-        return service;
+    private SessionTokenService createService() {
+        return new SessionTokenService(config, keyRegistry);
     }
 
     private Session testSession() {
@@ -91,13 +89,13 @@ class SessionTokenServiceTest {
     }
 
     @Nested
-    @DisplayName("init()")
-    class InitTests {
+    @DisplayName("signing authority")
+    class SigningAuthorityTests {
 
         @Test
         @DisplayName("should load signing key when configured")
         void shouldLoadSigningKeyWhenConfigured() {
-            var service = createAndInit();
+            var service = createService();
 
             assertTrue(service.isSigningAvailable());
         }
@@ -105,19 +103,9 @@ class SessionTokenServiceTest {
         @Test
         @DisplayName("should handle missing signing key")
         void shouldHandleMissingSigningKey() {
-            when(jwsProperties.signingKey()).thenReturn(Optional.empty());
+            when(keyRegistry.isReady()).thenReturn(false);
 
-            var service = createAndInit();
-
-            assertFalse(service.isSigningAvailable());
-        }
-
-        @Test
-        @DisplayName("should handle invalid signing key")
-        void shouldHandleInvalidSigningKey() {
-            when(jwsProperties.signingKey()).thenReturn(Optional.of("not-a-valid-key"));
-
-            var service = createAndInit();
+            var service = createService();
 
             assertFalse(service.isSigningAvailable());
         }
@@ -130,7 +118,7 @@ class SessionTokenServiceTest {
         @Test
         @DisplayName("should return true when JWS enabled")
         void shouldReturnTrueWhenEnabled() {
-            var service = createAndInit();
+            var service = createService();
             assertTrue(service.isEnabled());
         }
 
@@ -138,7 +126,7 @@ class SessionTokenServiceTest {
         @DisplayName("should return false when JWS disabled")
         void shouldReturnFalseWhenDisabled() {
             when(jwsConfig.enabled()).thenReturn(false);
-            var service = createAndInit();
+            var service = createService();
             assertFalse(service.isEnabled());
         }
     }
@@ -150,7 +138,7 @@ class SessionTokenServiceTest {
         @Test
         @DisplayName("should generate valid signed token")
         void shouldGenerateValidSignedToken() throws Exception {
-            var service = createAndInit();
+            var service = createService();
             var session = testSession();
 
             var token = service.generateToken(session);
@@ -165,6 +153,7 @@ class SessionTokenServiceTest {
             JwtConsumer consumer = new JwtConsumerBuilder()
                     .setVerificationKey(testKeyPair.getPublic())
                     .setExpectedIssuer("aussie-gateway")
+                    .setExpectedAudience("downstream-services")
                     .setRequireSubject()
                     .build();
 
@@ -177,7 +166,7 @@ class SessionTokenServiceTest {
         @Test
         @DisplayName("should include email and name claims from session")
         void shouldIncludeEmailAndNameClaims() throws Exception {
-            var service = createAndInit();
+            var service = createService();
             var session = testSession();
 
             var token = service.generateToken(session);
@@ -195,7 +184,7 @@ class SessionTokenServiceTest {
         @Test
         @DisplayName("should include roles from session permissions")
         void shouldIncludeRolesFromPermissions() throws Exception {
-            var service = createAndInit();
+            var service = createService();
             var session = testSession();
 
             var token = service.generateToken(session);
@@ -214,7 +203,7 @@ class SessionTokenServiceTest {
         @DisplayName("should include audience when configured")
         void shouldIncludeAudienceWhenConfigured() throws Exception {
             when(jwsConfig.audience()).thenReturn(Optional.of("test-audience"));
-            var service = createAndInit();
+            var service = createService();
             var session = testSession();
 
             var token = service.generateToken(session);
@@ -231,10 +220,10 @@ class SessionTokenServiceTest {
         @Test
         @DisplayName("should include additional claims")
         void shouldIncludeAdditionalClaims() throws Exception {
-            var service = createAndInit();
+            var service = createService();
             var session = testSession();
 
-            var token = service.generateToken(session, Map.of("custom_claim", "custom_value"));
+            var token = service.generateToken(session, Map.of("custom_claim", "custom_value", "sub", "attacker"));
 
             JwtConsumer consumer = new JwtConsumerBuilder()
                     .setVerificationKey(testKeyPair.getPublic())
@@ -243,12 +232,25 @@ class SessionTokenServiceTest {
 
             JwtClaims claims = consumer.processToClaims(token.token());
             assertEquals("custom_value", claims.getStringClaimValue("custom_claim"));
+            assertEquals("user-1", claims.getSubject());
+        }
+
+        @Test
+        @DisplayName("should not outlive the source session")
+        void shouldNotOutliveSession() {
+            final var sessionExpiration =
+                    Instant.now().plusSeconds(30).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+            final var session = testSession().withExpiresAt(sessionExpiration);
+
+            final var token = createService().generateToken(session);
+
+            assertEquals(sessionExpiration, token.expiresAt());
         }
 
         @Test
         @DisplayName("should set correct key ID header")
         void shouldSetCorrectKeyIdHeader() throws Exception {
-            var service = createAndInit();
+            var service = createService();
             var session = testSession();
 
             var token = service.generateToken(session);
@@ -262,7 +264,7 @@ class SessionTokenServiceTest {
         @DisplayName("should throw when JWS disabled")
         void shouldThrowWhenJwsDisabled() {
             when(jwsConfig.enabled()).thenReturn(false);
-            var service = createAndInit();
+            var service = createService();
 
             var ex = assertThrows(IllegalStateException.class, () -> service.generateToken(testSession()));
             assertEquals("JWS token generation is disabled", ex.getMessage());
@@ -271,17 +273,19 @@ class SessionTokenServiceTest {
         @Test
         @DisplayName("should throw when signing key not available")
         void shouldThrowWhenSigningKeyNotAvailable() {
-            when(jwsProperties.signingKey()).thenReturn(Optional.empty());
-            var service = createAndInit();
+            when(keyRegistry.isReady()).thenReturn(false);
+            when(keyRegistry.getCurrentSigningKey()).thenThrow(new IllegalStateException("missing"));
+            var service = createService();
 
-            var ex = assertThrows(IllegalStateException.class, () -> service.generateToken(testSession()));
+            var ex = assertThrows(
+                    SessionTokenService.SessionTokenException.class, () -> service.generateToken(testSession()));
             assertEquals("JWS signing key not configured", ex.getMessage());
         }
 
         @Test
         @DisplayName("should handle session with null claims")
         void shouldHandleSessionWithNullClaims() {
-            var service = createAndInit();
+            var service = createService();
             var session = new Session(
                     "session-123",
                     "user-1",
@@ -302,7 +306,7 @@ class SessionTokenServiceTest {
         @Test
         @DisplayName("should handle session with empty claims")
         void shouldHandleSessionWithEmptyClaims() {
-            var service = createAndInit();
+            var service = createService();
             var session = new Session(
                     "session-123",
                     "user-1",
@@ -323,7 +327,7 @@ class SessionTokenServiceTest {
         @DisplayName("should only include configured claims from session")
         void shouldOnlyIncludeConfiguredClaims() throws Exception {
             when(jwsConfig.includeClaims()).thenReturn(List.of("sub"));
-            var service = createAndInit();
+            var service = createService();
             var session = testSession();
 
             var token = service.generateToken(session);

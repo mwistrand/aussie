@@ -11,14 +11,17 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.List;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.quarkus.runtime.LaunchMode;
 import io.smallrye.mutiny.Uni;
 import io.vertx.mutiny.core.buffer.Buffer;
 import io.vertx.mutiny.core.net.SocketAddress;
@@ -97,6 +100,9 @@ class JwksCacheServiceTest {
         lenient().when(jwksConfig.fetchTimeout()).thenReturn(Duration.ofSeconds(5));
         lenient().when(jwksConfig.maxCacheEntries()).thenReturn(100);
         lenient().when(jwksConfig.cacheTtl()).thenReturn(Duration.ofHours(1));
+        lenient().when(jwksConfig.maxResponseBytes()).thenReturn(262_144);
+        lenient().when(jwksConfig.maxKeys()).thenReturn(32);
+        lenient().when(jwksConfig.maximumStale()).thenReturn(Duration.ofMinutes(15));
         lenient().when(resiliencyConfig.jwks()).thenReturn(jwksConfig);
         lenient().when(outboundClient.jwksWebClient()).thenReturn(webClient);
         lenient()
@@ -109,6 +115,11 @@ class JwksCacheServiceTest {
 
     @SuppressWarnings("unchecked")
     private void mockFetchResponse(int statusCode, String body) {
+        mockFetchResponse(statusCode, body, "application/json");
+    }
+
+    @SuppressWarnings("unchecked")
+    private void mockFetchResponse(int statusCode, String body, String contentType) {
         HttpRequest<Buffer> request = (HttpRequest<Buffer>) org.mockito.Mockito.mock(HttpRequest.class);
         HttpResponse<Buffer> response = (HttpResponse<Buffer>) org.mockito.Mockito.mock(HttpResponse.class);
 
@@ -117,6 +128,7 @@ class JwksCacheServiceTest {
         when(request.followRedirects(false)).thenReturn(request);
         when(request.send()).thenReturn(Uni.createFrom().item(response));
         when(response.statusCode()).thenReturn(statusCode);
+        lenient().when(response.getHeader("Content-Type")).thenReturn(contentType);
         if (body != null) {
             lenient().when(response.bodyAsString()).thenReturn(body);
         }
@@ -208,6 +220,33 @@ class JwksCacheServiceTest {
         }
 
         @Test
+        @DisplayName("should reject non-JWKS content types")
+        void shouldRejectUnexpectedContentType() {
+            mockFetchResponse(200, singleKeyJwks, "text/html");
+
+            final var exception = assertThrows(
+                    JwksCacheService.JwksFetchException.class,
+                    () -> service.getKeySet(JWKS_URI).await().atMost(Duration.ofSeconds(5)));
+
+            assertTrue(exception.getMessage().contains("content type"));
+        }
+
+        @Test
+        @DisplayName("should reject oversized JWKS responses")
+        void shouldRejectOversizedResponse() {
+            when(jwksConfig.maxResponseBytes()).thenReturn(10);
+            service = new JwksCacheService(
+                    outboundClient, resiliencyConfig, new SimpleMeterRegistry(), metrics, addressResolver);
+            mockFetchResponse(200, singleKeyJwks);
+
+            final var exception = assertThrows(
+                    JwksCacheService.JwksFetchException.class,
+                    () -> service.getKeySet(JWKS_URI).await().atMost(Duration.ofSeconds(5)));
+
+            assertTrue(exception.getMessage().contains("size limit"));
+        }
+
+        @Test
         @DisplayName("should propagate fetch failure when no stale cache exists")
         void shouldPropagateFailureWhenNoStaleCache() {
             mockFetchFailure(new RuntimeException("Connection refused"));
@@ -230,6 +269,7 @@ class JwksCacheServiceTest {
             when(request.followRedirects(false)).thenReturn(request);
             when(request.send()).thenReturn(Uni.createFrom().item(response));
             when(response.statusCode()).thenReturn(200);
+            when(response.getHeader("Content-Type")).thenReturn("application/json");
             when(response.bodyAsString()).thenReturn(singleKeyJwks);
 
             service.getKeySet(JWKS_URI).await().atMost(Duration.ofSeconds(5));
@@ -251,6 +291,7 @@ class JwksCacheServiceTest {
             when(request.followRedirects(false)).thenReturn(request);
             when(request.send()).thenReturn(Uni.createFrom().item(response));
             when(response.statusCode()).thenReturn(200);
+            when(response.getHeader("Content-Type")).thenReturn("application/json");
             when(response.bodyAsString()).thenReturn(singleKeyJwks);
 
             service.getKeySet(uri).await().atMost(Duration.ofSeconds(5));
@@ -259,23 +300,19 @@ class JwksCacheServiceTest {
         }
 
         @Test
-        @DisplayName("should not use SSL for http URIs")
-        @SuppressWarnings("unchecked")
-        void shouldNotUseSslForHttpUri() {
-            HttpRequest<Buffer> request = (HttpRequest<Buffer>) org.mockito.Mockito.mock(HttpRequest.class);
-            HttpResponse<Buffer> response = (HttpResponse<Buffer>) org.mockito.Mockito.mock(HttpResponse.class);
+        @DisplayName("should reject plaintext JWKS outside dev/test")
+        void shouldRejectHttpUri() {
+            assertThrows(
+                    JwksCacheService.JwksFetchException.class,
+                    () -> JwksCacheService.validateUri(JWKS_URI_HTTP, LaunchMode.NORMAL, List.of("prod")));
 
-            when(webClient.requestAbs(any(), any(SocketAddress.class), eq(JWKS_URI_HTTP.toString())))
-                    .thenReturn(request);
-            when(request.ssl(false)).thenReturn(request);
-            when(request.followRedirects(false)).thenReturn(request);
-            when(request.send()).thenReturn(Uni.createFrom().item(response));
-            when(response.statusCode()).thenReturn(200);
-            when(response.bodyAsString()).thenReturn(singleKeyJwks);
+            verify(webClient, never()).requestAbs(any(), any(SocketAddress.class), anyString());
+        }
 
-            service.getKeySet(JWKS_URI_HTTP).await().atMost(Duration.ofSeconds(5));
-
-            verify(request).ssl(false);
+        @Test
+        @DisplayName("should allow plaintext JWKS for a dev profile in a packaged application")
+        void shouldAllowHttpUriForPackagedDevProfile() {
+            JwksCacheService.validateUri(JWKS_URI_HTTP, LaunchMode.NORMAL, List.of("dev"));
         }
     }
 
@@ -374,6 +411,28 @@ class JwksCacheServiceTest {
             assertEquals(2, result.getJsonWebKeys().size());
             // Should not fetch again (cached from refresh)
             verify(webClient, times(2)).requestAbs(any(), any(SocketAddress.class), anyString());
+        }
+    }
+
+    @Nested
+    @DisplayName("stale fallback")
+    class StaleFallbackTests {
+
+        @Test
+        @DisplayName("uses expired keys only inside maximum-stale")
+        void staleFallbackIsBounded() throws Exception {
+            when(jwksConfig.cacheTtl()).thenReturn(Duration.ofMillis(5));
+            when(jwksConfig.maximumStale()).thenReturn(Duration.ofSeconds(1));
+            service = new JwksCacheService(
+                    outboundClient, resiliencyConfig, new SimpleMeterRegistry(), metrics, addressResolver);
+            mockFetchResponse(200, singleKeyJwks);
+            service.getKeySet(JWKS_URI).await().atMost(Duration.ofSeconds(5));
+            Thread.sleep(20);
+            mockFetchFailure(new RuntimeException("provider unavailable"));
+
+            final var stale = service.getKeySet(JWKS_URI).await().atMost(Duration.ofSeconds(5));
+
+            assertEquals(singleKeyId, stale.getJsonWebKeys().getFirst().getKeyId());
         }
     }
 

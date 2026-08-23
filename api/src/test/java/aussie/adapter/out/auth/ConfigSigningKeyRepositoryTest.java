@@ -1,6 +1,7 @@
 package aussie.adapter.out.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -20,7 +21,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.config.KeyRotationConfig;
 import aussie.core.config.RouteAuthConfig;
 import aussie.core.model.auth.KeyStatus;
 import aussie.core.model.auth.SigningKeyRecord;
@@ -32,7 +32,6 @@ class ConfigSigningKeyRepositoryTest {
     private static RSAPublicKey publicKey;
 
     private RouteAuthConfig routeAuthConfig;
-    private KeyRotationConfig keyRotationConfig;
     private ConfigSigningKeyRepository repository;
 
     @BeforeAll
@@ -47,7 +46,6 @@ class ConfigSigningKeyRepositoryTest {
     @BeforeEach
     void setUp() {
         routeAuthConfig = mock(RouteAuthConfig.class);
-        keyRotationConfig = mock(KeyRotationConfig.class);
 
         final var jwsProps = mock(RouteAuthConfig.JwsProperties.class);
         when(routeAuthConfig.enabled()).thenReturn(false);
@@ -55,7 +53,7 @@ class ConfigSigningKeyRepositoryTest {
         when(jwsProps.signingKey()).thenReturn(Optional.empty());
         when(jwsProps.keyId()).thenReturn("v1");
 
-        repository = new ConfigSigningKeyRepository(routeAuthConfig, keyRotationConfig);
+        repository = new ConfigSigningKeyRepository(routeAuthConfig);
     }
 
     @Nested
@@ -73,7 +71,7 @@ class ConfigSigningKeyRepositoryTest {
                     .thenReturn(Optional.of(Base64.getEncoder().encodeToString(privateKey.getEncoded())));
             when(jwsProps.keyId()).thenReturn("static-v1");
 
-            var repo = new ConfigSigningKeyRepository(config, keyRotationConfig);
+            var repo = new ConfigSigningKeyRepository(config);
             assertEquals(1, repo.getKeyCount());
 
             var key = repo.findById("static-v1").await().atMost(Duration.ofSeconds(1));
@@ -91,7 +89,7 @@ class ConfigSigningKeyRepositoryTest {
             when(jwsProps.signingKey()).thenReturn(Optional.of("not-a-valid-key"));
             when(jwsProps.keyId()).thenReturn("bad-v1");
 
-            var repo = new ConfigSigningKeyRepository(config, keyRotationConfig);
+            var repo = new ConfigSigningKeyRepository(config);
             assertEquals(0, repo.getKeyCount());
         }
     }
@@ -176,8 +174,8 @@ class ConfigSigningKeyRepositoryTest {
         }
 
         @Test
-        @DisplayName("should return only ACTIVE and DEPRECATED keys")
-        void shouldReturnOnlyActiveAndDeprecatedKeys() {
+        @DisplayName("should publish PENDING, ACTIVE, and DEPRECATED keys")
+        void shouldReturnPublishedKeys() {
             final var activeKey = SigningKeyRecord.active("k-active", privateKey, publicKey);
             final var deprecatedKey = SigningKeyRecord.active("k-deprecated", privateKey, publicKey)
                     .deprecate(Instant.now());
@@ -193,9 +191,87 @@ class ConfigSigningKeyRepositoryTest {
 
             final var result = repository.findAllForVerification().await().atMost(Duration.ofSeconds(1));
 
-            assertEquals(2, result.size());
-            assertTrue(result.stream()
-                    .allMatch(k -> k.status() == KeyStatus.ACTIVE || k.status() == KeyStatus.DEPRECATED));
+            assertEquals(3, result.size());
+            assertTrue(result.stream().noneMatch(k -> k.status() == KeyStatus.RETIRED));
+        }
+    }
+
+    @Nested
+    @DisplayName("activate()")
+    class Activate {
+
+        @Test
+        @DisplayName("should atomically replace only the expected active key")
+        void shouldCompareAndSetActiveKey() {
+            repository
+                    .store(SigningKeyRecord.active("k-old", privateKey, publicKey))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+            repository
+                    .store(SigningKeyRecord.pending("k-new-a", privateKey, publicKey))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+            repository
+                    .store(SigningKeyRecord.pending("k-new-b", privateKey, publicKey))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            final var first = repository
+                    .activate("k-new-a", Optional.of("k-old"), Instant.now())
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+            final var second = repository
+                    .activate("k-new-b", Optional.of("k-old"), Instant.now())
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            assertTrue(first);
+            assertFalse(second);
+            assertTrue(repository
+                    .findActive()
+                    .await()
+                    .atMost(Duration.ofSeconds(1))
+                    .isPresent());
+            assertEquals(
+                    KeyStatus.DEPRECATED,
+                    repository
+                            .findById("k-old")
+                            .await()
+                            .atMost(Duration.ofSeconds(1))
+                            .orElseThrow()
+                            .status());
+        }
+
+        @Test
+        @DisplayName("should reject activation when repository has multiple active keys")
+        void shouldRejectMultipleActiveKeys() {
+            repository
+                    .store(SigningKeyRecord.active("k-old-a", privateKey, publicKey))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+            repository
+                    .store(SigningKeyRecord.active("k-old-b", privateKey, publicKey))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+            repository
+                    .store(SigningKeyRecord.pending("k-new", privateKey, publicKey))
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            final var activated = repository
+                    .activate("k-new", Optional.of("k-old-a"), Instant.now())
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            assertFalse(activated);
+            assertEquals(
+                    KeyStatus.PENDING,
+                    repository
+                            .findById("k-new")
+                            .await()
+                            .atMost(Duration.ofSeconds(1))
+                            .orElseThrow()
+                            .status());
         }
     }
 

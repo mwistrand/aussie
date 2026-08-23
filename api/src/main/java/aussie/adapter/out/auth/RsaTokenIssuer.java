@@ -10,66 +10,35 @@ import java.util.Optional;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import org.jboss.logging.Logger;
 import org.jose4j.jws.AlgorithmIdentifiers;
 import org.jose4j.jws.JsonWebSignature;
 import org.jose4j.jwt.JwtClaims;
 import org.jose4j.jwt.NumericDate;
 import org.jose4j.lang.JoseException;
 
-import aussie.core.config.KeyRotationConfig;
-import aussie.core.config.RouteAuthConfig;
 import aussie.core.model.auth.AussieToken;
 import aussie.core.model.auth.SigningKeyRecord;
 import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.model.common.JwsConfig;
+import aussie.core.service.auth.IssuedClaimPolicy;
 import aussie.core.service.auth.SigningKeyRegistry;
 import aussie.spi.TokenIssuerProvider;
 
 /**
  * RS256 (RSA with SHA-256) token issuer.
  *
- * <p>
- * Signs JWS tokens using either:
- * <ul>
- * <li>Dynamic keys from {@link SigningKeyRegistry} when key rotation is
- * enabled</li>
- * <li>Static key from configuration when key rotation is disabled</li>
- * </ul>
+ * <p>Signs every token with the active key from {@link SigningKeyRegistry}.
  */
 @ApplicationScoped
 public class RsaTokenIssuer implements TokenIssuerProvider {
 
-    private static final Logger LOG = Logger.getLogger(RsaTokenIssuer.class);
+    private static final String TOKEN_PROFILE = "aussie+jwt-v1";
 
     private final SigningKeyRegistry keyRegistry;
-    private final KeyRotationConfig keyRotationConfig;
-    private final PrivateKey staticSigningKey;
-    private final String staticKeyId;
-    private final boolean staticKeyAvailable;
 
     @Inject
-    public RsaTokenIssuer(RouteAuthConfig config, KeyRotationConfig keyRotationConfig, SigningKeyRegistry keyRegistry) {
+    public RsaTokenIssuer(SigningKeyRegistry keyRegistry) {
         this.keyRegistry = keyRegistry;
-        this.keyRotationConfig = keyRotationConfig;
-
-        // Load static key for backward compatibility (when key rotation is disabled)
-        PrivateKey key = null;
-        boolean isAvailable = false;
-
-        if (config.enabled() && config.jws().signingKey().isPresent()) {
-            try {
-                key = SigningKeyRecord.parsePrivateKey(config.jws().signingKey().get());
-                isAvailable = true;
-                LOG.info("RSA token issuer initialized with static signing key");
-            } catch (IllegalArgumentException e) {
-                LOG.errorv(e, "Failed to load RSA signing key");
-            }
-        }
-
-        this.staticSigningKey = key;
-        this.staticKeyId = config.jws().keyId();
-        this.staticKeyAvailable = isAvailable;
     }
 
     @Override
@@ -79,10 +48,7 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
 
     @Override
     public boolean isAvailable() {
-        if (keyRotationConfig.enabled()) {
-            return keyRegistry.isReady();
-        }
-        return staticKeyAvailable;
+        return keyRegistry.isReady();
     }
 
     @Override
@@ -92,12 +58,20 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
 
     @Override
     public AussieToken issue(TokenValidationResult.Valid validated, JwsConfig config, Optional<String> audience) {
-        if (!isAvailable()) {
-            throw new TokenIssuanceException("RSA signing key not configured");
+        final SigningKeyRecord signingContext;
+        try {
+            signingContext = keyRegistry.getCurrentSigningKey();
+        } catch (IllegalStateException e) {
+            throw new TokenIssuanceException("RSA signing key not configured", e);
+        }
+        final var effectiveAudience = audience.filter(value -> !value.isBlank())
+                .or(config::defaultAudience)
+                .filter(value -> !value.isBlank());
+        if (effectiveAudience.isEmpty()) {
+            throw new TokenIssuanceException("Issued tokens require an audience");
         }
 
         try {
-            final var signingContext = getSigningContext();
             final var issuedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
             if (validated.expiresAt() == null) {
                 throw new TokenIssuanceException("Validated identity has no expiration");
@@ -108,13 +82,14 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
                 throw new TokenIssuanceException("Validated identity has expired");
             }
 
-            final var claims = buildClaims(validated, config, audience, issuedAt, expiresAt);
+            final var claims = buildClaims(validated, config, effectiveAudience, issuedAt, expiresAt);
             final var jws = signToken(claims, signingContext.privateKey(), signingContext.keyId());
 
             final var forwardedClaims = new HashMap<String, Object>();
             for (String claimName : config.forwardedClaims()) {
-                if (validated.claims().containsKey(claimName)) {
-                    forwardedClaims.put(claimName, validated.claims().get(claimName));
+                final var value = validated.claims().get(claimName);
+                if (value != null && !isStandardClaim(claimName)) {
+                    forwardedClaims.put(claimName, value);
                 }
             }
 
@@ -123,19 +98,6 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
             throw new TokenIssuanceException("Failed to sign token: " + e.getMessage(), e);
         }
     }
-
-    /**
-     * Get the signing context (key and key ID) based on configuration.
-     */
-    private SigningContext getSigningContext() {
-        if (keyRotationConfig.enabled()) {
-            final var keyRecord = keyRegistry.getCurrentSigningKey();
-            return new SigningContext(keyRecord.privateKey(), keyRecord.keyId());
-        }
-        return new SigningContext(staticSigningKey, staticKeyId);
-    }
-
-    private record SigningContext(PrivateKey privateKey, String keyId) {}
 
     private JwtClaims buildClaims(
             TokenValidationResult.Valid validated,
@@ -149,6 +111,7 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
         claims.setIssuer(config.issuer());
         claims.setSubject(validated.subject());
         claims.setIssuedAt(NumericDate.fromSeconds(issuedAt.getEpochSecond()));
+        claims.setNotBefore(NumericDate.fromSeconds(issuedAt.getEpochSecond()));
         claims.setExpirationTime(NumericDate.fromSeconds(expiresAt.getEpochSecond()));
         claims.setGeneratedJwtId();
 
@@ -157,6 +120,8 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
 
         // Preserve original issuer
         claims.setClaim("original_iss", validated.issuer());
+        claims.setClaim("original_provider", validated.identity().providerId());
+        claims.setClaim("aussie_token_profile", TOKEN_PROFILE);
 
         // Forward configured claims from original token
         for (String claimName : config.forwardedClaims()) {
@@ -164,6 +129,10 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
             if (value != null && !isStandardClaim(claimName)) {
                 claims.setClaim(claimName, value);
             }
+        }
+        if (claims.getClaimsMap().entrySet().stream()
+                .anyMatch(entry -> !IssuedClaimPolicy.isAllowed(entry.getKey(), entry.getValue()))) {
+            throw new TokenIssuanceException("Claim violates the issued-token policy");
         }
 
         return claims;
@@ -174,8 +143,12 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
                 || "sub".equals(claimName)
                 || "aud".equals(claimName)
                 || "iat".equals(claimName)
+                || "nbf".equals(claimName)
                 || "exp".equals(claimName)
-                || "jti".equals(claimName);
+                || "jti".equals(claimName)
+                || "original_iss".equals(claimName)
+                || "original_provider".equals(claimName)
+                || "aussie_token_profile".equals(claimName);
     }
 
     private String signToken(JwtClaims claims, PrivateKey privateKey, String keyId) throws JoseException {

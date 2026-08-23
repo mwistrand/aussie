@@ -227,6 +227,7 @@ public interface SessionConfig {
          *
          * @return Audience value (optional)
          */
+        @WithDefault("downstream-services")
         Optional<String> audience();
 
         /**

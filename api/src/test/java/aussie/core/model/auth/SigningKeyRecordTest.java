@@ -184,6 +184,27 @@ class SigningKeyRecordTest {
         void shouldRequirePublicKey() {
             assertThrows(NullPointerException.class, () -> SigningKeyRecord.active("k-test", privateKey, null));
         }
+
+        @Test
+        @DisplayName("should reject blank IDs, weak keys, and mismatched key pairs")
+        void shouldRejectUnsafeKeyMaterial() throws Exception {
+            assertThrows(IllegalArgumentException.class, () -> SigningKeyRecord.active(" ", privateKey, publicKey));
+
+            final var keyGen = KeyPairGenerator.getInstance("RSA");
+            keyGen.initialize(1024);
+            final var weakPair = keyGen.generateKeyPair();
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> SigningKeyRecord.active(
+                            "k-weak", (RSAPrivateKey) weakPair.getPrivate(), (RSAPublicKey) weakPair.getPublic()));
+
+            keyGen.initialize(2048);
+            final var mismatchedPublicKey =
+                    (RSAPublicKey) keyGen.generateKeyPair().getPublic();
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> SigningKeyRecord.active("k-mismatch", privateKey, mismatchedPublicKey));
+        }
     }
 
     @Nested

@@ -1,16 +1,12 @@
 package aussie.core.service.session;
 
-import java.security.PrivateKey;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
-import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -20,11 +16,12 @@ import org.jose4j.jws.JsonWebSignature;
 import org.jose4j.jwt.JwtClaims;
 import org.jose4j.lang.JoseException;
 
-import aussie.core.config.RouteAuthConfig;
 import aussie.core.config.SessionConfig;
 import aussie.core.model.auth.SigningKeyRecord;
 import aussie.core.model.session.Session;
 import aussie.core.model.session.SessionToken;
+import aussie.core.service.auth.IssuedClaimPolicy;
+import aussie.core.service.auth.SigningKeyRegistry;
 
 /**
  * Service for generating JWS tokens from sessions.
@@ -37,36 +34,15 @@ import aussie.core.model.session.SessionToken;
 public class SessionTokenService {
 
     private static final Logger LOG = Logger.getLogger(SessionTokenService.class);
+    private static final String TOKEN_PROFILE = "aussie+session-jwt-v1";
 
     private final SessionConfig config;
-    private final RouteAuthConfig routeAuthConfig;
-
-    private PrivateKey signingKey;
-    private boolean signingAvailable;
+    private final SigningKeyRegistry keyRegistry;
 
     @Inject
-    public SessionTokenService(SessionConfig config, RouteAuthConfig routeAuthConfig) {
+    public SessionTokenService(SessionConfig config, SigningKeyRegistry keyRegistry) {
         this.config = config;
-        this.routeAuthConfig = routeAuthConfig;
-    }
-
-    @PostConstruct
-    void init() {
-        // Try to load signing key from route auth config
-        Optional<String> keyData = routeAuthConfig.jws().signingKey();
-        if (keyData.isPresent()) {
-            try {
-                signingKey = SigningKeyRecord.parsePrivateKey(keyData.get());
-                signingAvailable = true;
-                LOG.info("Session token service initialized with signing key");
-            } catch (IllegalArgumentException e) {
-                LOG.warnf("Failed to load signing key for session tokens: %s", e.getMessage());
-                signingAvailable = false;
-            }
-        } else {
-            LOG.debug("No signing key configured for session tokens");
-            signingAvailable = false;
-        }
+        this.keyRegistry = keyRegistry;
     }
 
     /**
@@ -91,18 +67,27 @@ public class SessionTokenService {
             throw new IllegalStateException("JWS token generation is disabled");
         }
 
-        if (!signingAvailable) {
-            throw new IllegalStateException("JWS signing key not configured");
+        final SigningKeyRecord signingKey;
+        try {
+            signingKey = keyRegistry.getCurrentSigningKey();
+        } catch (IllegalStateException e) {
+            throw new SessionTokenException("JWS signing key not configured", e);
+        }
+        final var now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        if (session.expiresAt() == null) {
+            throw new SessionTokenException("Session has no expiration");
+        }
+        final var expiresAt =
+                earliest(now.plus(config.jws().ttl()), session.expiresAt()).truncatedTo(ChronoUnit.SECONDS);
+        if (!expiresAt.isAfter(now)) {
+            throw new SessionTokenException("Session has expired");
         }
 
-        Instant now = Instant.now();
-        Instant expiresAt = now.plus(config.jws().ttl());
-
-        Map<String, Object> claimsMap = buildClaims(session, additionalClaims, now, expiresAt);
+        final var claimsMap = buildClaims(session, additionalClaims, now, expiresAt);
 
         try {
-            String token = signToken(claimsMap, expiresAt);
-            Set<String> includedClaims = new HashSet<>(claimsMap.keySet());
+            final var token = signToken(claimsMap, signingKey);
+            final var includedClaims = new HashSet<>(claimsMap.keySet());
 
             LOG.debugf("Generated session token for session %s, expires at %s", session.id(), expiresAt);
 
@@ -112,13 +97,14 @@ public class SessionTokenService {
         }
     }
 
-    private String signToken(Map<String, Object> claims, Instant expiresAt) throws JoseException {
-        JwtClaims jwtClaims = new JwtClaims();
+    private String signToken(Map<String, Object> claims, SigningKeyRecord signingKey) throws JoseException {
+        final var jwtClaims = new JwtClaims();
 
         // Set standard claims
         jwtClaims.setIssuer((String) claims.get("iss"));
         jwtClaims.setSubject((String) claims.get("sub"));
         jwtClaims.setIssuedAt(org.jose4j.jwt.NumericDate.fromSeconds((Long) claims.get("iat")));
+        jwtClaims.setNotBefore(org.jose4j.jwt.NumericDate.fromSeconds((Long) claims.get("nbf")));
         jwtClaims.setExpirationTime(org.jose4j.jwt.NumericDate.fromSeconds((Long) claims.get("exp")));
         jwtClaims.setJwtId((String) claims.get("jti"));
 
@@ -128,17 +114,17 @@ public class SessionTokenService {
         }
 
         // Add all other claims
-        for (Map.Entry<String, Object> entry : claims.entrySet()) {
-            String key = entry.getKey();
+        for (final var entry : claims.entrySet()) {
+            final var key = entry.getKey();
             if (!isStandardClaim(key)) {
                 jwtClaims.setClaim(key, entry.getValue());
             }
         }
 
-        JsonWebSignature jws = new JsonWebSignature();
+        final var jws = new JsonWebSignature();
         jws.setPayload(jwtClaims.toJson());
-        jws.setKey(signingKey);
-        jws.setKeyIdHeaderValue(routeAuthConfig.jws().keyId());
+        jws.setKey(signingKey.privateKey());
+        jws.setKeyIdHeaderValue(signingKey.keyId());
         jws.setAlgorithmHeaderValue(AlgorithmIdentifiers.RSA_USING_SHA256);
 
         return jws.getCompactSerialization();
@@ -148,6 +134,7 @@ public class SessionTokenService {
         return "iss".equals(claimName)
                 || "sub".equals(claimName)
                 || "iat".equals(claimName)
+                || "nbf".equals(claimName)
                 || "exp".equals(claimName)
                 || "jti".equals(claimName)
                 || "aud".equals(claimName);
@@ -156,12 +143,13 @@ public class SessionTokenService {
     private Map<String, Object> buildClaims(
             Session session, Map<String, Object> additionalClaims, Instant now, Instant expiresAt) {
 
-        Map<String, Object> claims = new HashMap<>();
+        final var claims = new HashMap<String, Object>();
 
         // Standard JWT claims
         claims.put("iss", config.jws().issuer());
         claims.put("sub", session.userId());
         claims.put("iat", now.getEpochSecond());
+        claims.put("nbf", now.getEpochSecond());
         claims.put("exp", expiresAt.getEpochSecond());
         claims.put("jti", UUID.randomUUID().toString());
 
@@ -170,12 +158,14 @@ public class SessionTokenService {
 
         // Add session reference
         claims.put("sid", session.id());
+        claims.put("original_iss", session.issuer());
+        claims.put("aussie_token_profile", TOKEN_PROFILE);
 
         // Add configured claims from session
-        List<String> includeClaims = config.jws().includeClaims();
+        final var includeClaims = config.jws().includeClaims();
         if (session.claims() != null) {
             for (String claimName : includeClaims) {
-                if (session.claims().containsKey(claimName)) {
+                if (!isServerOwnedClaim(claimName) && session.claims().containsKey(claimName)) {
                     claims.put(claimName, session.claims().get(claimName));
                 }
             }
@@ -186,26 +176,29 @@ public class SessionTokenService {
             claims.put("roles", session.permissions());
         }
 
-        // Add email from claims if available
-        if (includeClaims.contains("email") && session.claims() != null) {
-            Object email = session.claims().get("email");
-            if (email != null) {
-                claims.put("email", email);
+        additionalClaims.forEach((name, value) -> {
+            if (!isServerOwnedClaim(name)) {
+                claims.put(name, value);
             }
-        }
+        });
 
-        // Add name from claims if available
-        if (includeClaims.contains("name") && session.claims() != null) {
-            Object name = session.claims().get("name");
-            if (name != null) {
-                claims.put("name", name);
-            }
+        if (claims.entrySet().stream()
+                .anyMatch(entry -> !IssuedClaimPolicy.isAllowed(entry.getKey(), entry.getValue()))) {
+            throw new SessionTokenException("Session claim violates the issued-token policy");
         }
-
-        // Add any additional claims
-        claims.putAll(additionalClaims);
 
         return claims;
+    }
+
+    private boolean isServerOwnedClaim(String claimName) {
+        return isStandardClaim(claimName)
+                || "sid".equals(claimName)
+                || "original_iss".equals(claimName)
+                || "aussie_token_profile".equals(claimName);
+    }
+
+    private Instant earliest(Instant left, Instant right) {
+        return left.isBefore(right) ? left : right;
     }
 
     /**
@@ -223,7 +216,7 @@ public class SessionTokenService {
      * @return true if a signing key is configured
      */
     public boolean isSigningAvailable() {
-        return signingAvailable;
+        return keyRegistry.isReady();
     }
 
     /**

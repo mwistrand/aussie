@@ -69,9 +69,17 @@ class SigningKeyRegistryTest {
     class WhenDisabled {
 
         @Test
-        @DisplayName("getCurrentSigningKey() should throw")
-        void getCurrentSigningKeyShouldThrow() {
-            assertThrows(IllegalStateException.class, () -> registry.getCurrentSigningKey());
+        @DisplayName("static signing key should initialize through the shared registry")
+        void staticSigningKeyShouldInitialize() {
+            final var activeKey = SigningKeyRecord.active("k-static", privateKey, publicKey);
+            when(repository.findAllForVerification())
+                    .thenReturn(Uni.createFrom().item(List.of(activeKey)));
+
+            registry.refreshCache().await().atMost(Duration.ofSeconds(1));
+
+            assertTrue(registry.isReady());
+            assertEquals("k-static", registry.getCurrentSigningKey().keyId());
+            assertEquals("k-static", registry.getVerificationKeys().getFirst().keyId());
         }
 
         @Test
@@ -209,7 +217,8 @@ class SigningKeyRegistryTest {
         @BeforeEach
         void enableKeyRotation() {
             when(config.enabled()).thenReturn(true);
-            when(repository.store(any())).thenReturn(Uni.createFrom().voidItem());
+            when(repository.storePendingIfAbsent(any()))
+                    .thenReturn(Uni.createFrom().item(true));
             registry = new SigningKeyRegistry(repository, config);
         }
 
@@ -221,7 +230,7 @@ class SigningKeyRegistryTest {
 
             assertNotNull(result.keyId());
             assertEquals(KeyStatus.PENDING, result.status());
-            verify(repository).store(any(SigningKeyRecord.class));
+            verify(repository).storePendingIfAbsent(any(SigningKeyRecord.class));
         }
 
         @Test
@@ -233,7 +242,7 @@ class SigningKeyRegistryTest {
             assertNotNull(result.privateKey());
             assertNotNull(result.publicKey());
             assertEquals(KeyStatus.PENDING, result.status());
-            verify(repository).store(any(SigningKeyRecord.class));
+            verify(repository).storePendingIfAbsent(any(SigningKeyRecord.class));
         }
     }
 
@@ -253,15 +262,14 @@ class SigningKeyRegistryTest {
             final var currentActive = SigningKeyRecord.active("k-old", privateKey, publicKey);
 
             when(repository.findActive()).thenReturn(Uni.createFrom().item(Optional.of(currentActive)));
-            when(repository.updateStatus(anyString(), any(KeyStatus.class), any()))
-                    .thenReturn(Uni.createFrom().voidItem());
+            when(repository.activate(eq("k-new"), eq(Optional.of("k-old")), any()))
+                    .thenReturn(Uni.createFrom().item(true));
             when(repository.findAllForVerification())
                     .thenReturn(Uni.createFrom().item(List.of()));
 
             registry.activateKey("k-new").await().atMost(Duration.ofSeconds(1));
 
-            verify(repository).updateStatus(eq("k-old"), eq(KeyStatus.DEPRECATED), any());
-            verify(repository).updateStatus(eq("k-new"), eq(KeyStatus.ACTIVE), any());
+            verify(repository).activate(eq("k-new"), eq(Optional.of("k-old")), any());
         }
 
         @Test

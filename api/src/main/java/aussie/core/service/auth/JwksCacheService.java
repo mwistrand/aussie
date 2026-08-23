@@ -1,9 +1,15 @@
 package aussie.core.service.auth;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.security.interfaces.ECPublicKey;
+import java.security.interfaces.RSAPublicKey;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -13,11 +19,14 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
+import io.quarkus.runtime.LaunchMode;
+import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.mutiny.core.buffer.Buffer;
 import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 import org.jose4j.jwk.JsonWebKey;
 import org.jose4j.jwk.JsonWebKeySet;
@@ -47,6 +56,8 @@ import aussie.core.service.routing.UpstreamAddressResolver;
 public class JwksCacheService implements JwksCache {
 
     private static final Logger LOG = Logger.getLogger(JwksCacheService.class);
+    private static final Set<String> PERMITTED_ALGORITHMS =
+            Set.of("RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "EdDSA");
 
     private final WebClient webClient;
     private final Cache<URI, CachedKeySet> cache;
@@ -66,11 +77,12 @@ public class JwksCacheService implements JwksCache {
         this.jwksConfig = resiliencyConfig.jwks();
         this.metrics = metrics;
         this.addressResolver = addressResolver;
+        validateConfiguration();
 
         // Build bounded Caffeine cache with LRU eviction
         this.cache = Caffeine.newBuilder()
                 .maximumSize(jwksConfig.maxCacheEntries())
-                .expireAfterWrite(jwksConfig.cacheTtl())
+                .expireAfterWrite(jwksConfig.cacheTtl().plus(jwksConfig.maximumStale()))
                 .recordStats()
                 .build();
 
@@ -80,8 +92,9 @@ public class JwksCacheService implements JwksCache {
 
     @Override
     public Uni<JsonWebKeySet> getKeySet(URI jwksUri) {
+        validateUri(jwksUri);
         var cached = cache.getIfPresent(jwksUri);
-        if (cached != null && !cached.isExpired()) {
+        if (cached != null && cached.isFresh()) {
             LOG.debugv("Using cached JWKS for {0}", jwksUri);
             return Uni.createFrom().item(cached.keySet());
         }
@@ -115,7 +128,8 @@ public class JwksCacheService implements JwksCache {
 
     @Override
     public Uni<JsonWebKeySet> refresh(URI jwksUri) {
-        LOG.infov("Force refreshing JWKS for {0}", jwksUri);
+        validateUri(jwksUri);
+        LOG.infov("Force refreshing JWKS for host {0}", jwksUri.getHost());
         cache.invalidate(jwksUri);
         inFlightFetches.remove(jwksUri); // Clear any stale in-flight fetch
         return getOrCreateFetch(jwksUri);
@@ -123,13 +137,13 @@ public class JwksCacheService implements JwksCache {
 
     @Override
     public void invalidate(URI jwksUri) {
-        LOG.infov("Invalidating cached JWKS for {0}", jwksUri);
+        LOG.infov("Invalidating cached JWKS for host {0}", jwksUri.getHost());
         cache.invalidate(jwksUri);
         inFlightFetches.remove(jwksUri);
     }
 
     private Uni<JsonWebKeySet> fetchAndCache(URI jwksUri) {
-        LOG.infov("Fetching JWKS from {0}", jwksUri);
+        LOG.infov("Fetching JWKS from host {0}", jwksUri.getHost());
 
         return addressResolver
                 .resolve(jwksUri)
@@ -144,23 +158,26 @@ public class JwksCacheService implements JwksCache {
                 .ifNoItem()
                 .after(jwksConfig.fetchTimeout())
                 .failWith(() -> {
-                    LOG.warnv("JWKS fetch timeout for {0} after {1}", jwksUri, jwksConfig.fetchTimeout());
+                    LOG.warnv(
+                            "JWKS fetch timeout for host {0} after {1}", jwksUri.getHost(), jwksConfig.fetchTimeout());
                     metrics.recordJwksFetchTimeout(jwksUri.getHost());
-                    return new JwksFetchException("Timeout fetching JWKS from " + jwksUri);
+                    return new JwksFetchException("Timeout fetching JWKS");
                 })
                 .map(this::parseResponse)
                 .invoke(keySet -> {
-                    cache.put(jwksUri, new CachedKeySet(keySet, Instant.now().plus(jwksConfig.cacheTtl())));
+                    final var expiresAt = Instant.now().plus(jwksConfig.cacheTtl());
+                    cache.put(jwksUri, new CachedKeySet(keySet, expiresAt, expiresAt.plus(jwksConfig.maximumStale())));
                     LOG.infov(
-                            "Cached {0} keys from {1}", keySet.getJsonWebKeys().size(), jwksUri);
+                            "Cached {0} keys from host {1}",
+                            keySet.getJsonWebKeys().size(), jwksUri.getHost());
                 })
                 .onFailure()
                 .recoverWithUni(error -> {
-                    LOG.errorv(error, "Failed to fetch JWKS from {0}", jwksUri);
+                    LOG.errorv(error, "Failed to fetch JWKS from host {0}", jwksUri.getHost());
                     // Try to use stale cached keys if available
                     var stale = cache.getIfPresent(jwksUri);
-                    if (stale != null) {
-                        LOG.warnv("Using stale cached JWKS for {0} due to: {1}", jwksUri, error.getMessage());
+                    if (stale != null && stale.canUseStale()) {
+                        LOG.warnv("Using stale cached JWKS for host {0}", jwksUri.getHost());
                         return Uni.createFrom().item(stale.keySet());
                     }
                     return Uni.createFrom().failure(error);
@@ -172,11 +189,102 @@ public class JwksCacheService implements JwksCache {
             throw new JwksFetchException("JWKS endpoint returned status " + response.statusCode());
         }
 
-        String body = response.bodyAsString();
+        final var contentType = response.getHeader("Content-Type");
+        final var mediaType = contentType == null ? "" : contentType.split(";", 2)[0].trim();
+        if (!(mediaType.equalsIgnoreCase("application/json")
+                || mediaType.equalsIgnoreCase("application/jwk-set+json"))) {
+            throw new JwksFetchException("JWKS endpoint returned an unsupported content type");
+        }
+
+        final var contentLength = response.getHeader("Content-Length");
+        if (contentLength != null) {
+            try {
+                if (Long.parseLong(contentLength) > jwksConfig.maxResponseBytes()) {
+                    throw new JwksFetchException("JWKS response exceeds the configured size limit");
+                }
+            } catch (NumberFormatException e) {
+                throw new JwksFetchException("JWKS endpoint returned an invalid content length", e);
+            }
+        }
+
+        final var body = response.bodyAsString();
+        if (body == null || body.getBytes(StandardCharsets.UTF_8).length > jwksConfig.maxResponseBytes()) {
+            throw new JwksFetchException("JWKS response exceeds the configured size limit");
+        }
         try {
-            return new JsonWebKeySet(body);
+            final var keySet = new JsonWebKeySet(body);
+            validateKeys(keySet);
+            return keySet;
         } catch (JoseException e) {
-            throw new JwksFetchException("Failed to parse JWKS response: " + e.getMessage(), e);
+            throw new JwksFetchException("Failed to parse JWKS response", e);
+        }
+    }
+
+    private void validateKeys(JsonWebKeySet keySet) {
+        final var keys = keySet.getJsonWebKeys();
+        if (keys.size() > jwksConfig.maxKeys()) {
+            throw new JwksFetchException("JWKS contains too many keys");
+        }
+
+        final var keyIds = new HashSet<String>();
+        for (final var key : keys) {
+            if (!keyIds.add(key.getKeyId())) {
+                throw new JwksFetchException("JWKS contains duplicate key IDs");
+            }
+            if (key.getUse() != null && !"sig".equals(key.getUse())) {
+                throw new JwksFetchException("JWKS contains a key not permitted for signatures");
+            }
+            if (key.getKeyOps() != null
+                    && !key.getKeyOps().isEmpty()
+                    && !key.getKeyOps().contains("verify")) {
+                throw new JwksFetchException("JWKS contains a key not permitted for verification");
+            }
+            if (key.getAlgorithm() != null && !PERMITTED_ALGORITHMS.contains(key.getAlgorithm())) {
+                throw new JwksFetchException("JWKS contains a key with a prohibited algorithm");
+            }
+
+            final var publicKey = key.getPublicKey();
+            if (publicKey instanceof RSAPublicKey rsaKey && rsaKey.getModulus().bitLength() >= 2048) {
+                continue;
+            }
+            if (publicKey instanceof ECPublicKey ecKey
+                    && ecKey.getParams().getCurve().getField().getFieldSize() >= 256) {
+                continue;
+            }
+            if (publicKey != null
+                    && ("EdDSA".equals(publicKey.getAlgorithm()) || "Ed25519".equals(publicKey.getAlgorithm()))) {
+                continue;
+            }
+            throw new JwksFetchException("JWKS contains an unsupported or undersized public key");
+        }
+    }
+
+    private void validateConfiguration() {
+        if (jwksConfig.maxCacheEntries() < 1
+                || jwksConfig.maxResponseBytes() < 1
+                || jwksConfig.maxKeys() < 1
+                || jwksConfig.cacheTtl().isZero()
+                || jwksConfig.cacheTtl().isNegative()
+                || jwksConfig.maximumStale().isNegative()) {
+            throw new IllegalArgumentException(
+                    "JWKS cache limits must be positive and maximum-stale cannot be negative");
+        }
+    }
+
+    private void validateUri(URI jwksUri) {
+        final var activeProfiles =
+                ConfigProvider.getConfig().unwrap(SmallRyeConfig.class).getProfiles();
+        validateUri(jwksUri, LaunchMode.current(), activeProfiles);
+    }
+
+    static void validateUri(URI jwksUri, LaunchMode launchMode, List<String> activeProfiles) {
+        if (jwksUri == null
+                || jwksUri.getHost() == null
+                || (launchMode == LaunchMode.NORMAL
+                        && !activeProfiles.contains("dev")
+                        && !activeProfiles.contains("test")
+                        && !"https".equalsIgnoreCase(jwksUri.getScheme()))) {
+            throw new JwksFetchException("JWKS URI must use HTTPS outside dev/test");
         }
     }
 
@@ -195,9 +303,13 @@ public class JwksCacheService implements JwksCache {
                 .findFirst();
     }
 
-    private record CachedKeySet(JsonWebKeySet keySet, Instant expiresAt) {
-        boolean isExpired() {
-            return Instant.now().isAfter(expiresAt);
+    private record CachedKeySet(JsonWebKeySet keySet, Instant expiresAt, Instant staleUntil) {
+        boolean isFresh() {
+            return Instant.now().isBefore(expiresAt);
+        }
+
+        boolean canUseStale() {
+            return !Instant.now().isAfter(staleUntil);
         }
     }
 

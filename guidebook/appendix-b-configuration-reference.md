@@ -320,7 +320,7 @@ Token providers are configured as a named map. Each provider entry supports:
 | `aussie.auth.route-auth.jws.forwarded-claims` | `Set<String>` | `sub,email,name,groups,roles,effective_permissions` | `AUSSIE_AUTH_ROUTE_AUTH_JWS_FORWARDED_CLAIMS` | Claims to forward from original token to downstream services. |
 | `aussie.auth.route-auth.jws.signing-key` | `Optional<String>` | _(not set)_ | `AUSSIE_JWS_SIGNING_KEY` | RSA private key for signing (PKCS#8 PEM format). Required when route-auth is enabled. |
 | `aussie.auth.route-auth.jws.default-audience` | `Optional<String>` | _(not set)_ | `AUSSIE_AUTH_ROUTE_AUTH_JWS_DEFAULT_AUDIENCE` | Default audience claim for issued tokens. |
-| `aussie.auth.route-auth.jws.require-audience` | `boolean` | `false` | `AUSSIE_AUTH_ROUTE_AUTH_JWS_REQUIRE_AUDIENCE` | Require audience claim in all issued tokens. |
+| `aussie.auth.route-auth.jws.require-audience` | `boolean` | `true` | `AUSSIE_AUTH_ROUTE_AUTH_JWS_REQUIRE_AUDIENCE` | Require audience claim in all issued tokens. |
 
 **Profile overrides:**
 
@@ -523,7 +523,7 @@ The test profile disables auth rate limiting because test suites exercising auth
 | `aussie.session.jws.enabled` | `boolean` | `true` | `AUSSIE_SESSION_JWS_ENABLED` | Enable JWS token generation for downstream services. |
 | `aussie.session.jws.ttl` | `Duration` | `PT5M` | `AUSSIE_SESSION_JWS_TTL` | JWS token TTL (should be short-lived). |
 | `aussie.session.jws.issuer` | `String` | `aussie-gateway` | `AUSSIE_SESSION_JWS_ISSUER` | JWS issuer claim. |
-| `aussie.session.jws.audience` | `Optional<String>` | _(not set)_ | `AUSSIE_SESSION_JWS_AUDIENCE` | JWS audience claim. |
+| `aussie.session.jws.audience` | `Optional<String>` | `downstream-services` | `AUSSIE_SESSION_JWS_AUDIENCE` | Required JWS audience claim. |
 | `aussie.session.jws.include-claims` | `List<String>` | `sub,email,name,roles` | `AUSSIE_SESSION_JWS_INCLUDE_CLAIMS` | Claims to include from session in JWS token. |
 
 **Profile overrides:**
@@ -711,6 +711,9 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | `aussie.resiliency.jwks.max-cache-entries` | `int` | `100` | `AUSSIE_RESILIENCY_JWKS_MAX_CACHE_ENTRIES` | Max JWKS entries to cache (LRU eviction). |
 | `aussie.resiliency.jwks.cache-ttl` | `Duration` | `PT1H` | `AUSSIE_RESILIENCY_JWKS_CACHE_TTL` | JWKS cache entry TTL. Entries refreshed on access after expiry. Also used as the TTL for the `OidcTokenValidator` `JwtConsumer` cache (bounded at 64 entries) so cached consumers expire alongside the keys they verify against. |
 | `aussie.resiliency.jwks.max-connections` | `int` | `10` | `AUSSIE_RESILIENCY_JWKS_MAX_CONNECTIONS` | Max concurrent JWKS fetch connections (bulkhead). |
+| `aussie.resiliency.jwks.max-response-bytes` | `int` | `262144` | `AUSSIE_RESILIENCY_JWKS_MAX_RESPONSE_BYTES` | Maximum decoded JWKS response size. |
+| `aussie.resiliency.jwks.max-keys` | `int` | `32` | `AUSSIE_RESILIENCY_JWKS_MAX_KEYS` | Maximum public keys accepted from one JWKS document. |
+| `aussie.resiliency.jwks.maximum-stale` | `Duration` | `PT15M` | `AUSSIE_RESILIENCY_JWKS_MAXIMUM_STALE` | Maximum bounded stale-key fallback after cache expiry; `PT0` disables fallback. |
 
 ### 18.3 Cassandra
 

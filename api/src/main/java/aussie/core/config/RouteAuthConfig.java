@@ -176,7 +176,7 @@ public interface RouteAuthConfig {
          * the service ID is used as the audience.
          */
         @WithName("require-audience")
-        @WithDefault("false")
+        @WithDefault("true")
         boolean requireAudience();
     }
 }

@@ -400,6 +400,58 @@ class OidcTokenValidatorTest {
         }
 
         @Test
+        @DisplayName("reused key ID cannot retain old verification material")
+        void reusedKeyIdUsesPublicKeyThumbprint() throws Exception {
+            final var generator = KeyPairGenerator.getInstance("RSA");
+            generator.initialize(2048);
+            final var rotatedPair = generator.generateKeyPair();
+            final var rotatedJwk = new RsaJsonWebKey((RSAPublicKey) rotatedPair.getPublic());
+            rotatedJwk.setKeyId(TEST_KEY_ID);
+            rotatedJwk.setAlgorithm(AlgorithmIdentifiers.RSA_USING_SHA256);
+            rotatedJwk.setUse("sig");
+
+            when(jwksCache.getKey(TEST_JWKS_URI, TEST_KEY_ID))
+                    .thenReturn(
+                            Uni.createFrom().item(Optional.of(rsaJwk)),
+                            Uni.createFrom().item(Optional.of(rotatedJwk)));
+
+            final var beforeRotation =
+                    validator.validate(createValidToken(), config).await().atMost(Duration.ofSeconds(1));
+            final var afterRotation = validator
+                    .validate(createTokenWithKey(rotatedPair), config)
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            assertInstanceOf(TokenValidationResult.Valid.class, beforeRotation);
+            assertInstanceOf(TokenValidationResult.Valid.class, afterRotation);
+        }
+
+        @Test
+        @DisplayName("changed JWK algorithm metadata cannot reuse a permissive consumer")
+        void changedJwkAlgorithmUsesDistinctConsumer() throws Exception {
+            final var algorithms = TokenProviderConfig.builder("test-provider", TEST_ISSUER, TEST_JWKS_URI)
+                    .audiences(Set.of(TEST_AUDIENCE))
+                    .allowedAlgorithms(Set.of("RS256", "RS512"))
+                    .build();
+            final var restrictedJwk = new RsaJsonWebKey((RSAPublicKey) keyPair.getPublic());
+            restrictedJwk.setKeyId(TEST_KEY_ID);
+            restrictedJwk.setAlgorithm(AlgorithmIdentifiers.RSA_USING_SHA512);
+            restrictedJwk.setUse("sig");
+            when(jwksCache.getKey(TEST_JWKS_URI, TEST_KEY_ID))
+                    .thenReturn(
+                            Uni.createFrom().item(Optional.of(rsaJwk)),
+                            Uni.createFrom().item(Optional.of(restrictedJwk)));
+
+            final var beforeRestriction =
+                    validator.validate(createValidToken(), algorithms).await().atMost(Duration.ofSeconds(1));
+            final var afterRestriction =
+                    validator.validate(createValidToken(), algorithms).await().atMost(Duration.ofSeconds(1));
+
+            assertInstanceOf(TokenValidationResult.Valid.class, beforeRestriction);
+            assertInstanceOf(TokenValidationResult.Invalid.class, afterRestriction);
+        }
+
+        @Test
         @DisplayName("token with missing kid header still validates against single-key JWKS")
         void tokenWithoutKidIsAccepted() throws Exception {
             final var token = createTokenWithoutKid();

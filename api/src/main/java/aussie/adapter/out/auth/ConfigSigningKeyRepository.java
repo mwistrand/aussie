@@ -12,7 +12,6 @@ import jakarta.inject.Inject;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
-import aussie.core.config.KeyRotationConfig;
 import aussie.core.config.RouteAuthConfig;
 import aussie.core.model.auth.KeyStatus;
 import aussie.core.model.auth.SigningKeyRecord;
@@ -46,23 +45,21 @@ public class ConfigSigningKeyRepository implements SigningKeyRepository {
 
     private final ConcurrentMap<String, SigningKeyRecord> keys = new ConcurrentHashMap<>();
     private final RouteAuthConfig routeAuthConfig;
-    private final KeyRotationConfig keyRotationConfig;
 
     @Inject
-    public ConfigSigningKeyRepository(RouteAuthConfig routeAuthConfig, KeyRotationConfig keyRotationConfig) {
+    public ConfigSigningKeyRepository(RouteAuthConfig routeAuthConfig) {
         this.routeAuthConfig = routeAuthConfig;
-        this.keyRotationConfig = keyRotationConfig;
 
         // Load initial key from configuration if available
         loadConfiguredKey();
     }
 
-    private void loadConfiguredKey() {
-        if (!routeAuthConfig.enabled()) {
-            LOG.debug("Route auth disabled, no initial signing key loaded");
-            return;
-        }
+    @Override
+    public boolean isDurable() {
+        return false;
+    }
 
+    private void loadConfiguredKey() {
         final var signingKeyOpt = routeAuthConfig.jws().signingKey();
         if (signingKeyOpt.isEmpty()) {
             LOG.debug("No signing key configured");
@@ -93,6 +90,21 @@ public class ConfigSigningKeyRepository implements SigningKeyRepository {
     }
 
     @Override
+    public Uni<Boolean> storePendingIfAbsent(SigningKeyRecord key) {
+        return Uni.createFrom().item(() -> {
+            synchronized (keys) {
+                if (key.status() != KeyStatus.PENDING
+                        || keys.containsKey(key.keyId())
+                        || keys.values().stream().anyMatch(existing -> existing.status() == KeyStatus.PENDING)) {
+                    return false;
+                }
+                keys.put(key.keyId(), key);
+                return true;
+            }
+        });
+    }
+
+    @Override
     public Uni<Optional<SigningKeyRecord>> findById(String keyId) {
         return Uni.createFrom().item(() -> Optional.ofNullable(keys.get(keyId)));
     }
@@ -112,7 +124,8 @@ public class ConfigSigningKeyRepository implements SigningKeyRepository {
     @Override
     public Uni<List<SigningKeyRecord>> findAllForVerification() {
         return Uni.createFrom().item(() -> keys.values().stream()
-                .filter(key -> key.status() == KeyStatus.ACTIVE || key.status() == KeyStatus.DEPRECATED)
+                .filter(key -> key.status() != KeyStatus.RETIRED)
+                .sorted((left, right) -> left.keyId().compareTo(right.keyId()))
                 .toList());
     }
 
@@ -121,6 +134,33 @@ public class ConfigSigningKeyRepository implements SigningKeyRepository {
         return Uni.createFrom().item(() -> keys.values().stream()
                 .filter(key -> key.status() == status)
                 .toList());
+    }
+
+    @Override
+    public Uni<Boolean> activate(String keyId, Optional<String> expectedActiveKeyId, Instant transitionTime) {
+        return Uni.createFrom().item(() -> {
+            synchronized (keys) {
+                final var pending = keys.get(keyId);
+                if (pending == null || pending.status() != KeyStatus.PENDING) {
+                    return false;
+                }
+
+                final var activeKeys = keys.values().stream()
+                        .filter(key -> key.status() == KeyStatus.ACTIVE)
+                        .toList();
+                if (activeKeys.size() > 1) {
+                    return false;
+                }
+                final var active = activeKeys.stream().findFirst();
+                if (!active.map(SigningKeyRecord::keyId).equals(expectedActiveKeyId)) {
+                    return false;
+                }
+
+                active.ifPresent(key -> keys.put(key.keyId(), key.deprecate(transitionTime)));
+                keys.put(keyId, pending.activate(transitionTime));
+                return true;
+            }
+        });
     }
 
     @Override

@@ -182,5 +182,20 @@ public class TokenValidationBenchmark {
         public int maxConnections() {
             return 10;
         }
+
+        @Override
+        public int maxResponseBytes() {
+            return 262_144;
+        }
+
+        @Override
+        public int maxKeys() {
+            return 32;
+        }
+
+        @Override
+        public Duration maximumStale() {
+            return Duration.ofMinutes(15);
+        }
     }
 }

@@ -26,8 +26,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.config.KeyRotationConfig;
-import aussie.core.config.RouteAuthConfig;
 import aussie.core.model.auth.SigningKeyRecord;
 import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.model.common.JwsConfig;
@@ -37,11 +35,7 @@ import aussie.core.service.auth.SigningKeyRegistry;
 class RsaTokenIssuerTest {
 
     private static KeyPair testKeyPair;
-    private static String testKeyPem;
 
-    private RouteAuthConfig routeAuthConfig;
-    private RouteAuthConfig.JwsProperties jwsProperties;
-    private KeyRotationConfig keyRotationConfig;
     private SigningKeyRegistry keyRegistry;
 
     @BeforeAll
@@ -49,25 +43,20 @@ class RsaTokenIssuerTest {
         var generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(2048);
         testKeyPair = generator.generateKeyPair();
-        testKeyPem = Base64.getEncoder().encodeToString(testKeyPair.getPrivate().getEncoded());
     }
 
     @BeforeEach
     void setUp() {
-        routeAuthConfig = mock(RouteAuthConfig.class);
-        jwsProperties = mock(RouteAuthConfig.JwsProperties.class);
-        keyRotationConfig = mock(KeyRotationConfig.class);
         keyRegistry = mock(SigningKeyRegistry.class);
 
-        when(routeAuthConfig.enabled()).thenReturn(true);
-        when(routeAuthConfig.jws()).thenReturn(jwsProperties);
-        when(jwsProperties.signingKey()).thenReturn(Optional.of(testKeyPem));
-        when(jwsProperties.keyId()).thenReturn("static-v1");
-        when(keyRotationConfig.enabled()).thenReturn(false);
+        final var signingKey = SigningKeyRecord.active(
+                "static-v1", (RSAPrivateKey) testKeyPair.getPrivate(), (RSAPublicKey) testKeyPair.getPublic());
+        when(keyRegistry.isReady()).thenReturn(true);
+        when(keyRegistry.getCurrentSigningKey()).thenReturn(signingKey);
     }
 
     private RsaTokenIssuer createIssuer() {
-        return new RsaTokenIssuer(routeAuthConfig, keyRotationConfig, keyRegistry);
+        return new RsaTokenIssuer(keyRegistry);
     }
 
     private TokenValidationResult.Valid validToken() {
@@ -85,8 +74,8 @@ class RsaTokenIssuerTest {
                 Duration.ofMinutes(5),
                 Duration.ofHours(24),
                 Set.of("sub", "email", "name"),
-                Optional.empty(),
-                false);
+                Optional.of("downstream-services"),
+                true);
     }
 
     @Nested
@@ -113,21 +102,20 @@ class RsaTokenIssuerTest {
         @Test
         @DisplayName("should return false when no signing key configured")
         void shouldReturnFalseWithNoKey() {
-            when(jwsProperties.signingKey()).thenReturn(Optional.empty());
+            when(keyRegistry.isReady()).thenReturn(false);
             assertFalse(createIssuer().isAvailable());
         }
 
         @Test
-        @DisplayName("should return false with invalid signing key")
-        void shouldReturnFalseWithInvalidKey() {
-            when(jwsProperties.signingKey()).thenReturn(Optional.of("not-a-valid-key"));
+        @DisplayName("should return false while the shared registry is not ready")
+        void shouldReturnFalseWhileRegistryIsNotReady() {
+            when(keyRegistry.isReady()).thenReturn(false);
             assertFalse(createIssuer().isAvailable());
         }
 
         @Test
         @DisplayName("should use key registry when rotation enabled")
         void shouldUseKeyRegistryWhenRotationEnabled() {
-            when(keyRotationConfig.enabled()).thenReturn(true);
             when(keyRegistry.isReady()).thenReturn(true);
 
             assertTrue(createIssuer().isAvailable());
@@ -136,7 +124,6 @@ class RsaTokenIssuerTest {
         @Test
         @DisplayName("should return false when rotation enabled but registry not ready")
         void shouldReturnFalseWhenRegistryNotReady() {
-            when(keyRotationConfig.enabled()).thenReturn(true);
             when(keyRegistry.isReady()).thenReturn(false);
 
             assertFalse(createIssuer().isAvailable());
@@ -163,6 +150,7 @@ class RsaTokenIssuerTest {
             var consumer = new JwtConsumerBuilder()
                     .setVerificationKey(testKeyPair.getPublic())
                     .setExpectedIssuer("aussie-gateway")
+                    .setExpectedAudience("downstream-services")
                     .setRequireSubject()
                     .build();
 
@@ -211,7 +199,6 @@ class RsaTokenIssuerTest {
         @Test
         @DisplayName("should use key registry when rotation enabled")
         void shouldUseKeyRegistryWhenRotationEnabled() throws Exception {
-            when(keyRotationConfig.enabled()).thenReturn(true);
             when(keyRegistry.isReady()).thenReturn(true);
 
             var signingKey = SigningKeyRecord.active(
@@ -231,7 +218,8 @@ class RsaTokenIssuerTest {
         @Test
         @DisplayName("should throw when not available")
         void shouldThrowWhenNotAvailable() {
-            when(jwsProperties.signingKey()).thenReturn(Optional.empty());
+            when(keyRegistry.isReady()).thenReturn(false);
+            when(keyRegistry.getCurrentSigningKey()).thenThrow(new IllegalStateException("missing"));
             var issuer = createIssuer();
 
             assertThrows(RsaTokenIssuer.TokenIssuanceException.class, () -> issuer.issue(validToken(), jwsConfig()));
@@ -252,8 +240,8 @@ class RsaTokenIssuerTest {
                     Duration.ofMinutes(5),
                     Duration.ofHours(24),
                     Set.of("sub", "iss", "email"),
-                    Optional.empty(),
-                    false);
+                    Optional.of("downstream-services"),
+                    true);
 
             var token = issuer.issue(validated, config);
 
@@ -299,6 +287,16 @@ class RsaTokenIssuerTest {
             assertThrows(
                     IllegalArgumentException.class,
                     () -> new TokenValidationResult.Valid("user-1", "issuer", Map.of("sub", "user-1"), null));
+        }
+
+        @Test
+        @DisplayName("should reject oversized gateway-owned claims")
+        void shouldRejectOversizedSubject() {
+            final var validated = new TokenValidationResult.Valid(
+                    "x".repeat(4097), "issuer", Map.of(), Instant.now().plusSeconds(300));
+
+            assertThrows(RsaTokenIssuer.TokenIssuanceException.class, () -> createIssuer()
+                    .issue(validated, jwsConfig()));
         }
     }
 

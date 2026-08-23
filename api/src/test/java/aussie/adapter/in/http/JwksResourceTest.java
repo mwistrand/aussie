@@ -24,7 +24,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import aussie.core.config.KeyRotationConfig;
 import aussie.core.model.auth.KeyStatus;
 import aussie.core.model.auth.SigningKeyRecord;
 import aussie.core.service.auth.SigningKeyRegistry;
@@ -41,9 +40,6 @@ class JwksResourceTest {
 
     @Mock
     private SigningKeyRegistry keyRegistry;
-
-    @Mock
-    private KeyRotationConfig keyRotationConfig;
 
     private JwksResource resource;
 
@@ -63,7 +59,7 @@ class JwksResourceTest {
 
     @BeforeEach
     void setUp() {
-        resource = new JwksResource(keyRegistry, keyRotationConfig);
+        resource = new JwksResource(keyRegistry);
     }
 
     @Nested
@@ -71,9 +67,9 @@ class JwksResourceTest {
     class GetJwks {
 
         @Test
-        @DisplayName("returns empty keys when key rotation is disabled")
-        void returnsEmptyKeysWhenDisabled() {
-            when(keyRotationConfig.enabled()).thenReturn(false);
+        @DisplayName("returns empty keys when no signing key exists")
+        void returnsEmptyKeysWhenNoSigningKeyExists() {
+            when(keyRegistry.getVerificationKeys()).thenReturn(List.of());
 
             final var response = resource.getJwks();
 
@@ -88,7 +84,6 @@ class JwksResourceTest {
         @Test
         @DisplayName("returns empty keys when enabled but no verification keys exist")
         void returnsEmptyKeysWhenNoVerificationKeys() {
-            when(keyRotationConfig.enabled()).thenReturn(true);
             when(keyRegistry.getVerificationKeys()).thenReturn(List.of());
 
             final var response = resource.getJwks();
@@ -103,8 +98,6 @@ class JwksResourceTest {
         @Test
         @DisplayName("returns JWK entries with Cache-Control header when keys are present")
         void returnsJwkEntriesWithCacheControl() {
-            when(keyRotationConfig.enabled()).thenReturn(true);
-
             final var now = Instant.now();
             final var key1 =
                     new SigningKeyRecord("kid-1", privateKey, publicKey, KeyStatus.ACTIVE, now, now, null, null);
@@ -117,6 +110,7 @@ class JwksResourceTest {
 
             assertEquals(200, response.getStatus());
             assertEquals("public, max-age=3600", response.getHeaderString("Cache-Control"));
+            assertNotNull(response.getHeaderString("ETag"));
 
             final var body = (Map<String, Object>) response.getEntity();
             final var keys = (List<Map<String, Object>>) body.get("keys");
@@ -131,8 +125,6 @@ class JwksResourceTest {
         @Test
         @DisplayName("produces correct RSA JWK fields")
         void producesCorrectJwkFields() {
-            when(keyRotationConfig.enabled()).thenReturn(true);
-
             final var now = Instant.now();
             final var keyRecord =
                     new SigningKeyRecord("test-kid", privateKey, publicKey, KeyStatus.ACTIVE, now, now, null, null);
@@ -170,8 +162,6 @@ class JwksResourceTest {
         @Test
         @DisplayName("encodes a normal BigInteger correctly")
         void encodesNormalBigInteger() {
-            when(keyRotationConfig.enabled()).thenReturn(true);
-
             final var now = Instant.now();
             final var keyRecord =
                     new SigningKeyRecord("kid-enc", privateKey, publicKey, KeyStatus.ACTIVE, now, now, null, null);
@@ -195,8 +185,6 @@ class JwksResourceTest {
         @Test
         @DisplayName("strips leading zero byte from two's complement encoding")
         void stripsLeadingZeroByte() {
-            when(keyRotationConfig.enabled()).thenReturn(true);
-
             final var now = Instant.now();
             final var keyRecord =
                     new SigningKeyRecord("kid-zero", privateKey, publicKey, KeyStatus.ACTIVE, now, now, null, null);

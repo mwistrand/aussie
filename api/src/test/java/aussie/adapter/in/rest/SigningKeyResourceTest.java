@@ -57,6 +57,7 @@ class SigningKeyResourceTest {
 
     private SigningKeyRecord createKeyRecord(String keyId, KeyStatus status) {
         var publicKey = mock(RSAPublicKey.class);
+        when(publicKey.getModulus()).thenReturn(BigInteger.ONE.shiftLeft(2047));
         var now = Instant.now();
         return new SigningKeyRecord(
                 keyId,

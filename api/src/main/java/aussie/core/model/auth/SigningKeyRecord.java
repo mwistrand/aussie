@@ -38,11 +38,22 @@ public record SigningKeyRecord(
         Instant deprecatedAt,
         Instant retiredAt) {
 
+    private static final int MIN_RSA_BITS = 2048;
+
     public SigningKeyRecord {
         Objects.requireNonNull(keyId, "keyId is required");
         Objects.requireNonNull(publicKey, "publicKey is required");
         Objects.requireNonNull(status, "status is required");
         Objects.requireNonNull(createdAt, "createdAt is required");
+        if (keyId.isBlank()) {
+            throw new IllegalArgumentException("keyId cannot be blank");
+        }
+        if (publicKey.getModulus().bitLength() < MIN_RSA_BITS) {
+            throw new IllegalArgumentException("RSA signing keys must be at least 2048 bits");
+        }
+        if (privateKey != null && !privateKey.getModulus().equals(publicKey.getModulus())) {
+            throw new IllegalArgumentException("Private key does not match the public key");
+        }
     }
 
     /**

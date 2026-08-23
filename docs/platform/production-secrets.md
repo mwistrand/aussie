@@ -127,9 +127,12 @@ aussie.auth.key-rotation.schedule=0 0 0 1 */3 ?
 aussie.auth.key-rotation.grace-period=PT24H
 aussie.auth.key-rotation.deprecation-period=P7D
 aussie.auth.key-rotation.retention-period=P30D
+aussie.auth.key-rotation.storage=vault
 ```
 
-See `application.properties` (key rotation section) for the full configuration reference.
+The built-in `config` repository is process-local and is rejected for rotation outside
+dev/test. Install a durable `SigningKeyRepository` implementation whose activation
+operation is a distributed compare-and-set. See [Signing Keys and Token Profile](signing-keys.md).
 
 ### Manual Rotation (Static Signing Key)
 
@@ -138,7 +141,7 @@ When using a static signing key (`aussie.auth.key-rotation.enabled=false`):
 1. Generate a new key: `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`
 2. Update the secret in your secrets manager
 3. Restart Aussie instances (rolling restart recommended)
-4. Verify the `/admin/jwks` endpoint serves the new public key
+4. Verify `/auth/.well-known/jwks.json` serves the new public key
 5. Notify downstream services to refresh their JWKS cache
 
 ### Encryption Key Rotation

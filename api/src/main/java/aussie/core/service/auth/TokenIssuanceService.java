@@ -46,9 +46,7 @@ public class TokenIssuanceService {
     @Inject
     public TokenIssuanceService(
             Instance<TokenIssuerProvider> issuerInstances, RoleManagement roleManagement, RouteAuthConfig config) {
-        this.issuers = issuerInstances.stream()
-                .filter(TokenIssuerProvider::isAvailable)
-                .toList();
+        this.issuers = issuerInstances.stream().toList();
         this.roleManagement = roleManagement;
 
         this.enabled = config.enabled();
@@ -75,7 +73,7 @@ public class TokenIssuanceService {
      * Check if token issuance is enabled and configured.
      */
     public boolean isEnabled() {
-        return enabled && !issuers.isEmpty();
+        return enabled && issuers.stream().anyMatch(TokenIssuerProvider::isAvailable);
     }
 
     /**
@@ -102,18 +100,18 @@ public class TokenIssuanceService {
      * @return the signed Aussie token, or empty if issuance is not configured
      */
     public Optional<AussieToken> issue(TokenValidationResult.Valid validated, Optional<String> audience) {
-        if (!isEnabled()) {
+        final var issuer = availableIssuer();
+        if (!enabled || issuer.isEmpty()) {
             LOG.debug("Token issuance not enabled or no issuers available");
             return Optional.empty();
         }
 
         try {
-            // Use the first available issuer
-            final TokenIssuerProvider issuer = issuers.get(0);
-            final AussieToken token = issuer.issue(validated, jwsConfig, audience);
+            final var selected = issuer.orElseThrow();
+            final AussieToken token = selected.issue(validated, jwsConfig, audience);
             LOG.debugv(
                     "Issued token for subject {0} using {1}, audience: {2}",
-                    validated.subject(), issuer.name(), audience.orElse("(none)"));
+                    validated.subject(), selected.name(), audience.orElse("(none)"));
             return Optional.of(token);
         } catch (Exception e) {
             LOG.errorv(e, "Failed to issue token for subject {0}", validated.subject());
@@ -169,7 +167,8 @@ public class TokenIssuanceService {
             try {
                 // Create a new validated result with expanded permissions in claims
                 final var enrichedValidated = enrichWithPermissions(validated, expandedPermissions);
-                final TokenIssuerProvider issuer = issuers.get(0);
+                final var issuer =
+                        availableIssuer().orElseThrow(() -> new IllegalStateException("No issuer available"));
                 final AussieToken token = issuer.issue(enrichedValidated, jwsConfig, effectiveAudience);
                 LOG.debugv(
                         "Issued token for subject {0} with {1} roles expanded to {2} permissions, audience: {3}",
@@ -233,5 +232,9 @@ public class TokenIssuanceService {
      */
     public JwsConfig getJwsConfig() {
         return jwsConfig;
+    }
+
+    private Optional<TokenIssuerProvider> availableIssuer() {
+        return issuers.stream().filter(TokenIssuerProvider::isAvailable).findFirst();
     }
 }

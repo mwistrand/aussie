@@ -1,7 +1,11 @@
 package aussie.adapter.in.http;
 
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 
@@ -15,7 +19,6 @@ import jakarta.ws.rs.core.Response;
 
 import org.jboss.logging.Logger;
 
-import aussie.core.config.KeyRotationConfig;
 import aussie.core.model.auth.SigningKeyRecord;
 import aussie.core.service.auth.SigningKeyRegistry;
 
@@ -38,12 +41,10 @@ public class JwksResource {
     private static final int CACHE_MAX_AGE_SECONDS = 3600;
 
     private final SigningKeyRegistry keyRegistry;
-    private final KeyRotationConfig keyRotationConfig;
 
     @Inject
-    public JwksResource(SigningKeyRegistry keyRegistry, KeyRotationConfig keyRotationConfig) {
+    public JwksResource(SigningKeyRegistry keyRegistry) {
         this.keyRegistry = keyRegistry;
-        this.keyRotationConfig = keyRotationConfig;
     }
 
     /**
@@ -70,11 +71,6 @@ public class JwksResource {
     @GET
     @Path("/.well-known/jwks.json")
     public Response getJwks() {
-        if (!keyRotationConfig.enabled()) {
-            LOG.debug("Key rotation disabled, JWKS endpoint returning empty set");
-            return Response.ok(Map.of("keys", List.of())).build();
-        }
-
         final var verificationKeys = keyRegistry.getVerificationKeys();
 
         if (verificationKeys.isEmpty()) {
@@ -82,13 +78,32 @@ public class JwksResource {
             return Response.ok(Map.of("keys", List.of())).build();
         }
 
-        final var jwks = verificationKeys.stream().map(this::toJwk).toList();
+        final var jwks = verificationKeys.stream()
+                .sorted((left, right) -> left.keyId().compareTo(right.keyId()))
+                .map(this::toJwk)
+                .toList();
 
         LOG.debugv("Returning JWKS with {0} keys", jwks.size());
 
         return Response.ok(Map.of("keys", jwks))
                 .header("Cache-Control", "public, max-age=" + CACHE_MAX_AGE_SECONDS)
+                .header("ETag", etag(verificationKeys))
                 .build();
+    }
+
+    private String etag(List<SigningKeyRecord> keys) {
+        try {
+            final var digest = MessageDigest.getInstance("SHA-256");
+            keys.stream()
+                    .sorted((left, right) -> left.keyId().compareTo(right.keyId()))
+                    .forEach(key -> {
+                        digest.update(key.keyId().getBytes(StandardCharsets.UTF_8));
+                        digest.update(key.publicKey().getEncoded());
+                    });
+            return '"' + HexFormat.of().formatHex(digest.digest()) + '"';
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
     }
 
     /**

@@ -4,7 +4,7 @@ This guide covers implementing audience validation in your backend service to pr
 
 ## Overview
 
-When Aussie issues tokens for authenticated endpoints, it can include an `aud` (audience) claim that identifies the intended recipient service. Your backend should validate this claim to ensure tokens issued for other services cannot be replayed against your API.
+When Aussie issues tokens for authenticated endpoints, it includes an `aud` (audience) claim that identifies the intended recipient service. Your backend should validate this claim to ensure tokens issued for other services cannot be replayed against your API.
 
 ## Configuration Options
 
@@ -37,7 +37,7 @@ export AUSSIE_AUTH_ROUTE_AUTH_JWS_DEFAULT_AUDIENCE=my-platform
 
 ### Required Audience Mode
 
-When enabled, all issued tokens include an audience claim. If no audience is configured, the service ID is used:
+This mode is enabled by default. All issued tokens include an audience claim; if no audience is configured, the service ID is used:
 
 ```bash
 export AUSSIE_AUTH_ROUTE_AUTH_JWS_REQUIRE_AUDIENCE=true
@@ -193,10 +193,8 @@ With audience validation:
 
 ### Token Missing Audience Claim
 
-If tokens don't include an audience claim:
-1. Verify `authRequired: true` on the endpoint
-2. Check if `audience` is configured on the endpoint or as a platform default
-3. Enable `require-audience` to force audience on all tokens
+A token without `aud` was not issued under the supported profile. Reject it and
+verify that every gateway instance is running the same release and signing configuration.
 
 ### Audience Mismatch Errors
 

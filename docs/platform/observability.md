@@ -197,6 +197,7 @@ These metrics expose configured bulkhead limits. For actual pool usage metrics, 
 | `aussie.security.auth.failures` | Counter | `reason`, `method`, `client_ip_hash` | Auth failures (via SPI handlers) |
 | `aussie.security.rate_limit.exceeded` | Counter | `service_id`, `client_ip_hash` | Rate limit violations |
 | `aussie.security.dos.detected` | Counter | `attack_type`, `client_ip_hash` | DoS attack detections |
+| `aussie.signing.key.ready` | Gauge | - | `1` when required token issuance has one active key published in JWKS; otherwise `0` |
 
 ### Traffic Attribution Metrics
 

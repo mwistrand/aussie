@@ -7,6 +7,7 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 - [Authentication Configuration](#authentication-configuration)
 - [Bootstrap Mode](#bootstrap-mode-first-time-setup)
 - [Production Secrets Management](production-secrets.md)
+- [Signing Keys and Token Profile](signing-keys.md)
 - [IdP Integration (RBAC)](#idp-integration-rbac)
 - [Group-Based Access Control](#group-based-access-control)
 - [Access Control](#access-control)
