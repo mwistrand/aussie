@@ -78,11 +78,18 @@ public class CassandraStorageProvider implements StorageRepositoryProvider, Auto
             runMigrations(config, keyspace);
         }
 
-        this.session = buildSession(config);
-        ObjectMapper objectMapper = new ObjectMapper()
-                .registerModule(new Jdk8Module())
-                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        return new CassandraServiceRegistrationRepository(objectMapper, session);
+        final var acquiredSession = buildSession(config);
+        try {
+            this.session = acquiredSession;
+            ObjectMapper objectMapper = new ObjectMapper()
+                    .registerModule(new Jdk8Module())
+                    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+            return new CassandraServiceRegistrationRepository(objectMapper, session);
+        } catch (RuntimeException e) {
+            this.session = null;
+            CassandraSessionRegistry.release(acquiredSession);
+            throw e;
+        }
     }
 
     private void runMigrations(StorageAdapterConfig config, String keyspace) {

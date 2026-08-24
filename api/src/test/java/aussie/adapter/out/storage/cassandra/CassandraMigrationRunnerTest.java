@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -58,8 +57,7 @@ class CassandraMigrationRunnerTest {
                                 ? appliedMigrations
                                 : statementResult);
         when(appliedMigrations.iterator()).thenReturn(List.<Row>of().iterator());
-        when(session.execute(anyString(), anyInt(), anyString(), anyString(), any(Instant.class)))
-                .thenReturn(claimResult);
+        when(session.execute(anyString(), any(Object[].class))).thenReturn(claimResult);
         when(claimResult.wasApplied()).thenReturn(false);
 
         final var runner = new CassandraMigrationRunner(session, "aussie");
@@ -67,6 +65,50 @@ class CassandraMigrationRunnerTest {
         final var failure = assertThrows(IllegalStateException.class, runner::runMigrations);
 
         assertEquals("Migration V2 is already claimed", failure.getMessage());
+    }
+
+    @Test
+    void atomicallyClaimsLegacyStartedMigrations() {
+        final var session = mock(CqlSession.class);
+        final var statementResult = mock(ResultSet.class);
+        final var appliedMigrations = mock(ResultSet.class);
+        final var appliedMigration = mock(Row.class);
+        final var claimResult = mock(ResultSet.class);
+
+        when(session.execute(anyString()))
+                .thenAnswer(
+                        invocation -> invocation.getArgument(0, String.class).startsWith("SELECT version")
+                                ? appliedMigrations
+                                : statementResult);
+        when(appliedMigrations.iterator()).thenReturn(List.of(appliedMigration).iterator());
+        when(appliedMigration.getInt("version")).thenReturn(2);
+        when(appliedMigration.getString("status")).thenReturn("STARTED");
+        when(session.execute(anyString(), any(Object[].class))).thenReturn(claimResult);
+        when(claimResult.wasApplied()).thenReturn(false);
+
+        final var runner = new CassandraMigrationRunner(session, "aussie");
+
+        assertThrows(IllegalStateException.class, runner::runMigrations);
+
+        verify(session)
+                .execute(
+                        argThat((String cql) -> cql.contains("IF status = 'STARTED' AND lease_id = null")),
+                        any(Object[].class));
+    }
+
+    @Test
+    void rejectsLeaseRenewalAfterOwnershipChanges() {
+        final var session = mock(CqlSession.class);
+        final var renewalResult = mock(ResultSet.class);
+        when(session.execute(anyString(), any(Instant.class), eq(2), anyString()))
+                .thenReturn(renewalResult);
+        when(renewalResult.wasApplied()).thenReturn(false);
+
+        final var runner = new CassandraMigrationRunner(session, "aussie");
+
+        final var failure = assertThrows(IllegalStateException.class, () -> runner.renewLease(2));
+
+        assertEquals("Migration lease lost for V2", failure.getMessage());
     }
 
     @Test

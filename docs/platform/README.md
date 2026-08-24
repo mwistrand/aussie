@@ -1129,7 +1129,7 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | `AUSSIE_STORAGE_CASSANDRA_KEYSPACE` | `aussie` | Cassandra keyspace |
 | `AUSSIE_STORAGE_CASSANDRA_USERNAME` | - | Cassandra username |
 | `AUSSIE_STORAGE_CASSANDRA_PASSWORD` | - | Cassandra password |
-| `AUSSIE_STORAGE_CASSANDRA_RUN_MIGRATIONS` | `false` | Run database migrations on startup |
+| `CASSANDRA_RUN_MIGRATIONS` | `false` | Run database migrations on startup |
 | `AUSSIE_AUTH_STORAGE_PROVIDER` | - | Auth storage backend (falls back to `aussie.storage.*` settings) |
 | `AUSSIE_AUTH_CACHE_ENABLED` | `false` | Enable caching for auth storage |
 | `AUSSIE_AUTH_ROLES_STORAGE_PROVIDER` | - | Roles storage backend (falls back to auth storage settings) |

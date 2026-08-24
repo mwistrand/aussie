@@ -60,9 +60,16 @@ public class CassandraTranslationConfigStorageProvider implements TranslationCon
 
     @Override
     public TranslationConfigRepository createRepository(StorageAdapterConfig config) {
-        this.session = buildSession(config);
-        LOG.info("Created Cassandra translation config repository");
-        return new CassandraTranslationConfigRepository(session);
+        final var acquiredSession = buildSession(config);
+        try {
+            this.session = acquiredSession;
+            LOG.info("Created Cassandra translation config repository");
+            return new CassandraTranslationConfigRepository(session);
+        } catch (RuntimeException e) {
+            this.session = null;
+            CassandraSessionRegistry.release(acquiredSession);
+            throw e;
+        }
     }
 
     @Override

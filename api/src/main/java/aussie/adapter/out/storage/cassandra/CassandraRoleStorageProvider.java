@@ -63,9 +63,16 @@ public class CassandraRoleStorageProvider implements RoleStorageProvider, AutoCl
 
     @Override
     public RoleRepository createRepository(StorageAdapterConfig config) {
-        this.session = buildSession(config);
-        this.encryptionService = createEncryptionService(config);
-        return new CassandraRoleRepository(session, encryptionService);
+        final var acquiredSession = buildSession(config);
+        try {
+            this.session = acquiredSession;
+            this.encryptionService = createEncryptionService(config);
+            return new CassandraRoleRepository(session, encryptionService);
+        } catch (RuntimeException e) {
+            this.session = null;
+            CassandraSessionRegistry.release(acquiredSession);
+            throw e;
+        }
     }
 
     @Override

@@ -7,6 +7,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -15,6 +16,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -28,11 +33,14 @@ public class CassandraMigrationRunner {
     private static final Logger LOG = Logger.getLogger(CassandraMigrationRunner.class);
     private static final String MIGRATIONS_PATH = "db/cassandra/";
     private static final String MANIFEST = MIGRATIONS_PATH + "migrations.manifest";
+    private static final Duration LEASE_DURATION = Duration.ofMinutes(5);
+    private static final Duration LEASE_RENEWAL_INTERVAL = LEASE_DURATION.dividedBy(3);
     private static final Pattern MIGRATION_PATTERN = Pattern.compile("V(\\d+)__.*\\.cql");
     private static final Pattern KEYSPACE_PATTERN = Pattern.compile("[A-Za-z][A-Za-z0-9_]{0,47}");
 
     private final CqlSession session;
     private final String keyspace;
+    private final String leaseId = UUID.randomUUID().toString();
 
     public CassandraMigrationRunner(CqlSession session, String keyspace) {
         this.session = session;
@@ -63,9 +71,22 @@ public class CassandraMigrationRunner {
             if (migration.version() == 1) {
                 continue;
             }
-            if (applied.containsKey(migration.version())) {
-                verifyAppliedMigration(migration, applied.get(migration.version()));
+            final var existing = applied.get(migration.version());
+            if (existing != null && "COMPLETED".equals(existing.status())) {
+                verifyAppliedMigration(migration, existing);
                 continue;
+            }
+            if (existing != null && existing.status() == null) {
+                verifyAppliedMigration(migration, existing);
+                continue;
+            }
+            if (existing != null
+                    && existing.checksum() != null
+                    && !migration.checksum().equals(existing.checksum())) {
+                throw new IllegalStateException("Checksum mismatch for migration V" + migration.version());
+            }
+            if (!claimMigration(migration, existing)) {
+                throw new IllegalStateException("Migration V" + migration.version() + " is already claimed");
             }
             applyMigration(migration);
             count++;
@@ -85,7 +106,9 @@ public class CassandraMigrationRunner {
                     applied_at timestamp,
                     status text,
                     started_at timestamp,
-                    error text
+                    error text,
+                    lease_id text,
+                    lease_until timestamp
                 )
                 """
                         .formatted(keyspace));
@@ -94,15 +117,21 @@ public class CassandraMigrationRunner {
         session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS status text".formatted(keyspace));
         session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS started_at timestamp".formatted(keyspace));
         session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS error text".formatted(keyspace));
+        session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS lease_id text".formatted(keyspace));
+        session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS lease_until timestamp".formatted(keyspace));
     }
 
     private Map<Integer, AppliedMigration> getAppliedMigrations() {
         final var applied = new HashMap<Integer, AppliedMigration>();
         for (var row : session.execute(
-                "SELECT version, checksum, status, error FROM %s.schema_migrations".formatted(keyspace))) {
+                "SELECT version, checksum, status, error, lease_until FROM %s.schema_migrations".formatted(keyspace))) {
             applied.put(
                     row.getInt("version"),
-                    new AppliedMigration(row.getString("checksum"), row.getString("status"), row.getString("error")));
+                    new AppliedMigration(
+                            row.getString("checksum"),
+                            row.getString("status"),
+                            row.getString("error"),
+                            row.getInstant("lease_until")));
         }
         return applied;
     }
@@ -184,9 +213,9 @@ public class CassandraMigrationRunner {
 
     private void applyMigration(Migration migration) {
         LOG.infov("Applying migration V{0}: {1}", migration.version(), migration.filename());
-        recordStarted(migration);
-        try {
+        try (final var lease = new LeaseHeartbeat(migration.version())) {
             for (var statement : splitStatements(migration.content())) {
+                lease.check();
                 final var executable = migrationStatement(migration.version(), statement);
                 if (executable.isEmpty() || executable.toUpperCase(Locale.ROOT).startsWith("USE ")) {
                     continue;
@@ -195,12 +224,13 @@ public class CassandraMigrationRunner {
             }
 
             if (migration.version() == 17) {
-                backfillApiKeyHashLookup();
-                backfillTranslationConfigVersionLookup();
+                backfillApiKeyHashLookup(lease);
+                backfillTranslationConfigVersionLookup(lease);
             } else if (migration.version() == 18) {
-                backfillTranslationConfigVersionSequence();
+                backfillTranslationConfigVersionSequence(lease);
             }
 
+            lease.check();
             recordCompleted(migration);
         } catch (Exception e) {
             recordFailed(migration, e);
@@ -208,35 +238,98 @@ public class CassandraMigrationRunner {
         }
     }
 
-    private void recordStarted(Migration migration) {
+    private boolean claimMigration(Migration migration, AppliedMigration existing) {
+        final var now = Instant.now();
+        final var leaseUntil = now.plus(LEASE_DURATION);
+        final String cql;
+        final Object[] values;
+        if (existing == null) {
+            cql =
+                    """
+                    INSERT INTO %s.schema_migrations
+                        (version, script_name, checksum, status, started_at, lease_id, lease_until)
+                    VALUES (?, ?, ?, 'STARTED', ?, ?, ?)
+                    IF NOT EXISTS
+                    """
+                            .formatted(keyspace);
+            values = new Object[] {
+                migration.version(), migration.filename(), migration.checksum(), now, leaseId, leaseUntil
+            };
+        } else if ("FAILED".equals(existing.status())) {
+            cql =
+                    """
+                    UPDATE %s.schema_migrations
+                    SET script_name = ?, checksum = ?, status = 'STARTED', started_at = ?,
+                        lease_id = ?, lease_until = ?, error = null
+                    WHERE version = ?
+                    IF status = 'FAILED'
+                    """
+                            .formatted(keyspace);
+            values = new Object[] {
+                migration.filename(), migration.checksum(), now, leaseId, leaseUntil, migration.version()
+            };
+        } else if ("STARTED".equals(existing.status())
+                && (existing.leaseUntil() == null || existing.leaseUntil().isBefore(now))) {
+            if (existing.leaseUntil() == null) {
+                cql =
+                        """
+                        UPDATE %s.schema_migrations
+                        SET script_name = ?, checksum = ?, started_at = ?, lease_id = ?, lease_until = ?, error = null
+                        WHERE version = ?
+                        IF status = 'STARTED' AND lease_id = null
+                        """
+                                .formatted(keyspace);
+                values = new Object[] {
+                    migration.filename(), migration.checksum(), now, leaseId, leaseUntil, migration.version()
+                };
+            } else {
+                cql =
+                        """
+                        UPDATE %s.schema_migrations
+                        SET script_name = ?, checksum = ?, started_at = ?, lease_id = ?, lease_until = ?, error = null
+                        WHERE version = ?
+                        IF status = 'STARTED' AND lease_until < ?
+                        """
+                                .formatted(keyspace);
+                values = new Object[] {
+                    migration.filename(), migration.checksum(), now, leaseId, leaseUntil, migration.version(), now
+                };
+            }
+        } else {
+            return false;
+        }
+        return session.execute(cql, values).wasApplied();
+    }
+
+    void renewLease(int version) {
         final var result = session.execute(
-                """
-                INSERT INTO %s.schema_migrations (version, script_name, checksum, status, started_at)
-                VALUES (?, ?, ?, 'STARTED', ?)
-                IF NOT EXISTS
-                """
-                        .formatted(keyspace),
-                migration.version(),
-                migration.filename(),
-                migration.checksum(),
-                Instant.now());
+                "UPDATE %s.schema_migrations SET lease_until = ? WHERE version = ? IF lease_id = ?".formatted(keyspace),
+                Instant.now().plus(LEASE_DURATION),
+                version,
+                leaseId);
         if (!result.wasApplied()) {
-            throw new IllegalStateException("Migration V" + migration.version() + " is already claimed");
+            throw new IllegalStateException("Migration lease lost for V" + version);
         }
     }
 
     private void recordCompleted(Migration migration) {
-        session.execute(
+        final var result = session.execute(
                 """
                 UPDATE %s.schema_migrations
-                SET script_name = ?, checksum = ?, status = 'COMPLETED', applied_at = ?, error = null
+                SET script_name = ?, checksum = ?, status = 'COMPLETED', applied_at = ?,
+                    lease_id = null, lease_until = null, error = null
                 WHERE version = ?
+                IF lease_id = ?
                 """
                         .formatted(keyspace),
                 migration.filename(),
                 migration.checksum(),
                 Instant.now(),
-                migration.version());
+                migration.version(),
+                leaseId);
+        if (!result.wasApplied()) {
+            throw new IllegalStateException("Migration lease lost for V" + migration.version());
+        }
     }
 
     private void recordLegacyCompleted(Migration migration) {
@@ -249,11 +342,15 @@ public class CassandraMigrationRunner {
 
     private void recordFailed(Migration migration, Exception failure) {
         try {
-            session.execute(
-                    "UPDATE %s.schema_migrations SET status = 'FAILED', error = ? WHERE version = ?"
+            final var result = session.execute(
+                    "UPDATE %s.schema_migrations SET status = 'FAILED', lease_id = null, lease_until = null, error = ? WHERE version = ? IF lease_id = ?"
                             .formatted(keyspace),
                     failure.getClass().getSimpleName(),
-                    migration.version());
+                    migration.version(),
+                    leaseId);
+            if (!result.wasApplied()) {
+                LOG.warnv("Migration lease lost while recording failure for V{0}", migration.version());
+            }
         } catch (RuntimeException ignored) {
             LOG.errorv(ignored, "Could not persist failed migration state for V{0}", migration.version());
         }
@@ -281,8 +378,14 @@ public class CassandraMigrationRunner {
     }
 
     void backfillApiKeyHashLookup() {
+        backfillApiKeyHashLookup(null);
+    }
+
+    private void backfillApiKeyHashLookup(LeaseHeartbeat lease) {
+        checkLease(lease);
         for (var row :
                 session.execute("SELECT key_id, key_hash, encrypted_data, created_at, updated_at FROM api_keys")) {
+            checkLease(lease);
             session.execute(
                     """
                         INSERT INTO api_keys_by_hash (key_hash, key_id, encrypted_data, created_at, updated_at)
@@ -297,11 +400,17 @@ public class CassandraMigrationRunner {
     }
 
     void backfillTranslationConfigVersionLookup() {
+        backfillTranslationConfigVersionLookup(null);
+    }
+
+    private void backfillTranslationConfigVersionLookup(LeaseHeartbeat lease) {
+        checkLease(lease);
         for (var row : session.execute(
                 """
                 SELECT id, version, config_json, created_by, created_at, comment
                 FROM translation_config_versions
                 """)) {
+            checkLease(lease);
             session.execute(
                     """
                         INSERT INTO translation_config_versions_by_number
@@ -318,11 +427,17 @@ public class CassandraMigrationRunner {
     }
 
     void backfillTranslationConfigVersionSequence() {
+        backfillTranslationConfigVersionSequence(null);
+    }
+
+    private void backfillTranslationConfigVersionSequence(LeaseHeartbeat lease) {
+        checkLease(lease);
         for (var row : session.execute(
                 """
                 SELECT id, version, config_json, created_by, created_at, comment
                 FROM translation_config_versions
                 """)) {
+            checkLease(lease);
             session.execute(
                     """
                     INSERT INTO translation_config_versions_by_sequence
@@ -335,6 +450,12 @@ public class CassandraMigrationRunner {
                     row.getString("created_by"),
                     row.getInstant("created_at"),
                     row.getString("comment"));
+        }
+    }
+
+    private void checkLease(LeaseHeartbeat lease) {
+        if (lease != null) {
+            lease.check();
         }
     }
 
@@ -365,9 +486,45 @@ public class CassandraMigrationRunner {
         }
     }
 
+    private final class LeaseHeartbeat implements AutoCloseable {
+
+        private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(
+                Thread.ofPlatform().daemon().name("cassandra-migration-lease").factory());
+        private volatile RuntimeException failure;
+
+        private LeaseHeartbeat(int version) {
+            final var intervalMillis = LEASE_RENEWAL_INTERVAL.toMillis();
+            scheduler.scheduleAtFixedRate(
+                    () -> {
+                        if (failure != null) {
+                            return;
+                        }
+                        try {
+                            renewLease(version);
+                        } catch (RuntimeException e) {
+                            failure = e;
+                        }
+                    },
+                    intervalMillis,
+                    intervalMillis,
+                    TimeUnit.MILLISECONDS);
+        }
+
+        private void check() {
+            if (failure != null) {
+                throw failure;
+            }
+        }
+
+        @Override
+        public void close() {
+            scheduler.close();
+        }
+    }
+
     private record ManifestEntry(String filename, String checksum) {}
 
     private record Migration(int version, String filename, String content, String checksum) {}
 
-    private record AppliedMigration(String checksum, String status, String error) {}
+    private record AppliedMigration(String checksum, String status, String error, Instant leaseUntil) {}
 }
