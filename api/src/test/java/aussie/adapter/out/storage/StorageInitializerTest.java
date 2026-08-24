@@ -1,5 +1,6 @@
 package aussie.adapter.out.storage;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,6 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.core.service.lifecycle.StartupState;
 import aussie.core.service.routing.ServiceRegistry;
 
 @DisplayName("StorageInitializer")
@@ -21,6 +23,9 @@ class StorageInitializerTest {
 
     @Mock
     private ServiceRegistry serviceRegistry;
+
+    @Mock
+    private StartupState startupState;
 
     @InjectMocks
     private StorageInitializer storageInitializer;
@@ -37,17 +42,20 @@ class StorageInitializerTest {
             storageInitializer.onStart(new StartupEvent());
 
             verify(serviceRegistry).initialize();
+            verify(startupState).complete(StartupState.Phase.DEPENDENCIES_CONNECTED);
+            verify(startupState).complete(StartupState.Phase.SNAPSHOT_LOADED);
         }
 
         @Test
-        @DisplayName("should not throw when initialization fails")
-        void shouldNotThrowOnInitializationFailure() {
+        @DisplayName("should fail startup when initialization fails")
+        void shouldFailStartupOnInitializationFailure() {
             when(serviceRegistry.initialize())
                     .thenReturn(Uni.createFrom().failure(new RuntimeException("Storage unavailable")));
 
-            storageInitializer.onStart(new StartupEvent());
+            assertThrows(IllegalStateException.class, () -> storageInitializer.onStart(new StartupEvent()));
 
             verify(serviceRegistry).initialize();
+            verify(startupState).fail(StartupState.Failure.ROUTE_SNAPSHOT_UNAVAILABLE);
         }
     }
 }

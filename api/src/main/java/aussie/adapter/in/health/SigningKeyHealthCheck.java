@@ -18,6 +18,7 @@ import aussie.core.config.KeyRotationConfig;
 import aussie.core.config.RouteAuthConfig;
 import aussie.core.config.SessionConfig;
 import aussie.core.service.auth.SigningKeyRegistry;
+import aussie.core.service.lifecycle.StartupState;
 import aussie.spi.SigningKeyRepository;
 
 /** Initializes the signing authority and keeps issuance readiness fail-closed. */
@@ -32,6 +33,7 @@ public class SigningKeyHealthCheck implements HealthCheck {
     private final RouteAuthConfig routeAuthConfig;
     private final SessionConfig sessionConfig;
     private final SigningKeyRepository keyRepository;
+    private final StartupState startupState;
 
     @Inject
     public SigningKeyHealthCheck(
@@ -40,22 +42,37 @@ public class SigningKeyHealthCheck implements HealthCheck {
             RouteAuthConfig routeAuthConfig,
             SessionConfig sessionConfig,
             SigningKeyRepository keyRepository,
-            MeterRegistry meterRegistry) {
+            MeterRegistry meterRegistry,
+            StartupState startupState) {
         this.keyRegistry = keyRegistry;
         this.rotationConfig = rotationConfig;
         this.routeAuthConfig = routeAuthConfig;
         this.sessionConfig = sessionConfig;
         this.keyRepository = keyRepository;
+        this.startupState = startupState;
         Gauge.builder("aussie.signing.key.ready", this, check -> check.signingReady() ? 1 : 0)
                 .description("Whether required token issuance has one active key published in JWKS")
                 .register(meterRegistry);
     }
 
     void onStart(@Observes StartupEvent event) {
-        validateConfiguration(LaunchMode.current());
-        keyRegistry.refreshCache().await().atMost(STARTUP_TIMEOUT);
-        if (issuanceRequired() && !keyRegistry.isReady()) {
-            throw new IllegalStateException("Token issuance requires one active signing key published in JWKS");
+        try {
+            validateConfiguration(LaunchMode.current());
+            startupState.complete(StartupState.Phase.CONFIG_VALIDATED);
+        } catch (RuntimeException e) {
+            startupState.fail(StartupState.Failure.CONFIGURATION_INVALID);
+            throw e;
+        }
+
+        try {
+            keyRegistry.refreshCache().await().atMost(STARTUP_TIMEOUT);
+            if (issuanceRequired() && !keyRegistry.isReady()) {
+                throw new IllegalStateException("Token issuance requires one active signing key published in JWKS");
+            }
+            startupState.complete(StartupState.Phase.SIGNING_READY);
+        } catch (RuntimeException e) {
+            startupState.fail(StartupState.Failure.SIGNING_KEY_UNAVAILABLE);
+            throw e;
         }
     }
 

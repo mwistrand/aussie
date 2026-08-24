@@ -24,6 +24,7 @@ import aussie.core.config.KeyRotationConfig;
 import aussie.core.config.RouteAuthConfig;
 import aussie.core.config.SessionConfig;
 import aussie.core.service.auth.SigningKeyRegistry;
+import aussie.core.service.lifecycle.StartupState;
 import aussie.spi.SigningKeyRepository;
 
 @DisplayName("SigningKeyHealthCheck")
@@ -34,6 +35,7 @@ class SigningKeyHealthCheckTest {
     private RouteAuthConfig routeAuthConfig;
     private SessionConfig sessionConfig;
     private SigningKeyRepository keyRepository;
+    private StartupState startupState;
     private SigningKeyHealthCheck healthCheck;
 
     @BeforeEach
@@ -43,6 +45,7 @@ class SigningKeyHealthCheckTest {
         routeAuthConfig = mock(RouteAuthConfig.class);
         sessionConfig = mock(SessionConfig.class);
         keyRepository = mock(SigningKeyRepository.class);
+        startupState = new StartupState();
         final var routeJws = mock(RouteAuthConfig.JwsProperties.class);
         final var sessionJws = mock(SessionConfig.JwsConfig.class);
 
@@ -59,7 +62,13 @@ class SigningKeyHealthCheckTest {
         when(keyRegistry.refreshCache()).thenReturn(Uni.createFrom().voidItem());
 
         healthCheck = new SigningKeyHealthCheck(
-                keyRegistry, rotationConfig, routeAuthConfig, sessionConfig, keyRepository, new SimpleMeterRegistry());
+                keyRegistry,
+                rotationConfig,
+                routeAuthConfig,
+                sessionConfig,
+                keyRepository,
+                new SimpleMeterRegistry(),
+                startupState);
     }
 
     @Test
@@ -71,6 +80,7 @@ class SigningKeyHealthCheckTest {
         healthCheck.onStart(mock(StartupEvent.class));
 
         verify(keyRegistry).refreshCache();
+        assertTrue(startupState.snapshot().failure().isEmpty());
         assertEquals(HealthCheckResponse.Status.UP, healthCheck.call().getStatus());
     }
 
@@ -82,6 +92,8 @@ class SigningKeyHealthCheckTest {
 
         assertEquals(HealthCheckResponse.Status.DOWN, healthCheck.call().getStatus());
         assertThrows(IllegalStateException.class, () -> healthCheck.onStart(mock(StartupEvent.class)));
+        assertEquals(
+                Optional.of("signing_key_unavailable"), startupState.snapshot().failure());
     }
 
     @Test
