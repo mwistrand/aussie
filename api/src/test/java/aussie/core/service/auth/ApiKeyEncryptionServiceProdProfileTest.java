@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Instant;
 import java.util.Base64;
 import java.util.Optional;
 
@@ -87,6 +88,17 @@ class ApiKeyEncryptionServiceProdProfileTest {
             assertFalse(
                     ex.getMessage().contains("allow-plaintext-reads"),
                     "decryption should fail past the gate when the flag is enabled");
+        }
+
+        @Test
+        @DisplayName("refuses PLAIN: records after the migration deadline")
+        void refusesPlaintextAfterMigrationDeadline() {
+            var service =
+                    new ApiKeyEncryptionService(Optional.of(VALID_KEY), "v1", "prod", true, Optional.of(Instant.EPOCH));
+
+            var ex = assertThrows(IllegalStateException.class, () -> service.decrypt("PLAIN:not-real"));
+
+            assertTrue(ex.getMessage().contains("plaintext-reads-expires-at"));
         }
 
         @Test

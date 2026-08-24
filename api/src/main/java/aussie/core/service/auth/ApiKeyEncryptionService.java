@@ -53,6 +53,7 @@ public class ApiKeyEncryptionService {
     private final String keyId;
     private final boolean encryptionEnabled;
     private final boolean allowPlaintextReads;
+    private final Optional<Instant> plaintextReadsExpiresAt;
     private final SecureRandom secureRandom;
 
     @Inject
@@ -61,9 +62,12 @@ public class ApiKeyEncryptionService {
             @ConfigProperty(name = "aussie.auth.encryption.key-id", defaultValue = "v1") String keyId,
             @ConfigProperty(name = "quarkus.profile", defaultValue = "") String profile,
             @ConfigProperty(name = "aussie.auth.encryption.allow-plaintext-reads", defaultValue = "false")
-                    boolean allowPlaintextReads) {
+                    boolean allowPlaintextReads,
+            @ConfigProperty(name = "aussie.auth.encryption.plaintext-reads-expires-at")
+                    Optional<Instant> plaintextReadsExpiresAt) {
         this.keyId = keyId;
         this.secureRandom = new SecureRandom();
+        this.plaintextReadsExpiresAt = plaintextReadsExpiresAt;
 
         final boolean keyPresent =
                 encryptionKey.isPresent() && !encryptionKey.get().isBlank();
@@ -103,6 +107,11 @@ public class ApiKeyEncryptionService {
                     + "encryption is disabled; PLAIN: reads are forced on so the service can "
                     + "read its own writes. Set aussie.auth.encryption.key to enforce the flag.");
         }
+    }
+
+    public ApiKeyEncryptionService(
+            Optional<String> encryptionKey, String keyId, String profile, boolean allowPlaintextReads) {
+        this(encryptionKey, keyId, profile, allowPlaintextReads, Optional.empty());
     }
 
     private static boolean isProd(String profile) {
@@ -169,6 +178,13 @@ public class ApiKeyEncryptionService {
                 throw new IllegalStateException("Refusing to decrypt PLAIN:-prefixed record: "
                         + "aussie.auth.encryption.allow-plaintext-reads is false. "
                         + "Re-encrypt this record or enable the migration flag.");
+            }
+            if (encryptionEnabled
+                    && plaintextReadsExpiresAt
+                            .filter(expiry -> !Instant.now().isBefore(expiry))
+                            .isPresent()) {
+                throw new IllegalStateException("Refusing to decrypt PLAIN:-prefixed record: "
+                        + "aussie.auth.encryption.plaintext-reads-expires-at has expired.");
             }
             String encoded = encryptedData.substring(6);
             String serialized = new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8);

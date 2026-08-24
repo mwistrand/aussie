@@ -1,5 +1,6 @@
 package aussie.adapter.out.storage.cassandra;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 
@@ -109,7 +110,9 @@ public class CassandraAuthKeyStorageProvider implements AuthKeyStorageProvider, 
         String profile = config.getOrDefault("quarkus.profile", "");
         boolean allowPlaintextReads =
                 Boolean.parseBoolean(config.getOrDefault("aussie.auth.encryption.allow-plaintext-reads", "false"));
-        return new ApiKeyEncryptionService(encryptionKey, keyId, profile, allowPlaintextReads);
+        final var plaintextReadsExpiresAt =
+                config.get("aussie.auth.encryption.plaintext-reads-expires-at").map(Instant::parse);
+        return new ApiKeyEncryptionService(encryptionKey, keyId, profile, allowPlaintextReads, plaintextReadsExpiresAt);
     }
 
     @Override
