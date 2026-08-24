@@ -8,6 +8,8 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,12 +31,17 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.adapter.in.context.ClientContextResolver;
+import aussie.adapter.in.http.GatewayCorsConfig;
 import aussie.adapter.in.problem.ProblemDetail;
 import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.common.context.ClientContext;
 import aussie.core.config.WebSocketConfig;
+import aussie.core.model.common.CorsConfig;
+import aussie.core.model.routing.EndpointConfig;
+import aussie.core.model.routing.RouteMatch;
+import aussie.core.model.service.ServiceRegistration;
 import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
 import aussie.core.port.out.OutboundHttpClients;
@@ -82,6 +89,9 @@ class WebSocketGatewayTest {
     @Mock
     private UpstreamAddressResolver addressResolver;
 
+    @Mock
+    private GatewayCorsConfig gatewayCorsConfig;
+
     private WebSocketGateway gateway;
 
     @BeforeEach
@@ -95,13 +105,15 @@ class WebSocketGatewayTest {
                 rateLimitService,
                 errorWriter,
                 clientContextResolver,
-                addressResolver);
+                addressResolver,
+                gatewayCorsConfig);
 
         lenient().when(ctx.request()).thenReturn(request);
         lenient().when(ctx.response()).thenReturn(response);
         lenient().when(response.setStatusCode(anyInt())).thenReturn(response);
         lenient().when(response.putHeader(anyString(), anyString())).thenReturn(response);
         lenient().when(clientContextResolver.getOrCompute(ctx)).thenReturn(new ClientContext(null, false, null));
+        lenient().when(gatewayCorsConfig.allowedOrigins()).thenReturn(java.util.List.of("https://app.example"));
         lenient()
                 .when(addressResolver.resolve(any(URI.class)))
                 .thenReturn(Uni.createFrom().item(SocketAddress.inetSocketAddress(443, "203.0.113.1")));
@@ -212,11 +224,51 @@ class WebSocketGatewayTest {
                             argThat(problemWithStatusAndDetail(
                                     503, "Service temporarily unavailable: connection limit reached")));
         }
+
+        @Test
+        @DisplayName("Should release reservations after rejected upgrades")
+        void shouldReleaseReservationsAfterRejectedUpgrades() {
+            mockRequestPath("/gateway/ws");
+            when(config.maxConnections()).thenReturn(1);
+            when(gatewayUseCase.upgradeGateway(any()))
+                    .thenReturn(Uni.createFrom().item(new WebSocketUpgradeResult.Unauthorized("Invalid token")));
+
+            gateway.handleGatewayUpgrade(ctx);
+            gateway.handleGatewayUpgrade(ctx);
+
+            verify(errorWriter, times(2)).write(eq(ctx), argThat(problemWithStatus(401)));
+        }
     }
 
     @Nested
     @DisplayName("handleUpgrade - result handling")
     class ResultHandlingTests {
+
+        @Test
+        @DisplayName("Should reject an unapproved WebSocket origin before dialing upstream")
+        void shouldRejectUnapprovedOrigin() {
+            mockRequestPath("/gateway/ws");
+            when(request.getHeader("Origin")).thenReturn("https://evil.example");
+            when(config.maxConnections()).thenReturn(1);
+            var service = ServiceRegistration.builder("svc")
+                    .baseUrl("http://backend.example")
+                    .corsConfig(CorsConfig.builder()
+                            .allowedOrigins("https://app.example")
+                            .build())
+                    .build();
+            var route =
+                    new RouteMatch(service, EndpointConfig.publicWebSocket("/ws", false), "/ws", java.util.Map.of());
+            when(gatewayUseCase.upgradeGateway(any()))
+                    .thenReturn(Uni.createFrom()
+                            .item(new WebSocketUpgradeResult.Authorized(
+                                    route, java.util.Optional.empty(), URI.create("ws://backend.example/ws"))));
+
+            gateway.handleGatewayUpgrade(ctx);
+
+            verify(errorWriter)
+                    .write(eq(ctx), argThat(problemWithStatusAndDetail(403, "WebSocket origin not allowed")));
+            verify(addressResolver, never()).resolve(any());
+        }
 
         @Test
         @DisplayName("Should return 401 for Unauthorized result")

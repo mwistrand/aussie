@@ -190,6 +190,8 @@ Or use session-based auth:
 const ws = new WebSocket("ws://aussie:1234/my-service/ws/notifications");
 ```
 
+Browser connections are accepted only when their exact `Origin` appears in the service's CORS configuration or, when the service has no CORS configuration, the gateway's global origin list. WebSocket origins cannot use `*`.
+
 ## Connection Lifecycle
 
 ### Connection Limits
@@ -215,6 +217,7 @@ Your backend may receive these close codes from Aussie:
 | `1000` | Normal closure | Log and clean up |
 | `1001` | Going away | Client disconnected |
 | `1002` | Protocol error | Check client implementation |
+| `1008` | Policy violation | Reauthenticate before reconnecting |
 | `1011` | Unexpected error | Check logs for details |
 
 ### Handling Disconnects

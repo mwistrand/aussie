@@ -11,6 +11,7 @@ All WebSocket settings use the prefix `aussie.websocket.*` and can be set via en
 | `aussie.websocket.idle-timeout` | `AUSSIE_WEBSOCKET_IDLE_TIMEOUT` | `PT5M` (5 minutes) | Close connection if no messages in either direction |
 | `aussie.websocket.max-lifetime` | `AUSSIE_WEBSOCKET_MAX_LIFETIME` | `PT24H` (24 hours) | Hard limit on connection lifetime regardless of activity |
 | `aussie.websocket.max-connections` | `AUSSIE_WEBSOCKET_MAX_CONNECTIONS` | `10000` | Maximum concurrent WebSocket connections **per instance** |
+| `aussie.websocket.max-queue-bytes` | `AUSSIE_WEBSOCKET_MAX_QUEUE_BYTES` | `1048576` | Apply backpressure after this many queued bytes per direction |
 | `aussie.websocket.ping.enabled` | `AUSSIE_WEBSOCKET_PING_ENABLED` | `true` | Enable ping/pong heartbeats to detect stale clients |
 | `aussie.websocket.ping.interval` | `AUSSIE_WEBSOCKET_PING_INTERVAL` | `PT30S` (30 seconds) | How often to send ping frames |
 | `aussie.websocket.ping.timeout` | `AUSSIE_WEBSOCKET_PING_TIMEOUT` | `PT10S` (10 seconds) | Close connection if pong not received within this time |
@@ -85,6 +86,9 @@ Authorization: Bearer <short-lived-jwt>
 ```
 
 The JWT contains the original user claims (sub, name, email, roles, etc.) and has a short expiration to minimize the window for token theft.
+Authenticated connections close when that JWT expires.
+
+Browser connections must send an exact allowed `Origin`. A service-level CORS origin list takes precedence over the global `aussie.gateway.cors.allowed-origins`; wildcard origins are not accepted for WebSockets.
 
 ## Close Code Reference
 
@@ -93,6 +97,7 @@ The JWT contains the original user claims (sub, name, email, roles, etc.) and ha
 | `1000` | Normal closure | Idle timeout, max lifetime, user disconnect |
 | `1001` | Going away | Client upgrade failed after backend connected |
 | `1002` | Protocol error | Ping timeout (no pong received) |
+| `1008` | Policy violation | Authentication expired |
 | `1011` | Unexpected error | Client or backend error |
 
 ## Routing Modes
@@ -136,6 +141,7 @@ Key log messages for observability:
 aussie.websocket.idle-timeout=PT10M
 aussie.websocket.max-lifetime=PT24H
 aussie.websocket.max-connections=20000
+aussie.websocket.max-queue-bytes=1048576
 aussie.websocket.ping.enabled=true
 aussie.websocket.ping.interval=PT30S
 aussie.websocket.ping.timeout=PT10S
@@ -148,6 +154,7 @@ aussie.websocket.ping.timeout=PT10S
 aussie.websocket.idle-timeout=PT2M
 aussie.websocket.max-lifetime=PT1H
 aussie.websocket.max-connections=100
+aussie.websocket.max-queue-bytes=1048576
 aussie.websocket.ping.enabled=true
 aussie.websocket.ping.interval=PT10S
 aussie.websocket.ping.timeout=PT5S

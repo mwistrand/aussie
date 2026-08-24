@@ -175,6 +175,23 @@ class WebSocketGatewayServiceTest {
         }
 
         @Test
+        @DisplayName("Should preserve the request query in the backend URI")
+        void shouldPreserveRequestQueryInBackendUri() {
+            registerWebSocketService("test-service", "http://backend:9090", "/ws/echo", false);
+            final var request = new WebSocketUpgradeRequest(
+                    "/ws/echo",
+                    Map.of("Upgrade", List.of("websocket"), "Connection", List.of("Upgrade")),
+                    URI.create("http://gateway:8080/ws/echo?token=a%2Fb"),
+                    "192.168.1.100");
+
+            final var result =
+                    webSocketGatewayService.upgradeGateway(request).await().atMost(TIMEOUT);
+
+            final var authorized = assertInstanceOf(WebSocketUpgradeResult.Authorized.class, result);
+            assertEquals(URI.create("ws://backend:9090/ws/echo?token=a%2Fb"), authorized.backendUri());
+        }
+
+        @Test
         @DisplayName("Should convert HTTPS backend URL to WSS")
         void shouldConvertHttpsToWss() {
             registerWebSocketService("test-service", "https://backend:9090", "/ws/secure", false);

@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.ObservesAsync;
@@ -22,6 +24,7 @@ import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
 import aussie.adapter.in.context.ClientContextResolver;
+import aussie.adapter.in.http.GatewayCorsConfig;
 import aussie.adapter.in.problem.ProblemDetail;
 import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
@@ -57,6 +60,7 @@ public class WebSocketGateway {
 
     // Track active sessions for metrics/debugging (per-instance count)
     private final Map<String, WebSocketProxySession> activeSessions = new ConcurrentHashMap<>();
+    private final AtomicInteger connectionReservations = new AtomicInteger();
 
     private final WebSocketGatewayUseCase gatewayUseCase;
     private final WebSocketConfig config;
@@ -67,6 +71,7 @@ public class WebSocketGateway {
     private final ProxyErrorWriter errorWriter;
     private final ClientContextResolver clientContextResolver;
     private final UpstreamAddressResolver addressResolver;
+    private final GatewayCorsConfig globalCorsConfig;
 
     @Inject
     public WebSocketGateway(
@@ -78,7 +83,8 @@ public class WebSocketGateway {
             WebSocketRateLimitService rateLimitService,
             ProxyErrorWriter errorWriter,
             ClientContextResolver clientContextResolver,
-            UpstreamAddressResolver addressResolver) {
+            UpstreamAddressResolver addressResolver,
+            GatewayCorsConfig globalCorsConfig) {
         this.gatewayUseCase = gatewayUseCase;
         this.config = config;
         this.vertx = vertx;
@@ -88,6 +94,7 @@ public class WebSocketGateway {
         this.errorWriter = errorWriter;
         this.clientContextResolver = clientContextResolver;
         this.addressResolver = addressResolver;
+        this.globalCorsConfig = globalCorsConfig;
     }
 
     /**
@@ -114,7 +121,7 @@ public class WebSocketGateway {
     }
 
     private void handleUpgrade(RoutingContext ctx, Uni<WebSocketUpgradeResult> resultUni) {
-        if (activeSessions.size() >= config.maxConnections()) {
+        if (!reserveConnection()) {
             LOG.warnv("WebSocket connection limit reached ({0})", config.maxConnections());
             errorWriter.write(
                     ctx, ProblemDetail.serviceUnavailable("Service temporarily unavailable: connection limit reached"));
@@ -127,21 +134,43 @@ public class WebSocketGateway {
                 .with(
                         result -> {
                             switch (result) {
-                                case WebSocketUpgradeResult.Authorized auth -> establishProxy(ctx, auth);
-                                case WebSocketUpgradeResult.Unauthorized u -> errorWriter.write(
-                                        ctx, ProblemDetail.unauthorized(u.reason()));
-                                case WebSocketUpgradeResult.Forbidden f -> errorWriter.write(
-                                        ctx, ProblemDetail.forbidden(f.reason()));
-                                case WebSocketUpgradeResult.RouteNotFound r -> errorWriter.write(
-                                        ctx, ProblemDetail.routeNotFound(r.path()));
-                                case WebSocketUpgradeResult.ServiceNotFound s -> errorWriter.write(
-                                        ctx, ProblemDetail.serviceNotFound(s.serviceId()));
-                                case WebSocketUpgradeResult.NotWebSocket n -> errorWriter.write(
-                                        ctx, ProblemDetail.badRequest("Not a WebSocket endpoint: " + n.path()));
-                                case WebSocketUpgradeResult.RateLimited rl -> handleRateLimited(ctx, rl);
+                                case WebSocketUpgradeResult.Authorized auth -> {
+                                    if (!isOriginAllowed(ctx, auth)) {
+                                        releaseConnection();
+                                        errorWriter.write(ctx, ProblemDetail.forbidden("WebSocket origin not allowed"));
+                                    } else {
+                                        establishProxy(ctx, auth);
+                                    }
+                                }
+                                case WebSocketUpgradeResult.Unauthorized u -> {
+                                    releaseConnection();
+                                    errorWriter.write(ctx, ProblemDetail.unauthorized(u.reason()));
+                                }
+                                case WebSocketUpgradeResult.Forbidden f -> {
+                                    releaseConnection();
+                                    errorWriter.write(ctx, ProblemDetail.forbidden(f.reason()));
+                                }
+                                case WebSocketUpgradeResult.RouteNotFound r -> {
+                                    releaseConnection();
+                                    errorWriter.write(ctx, ProblemDetail.routeNotFound(r.path()));
+                                }
+                                case WebSocketUpgradeResult.ServiceNotFound s -> {
+                                    releaseConnection();
+                                    errorWriter.write(ctx, ProblemDetail.serviceNotFound(s.serviceId()));
+                                }
+                                case WebSocketUpgradeResult.NotWebSocket n -> {
+                                    releaseConnection();
+                                    errorWriter.write(
+                                            ctx, ProblemDetail.badRequest("Not a WebSocket endpoint: " + n.path()));
+                                }
+                                case WebSocketUpgradeResult.RateLimited rl -> {
+                                    releaseConnection();
+                                    handleRateLimited(ctx, rl);
+                                }
                             }
                         },
                         error -> {
+                            releaseConnection();
                             int statusCode = mapErrorToStatusCode(error);
                             String message = mapErrorToMessage(statusCode);
                             LOG.warnv(error, "WebSocket upgrade failed with status {0}: {1}", statusCode, message);
@@ -171,6 +200,12 @@ public class WebSocketGateway {
     @SuppressWarnings("deprecation")
     private void establishProxy(RoutingContext ctx, WebSocketUpgradeResult.Authorized auth) {
         final var sessionId = UUID.randomUUID().toString();
+        final var connectionReleased = new AtomicBoolean();
+        final Runnable releaseConnection = () -> {
+            if (connectionReleased.compareAndSet(false, true)) {
+                this.releaseConnection();
+            }
+        };
         final var serviceId = auth.route().service().serviceId();
         final var clientId = auth.token()
                 .map(token -> {
@@ -199,7 +234,7 @@ public class WebSocketGateway {
         final var options = new WebSocketConnectOptions()
                 .setHost(backendUri.getHost())
                 .setPort(getPort(backendUri))
-                .setURI(backendUri.getPath())
+                .setURI(backendPath(backendUri))
                 .setHeaders(headers)
                 .setSsl("wss".equals(backendUri.getScheme()));
 
@@ -220,8 +255,23 @@ public class WebSocketGateway {
                                                     final var messageHandler = createMessageRateLimitHandler(
                                                             serviceId, clientId, sessionId);
 
-                                                    // Both connections established - create proxy session
-                                                    final var session = new WebSocketProxySession(
+                                                    final Runnable cleanup = () -> {
+                                                        if (activeSessions.remove(sessionId) != null) {
+                                                            metrics.decrementActiveWebSockets();
+                                                            rateLimitService
+                                                                    .cleanupConnection(serviceId, clientId, sessionId)
+                                                                    .subscribe()
+                                                                    .with(
+                                                                            ignored -> {},
+                                                                            err -> LOG.warnv(
+                                                                                    err,
+                                                                                    "Failed to cleanup rate limit state for session {0}",
+                                                                                    sessionId));
+                                                        }
+                                                        releaseConnection.run();
+                                                    };
+
+                                                    final var managedSession = new WebSocketProxySession(
                                                             sessionId,
                                                             clientWs,
                                                             backendWs,
@@ -229,31 +279,17 @@ public class WebSocketGateway {
                                                             config,
                                                             authSessionId,
                                                             userId,
-                                                            messageHandler);
-
-                                                    activeSessions.put(sessionId, session);
+                                                            auth.token().map(token -> token.expiresAt()),
+                                                            messageHandler,
+                                                            cleanup);
+                                                    activeSessions.put(sessionId, managedSession);
 
                                                     // Track connection metrics
                                                     metrics.incrementActiveWebSockets();
                                                     metrics.recordWebSocketConnect(serviceId);
 
-                                                    // Clean up session when closed
-                                                    clientWs.closeHandler(v -> {
-                                                        activeSessions.remove(sessionId);
-                                                        metrics.decrementActiveWebSockets();
-                                                        rateLimitService
-                                                                .cleanupConnection(serviceId, clientId, sessionId)
-                                                                .subscribe()
-                                                                .with(
-                                                                        ignored -> {},
-                                                                        err -> LOG.warnv(
-                                                                                err,
-                                                                                "Failed to cleanup rate limit state for session {0}",
-                                                                                sessionId));
-                                                    });
-
                                                     // Start the session (enables message forwarding and timers)
-                                                    session.start();
+                                                    managedSession.start();
 
                                                     LOG.infov(
                                                             "WebSocket session {0} established to {1}",
@@ -265,6 +301,7 @@ public class WebSocketGateway {
                                                             "Client WebSocket upgrade failed for session {0}",
                                                             sessionId);
                                                     backendWs.close((short) 1001, "Client upgrade failed");
+                                                    releaseConnection.run();
                                                     errorWriter.write(
                                                             ctx,
                                                             ProblemDetail.internalError("WebSocket upgrade failed"),
@@ -275,11 +312,13 @@ public class WebSocketGateway {
                                         LOG.warnv(err, "Backend WebSocket connection failed to {0}", backendUri);
                                         errorWriter.write(
                                                 ctx, ProblemDetail.badGateway("Backend connection failed"), serviceId);
+                                        releaseConnection.run();
                                     });
                         },
                         err -> {
                             LOG.warnv(err, "Backend WebSocket address denied for service {0}", serviceId);
                             errorWriter.write(ctx, ProblemDetail.badGateway("Backend connection failed"), serviceId);
+                            releaseConnection.run();
                         });
     }
 
@@ -300,6 +339,46 @@ public class WebSocketGateway {
                     return null;
                 })
                 .replaceWithVoid();
+    }
+
+    private boolean reserveConnection() {
+        while (true) {
+            final var current = connectionReservations.get();
+            if (current >= config.maxConnections()) {
+                return false;
+            }
+            if (connectionReservations.compareAndSet(current, current + 1)) {
+                return true;
+            }
+        }
+    }
+
+    private void releaseConnection() {
+        connectionReservations.updateAndGet(current -> Math.max(0, current - 1));
+    }
+
+    private boolean isOriginAllowed(RoutingContext ctx, WebSocketUpgradeResult.Authorized auth) {
+        final var origin = ctx.request().getHeader("Origin");
+        if (origin == null || origin.isBlank()) {
+            return true;
+        }
+        if (origin.length() > 4096) {
+            return false;
+        }
+        final var allowedOrigins = auth.route()
+                .service()
+                .corsConfig()
+                .map(serviceCors -> serviceCors.allowedOrigins())
+                .orElseGet(globalCorsConfig::allowedOrigins);
+        return allowedOrigins.stream().anyMatch(allowed -> !"*".equals(allowed) && origin.equals(allowed));
+    }
+
+    private String backendPath(URI uri) {
+        var path = uri.getRawPath();
+        if (path == null || path.isBlank()) {
+            path = "/";
+        }
+        return uri.getRawQuery() == null ? path : path + "?" + uri.getRawQuery();
     }
 
     /**

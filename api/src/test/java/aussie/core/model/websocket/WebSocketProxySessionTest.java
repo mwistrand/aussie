@@ -13,11 +13,15 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.Handler;
+import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.ServerWebSocket;
@@ -58,6 +62,7 @@ class WebSocketProxySessionTest {
     void setUp() {
         lenient().when(config.idleTimeout()).thenReturn(Duration.ofMinutes(5));
         lenient().when(config.maxLifetime()).thenReturn(Duration.ofHours(24));
+        lenient().when(config.maxQueueBytes()).thenReturn(1024);
         lenient().when(config.ping()).thenReturn(pingConfig);
         lenient().when(pingConfig.enabled()).thenReturn(false);
         lenient().when(pingConfig.interval()).thenReturn(Duration.ofSeconds(30));
@@ -153,6 +158,26 @@ class WebSocketProxySessionTest {
             verify(vertx).setPeriodic(eq(Duration.ofSeconds(30).toMillis()), any());
         }
 
+        @Test
+        @DisplayName("shouldScheduleAlreadyExpiredIdentityForImmediateClosure")
+        void shouldScheduleAlreadyExpiredIdentityForImmediateClosure() {
+            final var session = new WebSocketProxySession(
+                    "s1",
+                    clientSocket,
+                    backendSocket,
+                    vertx,
+                    config,
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of(Instant.now().minusSeconds(1)),
+                    MessageRateLimitHandler.noOp(),
+                    () -> {});
+
+            session.start();
+
+            verify(vertx).setTimer(eq(1L), any());
+        }
+
         @SuppressWarnings("unchecked")
         @Test
         @DisplayName("shouldForwardClientMessagesToBackendWithRateLimiting")
@@ -184,6 +209,25 @@ class WebSocketProxySessionTest {
             handlerCaptor.getValue().handle(buffer);
 
             verify(clientSocket).write(buffer);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("shouldPauseUntilProxyWriteCompletes")
+        void shouldPauseUntilProxyWriteCompletes() {
+            final var promise = Promise.<Void>promise();
+            when(backendSocket.write(any(Buffer.class))).thenReturn(promise.future());
+            final var session = new WebSocketProxySession("s1", clientSocket, backendSocket, vertx, config);
+            final var handlerCaptor = ArgumentCaptor.forClass(Handler.class);
+
+            session.start();
+            verify(clientSocket).handler(handlerCaptor.capture());
+            handlerCaptor.getValue().handle(Buffer.buffer("slow"));
+
+            verify(clientSocket).pause();
+            verify(clientSocket, never()).resume();
+            promise.complete();
+            verify(clientSocket).resume();
         }
 
         @SuppressWarnings("unchecked")
@@ -231,7 +275,7 @@ class WebSocketProxySessionTest {
             handlerCaptor.getValue().handle(new RuntimeException("connection reset"));
 
             assertTrue(session.isClosing());
-            verify(clientSocket).close((short) 1011, "Client error: connection reset");
+            verify(clientSocket).close((short) 1011, "Client error");
         }
 
         @SuppressWarnings("unchecked")
@@ -247,7 +291,7 @@ class WebSocketProxySessionTest {
             handlerCaptor.getValue().handle(new RuntimeException("timeout"));
 
             assertTrue(session.isClosing());
-            verify(backendSocket).close((short) 1011, "Backend error: timeout");
+            verify(backendSocket).close((short) 1011, "Backend error");
         }
 
         @SuppressWarnings("unchecked")
@@ -378,6 +422,33 @@ class WebSocketProxySessionTest {
             // Timer IDs are -1, so cancelTimer should not be called
             verify(vertx, never()).cancelTimer(anyLong());
             assertTrue(session.isClosing());
+        }
+
+        @Test
+        @DisplayName("shouldSanitizeCloseReasonsAndNotifyOnce")
+        void shouldSanitizeCloseReasonsAndNotifyOnce() {
+            final var closeCount = new AtomicInteger();
+            final var session = new WebSocketProxySession(
+                    "s1",
+                    clientSocket,
+                    backendSocket,
+                    vertx,
+                    config,
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.empty(),
+                    MessageRateLimitHandler.noOp(),
+                    closeCount::incrementAndGet);
+            final var reason = "unsafe\n" + "🙂".repeat(40);
+            final var reasonCaptor = ArgumentCaptor.forClass(String.class);
+
+            session.closeWithReason((short) 1011, reason);
+            session.closeWithReason((short) 1011, "again");
+
+            verify(clientSocket).close(eq((short) 1011), reasonCaptor.capture());
+            assertFalse(reasonCaptor.getValue().contains("\n"));
+            assertTrue(reasonCaptor.getValue().getBytes(StandardCharsets.UTF_8).length <= 123);
+            assertEquals(1, closeCount.get());
         }
     }
 

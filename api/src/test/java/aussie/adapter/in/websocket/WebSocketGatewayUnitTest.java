@@ -33,6 +33,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.adapter.in.context.ClientContextResolver;
+import aussie.adapter.in.http.GatewayCorsConfig;
 import aussie.adapter.in.problem.ProblemDetail;
 import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
@@ -89,6 +90,9 @@ class WebSocketGatewayUnitTest {
     @Mock
     private UpstreamAddressResolver addressResolver;
 
+    @Mock
+    private GatewayCorsConfig gatewayCorsConfig;
+
     private WebSocketGateway gateway;
 
     @BeforeEach
@@ -102,7 +106,8 @@ class WebSocketGatewayUnitTest {
                 rateLimitService,
                 errorWriter,
                 clientContextResolver,
-                addressResolver);
+                addressResolver,
+                gatewayCorsConfig);
 
         lenient().when(ctx.request()).thenReturn(request);
         lenient().when(ctx.response()).thenReturn(response);
@@ -341,6 +346,17 @@ class WebSocketGatewayUnitTest {
             final var result = (int) method.invoke(gateway, URI.create("ws://example.com:9090/ws"));
             assertEquals(9090, result);
         }
+    }
+
+    @Test
+    @DisplayName("backendPath should preserve raw paths and queries")
+    void backendPathShouldPreserveRawPathsAndQueries() throws Exception {
+        final var method = WebSocketGateway.class.getDeclaredMethod("backendPath", URI.class);
+        method.setAccessible(true);
+
+        final var result = method.invoke(gateway, URI.create("wss://example.com/a%20b?token=a%2Fb"));
+
+        assertEquals("/a%20b?token=a%2Fb", result);
     }
 
     @Nested

@@ -50,6 +50,10 @@ public interface WebSocketConfig {
     @WithDefault("10000")
     int maxConnections();
 
+    /** Maximum queued bytes per WebSocket direction before backpressure. */
+    @WithDefault("1048576")
+    int maxQueueBytes();
+
     /**
      * Ping/pong heartbeat configuration.
      */

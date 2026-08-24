@@ -120,23 +120,27 @@ public class WebSocketGatewayService implements WebSocketGatewayUseCase {
 
         return routeAuthService.authenticate(gatewayRequest, route).map(authResult -> switch (authResult) {
             case RouteAuthResult.Authenticated auth -> new WebSocketUpgradeResult.Authorized(
-                    route, Optional.of(auth.token()), buildBackendUri(route), auth.authSessionId());
+                    route,
+                    Optional.of(auth.token()),
+                    buildBackendUri(route, request.requestUri()),
+                    auth.authSessionId());
             case RouteAuthResult.NotRequired nr -> new WebSocketUpgradeResult.Authorized(
-                    route, Optional.empty(), buildBackendUri(route), Optional.empty());
+                    route, Optional.empty(), buildBackendUri(route, request.requestUri()), Optional.empty());
             case RouteAuthResult.Unauthorized u -> new WebSocketUpgradeResult.Unauthorized(u.reason());
             case RouteAuthResult.Forbidden f -> new WebSocketUpgradeResult.Forbidden(f.reason());
             case RouteAuthResult.BadRequest b -> new WebSocketUpgradeResult.Unauthorized(b.reason());
         });
     }
 
-    private URI buildBackendUri(RouteMatch route) {
+    private URI buildBackendUri(RouteMatch route, URI requestUri) {
         // Convert HTTP URI to WebSocket URI (http->ws, https->wss)
-        var baseUrl = route.service().baseUrl();
-        var scheme = "https".equals(baseUrl.getScheme()) ? "wss" : "ws";
-        var port = baseUrl.getPort();
-        var portSuffix = (port == -1 || port == 80 || port == 443) ? "" : ":" + port;
-        var path = route.targetPath().startsWith("/") ? route.targetPath() : "/" + route.targetPath();
+        final var baseUrl = route.service().baseUrl();
+        final var scheme = "https".equals(baseUrl.getScheme()) ? "wss" : "ws";
+        final var port = baseUrl.getPort();
+        final var portSuffix = (port == -1 || port == 80 || port == 443) ? "" : ":" + port;
+        final var path = route.targetPath().startsWith("/") ? route.targetPath() : "/" + route.targetPath();
+        final var query = requestUri.getRawQuery();
 
-        return URI.create(scheme + "://" + baseUrl.getHost() + portSuffix + path);
+        return URI.create(scheme + "://" + baseUrl.getHost() + portSuffix + path + (query == null ? "" : "?" + query));
     }
 }

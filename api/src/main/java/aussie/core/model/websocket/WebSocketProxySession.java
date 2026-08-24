@@ -1,15 +1,19 @@
 package aussie.core.model.websocket;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.ServerWebSocket;
 import io.vertx.core.http.WebSocket;
+import io.vertx.core.streams.ReadStream;
+import io.vertx.core.streams.WriteStream;
 import org.jboss.logging.Logger;
 
 import aussie.core.config.WebSocketConfig;
@@ -41,12 +45,15 @@ public class WebSocketProxySession {
     private final WebSocketConfig config;
     private final Optional<String> authSessionId;
     private final Optional<String> userId;
+    private final Optional<Instant> identityExpiresAt;
     private final MessageRateLimitHandler messageRateLimitHandler;
+    private final Runnable closeListener;
 
     private final AtomicBoolean closing = new AtomicBoolean();
     private final AtomicLong rateLimitedMessages = new AtomicLong(0);
     private long idleTimerId = -1;
     private long maxLifetimeTimerId = -1;
+    private long identityExpiryTimerId = -1;
     private long pingTimerId = -1;
     private long pongTimeoutTimerId = -1;
     private final Instant connectedAt;
@@ -66,7 +73,9 @@ public class WebSocketProxySession {
                 config,
                 Optional.empty(),
                 Optional.empty(),
-                MessageRateLimitHandler.noOp());
+                Optional.empty(),
+                MessageRateLimitHandler.noOp(),
+                () -> {});
     }
 
     public WebSocketProxySession(
@@ -85,7 +94,9 @@ public class WebSocketProxySession {
                 config,
                 authSessionId,
                 userId,
-                MessageRateLimitHandler.noOp());
+                Optional.empty(),
+                MessageRateLimitHandler.noOp(),
+                () -> {});
     }
 
     public WebSocketProxySession(
@@ -97,6 +108,30 @@ public class WebSocketProxySession {
             Optional<String> authSessionId,
             Optional<String> userId,
             MessageRateLimitHandler messageRateLimitHandler) {
+        this(
+                sessionId,
+                clientSocket,
+                backendSocket,
+                vertx,
+                config,
+                authSessionId,
+                userId,
+                Optional.empty(),
+                messageRateLimitHandler,
+                () -> {});
+    }
+
+    public WebSocketProxySession(
+            String sessionId,
+            ServerWebSocket clientSocket,
+            WebSocket backendSocket,
+            Vertx vertx,
+            WebSocketConfig config,
+            Optional<String> authSessionId,
+            Optional<String> userId,
+            Optional<Instant> identityExpiresAt,
+            MessageRateLimitHandler messageRateLimitHandler,
+            Runnable closeListener) {
         this.sessionId = sessionId;
         this.clientSocket = clientSocket;
         this.backendSocket = backendSocket;
@@ -104,7 +139,9 @@ public class WebSocketProxySession {
         this.config = config;
         this.authSessionId = authSessionId;
         this.userId = userId;
+        this.identityExpiresAt = identityExpiresAt;
         this.messageRateLimitHandler = messageRateLimitHandler;
+        this.closeListener = closeListener;
         this.connectedAt = Instant.now();
         this.lastActivity = Instant.now();
     }
@@ -115,12 +152,18 @@ public class WebSocketProxySession {
      * <p>Enables bidirectional message forwarding and starts lifecycle timers.
      */
     public void start() {
+        if (config.maxQueueBytes() > 0) {
+            clientSocket.setWriteQueueMaxSize(config.maxQueueBytes());
+            backendSocket.setWriteQueueMaxSize(config.maxQueueBytes());
+        }
+
         // Set up bidirectional message forwarding with rate limiting (non-blocking)
         clientSocket.handler(buffer -> {
+            clientSocket.pause();
             messageRateLimitHandler
                     .checkAndProceed(() -> {
                         resetIdleTimer();
-                        backendSocket.write(buffer); // Returns Future, non-blocking
+                        forward(clientSocket, backendSocket, buffer);
                     })
                     .subscribe()
                     .with(
@@ -135,8 +178,9 @@ public class WebSocketProxySession {
         });
 
         backendSocket.handler(buffer -> {
+            backendSocket.pause();
             resetIdleTimer();
-            clientSocket.write(buffer); // Returns Future, non-blocking
+            forward(backendSocket, clientSocket, buffer);
         });
 
         // Handle close from either side
@@ -144,8 +188,8 @@ public class WebSocketProxySession {
         backendSocket.closeHandler(v -> closeWithReason((short) 1000, "Backend disconnected"));
 
         // Handle errors
-        clientSocket.exceptionHandler(t -> closeWithReason((short) 1011, "Client error: " + t.getMessage()));
-        backendSocket.exceptionHandler(t -> closeWithReason((short) 1011, "Backend error: " + t.getMessage()));
+        clientSocket.exceptionHandler(t -> closeWithReason((short) 1011, "Client error"));
+        backendSocket.exceptionHandler(t -> closeWithReason((short) 1011, "Backend error"));
 
         // Handle pong responses from client
         clientSocket.pongHandler(buffer -> {
@@ -156,9 +200,39 @@ public class WebSocketProxySession {
         // Start timers (all timer callbacks run on event loop, non-blocking)
         startIdleTimer();
         startMaxLifetimeTimer();
+        startIdentityExpiryTimer();
         if (config.ping().enabled()) {
             startPingTimer();
         }
+    }
+
+    private void forward(ReadStream<Buffer> source, WriteStream<Buffer> target, Buffer buffer) {
+        if (closing.get()) {
+            return;
+        }
+        target.drainHandler(ignored -> {
+            if (!closing.get()) {
+                source.resume();
+            }
+        });
+        final Future<Void> write;
+        try {
+            write = target.write(buffer);
+        } catch (RuntimeException failure) {
+            closeWithReason((short) 1011, "Proxy write failed");
+            return;
+        }
+        if (write == null) {
+            source.resume();
+            return;
+        }
+        write.onComplete(result -> {
+            if (result.failed()) {
+                closeWithReason((short) 1011, "Proxy write failed");
+            } else if (!target.writeQueueFull() && !closing.get()) {
+                source.resume();
+            }
+        });
     }
 
     private void startIdleTimer() {
@@ -180,6 +254,15 @@ public class WebSocketProxySession {
                 vertx.setTimer(lifetimeMs, id -> closeWithReason((short) 1000, "Maximum connection lifetime exceeded"));
     }
 
+    private void startIdentityExpiryTimer() {
+        identityExpiresAt.ifPresent(expiresAt -> {
+            final var delayMs =
+                    Math.max(1, Duration.between(Instant.now(), expiresAt).toMillis());
+            identityExpiryTimerId =
+                    vertx.setTimer(delayMs, id -> closeWithReason((short) 1008, "Authentication expired"));
+        });
+    }
+
     private void startPingTimer() {
         var intervalMs = config.ping().interval().toMillis();
         pingTimerId = vertx.setPeriodic(intervalMs, id -> {
@@ -191,6 +274,7 @@ public class WebSocketProxySession {
     }
 
     private void startPongTimeout() {
+        cancelPongTimeout();
         var timeoutMs = config.ping().timeout().toMillis();
         pongTimeoutTimerId =
                 vertx.setTimer(timeoutMs, id -> closeWithReason((short) 1002, "Ping timeout - no pong received"));
@@ -216,12 +300,17 @@ public class WebSocketProxySession {
             return; // Already closing
         }
 
+        final var safeReason = safeCloseReason(reason);
+
         // Cancel all timers
         if (idleTimerId != -1) {
             vertx.cancelTimer(idleTimerId);
         }
         if (maxLifetimeTimerId != -1) {
             vertx.cancelTimer(maxLifetimeTimerId);
+        }
+        if (identityExpiryTimerId != -1) {
+            vertx.cancelTimer(identityExpiryTimerId);
         }
         if (pingTimerId != -1) {
             vertx.cancelTimer(pingTimerId);
@@ -231,12 +320,28 @@ public class WebSocketProxySession {
         }
 
         // Close both connections with the reason (non-blocking)
-        clientSocket.close(code, reason);
-        backendSocket.close(code, reason);
+        clientSocket.close(code, safeReason);
+        backendSocket.close(code, safeReason);
 
         // Log session end (for metrics)
         var duration = Duration.between(connectedAt, Instant.now()).toSeconds();
-        LOG.infov("WebSocket session {0} closed: {1} (duration: {2}s)", sessionId, reason, duration);
+        LOG.infov("WebSocket session {0} closed: {1} (duration: {2}s)", sessionId, safeReason, duration);
+        closeListener.run();
+    }
+
+    private static String safeCloseReason(String reason) {
+        final var value = reason == null ? "Connection closed" : reason.replaceAll("\\p{Cc}", " ");
+        final var bytes = value.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length <= 123) {
+            return value;
+        }
+        for (var end = 123; end > 0; end--) {
+            final var candidate = new String(bytes, 0, end, StandardCharsets.UTF_8);
+            if (candidate.getBytes(StandardCharsets.UTF_8).length <= 123) {
+                return candidate;
+            }
+        }
+        return "";
     }
 
     public String sessionId() {

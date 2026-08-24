@@ -77,6 +77,7 @@ public class ProductionConfigurationValidator {
         validateEncryption();
         validateRateLimiting();
         validateResiliency();
+        validateWebSocket();
         validateTelemetry();
     }
 
@@ -258,6 +259,25 @@ public class ProductionConfigurationValidator {
                 || !enabled("aussie.telemetry.metrics.enabled", false)
                 || !enabled("aussie.telemetry.security.enabled", false)) {
             throw invalid("production requires telemetry, metrics, and security telemetry to be enabled");
+        }
+    }
+
+    private void validateWebSocket() {
+        if (integer("aussie.websocket.max-connections", 10_000) < 1
+                || integer("aussie.websocket.max-queue-bytes", 1_048_576) < 1) {
+            throw invalid("WebSocket connection and queue limits must be positive");
+        }
+        final var idleTimeout = duration("aussie.websocket.idle-timeout", Duration.ofMinutes(5));
+        final var maxLifetime = duration("aussie.websocket.max-lifetime", Duration.ofHours(24));
+        if (idleTimeout.toMillis() < 1 || maxLifetime.toMillis() < 1) {
+            throw invalid("WebSocket idle timeout and maximum lifetime must be positive");
+        }
+        if (enabled("aussie.websocket.ping.enabled", true)) {
+            final var interval = duration("aussie.websocket.ping.interval", Duration.ofSeconds(30));
+            final var timeout = duration("aussie.websocket.ping.timeout", Duration.ofSeconds(10));
+            if (interval.toMillis() < 1 || timeout.toMillis() < 1 || timeout.compareTo(interval) >= 0) {
+                throw invalid("WebSocket ping timeout must be positive and shorter than its interval");
+            }
         }
     }
 

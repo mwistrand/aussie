@@ -68,6 +68,13 @@ function generateCodeVerifier(): string {
   return base64UrlEncode(array);
 }
 
+function getCsrfToken(): string | undefined {
+  return document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith("aussie_session_csrf="))
+    ?.split("=")[1];
+}
+
 async function generateCodeChallenge(verifier: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(verifier);
@@ -562,10 +569,14 @@ export default function TestingDashboardPage() {
 
     try {
       const logoutUrl = `${config.aussieUrl}/auth/session`;
+      const csrfToken = getCsrfToken();
       const response = await fetch(logoutUrl, {
         method: "DELETE",
         credentials: "include",
-        headers: { Accept: "application/json" },
+        headers: {
+          Accept: "application/json",
+          ...(csrfToken && { "X-CSRF-Token": csrfToken }),
+        },
       });
 
       if (response.ok) {

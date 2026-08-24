@@ -616,6 +616,7 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | `aussie.websocket.idle-timeout` | `Duration` | `PT5M` | `AUSSIE_WEBSOCKET_IDLE_TIMEOUT` | Close connection if no messages in either direction. |
 | `aussie.websocket.max-lifetime` | `Duration` | `PT24H` | `AUSSIE_WEBSOCKET_MAX_LIFETIME` | Hard limit on connection lifetime regardless of activity. |
 | `aussie.websocket.max-connections` | `int` | `10000` | `AUSSIE_WEBSOCKET_MAX_CONNECTIONS` | Maximum concurrent WebSocket connections **per instance** (not cluster-wide). |
+| `aussie.websocket.max-queue-bytes` | `int` | `1048576` | `AUSSIE_WEBSOCKET_MAX_QUEUE_BYTES` | Apply backpressure after this many queued bytes per direction. |
 | `aussie.websocket.ping.enabled` | `boolean` | `true` | `AUSSIE_WEBSOCKET_PING_ENABLED` | Enable ping/pong heartbeats for stale connection detection. |
 | `aussie.websocket.ping.interval` | `Duration` | `PT30S` | `AUSSIE_WEBSOCKET_PING_INTERVAL` | Ping frame interval. |
 | `aussie.websocket.ping.timeout` | `Duration` | `PT10S` | `AUSSIE_WEBSOCKET_PING_TIMEOUT` | Close connection if pong not received within this time. |
