@@ -26,6 +26,7 @@ import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.ServerWebSocket;
 import io.vertx.core.http.WebSocket;
+import io.vertx.core.http.WebSocketFrame;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -131,8 +132,8 @@ class WebSocketProxySessionTest {
             session.start();
 
             // handlers set
-            verify(clientSocket).handler(any());
-            verify(backendSocket).handler(any());
+            verify(clientSocket).frameHandler(any());
+            verify(backendSocket).frameHandler(any());
             verify(clientSocket).closeHandler(any());
             verify(backendSocket).closeHandler(any());
             verify(clientSocket).exceptionHandler(any());
@@ -186,13 +187,13 @@ class WebSocketProxySessionTest {
 
             final var handlerCaptor = ArgumentCaptor.forClass(Handler.class);
             session.start();
-            verify(clientSocket).handler(handlerCaptor.capture());
+            verify(clientSocket).frameHandler(handlerCaptor.capture());
 
             // Simulate a message from the client
-            final var buffer = Buffer.buffer("hello");
-            handlerCaptor.getValue().handle(buffer);
+            final var frame = WebSocketFrame.textFrame("hello", true);
+            handlerCaptor.getValue().handle(frame);
 
-            verify(backendSocket).write(buffer);
+            verify(backendSocket).writeFrame(frame);
         }
 
         @SuppressWarnings("unchecked")
@@ -203,12 +204,38 @@ class WebSocketProxySessionTest {
 
             final var handlerCaptor = ArgumentCaptor.forClass(Handler.class);
             session.start();
-            verify(backendSocket).handler(handlerCaptor.capture());
+            verify(backendSocket).frameHandler(handlerCaptor.capture());
 
-            final var buffer = Buffer.buffer("response");
-            handlerCaptor.getValue().handle(buffer);
+            final var frame = WebSocketFrame.binaryFrame(Buffer.buffer("response"), true);
+            handlerCaptor.getValue().handle(frame);
 
-            verify(clientSocket).write(buffer);
+            verify(clientSocket).writeFrame(frame);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("shouldNotRateLimitBackendMessages")
+        void shouldNotRateLimitBackendMessages() {
+            final var failingHandler = (MessageRateLimitHandler)
+                    onAllowed -> Uni.createFrom().failure(new RuntimeException("rate limited"));
+            final var session = new WebSocketProxySession(
+                    "s1",
+                    clientSocket,
+                    backendSocket,
+                    vertx,
+                    config,
+                    Optional.empty(),
+                    Optional.empty(),
+                    failingHandler);
+            final var handlerCaptor = ArgumentCaptor.forClass(Handler.class);
+            session.start();
+            verify(backendSocket).frameHandler(handlerCaptor.capture());
+            final var frame = WebSocketFrame.textFrame("response", true);
+
+            handlerCaptor.getValue().handle(frame);
+
+            verify(clientSocket).writeFrame(frame);
+            assertEquals(0L, session.rateLimitedMessageCount());
         }
 
         @SuppressWarnings("unchecked")
@@ -216,18 +243,95 @@ class WebSocketProxySessionTest {
         @DisplayName("shouldPauseUntilProxyWriteCompletes")
         void shouldPauseUntilProxyWriteCompletes() {
             final var promise = Promise.<Void>promise();
-            when(backendSocket.write(any(Buffer.class))).thenReturn(promise.future());
+            when(backendSocket.writeFrame(any())).thenReturn(promise.future());
             final var session = new WebSocketProxySession("s1", clientSocket, backendSocket, vertx, config);
             final var handlerCaptor = ArgumentCaptor.forClass(Handler.class);
 
             session.start();
-            verify(clientSocket).handler(handlerCaptor.capture());
-            handlerCaptor.getValue().handle(Buffer.buffer("slow"));
+            verify(clientSocket).frameHandler(handlerCaptor.capture());
+            handlerCaptor.getValue().handle(WebSocketFrame.binaryFrame(Buffer.buffer("slow"), true));
 
             verify(clientSocket).pause();
             verify(clientSocket, never()).resume();
             promise.complete();
             verify(clientSocket).resume();
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("shouldPreserveFragmentedFrames")
+        void shouldPreserveFragmentedFrames() {
+            final var session = new WebSocketProxySession("s1", clientSocket, backendSocket, vertx, config);
+            final var handlerCaptor = ArgumentCaptor.forClass(Handler.class);
+            session.start();
+            verify(clientSocket).frameHandler(handlerCaptor.capture());
+
+            final var first = WebSocketFrame.textFrame("hel", false);
+            final var last = WebSocketFrame.continuationFrame(Buffer.buffer("lo"), true);
+            handlerCaptor.getValue().handle(first);
+            handlerCaptor.getValue().handle(last);
+
+            verify(backendSocket).writeFrame(first);
+            verify(backendSocket).writeFrame(last);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("shouldResumeTheSourceWhenTheTargetDrains")
+        void shouldResumeTheSourceWhenTheTargetDrains() {
+            final var session = new WebSocketProxySession("s1", clientSocket, backendSocket, vertx, config);
+            final var drainCaptor = ArgumentCaptor.forClass(Handler.class);
+            session.start();
+            verify(backendSocket).drainHandler(drainCaptor.capture());
+
+            drainCaptor.getValue().handle(null);
+
+            verify(clientSocket).resume();
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("shouldNotForwardControlFrames")
+        void shouldNotForwardControlFrames() {
+            final var session = new WebSocketProxySession("s1", clientSocket, backendSocket, vertx, config);
+            final var handlerCaptor = ArgumentCaptor.forClass(Handler.class);
+            session.start();
+            verify(clientSocket).frameHandler(handlerCaptor.capture());
+
+            handlerCaptor.getValue().handle(WebSocketFrame.pingFrame(Buffer.buffer("ping")));
+
+            verify(backendSocket, never()).writeFrame(any());
+            verify(clientSocket, never()).pause();
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("shouldCloseOnOversizedMessage")
+        void shouldCloseOnOversizedMessage() {
+            when(config.maxMessageBytes()).thenReturn(4);
+            final var session = new WebSocketProxySession("s1", clientSocket, backendSocket, vertx, config);
+            final var handlerCaptor = ArgumentCaptor.forClass(Handler.class);
+            session.start();
+            verify(clientSocket).frameHandler(handlerCaptor.capture());
+
+            handlerCaptor.getValue().handle(WebSocketFrame.textFrame("hello", true));
+
+            verify(clientSocket).close((short) 1009, "Message too large");
+            verify(backendSocket, never()).writeFrame(any());
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("shouldCloseOnInvalidFragmentSequence")
+        void shouldCloseOnInvalidFragmentSequence() {
+            final var session = new WebSocketProxySession("s1", clientSocket, backendSocket, vertx, config);
+            final var handlerCaptor = ArgumentCaptor.forClass(Handler.class);
+            session.start();
+            verify(clientSocket).frameHandler(handlerCaptor.capture());
+
+            handlerCaptor.getValue().handle(WebSocketFrame.continuationFrame(Buffer.buffer("bad"), true));
+
+            verify(clientSocket).close((short) 1002, "Invalid frame sequence");
         }
 
         @SuppressWarnings("unchecked")
@@ -340,10 +444,10 @@ class WebSocketProxySessionTest {
 
             final var handlerCaptor = ArgumentCaptor.forClass(Handler.class);
             session.start();
-            verify(clientSocket).handler(handlerCaptor.capture());
+            verify(clientSocket).frameHandler(handlerCaptor.capture());
 
             // Simulate a message that will be rate-limited
-            handlerCaptor.getValue().handle(Buffer.buffer("msg"));
+            handlerCaptor.getValue().handle(WebSocketFrame.textFrame("msg", true));
 
             // Allow async to complete
             assertEquals(1L, session.rateLimitedMessageCount());
@@ -372,6 +476,23 @@ class WebSocketProxySessionTest {
             verify(clientSocket).writePing(any(Buffer.class));
             // Should also start pong timeout timer
             verify(vertx).setTimer(eq(Duration.ofSeconds(10).toMillis()), any());
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("shouldCloseWithoutStartingPongTimeoutWhenPingFails")
+        void shouldCloseWithoutStartingPongTimeoutWhenPingFails() {
+            when(pingConfig.enabled()).thenReturn(true);
+            when(clientSocket.writePing(any())).thenReturn(io.vertx.core.Future.failedFuture("write failed"));
+            final var session = new WebSocketProxySession("s1", clientSocket, backendSocket, vertx, config);
+            final var periodicCaptor = ArgumentCaptor.forClass(Handler.class);
+            session.start();
+            verify(vertx).setPeriodic(eq(Duration.ofSeconds(30).toMillis()), periodicCaptor.capture());
+
+            periodicCaptor.getValue().handle(30L);
+
+            verify(clientSocket).close((short) 1011, "Heartbeat failed");
+            verify(vertx, never()).setTimer(eq(Duration.ofSeconds(10).toMillis()), any());
         }
     }
 
@@ -422,6 +543,18 @@ class WebSocketProxySessionTest {
             // Timer IDs are -1, so cancelTimer should not be called
             verify(vertx, never()).cancelTimer(anyLong());
             assertTrue(session.isClosing());
+        }
+
+        @Test
+        @DisplayName("shouldNotStartAfterClose")
+        void shouldNotStartAfterClose() {
+            final var session = new WebSocketProxySession("s1", clientSocket, backendSocket, vertx, config);
+            session.closeWithReason((short) 1000, "done");
+
+            session.start();
+
+            verify(clientSocket, never()).frameHandler(any());
+            verify(vertx, never()).setTimer(anyLong(), any());
         }
 
         @Test
@@ -560,10 +693,10 @@ class WebSocketProxySessionTest {
 
             // Capture backend handler
             final var handlerCaptor = ArgumentCaptor.forClass(Handler.class);
-            verify(backendSocket).handler(handlerCaptor.capture());
+            verify(backendSocket).frameHandler(handlerCaptor.capture());
 
             // Simulate backend message
-            handlerCaptor.getValue().handle(Buffer.buffer("data"));
+            handlerCaptor.getValue().handle(WebSocketFrame.textFrame("data", true));
 
             // Should cancel old idle timer and start a new one
             verify(vertx).cancelTimer(100L);

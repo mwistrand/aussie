@@ -12,6 +12,8 @@ All WebSocket settings use the prefix `aussie.websocket.*` and can be set via en
 | `aussie.websocket.max-lifetime` | `AUSSIE_WEBSOCKET_MAX_LIFETIME` | `PT24H` (24 hours) | Hard limit on connection lifetime regardless of activity |
 | `aussie.websocket.max-connections` | `AUSSIE_WEBSOCKET_MAX_CONNECTIONS` | `10000` | Maximum concurrent WebSocket connections **per instance** |
 | `aussie.websocket.max-queue-bytes` | `AUSSIE_WEBSOCKET_MAX_QUEUE_BYTES` | `1048576` | Apply backpressure after this many queued bytes per direction |
+| `aussie.websocket.max-message-bytes` | `AUSSIE_WEBSOCKET_MAX_MESSAGE_BYTES` | `1048576` | Maximum logical message size, including fragments |
+| `aussie.websocket.allowed-subprotocols` | `AUSSIE_WEBSOCKET_ALLOWED_SUBPROTOCOLS` | empty | Exact subprotocol names allowed on both handshakes; client extensions are not forwarded upstream |
 | `aussie.websocket.ping.enabled` | `AUSSIE_WEBSOCKET_PING_ENABLED` | `true` | Enable ping/pong heartbeats to detect stale clients |
 | `aussie.websocket.ping.interval` | `AUSSIE_WEBSOCKET_PING_INTERVAL` | `PT30S` (30 seconds) | How often to send ping frames |
 | `aussie.websocket.ping.timeout` | `AUSSIE_WEBSOCKET_PING_TIMEOUT` | `PT10S` (10 seconds) | Close connection if pong not received within this time |

@@ -1,6 +1,8 @@
 package aussie.core.config;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
 
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
@@ -53,6 +55,13 @@ public interface WebSocketConfig {
     /** Maximum queued bytes per WebSocket direction before backpressure. */
     @WithDefault("1048576")
     int maxQueueBytes();
+
+    /** Maximum bytes in one logical WebSocket message, including fragments. */
+    @WithDefault("1048576")
+    int maxMessageBytes();
+
+    /** Subprotocols accepted during the client and backend handshakes. */
+    Optional<List<String>> allowedSubprotocols();
 
     /**
      * Ping/pong heartbeat configuration.

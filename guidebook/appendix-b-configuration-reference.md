@@ -617,6 +617,8 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | `aussie.websocket.max-lifetime` | `Duration` | `PT24H` | `AUSSIE_WEBSOCKET_MAX_LIFETIME` | Hard limit on connection lifetime regardless of activity. |
 | `aussie.websocket.max-connections` | `int` | `10000` | `AUSSIE_WEBSOCKET_MAX_CONNECTIONS` | Maximum concurrent WebSocket connections **per instance** (not cluster-wide). |
 | `aussie.websocket.max-queue-bytes` | `int` | `1048576` | `AUSSIE_WEBSOCKET_MAX_QUEUE_BYTES` | Apply backpressure after this many queued bytes per direction. |
+| `aussie.websocket.max-message-bytes` | `int` | `1048576` | `AUSSIE_WEBSOCKET_MAX_MESSAGE_BYTES` | Maximum logical WebSocket message size, including fragments. |
+| `aussie.websocket.allowed-subprotocols` | `List<String>` | empty | `AUSSIE_WEBSOCKET_ALLOWED_SUBPROTOCOLS` | Exact subprotocols allowed on both handshakes; client extensions are not forwarded upstream. |
 | `aussie.websocket.ping.enabled` | `boolean` | `true` | `AUSSIE_WEBSOCKET_PING_ENABLED` | Enable ping/pong heartbeats for stale connection detection. |
 | `aussie.websocket.ping.interval` | `Duration` | `PT30S` | `AUSSIE_WEBSOCKET_PING_INTERVAL` | Ping frame interval. |
 | `aussie.websocket.ping.timeout` | `Duration` | `PT10S` | `AUSSIE_WEBSOCKET_PING_TIMEOUT` | Close connection if pong not received within this time. |

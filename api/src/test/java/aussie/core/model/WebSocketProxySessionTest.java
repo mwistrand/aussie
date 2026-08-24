@@ -23,6 +23,7 @@ import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.ServerWebSocket;
 import io.vertx.core.http.WebSocket;
+import io.vertx.core.http.WebSocketFrame;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -116,7 +117,7 @@ class WebSocketProxySessionTest {
 
             session.start();
 
-            verify(clientSocket).handler(any());
+            verify(clientSocket).frameHandler(any());
         }
 
         @Test
@@ -126,7 +127,7 @@ class WebSocketProxySessionTest {
 
             session.start();
 
-            verify(backendSocket).handler(any());
+            verify(backendSocket).frameHandler(any());
         }
 
         @Test
@@ -211,36 +212,36 @@ class WebSocketProxySessionTest {
         @DisplayName("Should forward client messages to backend")
         void shouldForwardClientMessagesToBackend() {
             @SuppressWarnings("unchecked")
-            ArgumentCaptor<Handler<Buffer>> handlerCaptor = ArgumentCaptor.forClass(Handler.class);
+            ArgumentCaptor<Handler<WebSocketFrame>> handlerCaptor = ArgumentCaptor.forClass(Handler.class);
             var session = new WebSocketProxySession("test-session", clientSocket, backendSocket, vertx, config);
 
             session.start();
 
-            verify(clientSocket).handler(handlerCaptor.capture());
+            verify(clientSocket).frameHandler(handlerCaptor.capture());
 
             // Simulate receiving a message from client
-            var buffer = Buffer.buffer("test message");
-            handlerCaptor.getValue().handle(buffer);
+            var frame = WebSocketFrame.textFrame("test message", true);
+            handlerCaptor.getValue().handle(frame);
 
-            verify(backendSocket).write(buffer);
+            verify(backendSocket).writeFrame(frame);
         }
 
         @Test
         @DisplayName("Should forward backend messages to client")
         void shouldForwardBackendMessagesToClient() {
             @SuppressWarnings("unchecked")
-            ArgumentCaptor<Handler<Buffer>> handlerCaptor = ArgumentCaptor.forClass(Handler.class);
+            ArgumentCaptor<Handler<WebSocketFrame>> handlerCaptor = ArgumentCaptor.forClass(Handler.class);
             var session = new WebSocketProxySession("test-session", clientSocket, backendSocket, vertx, config);
 
             session.start();
 
-            verify(backendSocket).handler(handlerCaptor.capture());
+            verify(backendSocket).frameHandler(handlerCaptor.capture());
 
             // Simulate receiving a message from backend
-            var buffer = Buffer.buffer("backend response");
-            handlerCaptor.getValue().handle(buffer);
+            var frame = WebSocketFrame.binaryFrame(Buffer.buffer("backend response"), true);
+            handlerCaptor.getValue().handle(frame);
 
-            verify(clientSocket).write(buffer);
+            verify(clientSocket).writeFrame(frame);
         }
     }
 

@@ -264,8 +264,9 @@ public class ProductionConfigurationValidator {
 
     private void validateWebSocket() {
         if (integer("aussie.websocket.max-connections", 10_000) < 1
-                || integer("aussie.websocket.max-queue-bytes", 1_048_576) < 1) {
-            throw invalid("WebSocket connection and queue limits must be positive");
+                || integer("aussie.websocket.max-queue-bytes", 1_048_576) < 1
+                || integer("aussie.websocket.max-message-bytes", 1_048_576) < 1) {
+            throw invalid("WebSocket connection, queue, and message limits must be positive");
         }
         final var idleTimeout = duration("aussie.websocket.idle-timeout", Duration.ofMinutes(5));
         final var maxLifetime = duration("aussie.websocket.max-lifetime", Duration.ofHours(24));

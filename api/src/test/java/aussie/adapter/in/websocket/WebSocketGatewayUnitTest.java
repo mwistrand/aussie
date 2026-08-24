@@ -1,6 +1,7 @@
 package aussie.adapter.in.websocket;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -15,6 +16,7 @@ import static org.mockito.Mockito.when;
 
 import java.net.URI;
 import java.time.Instant;
+import java.util.List;
 
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.MultiMap;
@@ -357,6 +359,52 @@ class WebSocketGatewayUnitTest {
         final var result = method.invoke(gateway, URI.create("wss://example.com/a%20b?token=a%2Fb"));
 
         assertEquals("/a%20b?token=a%2Fb", result);
+    }
+
+    @Test
+    @DisplayName("selectSubprotocol should choose the first configured requested protocol")
+    void selectSubprotocolShouldChooseFirstConfiguredRequestedProtocol() throws Exception {
+        final var method = WebSocketGateway.class.getDeclaredMethod("selectSubprotocol", String.class, List.class);
+        method.setAccessible(true);
+
+        final var result = (java.util.Optional<?>) method.invoke(gateway, "chat, aussie.v1", List.of("aussie.v1"));
+
+        assertTrue(result.isPresent());
+        assertEquals("aussie.v1", result.get());
+    }
+
+    @Test
+    @DisplayName("selectSubprotocol should reject an entirely malformed protocol list")
+    void selectSubprotocolShouldRejectMalformedRequestedProtocols() throws Exception {
+        final var method = WebSocketGateway.class.getDeclaredMethod("selectSubprotocol", String.class, List.class);
+        method.setAccessible(true);
+
+        final var result =
+                (java.util.Optional<?>) method.invoke(gateway, "aussie.v1, bad protocol", List.of("aussie.v1"));
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    @DisplayName("shutdown should close active sessions and reject new connections")
+    void shutdownShouldDrainConnections() throws Exception {
+        final var activeSessionsField = WebSocketGateway.class.getDeclaredField("activeSessions");
+        activeSessionsField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        final var activeSessions = (java.util.Map<String, WebSocketProxySession>) activeSessionsField.get(gateway);
+        final var session = mock(WebSocketProxySession.class);
+        activeSessions.put("ws-session-1", session);
+
+        gateway.onShutdown(null);
+        mockRequestPath("/gateway/ws");
+        gateway.handleGatewayUpgrade(ctx);
+
+        verify(session).closeWithReason((short) 1001, "Server shutting down");
+        verify(errorWriter)
+                .write(
+                        eq(ctx),
+                        argThat(problem ->
+                                problem.status() == 503 && "Gateway is shutting down".equals(problem.detail())));
     }
 
     @Nested

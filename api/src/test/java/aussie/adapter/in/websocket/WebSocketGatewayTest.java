@@ -271,6 +271,31 @@ class WebSocketGatewayTest {
         }
 
         @Test
+        @DisplayName("Should allow browser extension offers without forwarding them upstream")
+        void shouldAllowBrowserExtensionOffers() {
+            mockRequestPath("/gateway/ws");
+            request.headers().add("Sec-WebSocket-Extensions", "permessage-deflate; client_max_window_bits");
+            when(config.maxConnections()).thenReturn(1);
+            when(addressResolver.resolve(any(URI.class)))
+                    .thenReturn(Uni.createFrom().failure(new RuntimeException("backend unavailable")));
+            var service = ServiceRegistration.builder("svc")
+                    .baseUrl("http://backend.example")
+                    .build();
+            var route =
+                    new RouteMatch(service, EndpointConfig.publicWebSocket("/ws", false), "/ws", java.util.Map.of());
+            when(gatewayUseCase.upgradeGateway(any()))
+                    .thenReturn(Uni.createFrom()
+                            .item(new WebSocketUpgradeResult.Authorized(
+                                    route, java.util.Optional.empty(), URI.create("ws://backend.example/ws"))));
+
+            gateway.handleGatewayUpgrade(ctx);
+
+            verify(addressResolver).resolve(any(URI.class));
+            verify(errorWriter)
+                    .write(eq(ctx), argThat(problemWithStatusAndDetail(502, "Backend connection failed")), eq("svc"));
+        }
+
+        @Test
         @DisplayName("Should return 401 for Unauthorized result")
         void shouldReturn401ForUnauthorized() {
             mockRequestPath("/gateway/ws");

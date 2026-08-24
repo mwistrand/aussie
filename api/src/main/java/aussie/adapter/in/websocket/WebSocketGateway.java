@@ -2,19 +2,23 @@ package aussie.adapter.in.websocket;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.event.ObservesAsync;
 import jakarta.inject.Inject;
 
+import io.quarkus.runtime.ShutdownEvent;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.MultiMap;
 import io.vertx.core.Vertx;
@@ -61,6 +65,7 @@ public class WebSocketGateway {
     // Track active sessions for metrics/debugging (per-instance count)
     private final Map<String, WebSocketProxySession> activeSessions = new ConcurrentHashMap<>();
     private final AtomicInteger connectionReservations = new AtomicInteger();
+    private final AtomicBoolean draining = new AtomicBoolean();
 
     private final WebSocketGatewayUseCase gatewayUseCase;
     private final WebSocketConfig config;
@@ -122,9 +127,14 @@ public class WebSocketGateway {
 
     private void handleUpgrade(RoutingContext ctx, Uni<WebSocketUpgradeResult> resultUni) {
         if (!reserveConnection()) {
-            LOG.warnv("WebSocket connection limit reached ({0})", config.maxConnections());
-            errorWriter.write(
-                    ctx, ProblemDetail.serviceUnavailable("Service temporarily unavailable: connection limit reached"));
+            if (draining.get()) {
+                errorWriter.write(ctx, ProblemDetail.serviceUnavailable("Gateway is shutting down"));
+            } else {
+                LOG.warnv("WebSocket connection limit reached ({0})", config.maxConnections());
+                errorWriter.write(
+                        ctx,
+                        ProblemDetail.serviceUnavailable("Service temporarily unavailable: connection limit reached"));
+            }
             return;
         }
 
@@ -135,11 +145,20 @@ public class WebSocketGateway {
                         result -> {
                             switch (result) {
                                 case WebSocketUpgradeResult.Authorized auth -> {
-                                    if (!isOriginAllowed(ctx, auth)) {
+                                    final var protocol = selectSubprotocol(ctx);
+                                    if (protocol.isEmpty() && hasRequestedSubprotocol(ctx)) {
+                                        releaseConnection();
+                                        errorWriter.write(
+                                                ctx, ProblemDetail.badRequest("WebSocket subprotocol not allowed"));
+                                    } else if (draining.get()) {
+                                        releaseConnection();
+                                        errorWriter.write(
+                                                ctx, ProblemDetail.serviceUnavailable("Gateway is shutting down"));
+                                    } else if (!isOriginAllowed(ctx, auth)) {
                                         releaseConnection();
                                         errorWriter.write(ctx, ProblemDetail.forbidden("WebSocket origin not allowed"));
                                     } else {
-                                        establishProxy(ctx, auth);
+                                        establishProxy(ctx, auth, protocol.orElse(null));
                                     }
                                 }
                                 case WebSocketUpgradeResult.Unauthorized u -> {
@@ -198,7 +217,7 @@ public class WebSocketGateway {
     }
 
     @SuppressWarnings("deprecation")
-    private void establishProxy(RoutingContext ctx, WebSocketUpgradeResult.Authorized auth) {
+    private void establishProxy(RoutingContext ctx, WebSocketUpgradeResult.Authorized auth, String subprotocol) {
         final var sessionId = UUID.randomUUID().toString();
         final var connectionReleased = new AtomicBoolean();
         final Runnable releaseConnection = () -> {
@@ -237,6 +256,9 @@ public class WebSocketGateway {
                 .setURI(backendPath(backendUri))
                 .setHeaders(headers)
                 .setSsl("wss".equals(backendUri.getScheme()));
+        if (subprotocol != null) {
+            options.setSubProtocols(List.of(subprotocol));
+        }
 
         addressResolver
                 .resolve(backendUri)
@@ -247,7 +269,28 @@ public class WebSocketGateway {
                             httpClient
                                     .webSocket(options)
                                     .onSuccess(backendWs -> {
+                                        if (draining.get()) {
+                                            backendWs.close((short) 1001, "Server shutting down");
+                                            releaseConnection.run();
+                                            errorWriter.write(
+                                                    ctx,
+                                                    ProblemDetail.serviceUnavailable("Gateway is shutting down"),
+                                                    serviceId);
+                                            return;
+                                        }
+                                        if (subprotocol != null && !subprotocol.equals(backendWs.subProtocol())) {
+                                            backendWs.close((short) 1002, "Backend subprotocol mismatch");
+                                            releaseConnection.run();
+                                            errorWriter.write(
+                                                    ctx,
+                                                    ProblemDetail.badGateway("Backend subprotocol negotiation failed"),
+                                                    serviceId);
+                                            return;
+                                        }
                                         // Backend connected - now upgrade client connection (non-blocking)
+                                        if (subprotocol != null) {
+                                            ctx.response().putHeader("Sec-WebSocket-Protocol", subprotocol);
+                                        }
                                         ctx.request()
                                                 .toWebSocket()
                                                 .onSuccess(clientWs -> {
@@ -282,14 +325,17 @@ public class WebSocketGateway {
                                                             auth.token().map(token -> token.expiresAt()),
                                                             messageHandler,
                                                             cleanup);
-                                                    activeSessions.put(sessionId, managedSession);
-
-                                                    // Track connection metrics
-                                                    metrics.incrementActiveWebSockets();
-                                                    metrics.recordWebSocketConnect(serviceId);
-
-                                                    // Start the session (enables message forwarding and timers)
-                                                    managedSession.start();
+                                                    synchronized (activeSessions) {
+                                                        if (draining.get()) {
+                                                            managedSession.closeWithReason(
+                                                                    (short) 1001, "Server shutting down");
+                                                            return;
+                                                        }
+                                                        activeSessions.put(sessionId, managedSession);
+                                                        metrics.incrementActiveWebSockets();
+                                                        metrics.recordWebSocketConnect(serviceId);
+                                                        managedSession.start();
+                                                    }
 
                                                     LOG.infov(
                                                             "WebSocket session {0} established to {1}",
@@ -342,7 +388,13 @@ public class WebSocketGateway {
     }
 
     private boolean reserveConnection() {
+        if (draining.get()) {
+            return false;
+        }
         while (true) {
+            if (draining.get()) {
+                return false;
+            }
             final var current = connectionReservations.get();
             if (current >= config.maxConnections()) {
                 return false;
@@ -373,6 +425,42 @@ public class WebSocketGateway {
         return allowedOrigins.stream().anyMatch(allowed -> !"*".equals(allowed) && origin.equals(allowed));
     }
 
+    private boolean hasRequestedSubprotocol(RoutingContext ctx) {
+        final var header = requestHeader(ctx, "Sec-WebSocket-Protocol");
+        return header != null && !header.isBlank();
+    }
+
+    private Optional<String> selectSubprotocol(RoutingContext ctx) {
+        final var allowed = config.allowedSubprotocols().orElse(List.of());
+        return selectSubprotocol(requestHeader(ctx, "Sec-WebSocket-Protocol"), allowed);
+    }
+
+    private Optional<String> selectSubprotocol(String header, List<String> allowed) {
+        if (header == null || header.isBlank()) {
+            return Optional.empty();
+        }
+        final var requested =
+                Arrays.stream(header.split(",", -1)).map(String::trim).toList();
+        return requested.stream().allMatch(WebSocketGateway::isProtocolToken)
+                ? requested.stream().filter(allowed::contains).findFirst()
+                : Optional.empty();
+    }
+
+    private String requestHeader(RoutingContext ctx, String name) {
+        return String.join(",", ctx.request().headers().getAll(name));
+    }
+
+    private static boolean isProtocolToken(String value) {
+        return !value.isEmpty() && value.chars().allMatch(WebSocketGateway::isProtocolTokenChar);
+    }
+
+    private static boolean isProtocolTokenChar(int c) {
+        return c >= 'a' && c <= 'z'
+                || c >= 'A' && c <= 'Z'
+                || c >= '0' && c <= '9'
+                || "!#$%&'*+-.^_`|~".indexOf(c) >= 0;
+    }
+
     private String backendPath(URI uri) {
         var path = uri.getRawPath();
         if (path == null || path.isBlank()) {
@@ -397,6 +485,17 @@ public class WebSocketGateway {
             LOG.infov("Closing {0} WebSocket session(s) due to logout", sessionsToClose.size());
             sessionsToClose.forEach(session -> session.closeWithReason((short) 1000, "Session logged out"));
         }
+    }
+
+    void onShutdown(@Observes ShutdownEvent event) {
+        if (!draining.compareAndSet(false, true)) {
+            return;
+        }
+        final List<WebSocketProxySession> sessions;
+        synchronized (activeSessions) {
+            sessions = List.copyOf(activeSessions.values());
+        }
+        sessions.forEach(session -> session.closeWithReason((short) 1001, "Server shutting down"));
     }
 
     private int mapErrorToStatusCode(Throwable error) {
