@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.Optional;
@@ -422,14 +423,17 @@ class AuthKeyStorageProviderLoaderTest {
             var healthIndicator = mock(StorageHealthIndicator.class);
             when(storageProvider.createHealthIndicator(config)).thenReturn(Optional.of(healthIndicator));
 
+            var cacheProviderMock = mock(AuthKeyCacheProvider.class);
+
             var loader = createLoader(Optional.empty(), Optional.empty(), false);
             setStorageProvider(loader, storageProvider);
-            setCacheProviderResolved(loader);
+            setCacheProvider(loader, cacheProviderMock);
 
             var indicators = loader.authKeyHealthIndicators();
 
             assertEquals(1, indicators.size());
             assertEquals(healthIndicator, indicators.get(0));
+            verifyNoInteractions(cacheProviderMock);
         }
 
         @Test
@@ -443,7 +447,7 @@ class AuthKeyStorageProviderLoaderTest {
             var cacheHealth = mock(StorageHealthIndicator.class);
             when(cacheProviderMock.createHealthIndicator(config)).thenReturn(Optional.of(cacheHealth));
 
-            var loader = createLoader(Optional.empty(), Optional.empty(), false);
+            var loader = createLoader(Optional.empty(), Optional.empty(), true);
             setStorageProvider(loader, storageProvider);
             setCacheProvider(loader, cacheProviderMock);
 
@@ -479,7 +483,7 @@ class AuthKeyStorageProviderLoaderTest {
             var cacheProviderMock = mock(AuthKeyCacheProvider.class);
             when(cacheProviderMock.createHealthIndicator(config)).thenReturn(Optional.empty());
 
-            var loader = createLoader(Optional.empty(), Optional.empty(), false);
+            var loader = createLoader(Optional.empty(), Optional.empty(), true);
             setStorageProvider(loader, storageProvider);
             setCacheProvider(loader, cacheProviderMock);
 
@@ -499,7 +503,7 @@ class AuthKeyStorageProviderLoaderTest {
             var cacheHealth = mock(StorageHealthIndicator.class);
             when(cacheProviderMock.createHealthIndicator(config)).thenReturn(Optional.of(cacheHealth));
 
-            var loader = createLoader(Optional.empty(), Optional.empty(), false);
+            var loader = createLoader(Optional.empty(), Optional.empty(), true);
             setStorageProvider(loader, storageProvider);
             setCacheProvider(loader, cacheProviderMock);
 

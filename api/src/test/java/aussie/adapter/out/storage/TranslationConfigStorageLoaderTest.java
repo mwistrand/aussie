@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -363,7 +364,7 @@ class TranslationConfigStorageLoaderTest {
             var cacheProviderMock = mock(TranslationConfigCacheProvider.class);
             when(cacheProviderMock.createHealthIndicator(config)).thenReturn(Optional.empty());
 
-            var loader = createLoader(Optional.empty(), Optional.empty(), false);
+            var loader = createLoader(Optional.empty(), Optional.empty(), true);
             setStorageProvider(loader, storageProvider);
             setCacheProvider(loader, cacheProviderMock);
 
@@ -492,14 +493,17 @@ class TranslationConfigStorageLoaderTest {
             var healthIndicator = mock(StorageHealthIndicator.class);
             when(storageProvider.createHealthIndicator(config)).thenReturn(Optional.of(healthIndicator));
 
+            var cacheProviderMock = mock(TranslationConfigCacheProvider.class);
+
             var loader = createLoader(Optional.empty(), Optional.empty(), false);
             setStorageProvider(loader, storageProvider);
-            setCacheProviderResolved(loader);
+            setCacheProvider(loader, cacheProviderMock);
 
             var indicators = loader.translationConfigHealthIndicators();
 
             assertEquals(1, indicators.size());
             assertEquals(healthIndicator, indicators.get(0));
+            verifyNoInteractions(cacheProviderMock);
         }
 
         @Test
@@ -513,7 +517,7 @@ class TranslationConfigStorageLoaderTest {
             var cacheHealth = mock(StorageHealthIndicator.class);
             when(cacheProviderMock.createHealthIndicator(config)).thenReturn(Optional.of(cacheHealth));
 
-            var loader = createLoader(Optional.empty(), Optional.empty(), false);
+            var loader = createLoader(Optional.empty(), Optional.empty(), true);
             setStorageProvider(loader, storageProvider);
             setCacheProvider(loader, cacheProviderMock);
 
@@ -549,7 +553,7 @@ class TranslationConfigStorageLoaderTest {
             var cacheProviderMock = mock(TranslationConfigCacheProvider.class);
             when(cacheProviderMock.createHealthIndicator(config)).thenReturn(Optional.empty());
 
-            var loader = createLoader(Optional.empty(), Optional.empty(), false);
+            var loader = createLoader(Optional.empty(), Optional.empty(), true);
             setStorageProvider(loader, storageProvider);
             setCacheProvider(loader, cacheProviderMock);
 
@@ -569,7 +573,7 @@ class TranslationConfigStorageLoaderTest {
             var cacheHealth = mock(StorageHealthIndicator.class);
             when(cacheProviderMock.createHealthIndicator(config)).thenReturn(Optional.of(cacheHealth));
 
-            var loader = createLoader(Optional.empty(), Optional.empty(), false);
+            var loader = createLoader(Optional.empty(), Optional.empty(), true);
             setStorageProvider(loader, storageProvider);
             setCacheProvider(loader, cacheProviderMock);
 

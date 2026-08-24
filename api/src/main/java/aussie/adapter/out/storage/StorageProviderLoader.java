@@ -103,7 +103,9 @@ public class StorageProviderLoader {
 
         getRepositoryProvider().createHealthIndicator(config).ifPresent(indicators::add);
 
-        getCacheProvider().flatMap(p -> p.createHealthIndicator(config)).ifPresent(indicators::add);
+        if (cacheEnabled) {
+            getCacheProvider().flatMap(p -> p.createHealthIndicator(config)).ifPresent(indicators::add);
+        }
 
         return indicators;
     }

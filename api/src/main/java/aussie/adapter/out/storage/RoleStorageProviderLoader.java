@@ -11,6 +11,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
 
+import io.quarkus.runtime.Startup;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
@@ -52,6 +53,7 @@ public class RoleStorageProviderLoader {
 
     @Produces
     @ApplicationScoped
+    @Startup(50)
     public RoleRepository roleRepository() {
         final var provider = getStorageProvider();
         LOG.infof("Creating role repository from provider: %s (%s)", provider.name(), provider.description());

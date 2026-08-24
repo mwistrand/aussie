@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -387,14 +388,17 @@ class StorageProviderLoaderTest {
             var healthIndicator = mock(StorageHealthIndicator.class);
             when(repoProvider.createHealthIndicator(config)).thenReturn(Optional.of(healthIndicator));
 
+            var cacheProviderMock = mock(ConfigurationCacheProvider.class);
+
             var loader = createLoader(Optional.empty(), Optional.empty(), false);
             setRepositoryProvider(loader, repoProvider);
-            setCacheProviderResolved(loader);
+            setCacheProvider(loader, cacheProviderMock);
 
             var indicators = loader.healthIndicators();
 
             assertEquals(1, indicators.size());
             assertEquals(healthIndicator, indicators.get(0));
+            verifyNoInteractions(cacheProviderMock);
         }
 
         @Test
@@ -408,7 +412,7 @@ class StorageProviderLoaderTest {
             var cacheHealth = mock(StorageHealthIndicator.class);
             when(cacheProviderMock.createHealthIndicator(config)).thenReturn(Optional.of(cacheHealth));
 
-            var loader = createLoader(Optional.empty(), Optional.empty(), false);
+            var loader = createLoader(Optional.empty(), Optional.empty(), true);
             setRepositoryProvider(loader, repoProvider);
             setCacheProvider(loader, cacheProviderMock);
 
@@ -444,7 +448,7 @@ class StorageProviderLoaderTest {
             var cacheProviderMock = mock(ConfigurationCacheProvider.class);
             when(cacheProviderMock.createHealthIndicator(config)).thenReturn(Optional.empty());
 
-            var loader = createLoader(Optional.empty(), Optional.empty(), false);
+            var loader = createLoader(Optional.empty(), Optional.empty(), true);
             setRepositoryProvider(loader, repoProvider);
             setCacheProvider(loader, cacheProviderMock);
 
@@ -464,7 +468,7 @@ class StorageProviderLoaderTest {
             var cacheHealth = mock(StorageHealthIndicator.class);
             when(cacheProviderMock.createHealthIndicator(config)).thenReturn(Optional.of(cacheHealth));
 
-            var loader = createLoader(Optional.empty(), Optional.empty(), false);
+            var loader = createLoader(Optional.empty(), Optional.empty(), true);
             setRepositoryProvider(loader, repoProvider);
             setCacheProvider(loader, cacheProviderMock);
 

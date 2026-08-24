@@ -12,6 +12,7 @@ import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
 
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
+import io.quarkus.runtime.Startup;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
@@ -70,6 +71,7 @@ public class AuthKeyStorageProviderLoader {
 
     @Produces
     @ApplicationScoped
+    @Startup(50)
     public ApiKeyRepository apiKeyRepository() {
         AuthKeyStorageProvider provider = getStorageProvider();
         LOG.infof("Creating API key repository from provider: %s (%s)", provider.name(), provider.description());
@@ -110,7 +112,9 @@ public class AuthKeyStorageProviderLoader {
 
         getStorageProvider().createHealthIndicator(config).ifPresent(indicators::add);
 
-        getCacheProvider().flatMap(p -> p.createHealthIndicator(config)).ifPresent(indicators::add);
+        if (cacheEnabled) {
+            getCacheProvider().flatMap(p -> p.createHealthIndicator(config)).ifPresent(indicators::add);
+        }
 
         return indicators;
     }

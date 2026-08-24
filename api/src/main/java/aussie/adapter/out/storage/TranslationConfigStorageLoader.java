@@ -14,6 +14,7 @@ import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
 
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
+import io.quarkus.runtime.Startup;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
@@ -81,6 +82,7 @@ public class TranslationConfigStorageLoader {
 
     @Produces
     @ApplicationScoped
+    @Startup(50)
     public TranslationConfigRepository repository() {
         final var provider = getStorageProvider();
         LOG.infof(
@@ -120,7 +122,9 @@ public class TranslationConfigStorageLoader {
         final List<StorageHealthIndicator> indicators = new ArrayList<>();
 
         getStorageProvider().createHealthIndicator(config).ifPresent(indicators::add);
-        getCacheProvider().flatMap(p -> p.createHealthIndicator(config)).ifPresent(indicators::add);
+        if (cacheEnabled) {
+            getCacheProvider().flatMap(p -> p.createHealthIndicator(config)).ifPresent(indicators::add);
+        }
 
         return indicators;
     }

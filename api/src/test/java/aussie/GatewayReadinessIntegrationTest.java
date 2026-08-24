@@ -19,6 +19,8 @@ class GatewayReadinessIntegrationTest {
                 .body("status", equalTo("UP"))
                 .body("checks.name", hasItem("gateway-startup"))
                 .body("checks.find { it.name == 'gateway-startup' }.status", equalTo("UP"))
-                .body("checks.find { it.name == 'gateway-startup' }.data.phase", equalTo("READY"));
+                .body("checks.find { it.name == 'gateway-startup' }.data.phase", equalTo("READY"))
+                .body("checks.name", hasItem("required-dependencies"))
+                .body("checks.find { it.name == 'required-dependencies' }.status", equalTo("UP"));
     }
 }

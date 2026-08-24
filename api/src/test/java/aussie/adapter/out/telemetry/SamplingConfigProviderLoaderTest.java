@@ -68,7 +68,7 @@ class SamplingConfigProviderLoaderTest {
             try (MockedStatic<ServiceLoader> sl = mockStatic(ServiceLoader.class)) {
                 sl.when(() -> ServiceLoader.load(SamplingConfigProvider.class)).thenReturn(serviceLoader);
 
-                var loader = new SamplingConfigProviderLoader(Optional.of("cassandra"), config);
+                var loader = new SamplingConfigProviderLoader(Optional.of("cassandra"), true, config);
 
                 var result = loader.repository();
 
@@ -99,7 +99,7 @@ class SamplingConfigProviderLoaderTest {
             try (MockedStatic<ServiceLoader> sl = mockStatic(ServiceLoader.class)) {
                 sl.when(() -> ServiceLoader.load(SamplingConfigProvider.class)).thenReturn(serviceLoader);
 
-                var loader = new SamplingConfigProviderLoader(Optional.empty(), config);
+                var loader = new SamplingConfigProviderLoader(Optional.empty(), true, config);
 
                 var result = loader.repository();
 
@@ -116,7 +116,7 @@ class SamplingConfigProviderLoaderTest {
             try (MockedStatic<ServiceLoader> sl = mockStatic(ServiceLoader.class)) {
                 sl.when(() -> ServiceLoader.load(SamplingConfigProvider.class)).thenReturn(serviceLoader);
 
-                var loader = new SamplingConfigProviderLoader(Optional.empty(), config);
+                var loader = new SamplingConfigProviderLoader(Optional.empty(), true, config);
 
                 var exception = assertThrows(StorageProviderException.class, loader::repository);
                 assertTrue(exception.getMessage().contains("No sampling config providers found"));
@@ -134,7 +134,7 @@ class SamplingConfigProviderLoaderTest {
             try (MockedStatic<ServiceLoader> sl = mockStatic(ServiceLoader.class)) {
                 sl.when(() -> ServiceLoader.load(SamplingConfigProvider.class)).thenReturn(serviceLoader);
 
-                var loader = new SamplingConfigProviderLoader(Optional.of("nonexistent"), config);
+                var loader = new SamplingConfigProviderLoader(Optional.of("nonexistent"), true, config);
 
                 var exception = assertThrows(StorageProviderException.class, loader::repository);
                 assertTrue(
@@ -154,7 +154,7 @@ class SamplingConfigProviderLoaderTest {
             try (MockedStatic<ServiceLoader> sl = mockStatic(ServiceLoader.class)) {
                 sl.when(() -> ServiceLoader.load(SamplingConfigProvider.class)).thenReturn(serviceLoader);
 
-                var loader = new SamplingConfigProviderLoader(Optional.empty(), config);
+                var loader = new SamplingConfigProviderLoader(Optional.empty(), true, config);
 
                 var exception = assertThrows(StorageProviderException.class, loader::repository);
                 assertTrue(exception.getMessage().contains("No available sampling config providers"));
@@ -181,7 +181,7 @@ class SamplingConfigProviderLoaderTest {
             try (MockedStatic<ServiceLoader> sl = mockStatic(ServiceLoader.class)) {
                 sl.when(() -> ServiceLoader.load(SamplingConfigProvider.class)).thenReturn(serviceLoader);
 
-                var loader = new SamplingConfigProviderLoader(Optional.empty(), config);
+                var loader = new SamplingConfigProviderLoader(Optional.empty(), true, config);
 
                 var result = loader.repository();
 
@@ -207,7 +207,7 @@ class SamplingConfigProviderLoaderTest {
             try (MockedStatic<ServiceLoader> sl = mockStatic(ServiceLoader.class)) {
                 sl.when(() -> ServiceLoader.load(SamplingConfigProvider.class)).thenReturn(serviceLoader);
 
-                var loader = new SamplingConfigProviderLoader(Optional.empty(), config);
+                var loader = new SamplingConfigProviderLoader(Optional.empty(), true, config);
 
                 var result1 = loader.repository();
                 var indicators = loader.samplingHealthIndicators();
@@ -236,7 +236,7 @@ class SamplingConfigProviderLoaderTest {
             try (MockedStatic<ServiceLoader> sl = mockStatic(ServiceLoader.class)) {
                 sl.when(() -> ServiceLoader.load(SamplingConfigProvider.class)).thenReturn(serviceLoader);
 
-                var loader = new SamplingConfigProviderLoader(Optional.empty(), config);
+                var loader = new SamplingConfigProviderLoader(Optional.empty(), true, config);
 
                 var indicators = loader.samplingHealthIndicators();
 
@@ -258,12 +258,20 @@ class SamplingConfigProviderLoaderTest {
             try (MockedStatic<ServiceLoader> sl = mockStatic(ServiceLoader.class)) {
                 sl.when(() -> ServiceLoader.load(SamplingConfigProvider.class)).thenReturn(serviceLoader);
 
-                var loader = new SamplingConfigProviderLoader(Optional.empty(), config);
+                var loader = new SamplingConfigProviderLoader(Optional.empty(), true, config);
 
                 var indicators = loader.samplingHealthIndicators();
 
                 assertTrue(indicators.isEmpty());
             }
+        }
+
+        @Test
+        @DisplayName("should skip provider when sampling is disabled")
+        void shouldSkipProviderWhenSamplingIsDisabled() {
+            var loader = new SamplingConfigProviderLoader(Optional.empty(), false, config);
+
+            assertTrue(loader.samplingHealthIndicators().isEmpty());
         }
     }
 }

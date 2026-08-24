@@ -37,6 +37,7 @@ public class SamplingConfigProviderLoader {
     private static final Logger LOG = Logger.getLogger(SamplingConfigProviderLoader.class);
 
     private final Optional<String> configuredProvider;
+    private final boolean samplingEnabled;
     private final StorageAdapterConfig config;
 
     private SamplingConfigProvider provider;
@@ -44,8 +45,10 @@ public class SamplingConfigProviderLoader {
     @Inject
     public SamplingConfigProviderLoader(
             @ConfigProperty(name = "aussie.telemetry.sampling.storage.provider") Optional<String> configuredProvider,
+            @ConfigProperty(name = "aussie.telemetry.sampling.enabled", defaultValue = "false") boolean samplingEnabled,
             StorageAdapterConfig config) {
         this.configuredProvider = configuredProvider;
+        this.samplingEnabled = samplingEnabled;
         this.config = config;
     }
 
@@ -73,7 +76,9 @@ public class SamplingConfigProviderLoader {
     @ApplicationScoped
     public List<StorageHealthIndicator> samplingHealthIndicators() {
         final List<StorageHealthIndicator> indicators = new ArrayList<>();
-        getProvider().createHealthIndicator(config).ifPresent(indicators::add);
+        if (samplingEnabled) {
+            getProvider().createHealthIndicator(config).ifPresent(indicators::add);
+        }
         return indicators;
     }
 
