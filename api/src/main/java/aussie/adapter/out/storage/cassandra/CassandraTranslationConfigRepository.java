@@ -64,12 +64,14 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
     private final CqlSession session;
     private final PreparedStatement insertVersionStmt;
     private final PreparedStatement insertVersionByNumberStmt;
+    private final PreparedStatement insertVersionBySequenceStmt;
     private final PreparedStatement selectByIdStmt;
     private final PreparedStatement selectByVersionStmt;
     private final PreparedStatement selectLegacyByVersionStmt;
     private final PreparedStatement selectAllStmt;
     private final PreparedStatement deleteStmt;
     private final PreparedStatement deleteVersionByNumberStmt;
+    private final PreparedStatement deleteVersionBySequenceStmt;
     private final PreparedStatement getMetadataStmt;
     private final PreparedStatement setMetadataStmt;
     private final PreparedStatement casMetadataStmt;
@@ -79,12 +81,14 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
         this.session = session;
         this.insertVersionStmt = prepareInsertVersion();
         this.insertVersionByNumberStmt = prepareInsertVersionByNumber();
+        this.insertVersionBySequenceStmt = prepareInsertVersionBySequence();
         this.selectByIdStmt = prepareSelectById();
         this.selectByVersionStmt = prepareSelectByVersion();
         this.selectLegacyByVersionStmt = prepareSelectLegacyByVersion();
         this.selectAllStmt = prepareSelectAll();
         this.deleteStmt = prepareDelete();
         this.deleteVersionByNumberStmt = prepareDeleteVersionByNumber();
+        this.deleteVersionBySequenceStmt = prepareDeleteVersionBySequence();
         this.getMetadataStmt = prepareGetMetadata();
         this.setMetadataStmt = prepareSetMetadata();
         this.casMetadataStmt = prepareCasMetadata();
@@ -105,6 +109,16 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
                 INSERT INTO translation_config_versions_by_number
                     (version, id, config_json, created_by, created_at, comment)
                 VALUES (?, ?, ?, ?, ?, ?)
+                """);
+    }
+
+    private PreparedStatement prepareInsertVersionBySequence() {
+        // ponytail: one global partition; bucket by version if history growth makes compaction expensive.
+        return session.prepare(
+                """
+                INSERT INTO translation_config_versions_by_sequence
+                    (scope, version, id, config_json, created_by, created_at, comment)
+                VALUES ('global', ?, ?, ?, ?, ?, ?)
                 """);
     }
 
@@ -130,6 +144,11 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
 
     private PreparedStatement prepareDeleteVersionByNumber() {
         return session.prepare("DELETE FROM translation_config_versions_by_number WHERE version = ?");
+    }
+
+    private PreparedStatement prepareDeleteVersionBySequence() {
+        return session.prepare(
+                "DELETE FROM translation_config_versions_by_sequence WHERE scope = 'global' AND version = ?");
     }
 
     private PreparedStatement prepareGetMetadata() {
@@ -178,6 +197,13 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
                                     version.createdAt(),
                                     version.comment()))
                             .addStatement(insertVersionByNumberStmt.bind(
+                                    version.version(),
+                                    version.id(),
+                                    configJson,
+                                    version.createdBy(),
+                                    version.createdAt(),
+                                    version.comment()))
+                            .addStatement(insertVersionBySequenceStmt.bind(
                                     version.version(),
                                     version.id(),
                                     configJson,
@@ -276,6 +302,10 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
 
     @Override
     public Uni<List<TranslationConfigVersion>> listVersions(int limit, int offset) {
+        if (limit < 1 || offset < 0) {
+            return Uni.createFrom().failure(new IllegalArgumentException("Invalid translation version page"));
+        }
+        // V18 nodes dual-write the ordered table; read it only after V17 writers are no longer supported.
         return listVersions().map(all -> all.stream().skip(offset).limit(limit).toList());
     }
 
@@ -360,6 +390,7 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
                             final var batch = BatchStatement.builder(DefaultBatchType.LOGGED)
                                     .addStatement(deleteStmt.bind(versionId))
                                     .addStatement(deleteVersionByNumberStmt.bind(version.version()))
+                                    .addStatement(deleteVersionBySequenceStmt.bind(version.version()))
                                     .build();
                             return session.executeAsync(batch).toCompletableFuture();
                         })

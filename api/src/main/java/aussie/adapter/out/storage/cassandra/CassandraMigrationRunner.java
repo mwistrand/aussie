@@ -64,12 +64,7 @@ public class CassandraMigrationRunner {
                 continue;
             }
             if (applied.containsKey(migration.version())) {
-                final var checksum = applied.get(migration.version());
-                if (checksum == null) {
-                    recordChecksum(migration);
-                } else if (!migration.checksum().equals(checksum)) {
-                    throw new IllegalStateException("Checksum mismatch for migration V" + migration.version());
-                }
+                verifyAppliedMigration(migration, applied.get(migration.version()));
                 continue;
             }
             applyMigration(migration);
@@ -87,19 +82,46 @@ public class CassandraMigrationRunner {
                     version int PRIMARY KEY,
                     script_name text,
                     checksum text,
-                    applied_at timestamp
+                    applied_at timestamp,
+                    status text,
+                    started_at timestamp,
+                    error text
                 )
                 """
                         .formatted(keyspace));
 
         session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS checksum text".formatted(keyspace));
+        session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS status text".formatted(keyspace));
+        session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS started_at timestamp".formatted(keyspace));
+        session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS error text".formatted(keyspace));
     }
 
-    private Map<Integer, String> getAppliedMigrations() {
-        final var applied = new HashMap<Integer, String>();
-        session.execute("SELECT version, checksum FROM %s.schema_migrations".formatted(keyspace))
-                .forEach(row -> applied.put(row.getInt("version"), row.getString("checksum")));
+    private Map<Integer, AppliedMigration> getAppliedMigrations() {
+        final var applied = new HashMap<Integer, AppliedMigration>();
+        for (var row : session.execute(
+                "SELECT version, checksum, status, error FROM %s.schema_migrations".formatted(keyspace))) {
+            applied.put(
+                    row.getInt("version"),
+                    new AppliedMigration(row.getString("checksum"), row.getString("status"), row.getString("error")));
+        }
         return applied;
+    }
+
+    private void verifyAppliedMigration(Migration migration, AppliedMigration applied) {
+        if (applied.checksum() != null && !migration.checksum().equals(applied.checksum())) {
+            throw new IllegalStateException("Checksum mismatch for migration V" + migration.version());
+        }
+        if (applied.status() == null) {
+            recordLegacyCompleted(migration);
+        } else if (!"COMPLETED".equals(applied.status())) {
+            throw new IllegalStateException("Migration V%s is %s%s"
+                    .formatted(
+                            migration.version(),
+                            applied.status(),
+                            applied.error() == null ? "" : ": " + applied.error()));
+        } else if (applied.checksum() == null) {
+            recordChecksum(migration);
+        }
     }
 
     private List<Migration> discoverMigrations() {
@@ -162,33 +184,79 @@ public class CassandraMigrationRunner {
 
     private void applyMigration(Migration migration) {
         LOG.infov("Applying migration V{0}: {1}", migration.version(), migration.filename());
-        for (var statement : splitStatements(migration.content())) {
-            final var executable = migrationStatement(migration.version(), statement);
-            if (executable.isEmpty() || executable.toUpperCase(Locale.ROOT).startsWith("USE ")) {
-                continue;
-            }
-            try {
+        recordStarted(migration);
+        try {
+            for (var statement : splitStatements(migration.content())) {
+                final var executable = migrationStatement(migration.version(), statement);
+                if (executable.isEmpty() || executable.toUpperCase(Locale.ROOT).startsWith("USE ")) {
+                    continue;
+                }
                 session.execute(executable);
-            } catch (Exception e) {
-                throw new IllegalStateException("Migration failed: " + migration.filename(), e);
             }
-        }
 
-        if (migration.version() == 17) {
-            backfillApiKeyHashLookup();
-            backfillTranslationConfigVersionLookup();
-        }
+            if (migration.version() == 17) {
+                backfillApiKeyHashLookup();
+                backfillTranslationConfigVersionLookup();
+            } else if (migration.version() == 18) {
+                backfillTranslationConfigVersionSequence();
+            }
 
-        session.execute(
+            recordCompleted(migration);
+        } catch (Exception e) {
+            recordFailed(migration, e);
+            throw new IllegalStateException("Migration failed: " + migration.filename(), e);
+        }
+    }
+
+    private void recordStarted(Migration migration) {
+        final var result = session.execute(
                 """
-                INSERT INTO %s.schema_migrations (version, script_name, checksum, applied_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO %s.schema_migrations (version, script_name, checksum, status, started_at)
+                VALUES (?, ?, ?, 'STARTED', ?)
+                IF NOT EXISTS
                 """
                         .formatted(keyspace),
                 migration.version(),
                 migration.filename(),
                 migration.checksum(),
                 Instant.now());
+        if (!result.wasApplied()) {
+            throw new IllegalStateException("Migration V" + migration.version() + " is already claimed");
+        }
+    }
+
+    private void recordCompleted(Migration migration) {
+        session.execute(
+                """
+                UPDATE %s.schema_migrations
+                SET script_name = ?, checksum = ?, status = 'COMPLETED', applied_at = ?, error = null
+                WHERE version = ?
+                """
+                        .formatted(keyspace),
+                migration.filename(),
+                migration.checksum(),
+                Instant.now(),
+                migration.version());
+    }
+
+    private void recordLegacyCompleted(Migration migration) {
+        session.execute(
+                "UPDATE %s.schema_migrations SET checksum = ?, status = 'COMPLETED' WHERE version = ?"
+                        .formatted(keyspace),
+                migration.checksum(),
+                migration.version());
+    }
+
+    private void recordFailed(Migration migration, Exception failure) {
+        try {
+            session.execute(
+                    "UPDATE %s.schema_migrations SET status = 'FAILED', error = ? WHERE version = ?"
+                            .formatted(keyspace),
+                    failure.getClass().getSimpleName(),
+                    migration.version());
+        } catch (RuntimeException ignored) {
+            LOG.errorv(ignored, "Could not persist failed migration state for V{0}", migration.version());
+        }
     }
 
     private void recordChecksum(Migration migration) {
@@ -249,6 +317,27 @@ public class CassandraMigrationRunner {
         }
     }
 
+    void backfillTranslationConfigVersionSequence() {
+        for (var row : session.execute(
+                """
+                SELECT id, version, config_json, created_by, created_at, comment
+                FROM translation_config_versions
+                """)) {
+            session.execute(
+                    """
+                    INSERT INTO translation_config_versions_by_sequence
+                        (scope, version, id, config_json, created_by, created_at, comment)
+                    VALUES ('global', ?, ?, ?, ?, ?, ?)
+                    """,
+                    row.getInt("version"),
+                    row.getString("id"),
+                    row.getString("config_json"),
+                    row.getString("created_by"),
+                    row.getInstant("created_at"),
+                    row.getString("comment"));
+        }
+    }
+
     private List<String> splitStatements(String content) {
         final var withoutComments = content.lines()
                 .map(String::trim)
@@ -279,4 +368,6 @@ public class CassandraMigrationRunner {
     private record ManifestEntry(String filename, String checksum) {}
 
     private record Migration(int version, String filename, String content, String checksum) {}
+
+    private record AppliedMigration(String checksum, String status, String error) {}
 }

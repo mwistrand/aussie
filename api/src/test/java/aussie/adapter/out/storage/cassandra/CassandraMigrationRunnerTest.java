@@ -2,6 +2,10 @@ package aussie.adapter.out.storage.cassandra;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -17,6 +21,53 @@ import com.datastax.oss.driver.api.core.cql.Row;
 import org.junit.jupiter.api.Test;
 
 class CassandraMigrationRunnerTest {
+
+    @Test
+    void rejectsChangedLegacyMigrationsBeforeAdoptingTheirStatus() {
+        final var session = mock(CqlSession.class);
+        final var statementResult = mock(ResultSet.class);
+        final var appliedMigrations = mock(ResultSet.class);
+        final var appliedMigration = mock(Row.class);
+
+        when(session.execute(anyString()))
+                .thenAnswer(
+                        invocation -> invocation.getArgument(0, String.class).startsWith("SELECT version")
+                                ? appliedMigrations
+                                : statementResult);
+        when(appliedMigrations.iterator()).thenReturn(List.of(appliedMigration).iterator());
+        when(appliedMigration.getInt("version")).thenReturn(2);
+        when(appliedMigration.getString("checksum")).thenReturn("changed");
+
+        final var runner = new CassandraMigrationRunner(session, "aussie");
+
+        final var failure = assertThrows(IllegalStateException.class, runner::runMigrations);
+
+        assertEquals("Checksum mismatch for migration V2", failure.getMessage());
+    }
+
+    @Test
+    void atomicallyClaimsPendingMigrations() {
+        final var session = mock(CqlSession.class);
+        final var statementResult = mock(ResultSet.class);
+        final var appliedMigrations = mock(ResultSet.class);
+        final var claimResult = mock(ResultSet.class);
+
+        when(session.execute(anyString()))
+                .thenAnswer(
+                        invocation -> invocation.getArgument(0, String.class).startsWith("SELECT version")
+                                ? appliedMigrations
+                                : statementResult);
+        when(appliedMigrations.iterator()).thenReturn(List.<Row>of().iterator());
+        when(session.execute(anyString(), anyInt(), anyString(), anyString(), any(Instant.class)))
+                .thenReturn(claimResult);
+        when(claimResult.wasApplied()).thenReturn(false);
+
+        final var runner = new CassandraMigrationRunner(session, "aussie");
+
+        final var failure = assertThrows(IllegalStateException.class, runner::runMigrations);
+
+        assertEquals("Migration V2 is already claimed", failure.getMessage());
+    }
 
     @Test
     void makesPreManifestMigrationsSafeToAdopt() {
@@ -75,6 +126,38 @@ class CassandraMigrationRunnerTest {
                 .execute(
                         argThat((String cql) -> cql.contains("INSERT INTO translation_config_versions_by_number")),
                         eq(7),
+                        eq("version-id"),
+                        eq("{}"),
+                        eq("reviewer"),
+                        eq(createdAt),
+                        eq("reviewed"));
+    }
+
+    @Test
+    void backfillsOrderedTranslationVersionPages() {
+        final var session = mock(CqlSession.class);
+        final var versions = mock(ResultSet.class);
+        final var version = mock(Row.class);
+        final var createdAt = Instant.parse("2026-08-23T12:00:00Z");
+
+        when(session.execute(argThat((String cql) -> cql.contains("FROM translation_config_versions"))))
+                .thenReturn(versions);
+        when(versions.iterator()).thenReturn(List.of(version).iterator());
+        when(version.getInt("version")).thenReturn(3);
+        when(version.getString("id")).thenReturn("version-id");
+        when(version.getString("config_json")).thenReturn("{}");
+        when(version.getString("created_by")).thenReturn("reviewer");
+        when(version.getInstant("created_at")).thenReturn(createdAt);
+        when(version.getString("comment")).thenReturn("reviewed");
+
+        final var runner = new CassandraMigrationRunner(session, "aussie");
+
+        assertDoesNotThrow(runner::backfillTranslationConfigVersionSequence);
+
+        verify(session)
+                .execute(
+                        argThat((String cql) -> cql.contains("INSERT INTO translation_config_versions_by_sequence")),
+                        eq(3),
                         eq("version-id"),
                         eq("{}"),
                         eq("reviewer"),
