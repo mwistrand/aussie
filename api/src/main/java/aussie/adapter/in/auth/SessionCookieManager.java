@@ -2,6 +2,7 @@ package aussie.adapter.in.auth;
 
 import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -19,6 +20,9 @@ import aussie.core.model.session.Session;
  */
 @ApplicationScoped
 public class SessionCookieManager {
+
+    public static final String CSRF_HEADER = "X-CSRF-Token";
+    private static final String CSRF_SUFFIX = "_csrf";
 
     private final SessionConfig config;
 
@@ -59,14 +63,38 @@ public class SessionCookieManager {
     public NewCookie createResponseCookie(Session session) {
         final var cookie = createCookie(session);
         final var builder = responseCookieBuilder(cookie);
+        if (cookie.getMaxAge() > 0) {
+            builder.maxAge((int) Math.min(cookie.getMaxAge(), Integer.MAX_VALUE));
+        }
+        return builder.build();
+    }
+
+    /** Create the browser-readable double-submit token for a new session. */
+    public NewCookie createCsrfResponseCookie(Session session) {
+        final var cookie = createCsrfCookie(session);
+        final var builder = responseCookieBuilder(cookie);
+        if (cookie.getMaxAge() > 0) {
+            builder.maxAge((int) Math.min(cookie.getMaxAge(), Integer.MAX_VALUE));
+        }
+        return builder.build();
+    }
+
+    /** Create a CSRF cookie with the same scope and browser protections as the session cookie. */
+    private Cookie createCsrfCookie(Session session) {
+        final var cookie = Cookie.cookie(csrfCookieName(), UUID.randomUUID().toString())
+                .setPath(config.cookie().path())
+                .setSecure(config.cookie().secure())
+                .setHttpOnly(false)
+                .setSameSite(parseSameSite(config.cookie().sameSite()));
+        config.cookie().domain().ifPresent(cookie::setDomain);
         if (session.expiresAt() != null) {
             final var maxAge = session.expiresAt().getEpochSecond()
                     - java.time.Instant.now().getEpochSecond();
             if (maxAge > 0) {
-                builder.maxAge((int) Math.min(maxAge, Integer.MAX_VALUE));
+                cookie.setMaxAge(maxAge);
             }
         }
-        return builder.build();
+        return cookie;
     }
 
     /**
@@ -88,6 +116,22 @@ public class SessionCookieManager {
     /** Create the JAX-RS response cookie that clears the configured session cookie. */
     public NewCookie createLogoutResponseCookie() {
         return responseCookieBuilder(createLogoutCookie()).maxAge(0).build();
+    }
+
+    /** Create the CSRF cookie that clears the current session's token. */
+    public NewCookie createLogoutCsrfResponseCookie() {
+        return responseCookieBuilder(createLogoutCsrfCookie()).maxAge(0).build();
+    }
+
+    private Cookie createLogoutCsrfCookie() {
+        final var cookie = Cookie.cookie(csrfCookieName(), "")
+                .setPath(config.cookie().path())
+                .setSecure(config.cookie().secure())
+                .setHttpOnly(false)
+                .setSameSite(parseSameSite(config.cookie().sameSite()))
+                .setMaxAge(0);
+        config.cookie().domain().ifPresent(cookie::setDomain);
+        return cookie;
     }
 
     /**
@@ -121,6 +165,10 @@ public class SessionCookieManager {
      */
     public String getCookieName() {
         return config.cookie().name();
+    }
+
+    public String csrfCookieName() {
+        return config.cookie().name() + CSRF_SUFFIX;
     }
 
     private NewCookie.Builder responseCookieBuilder(Cookie cookie) {

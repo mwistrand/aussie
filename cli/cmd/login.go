@@ -25,7 +25,8 @@ The default mode can be configured in .aussierc:
 
 Configuration:
   Set auth.login_url in .aussierc to point to your organization's
-  authentication endpoint (translation layer).
+  authorization endpoint. Set auth.token_url when code exchange uses a
+  separate endpoint; otherwise it defaults to auth.login_url.
 
 Examples:
   aussie login                     # Uses mode from config (default: browser)

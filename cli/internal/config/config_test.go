@@ -468,6 +468,7 @@ func TestLoadFromFile_WithAuthConfig(t *testing.T) {
 
 [auth]
 login_url = "https://sso.example.com/auth/login"
+token_url = "https://sso.example.com/auth/token"
 logout_url = "https://sso.example.com/auth/logout"
 refresh_url = "https://sso.example.com/auth/refresh"
 mode = "device_code"
@@ -486,6 +487,9 @@ refresh_before_expiry = "5m"`
 	// Check auth config
 	if cfg.Auth.LoginURL != "https://sso.example.com/auth/login" {
 		t.Errorf("Auth.LoginURL = %q, want %q", cfg.Auth.LoginURL, "https://sso.example.com/auth/login")
+	}
+	if cfg.Auth.TokenURL != "https://sso.example.com/auth/token" {
+		t.Errorf("Auth.TokenURL = %q, want %q", cfg.Auth.TokenURL, "https://sso.example.com/auth/token")
 	}
 	if cfg.Auth.LogoutURL != "https://sso.example.com/auth/logout" {
 		t.Errorf("Auth.LogoutURL = %q, want %q", cfg.Auth.LogoutURL, "https://sso.example.com/auth/logout")
@@ -586,6 +590,7 @@ func TestSave_WithAuthConfig(t *testing.T) {
 		Host: "http://test-server:8080",
 		Auth: AuthConfig{
 			LoginURL:    "https://sso.example.com/login",
+			TokenURL:    "https://sso.example.com/token",
 			LogoutURL:   "https://sso.example.com/logout",
 			Mode:        AuthModeDeviceCode,
 			AutoRefresh: true,
@@ -605,6 +610,9 @@ func TestSave_WithAuthConfig(t *testing.T) {
 
 	if loadedCfg.Auth.LoginURL != cfg.Auth.LoginURL {
 		t.Errorf("Loaded Auth.LoginURL = %q, want %q", loadedCfg.Auth.LoginURL, cfg.Auth.LoginURL)
+	}
+	if loadedCfg.Auth.TokenURL != cfg.Auth.TokenURL {
+		t.Errorf("Loaded Auth.TokenURL = %q, want %q", loadedCfg.Auth.TokenURL, cfg.Auth.TokenURL)
 	}
 	if loadedCfg.Auth.LogoutURL != cfg.Auth.LogoutURL {
 		t.Errorf("Loaded Auth.LogoutURL = %q, want %q", loadedCfg.Auth.LogoutURL, cfg.Auth.LogoutURL)

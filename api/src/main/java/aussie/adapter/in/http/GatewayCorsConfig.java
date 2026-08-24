@@ -50,7 +50,7 @@ public interface GatewayCorsConfig {
      *
      * @return Set of allowed headers
      */
-    @WithDefault("Content-Type,Authorization,X-Requested-With,Accept,Origin")
+    @WithDefault("Content-Type,Authorization,X-Requested-With,Accept,Origin,X-CSRF-Token")
     Set<String> allowedHeaders();
 
     /**

@@ -89,6 +89,11 @@ The following diagram traces a standard HTTP request from arrival through both f
   |    |-- conflict/invalid? --> 401          |----> RESPONSE (short-circuit)
   |    |-- valid? --> SecurityIdentity        |
   |    v                                      |
+  |  [Priority 1010] CsrfProtectionFilter     |
+  |    |            (@ServerRequestFilter)    |
+  |    |-- safe/non-session? --> continue     |
+  |    |-- invalid origin/token? --> 403      |----> RESPONSE (short-circuit)
+  |    v                                      |
   |  [Priority 5000] AccessControlFilter      |
   |    |            (@ServerRequestFilter)    |
   |    |-- public endpoint? --> continue      |
@@ -331,7 +336,8 @@ The following table lists every filter in numeric execution order across both la
 | 5 | 900 | `AUTH - 100` | `AuthRateLimitFilter` | `system.filter` | Yes (429 on lockout) |
 | 6 | 900 | `AUTH - 100` | `RequestValidationFilter` | `system.filter` | Yes (413, 431, 400) |
 | 7 | 950 | `AUTH - 50` | `RateLimitFilter` | `system.filter` | Yes (429 on rate limit) |
-| 8 | 5000 | (default) | `AccessControlFilter` | `system.filter` | Yes (404 on denied) |
+| 8 | 1010 | `AUTH + 10` | `CsrfProtectionFilter` | `system.filter` | Yes (403 on invalid origin/token) |
+| 9 | 5000 | (default) | `AccessControlFilter` | `system.filter` | Yes (404 on denied) |
 
 Note: Filters at the same priority (900) have no guaranteed relative ordering. The container may execute them in any order. In practice, Quarkus tends to order them by discovery order (classpath scanning), but this is an implementation detail, not a contract.
 

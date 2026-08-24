@@ -14,6 +14,23 @@ When a user authenticates with an identity provider (IdP), Aussie can:
 
 This feature works in conjunction with [PKCE](pkce.md) for secure authorization flows.
 
+## Client Flow
+
+Clients start the transaction with their own 43-character base64url state and S256 challenge:
+
+```http
+GET /auth/oidc/authorize?redirect_uri=http%3A%2F%2F127.0.0.1%3A49152%2Fcallback&code_challenge=<challenge>&code_challenge_method=S256&state=<state>
+```
+
+After the identity provider redirects to the registered URI with `code` and the same `state`, exchange the complete transaction:
+
+```http
+POST /auth/oidc/token
+Content-Type: application/x-www-form-urlencoded
+
+code=<code>&code_verifier=<verifier>&state=<state>&redirect_uri=http%3A%2F%2F127.0.0.1%3A49152%2Fcallback
+```
+
 ## Configuration
 
 ### Enable Token Exchange
@@ -206,7 +223,7 @@ With `create-session=false`, `/auth/oidc/token` returns the validated public-cli
 }
 ```
 
-With `create-session=true`, it returns `204 No Content` and sets the configured session cookie. Access, ID, refresh, and session tokens are not exposed to browser JavaScript.
+With `create-session=true`, it returns `204 No Content` and sets the configured HttpOnly session cookie plus a readable CSRF cookie. Unsafe session-authenticated requests must copy the CSRF cookie value into `X-CSRF-Token`. Access, ID, refresh, and session tokens are not exposed to browser JavaScript.
 
 ## Security Considerations
 

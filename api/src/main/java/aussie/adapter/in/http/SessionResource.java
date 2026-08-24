@@ -91,6 +91,7 @@ public class SessionResource {
             if (redirectUrl != null && !redirectUrl.isBlank()) {
                 return Response.seeOther(URI.create(sanitizeRedirectUrl(redirectUrl)))
                         .cookie(cookieManager.createResponseCookie(session))
+                        .cookie(cookieManager.createCsrfResponseCookie(session))
                         .build();
             }
 
@@ -99,6 +100,7 @@ public class SessionResource {
                             "userId", session.userId(),
                             "expiresAt", session.expiresAt().toString()))
                     .cookie(cookieManager.createResponseCookie(session))
+                    .cookie(cookieManager.createCsrfResponseCookie(session))
                     .build();
         });
     }
@@ -166,6 +168,7 @@ public class SessionResource {
 
                     return Response.ok(Map.of("message", "Logged out"))
                             .cookie(cookieManager.createLogoutResponseCookie())
+                            .cookie(cookieManager.createLogoutCsrfResponseCookie())
                             .build();
                 });
     }
@@ -192,6 +195,7 @@ public class SessionResource {
 
                     return Response.ok(Map.of("message", "Logged out from all devices"))
                             .cookie(cookieManager.createLogoutResponseCookie())
+                            .cookie(cookieManager.createLogoutCsrfResponseCookie())
                             .build();
                 });
     }
@@ -223,6 +227,7 @@ public class SessionResource {
                             "expiresAt", session.expiresAt().toString(),
                             "lastAccessedAt", session.lastAccessedAt().toString()))
                     .cookie(cookieManager.createResponseCookie(session))
+                    .cookie(cookieManager.createCsrfResponseCookie(session))
                     .build();
         });
     }
@@ -251,6 +256,7 @@ public class SessionResource {
             // Redirect to the original page
             return Response.seeOther(URI.create(safeRedirectUrl))
                     .cookie(cookieManager.createResponseCookie(session))
+                    .cookie(cookieManager.createCsrfResponseCookie(session))
                     .build();
         });
     }

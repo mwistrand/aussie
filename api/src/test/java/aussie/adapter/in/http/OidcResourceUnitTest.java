@@ -25,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.adapter.in.auth.SessionCookieManager;
@@ -87,6 +88,11 @@ class OidcResourceUnitTest {
     @BeforeEach
     void setUp() {
         when(oidcConfig.publicEndpointsEnabled()).thenReturn(true);
+        Mockito.lenient()
+                .when(cookieManager.createCsrfResponseCookie(any()))
+                .thenReturn(new jakarta.ws.rs.core.NewCookie.Builder("aussie_session_csrf")
+                        .value("csrf-token")
+                        .build());
         resource = new OidcResource(
                 pkceService,
                 pkceConfig,
@@ -222,18 +228,19 @@ class OidcResourceUnitTest {
         when(oidcConfig.publicEndpointsEnabled()).thenReturn(false);
 
         final var problem = assertThrows(
-                HttpProblem.class, () -> resource.authorize("https://app.example.com/callback", "challenge", "S256"));
+                HttpProblem.class,
+                () -> resource.authorize("https://app.example.com/callback", "challenge", "S256", null));
 
         assertEquals(Response.Status.NOT_FOUND.getStatusCode(), problem.getStatusCode());
     }
 
     @Test
-    void storesPkceChallengeAndRedirectsToProvider() {
+    void storesClientPkceStateAndRedirectsToProvider() {
         when(pkceConfig.enabled()).thenReturn(true);
         when(tokenExchangeConfig.enabled()).thenReturn(true);
         when(pkceService.isValidChallengeMethod("S256")).thenReturn(true);
         when(pkceService.isValidCodeChallenge("challenge")).thenReturn(true);
-        when(pkceService.generateState()).thenReturn("generated-state");
+        when(pkceService.isValidState("client-state")).thenReturn(true);
         when(pkceService.generateNonce()).thenReturn("generated-nonce");
         when(pkceConfig.challengeTtl()).thenReturn(Duration.ofMinutes(10));
         when(oidcConfig.tokenExchange()).thenReturn(tokenExchangeConfig);
@@ -242,17 +249,17 @@ class OidcResourceUnitTest {
         when(tokenExchangeConfig.providerId()).thenReturn(Optional.of("configured-idp"));
         when(tokenExchangeConfig.clientId()).thenReturn(Optional.of("client"));
         when(tokenExchangeConfig.scopes()).thenReturn(Set.of("openid"));
-        when(pkceService.storeTransaction(eq("generated-state"), any()))
+        when(pkceService.storeTransaction(eq("client-state"), any()))
                 .thenReturn(Uni.createFrom().voidItem());
 
-        final var response = resource.authorize("https://app.example.com/callback", "challenge", "S256")
+        final var response = resource.authorize("https://app.example.com/callback", "challenge", "S256", "client-state")
                 .await()
                 .atMost(Duration.ofSeconds(5));
 
         assertEquals(Response.Status.SEE_OTHER.getStatusCode(), response.getStatus());
-        assertTrue(response.getLocation().toString().contains("state=generated-state"));
+        assertTrue(response.getLocation().toString().contains("state=client-state"));
         assertTrue(response.getLocation().toString().contains("nonce=generated-nonce"));
-        verify(pkceService).storeTransaction(eq("generated-state"), any());
+        verify(pkceService).storeTransaction(eq("client-state"), any());
     }
 
     @Test

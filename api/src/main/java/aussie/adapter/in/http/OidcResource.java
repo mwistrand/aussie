@@ -102,6 +102,7 @@ public class OidcResource {
      * @param redirectUri The URI to redirect to after authentication
      * @param codeChallenge The PKCE code_challenge (required when PKCE is enabled)
      * @param codeChallengeMethod The challenge method (must be "S256")
+     * @param clientState Optional client-generated OAuth state
      * @return Redirect to identity provider or error response
      */
     @GET
@@ -109,7 +110,8 @@ public class OidcResource {
     public Uni<Response> authorize(
             @QueryParam("redirect_uri") String redirectUri,
             @QueryParam("code_challenge") String codeChallenge,
-            @QueryParam("code_challenge_method") String codeChallengeMethod) {
+            @QueryParam("code_challenge_method") String codeChallengeMethod,
+            @QueryParam("state") String clientState) {
 
         requirePublicEndpointsEnabled();
         requireTokenExchangeEnabled();
@@ -140,7 +142,10 @@ public class OidcResource {
             throw GatewayProblem.badRequest("code_challenge is not a valid S256 challenge");
         }
 
-        final var state = pkceService.generateState();
+        final var state = clientState == null ? pkceService.generateState() : clientState;
+        if (!pkceService.isValidState(state)) {
+            throw GatewayProblem.badRequest("state is invalid");
+        }
         final var nonce = pkceService.generateNonce();
         final var now = Instant.now();
         final var transactionTtl = configuredTransactionTtl();
@@ -325,6 +330,7 @@ public class OidcResource {
                 })
                 .map(session -> Response.noContent()
                         .cookie(cookieManager.createResponseCookie(session))
+                        .cookie(cookieManager.createCsrfResponseCookie(session))
                         .build());
     }
 

@@ -810,6 +810,7 @@ JAX-RS server filters that intercept requests before they reach resource classes
 | `RequestValidationFilter` | `AUTHENTICATION - 100` | Validates request body size and header sizes. Blocks oversized requests with 413/431. |
 | `AuthRateLimitFilter` | `AUTHENTICATION - 100` | Checks if the client IP is locked out due to brute-force attempts. Build-time conditional on `aussie.auth.rate-limit.enabled`. |
 | `RateLimitFilter` | `@ServerRequestFilter` | Enforces per-service and per-endpoint rate limits. Adds `X-RateLimit-*` response headers. Runs before authentication to reject floods cheaply. |
+| `CsrfProtectionFilter` | `AUTHENTICATION + 10` | Requires an allowed origin and matching double-submit token for unsafe session-cookie requests. |
 | `AccessControlFilter` | `@ServerRequestFilter` | Evaluates IP allowlists/denylists and endpoint visibility. Blocks requests to private endpoints and denied IPs. |
 
 **Allowed dependencies:** `common/context`, `core/service`, `core/model`, `core/config`, `core/port/out`, `core/util`, `spi`, `adapter/in/context`, `adapter/in/problem`, `adapter/out/telemetry`, `system/context`.
@@ -857,8 +858,8 @@ JAX-RS server filters that intercept requests before they reach resource classes
 | `adapter/out/telemetry` | 19 |
 | `adapter/out/threading` | 1 |
 | `system/context` | 1 |
-| `system/filter` | 5 |
-| **Total** | **346** |
+| `system/filter` | 6 |
+| **Total** | **347** |
 
 ## How to Use This Map
 

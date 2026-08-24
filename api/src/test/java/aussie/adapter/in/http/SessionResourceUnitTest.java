@@ -2,6 +2,7 @@ package aussie.adapter.in.http;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -75,6 +76,17 @@ class SessionResourceUnitTest {
         lenient()
                 .when(clientContextResolver.getOrCompute(routingContext))
                 .thenReturn(new ClientContext(null, false, null));
+        lenient()
+                .when(cookieManager.createCsrfResponseCookie(any()))
+                .thenReturn(new NewCookie.Builder("aussie_session_csrf")
+                        .value("csrf-token")
+                        .build());
+        lenient()
+                .when(cookieManager.createLogoutCsrfResponseCookie())
+                .thenReturn(new NewCookie.Builder("aussie_session_csrf")
+                        .value("")
+                        .maxAge(0)
+                        .build());
         resource = new SessionResource(
                 sessionManagement,
                 cookieManager,
@@ -215,6 +227,7 @@ class SessionResourceUnitTest {
         final var response = resource.refreshSession().await().atMost(Duration.ofSeconds(5));
 
         assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
+        assertTrue(response.getCookies().containsKey("aussie_session_csrf"));
     }
 
     @Test

@@ -38,6 +38,7 @@ host = "http://localhost:1234"
 
 [auth]
 login_url = "https://sso.yourcompany.com/auth/aussie/login"
+token_url = "https://sso.yourcompany.com/auth/aussie/token"    # Optional; defaults to login_url
 logout_url = "https://sso.yourcompany.com/auth/aussie/logout"   # Optional
 refresh_url = "https://sso.yourcompany.com/auth/aussie/refresh" # Optional
 mode = "browser"  # Options: browser, device_code, cli_callback
@@ -516,6 +517,7 @@ host = "http://localhost:1234"
 
 [auth]
 login_url = "https://sso.yourcompany.com/auth/aussie/login"
+token_url = "https://sso.yourcompany.com/auth/aussie/token"  # Optional; defaults to login_url
 logout_url = "https://sso.yourcompany.com/auth/aussie/logout"
 mode = "browser"  # or "device_code" for headless environments
 ```

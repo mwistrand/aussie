@@ -2,8 +2,13 @@ package cmd
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -38,7 +43,8 @@ The default mode can be configured in .aussierc:
 
 Configuration:
   Set auth.login_url in .aussierc to point to your organization's
-  authentication endpoint (translation layer).
+  authorization endpoint. Set auth.token_url when code exchange uses a
+  separate endpoint; otherwise it defaults to auth.login_url.
 
 Examples:
   aussie login                     # Uses mode from config (default: browser)
@@ -89,91 +95,9 @@ login_url = "https://your-org.example.com/auth/aussie/login"`)
 	}
 }
 
-// browserLogin opens the browser to the login URL with a callback parameter.
-// The translation layer handles the IdP flow and redirects back with a token.
+// browserLogin opens the browser and completes an authorization-code callback.
 func browserLogin(cfg *config.Config) error {
-	// Start local server to receive callback
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return fmt.Errorf("failed to start callback server: %w", err)
-	}
-	defer listener.Close()
-
-	port := listener.Addr().(*net.TCPAddr).Port
-	callbackURL := fmt.Sprintf("http://127.0.0.1:%d/callback", port)
-
-	// Build login URL with callback
-	loginURL, err := url.Parse(cfg.Auth.LoginURL)
-	if err != nil {
-		return fmt.Errorf("invalid login URL: %w", err)
-	}
-	q := loginURL.Query()
-	q.Set("callback", callbackURL)
-	loginURL.RawQuery = q.Encode()
-
-	fmt.Printf("Opening browser for authentication...\n")
-	fmt.Printf("If the browser doesn't open, visit:\n  %s\n\n", loginURL.String())
-
-	// Open browser
-	if err := openBrowser(loginURL.String()); err != nil {
-		fmt.Printf("Could not open browser: %v\n", err)
-	}
-
-	// Wait for callback with channels
-	tokenChan := make(chan string)
-	errChan := make(chan error)
-
-	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != "/callback" {
-				http.NotFound(w, r)
-				return
-			}
-
-			token := r.URL.Query().Get("token")
-			if token == "" {
-				errMsg := r.URL.Query().Get("error")
-				if errMsg == "" {
-					errMsg = "no token received"
-				}
-				w.Header().Set("Content-Type", "text/html")
-				w.Write([]byte(`<html><body><h1>Authentication Failed</h1><p>You may close this window.</p></body></html>`))
-				errChan <- fmt.Errorf("authentication failed: %s", errMsg)
-				return
-			}
-
-			w.Header().Set("Content-Type", "text/html")
-			w.Write([]byte(`<html><body><h1>Authentication Successful!</h1><p>You may close this window.</p></body></html>`))
-			tokenChan <- token
-		}),
-	}
-
-	go server.Serve(listener)
-
-	// Wait for result with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	var result error
-	var token string
-
-	select {
-	case token = <-tokenChan:
-		result = nil
-	case result = <-errChan:
-	case <-ctx.Done():
-		result = fmt.Errorf("authentication timed out after 5 minutes")
-	}
-
-	// Gracefully shutdown the server
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer shutdownCancel()
-	_ = server.Shutdown(shutdownCtx)
-
-	if result != nil {
-		return result
-	}
-	return storeAndPrintCredentials(token, cfg.Host)
+	return oauthCallbackLogin(cfg, true)
 }
 
 // deviceCodeLogin uses device code flow for headless environments.
@@ -241,84 +165,182 @@ func deviceCodeLogin(cfg *config.Config) error {
 
 // callbackLogin starts a local server and waits for callback (similar to browser but no browser open).
 func callbackLogin(cfg *config.Config) error {
-	// Start local server to receive callback
+	return oauthCallbackLogin(cfg, false)
+}
+
+type callbackResult struct {
+	code string
+	err  string
+}
+
+func oauthCallbackLogin(cfg *config.Config, open bool) error {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("failed to start callback server: %w", err)
 	}
 	defer listener.Close()
-
 	port := listener.Addr().(*net.TCPAddr).Port
 	callbackURL := fmt.Sprintf("http://127.0.0.1:%d/callback", port)
 
-	// Build login URL with callback
 	loginURL, err := url.Parse(cfg.Auth.LoginURL)
 	if err != nil {
 		return fmt.Errorf("invalid login URL: %w", err)
 	}
-	q := loginURL.Query()
-	q.Set("callback", callbackURL)
-	loginURL.RawQuery = q.Encode()
+	if err := validateOAuthURL(loginURL); err != nil {
+		return err
+	}
+	state, err := randomOAuthValue()
+	if err != nil {
+		return fmt.Errorf("failed to create OAuth state: %w", err)
+	}
+	verifier, err := randomOAuthValue()
+	if err != nil {
+		return fmt.Errorf("failed to create PKCE verifier: %w", err)
+	}
+	hash := sha256.Sum256([]byte(verifier))
+	query := loginURL.Query()
+	query.Set("callback", callbackURL)
+	query.Set("redirect_uri", callbackURL)
+	query.Set("response_type", "code")
+	query.Set("state", state)
+	query.Set("code_challenge", base64.RawURLEncoding.EncodeToString(hash[:]))
+	query.Set("code_challenge_method", "S256")
+	loginURL.RawQuery = query.Encode()
 
-	fmt.Printf("\nAuthentication required.\n")
-	fmt.Printf("Visit this URL to authenticate:\n  %s\n\n", loginURL.String())
+	fmt.Printf("\nAuthentication required.\nVisit this URL to authenticate:\n  %s\n\n", loginURL)
+	if open {
+		if err := openBrowser(loginURL.String()); err != nil {
+			fmt.Printf("Could not open browser: %v\n", err)
+		}
+	}
 	fmt.Printf("Waiting for callback on port %d...\n", port)
 
-	// Wait for callback with channels
-	tokenChan := make(chan string)
-	errChan := make(chan error)
-
-	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path != "/callback" {
-				http.NotFound(w, r)
-				return
-			}
-
-			token := r.URL.Query().Get("token")
-			if token == "" {
-				errMsg := r.URL.Query().Get("error")
-				if errMsg == "" {
-					errMsg = "no token received"
-				}
-				w.Header().Set("Content-Type", "text/plain")
-				w.Write([]byte("Authentication failed. You may close this window."))
-				errChan <- fmt.Errorf("authentication failed: %s", errMsg)
-				return
-			}
-
-			w.Header().Set("Content-Type", "text/plain")
-			w.Write([]byte("Authentication successful! You may close this window."))
-			tokenChan <- token
-		}),
-	}
-
+	resultChan := make(chan callbackResult, 1)
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		result, accepted := parseOAuthCallback(r, listener.Addr().String(), state)
+		if !accepted {
+			http.NotFound(w, r)
+			return
+		}
+		if result.err != "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, "Authentication failed. You may close this window.")
+		} else {
+			_, _ = io.WriteString(w, "Authentication successful. You may close this window.")
+		}
+		select {
+		case resultChan <- result:
+		default:
+		}
+	})}
 	go server.Serve(listener)
 
-	// Wait for result with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-
-	var result error
-	var token string
-
+	var result callbackResult
 	select {
-	case token = <-tokenChan:
-		result = nil
-	case result = <-errChan:
+	case result = <-resultChan:
 	case <-ctx.Done():
-		result = fmt.Errorf("authentication timed out after 10 minutes")
+		return fmt.Errorf("authentication timed out after 10 minutes")
 	}
-
-	// Gracefully shutdown the server
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer shutdownCancel()
 	_ = server.Shutdown(shutdownCtx)
-
-	if result != nil {
-		return result
+	if result.err != "" {
+		return errors.New(result.err)
+	}
+	token, err := exchangeOAuthCode(cfg, result.code, verifier, state, callbackURL)
+	if err != nil {
+		return err
 	}
 	return storeAndPrintCredentials(token, cfg.Host)
+}
+
+func parseOAuthCallback(r *http.Request, expectedHost, expectedState string) (callbackResult, bool) {
+	if r.Method != http.MethodGet || r.Host != expectedHost || r.URL.Path != "/callback" {
+		return callbackResult{}, false
+	}
+	query := r.URL.Query()
+	if query.Get("token") != "" || query.Get("access_token") != "" || query.Get("id_token") != "" {
+		return callbackResult{}, false
+	}
+	result := callbackResult{code: query.Get("code"), err: query.Get("error")}
+	if result.code == "" && result.err == "" {
+		result.err = "authorization callback was incomplete"
+	}
+	if query.Get("state") != expectedState {
+		return callbackResult{}, false
+	}
+	return result, true
+}
+
+func randomOAuthValue() (string, error) {
+	value := make([]byte, 32)
+	if _, err := rand.Read(value); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(value), nil
+}
+
+func validateOAuthURL(value *url.URL) error {
+	if value.User != nil || value.Hostname() == "" {
+		return fmt.Errorf("OAuth endpoints must not contain credentials")
+	}
+	host := strings.ToLower(value.Hostname())
+	if !strings.EqualFold(value.Scheme, "https") && !(strings.EqualFold(value.Scheme, "http") && (host == "localhost" || host == "127.0.0.1" || host == "::1")) {
+		return fmt.Errorf("OAuth endpoints require HTTPS (HTTP is allowed only for localhost)")
+	}
+	return nil
+}
+
+func exchangeOAuthCode(cfg *config.Config, code, verifier, state, redirectURI string) (string, error) {
+	tokenURL := cfg.Auth.TokenURL
+	if tokenURL == "" {
+		tokenURL = cfg.Auth.LoginURL
+	}
+	parsed, err := url.Parse(tokenURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid OAuth token URL: %w", err)
+	}
+	if err := validateOAuthURL(parsed); err != nil {
+		return "", err
+	}
+	form := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "code_verifier": {verifier}, "state": {state}, "redirect_uri": {redirectURI}}
+	req, err := http.NewRequest(http.MethodPost, parsed.String(), strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", fmt.Errorf("failed to create OAuth token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("OAuth token exchange failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("OAuth token exchange failed with status %d", resp.StatusCode)
+	}
+	var tokenResponse struct {
+		Token       string `json:"token"`
+		AccessToken string `json:"access_token"`
+		Error       string `json:"error"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&tokenResponse); err != nil {
+		return "", fmt.Errorf("invalid OAuth token response: %w", err)
+	}
+	if tokenResponse.Error != "" {
+		return "", errors.New("OAuth token exchange was rejected")
+	}
+	if tokenResponse.Token != "" {
+		return tokenResponse.Token, nil
+	}
+	if tokenResponse.AccessToken != "" {
+		return tokenResponse.AccessToken, nil
+	}
+	return "", errors.New("OAuth token response did not contain a token")
 }
 
 // pollForToken polls the translation layer for a token using the device code.

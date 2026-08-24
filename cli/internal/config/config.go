@@ -37,6 +37,9 @@ type AuthConfig struct {
 	// This triggers the auth flow (SAML, OIDC, etc.).
 	LoginURL string `toml:"login_url,omitempty"`
 
+	// TokenURL is the OAuth authorization-code exchange endpoint.
+	TokenURL string `toml:"token_url,omitempty"`
+
 	// LogoutURL is the optional server-side logout endpoint.
 	LogoutURL string `toml:"logout_url,omitempty"`
 

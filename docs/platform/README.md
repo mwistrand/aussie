@@ -256,8 +256,8 @@ Platform teams must provide a **translation layer** between the CLI and their Id
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/auth/aussie/login` | GET | Initiate auth flow (redirect to IdP or return device code) |
-| `/auth/aussie/login` | POST | Exchange IdP credentials for Aussie JWT |
+| `/auth/aussie/login` | GET | Initiate an authorization-code + PKCE flow (or return a device code) |
+| `/auth/aussie/token` | POST | Exchange the code, verifier, state, and redirect URI for an Aussie JWT |
 | `/auth/aussie/logout` | POST | Invalidate session (optional) |
 | `/auth/aussie/refresh` | POST | Refresh token (optional) |
 
@@ -278,12 +278,14 @@ Your translation layer must return a JWT with this structure:
 ### Authentication Flows
 
 **Browser Flow (Default)**
-1. CLI opens browser to `login_url?callback=http://127.0.0.1:PORT/callback`
-2. Translation layer redirects to IdP
-3. User authenticates with IdP
-4. IdP redirects back to translation layer
-5. Translation layer generates Aussie JWT
-6. Redirects to CLI callback with `?token=JWT`
+1. CLI creates a loopback callback, random state, and PKCE S256 verifier/challenge
+2. CLI opens `login_url` with the callback, state, and PKCE challenge
+3. Translation layer redirects to IdP
+4. User authenticates with IdP
+5. Translation layer redirects to the exact loopback callback with `?code=...&state=...`
+6. CLI verifies the callback host and state
+7. CLI POSTs the code, verifier, state, and redirect URI to `token_url` (or `login_url` when omitted)
+8. Translation layer returns JSON containing `token` or `access_token`; tokens are never placed in callback URLs
 
 **Device Code Flow (Headless)**
 1. CLI POSTs to `login_url?flow=device_code`
@@ -741,9 +743,11 @@ The callback equivalent is `GET /auth/callback?token=<signed-jwt>&redirect=/dash
 For production deployments behind TLS:
 - `secure=true` ensures cookies are only sent over HTTPS
 - `http-only=true` prevents JavaScript access
-- `same-site=Lax` or `Strict` provides CSRF protection
+- `same-site=Lax` or `Strict` limits ambient cross-site cookie delivery
 
 Set `cookie.domain` if Aussie is accessed from multiple subdomains. For local development, set `cookie.secure=false` in the dev profile.
+
+Session creation also sets a browser-readable `<session-cookie-name>_csrf` cookie. Every unsafe request authenticated by the session cookie must send its value in `X-CSRF-Token` and include an `Origin` matching either the gateway or a credentialed CORS allowlist entry. Session refresh rotates both cookies.
 
 ## Auth Rate Limiting (Brute Force Protection)
 

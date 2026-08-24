@@ -4,6 +4,8 @@ import {
   parseRedirectUrl,
   createDeviceCode,
   getDeviceCode,
+  createAuthorizationCode,
+  exchangeAuthorizationCode,
   USER_GROUPS,
 } from '@/lib/auth';
 
@@ -32,6 +34,34 @@ export async function POST(request: NextRequest) {
     const contentType = request.headers.get('content-type') || '';
     const searchParams = request.nextUrl.searchParams;
     const flow = searchParams.get('flow');
+    let formData: FormData | undefined;
+
+    // OAuth authorization-code exchange for the CLI browser flow.
+    if (contentType.includes('application/x-www-form-urlencoded')) {
+      formData = await request.formData();
+      if (formData.get('grant_type') === 'authorization_code') {
+        const result = exchangeAuthorizationCode(
+          String(formData.get('code') || ''),
+          'aussie-cli',
+          String(formData.get('redirect_uri') || ''),
+          String(formData.get('code_verifier') || '')
+        );
+
+        if ('error' in result && result.error) {
+          return NextResponse.json({ error: result.error }, { status: 400 });
+        }
+        if (!result.claims) {
+          return NextResponse.json({ error: 'Invalid authorization code' }, { status: 400 });
+        }
+
+        const token = await generateToken(result.claims);
+        return NextResponse.json({
+          access_token: token,
+          token_type: 'Bearer',
+          expires_in: 3600,
+        });
+      }
+    }
 
     // Device code flow initiation
     if (flow === 'device_code') {
@@ -54,7 +84,7 @@ export async function POST(request: NextRequest) {
       body = await request.json();
     } else {
       // Handle form data
-      const formData = await request.formData();
+      formData ??= await request.formData();
       body = {
         username: formData.get('username') as string,
         group: formData.get('group') as string | undefined,
@@ -93,13 +123,14 @@ export async function POST(request: NextRequest) {
       .find((prefix) => prefix !== 'platform-team') || undefined;
 
     // Generate signed JWT token
-    const token = await generateToken({
+    const claims = {
       sub: body.username.trim(),
       name: body.username.trim(),
       groups,
       permissions,
       teamId,
-    });
+    };
+    const token = await generateToken(claims);
 
     // Parse and validate redirect URL
     const redirectUrl = parseRedirectUrl(body.redirect || null);
@@ -107,10 +138,34 @@ export async function POST(request: NextRequest) {
     // Check for callback parameter (CLI callback flow)
     const callback = searchParams.get('callback');
     if (callback) {
-      // CLI callback flow: return the callback URL for client-side redirect
-      // (fetch doesn't follow redirects in a way that navigates the browser)
       try {
         const callbackUrl = new URL(callback);
+
+        if (callbackUrl.searchParams.get('response_type') === 'code') {
+          const redirectUri = callbackUrl.searchParams.get('redirect_uri');
+          const state = callbackUrl.searchParams.get('state');
+          const codeChallenge = callbackUrl.searchParams.get('code_challenge');
+          const codeChallengeMethod = callbackUrl.searchParams.get('code_challenge_method');
+
+          if (!redirectUri || !state || !codeChallenge || codeChallengeMethod !== 'S256') {
+            return NextResponse.json({ error: 'Invalid OAuth request' }, { status: 400 });
+          }
+
+          const code = createAuthorizationCode({
+            clientId: 'aussie-cli',
+            redirectUri,
+            codeChallenge,
+            codeChallengeMethod,
+            claims,
+            state,
+          });
+          const redirect = new URL(redirectUri);
+          redirect.searchParams.set('code', code);
+          redirect.searchParams.set('state', state);
+          return NextResponse.json({ success: true, redirectTo: redirect.toString() });
+        }
+
+        // Legacy browser callback flow.
         callbackUrl.searchParams.set('token', token);
         return NextResponse.json({
           success: true,
@@ -151,7 +206,18 @@ export async function GET(request: NextRequest) {
     const host = request.headers.get('host') || 'localhost:3000';
     const protocol = request.headers.get('x-forwarded-proto') || 'http';
     const loginPageUrl = new URL('/login', `${protocol}://${host}`);
-    loginPageUrl.searchParams.set('callback', callback);
+    const callbackUrl = new URL(callback);
+    for (const parameter of [
+      'redirect_uri',
+      'response_type',
+      'state',
+      'code_challenge',
+      'code_challenge_method',
+    ]) {
+      const value = searchParams.get(parameter);
+      if (value) callbackUrl.searchParams.set(parameter, value);
+    }
+    loginPageUrl.searchParams.set('callback', callbackUrl.toString());
     return NextResponse.redirect(loginPageUrl.toString());
   }
 

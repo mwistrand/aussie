@@ -61,6 +61,17 @@ class SessionCookieManagerTest {
         assertTrue(cookie.getMaxAge() > 3500);
     }
 
+    @Test
+    void createsReadableCsrfCookieWithSessionLifetime() {
+        final var cookie =
+                manager.createCsrfResponseCookie(testSession(Instant.now().plusSeconds(3600)));
+
+        assertEquals("aussie_session_csrf", cookie.getName());
+        assertTrue(cookie.isSecure());
+        assertFalse(cookie.isHttpOnly());
+        assertTrue(cookie.getMaxAge() > 3500);
+    }
+
     private Session testSession(Instant expiresAt) {
         return new Session(
                 "session-123",
