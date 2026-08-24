@@ -88,12 +88,12 @@ All durations use ISO-8601 format (e.g., `PT30S` for 30 seconds, `PT1H` for 1 ho
 
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
-| `aussie.gateway.cors.enabled` | `boolean` | `true` | `AUSSIE_GATEWAY_CORS_ENABLED` | Enable CORS handling. |
-| `aussie.gateway.cors.allowed-origins` | `List<String>` | `*` | `AUSSIE_GATEWAY_CORS_ALLOWED_ORIGINS` | Allowed origins. Use `*` for any. Supports wildcard subdomains like `*.example.com`. |
+| `aussie.gateway.cors.enabled` | `boolean` | `false` | `AUSSIE_GATEWAY_CORS_ENABLED` | Enable CORS handling. |
+| `aussie.gateway.cors.allowed-origins` | `List<String>` | deny all | `AUSSIE_GATEWAY_CORS_ALLOWED_ORIGINS` | Allowed exact origins. Production requires explicit HTTPS origins and rejects wildcards. |
 | `aussie.gateway.cors.allowed-methods` | `Set<String>` | `GET,POST,PUT,DELETE,PATCH,OPTIONS,HEAD` | `AUSSIE_GATEWAY_CORS_ALLOWED_METHODS` | Allowed HTTP methods. |
 | `aussie.gateway.cors.allowed-headers` | `Set<String>` | `Content-Type,Authorization,X-Requested-With,Accept,Origin` | `AUSSIE_GATEWAY_CORS_ALLOWED_HEADERS` | Allowed request headers. |
 | `aussie.gateway.cors.exposed-headers` | `Optional<Set<String>>` | _(not set)_ | `AUSSIE_GATEWAY_CORS_EXPOSED_HEADERS` | Headers exposed to the browser. |
-| `aussie.gateway.cors.allow-credentials` | `boolean` | `true` | `AUSSIE_GATEWAY_CORS_ALLOW_CREDENTIALS` | Allow credentials (cookies, authorization headers). |
+| `aussie.gateway.cors.allow-credentials` | `boolean` | `false` | `AUSSIE_GATEWAY_CORS_ALLOW_CREDENTIALS` | Allow credentials (cookies, authorization headers). |
 | `aussie.gateway.cors.max-age` | `Optional<Long>` | `3600` | `AUSSIE_GATEWAY_CORS_MAX_AGE` | Max age for preflight cache in seconds. |
 
 **Profile overrides:**
@@ -103,7 +103,7 @@ All durations use ISO-8601 format (e.g., `PT30S` for 30 seconds, `PT1H` for 1 ho
 | `%dev` | `aussie.gateway.cors.allowed-origins` | `http://localhost:3000,http://127.0.0.1:3000` |
 | `%prod` | `aussie.gateway.cors.enabled` | `true` |
 
-**Security considerations:** The default `allowed-origins=*` is permissive. When `allow-credentials=true`, the combination with `allowed-origins=*` is insecure: browsers will reject this combination, but the configuration should be tightened in production to list specific allowed origins. The dev profile narrows origins to `localhost:3000`.
+**Security considerations:** CORS is disabled and denies all origins by default. Production enables the filter but requires an explicit list of exact HTTPS origins; wildcard origins are rejected. The dev profile supplies local origins but still requires CORS to be enabled explicitly.
 
 ## 3. Security Headers
 
@@ -1089,6 +1089,6 @@ Quarkus profiles control which configuration values are active. Aussie uses thre
 | Connection pools (HTTP) | 50/host, 200 total | 200/host, 2000 total |
 | Connection pools (Cassandra) | 30/node | 50/node |
 | Connection pools (Redis) | 30 connections, 100 waiting | 50 connections, 200 waiting |
-| CORS origins | `localhost:3000` | `*` (must be overridden) |
+| CORS origins | `localhost:3000` | Deny all until explicitly configured |
 | Translation config storage | Memory | Auto-selects (Cassandra if available) |
 | Translation config cache | Disabled | Enabled |

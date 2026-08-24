@@ -173,7 +173,7 @@ func browserLogin(cfg *config.Config) error {
 	if result != nil {
 		return result
 	}
-	return storeAndPrintCredentials(token)
+	return storeAndPrintCredentials(token, cfg.Host)
 }
 
 // deviceCodeLogin uses device code flow for headless environments.
@@ -233,7 +233,7 @@ func deviceCodeLogin(cfg *config.Config) error {
 			return err
 		}
 
-		return storeAndPrintCredentials(token)
+		return storeAndPrintCredentials(token, cfg.Host)
 	}
 
 	return fmt.Errorf("device code expired")
@@ -318,7 +318,7 @@ func callbackLogin(cfg *config.Config) error {
 	if result != nil {
 		return result
 	}
-	return storeAndPrintCredentials(token)
+	return storeAndPrintCredentials(token, cfg.Host)
 }
 
 // pollForToken polls the translation layer for a token using the device code.
@@ -367,7 +367,7 @@ func pollForToken(loginURL, deviceCode string) (string, error) {
 }
 
 // storeAndPrintCredentials parses the token, stores credentials, and prints status.
-func storeAndPrintCredentials(token string) error {
+func storeAndPrintCredentials(token, host string) error {
 	claims, err := auth.ParseTokenClaims(token)
 	if err != nil {
 		return fmt.Errorf("failed to parse token: %w", err)
@@ -378,6 +378,10 @@ func storeAndPrintCredentials(token string) error {
 	}
 
 	creds := claims.ToStoredCredentials(token)
+	creds.ServerOrigin, err = auth.CanonicalOrigin(host)
+	if err != nil {
+		return fmt.Errorf("invalid configured server: %w", err)
+	}
 	if err := auth.StoreCredentials(creds); err != nil {
 		return fmt.Errorf("failed to store credentials: %w", err)
 	}

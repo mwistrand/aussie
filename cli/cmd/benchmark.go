@@ -91,7 +91,7 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get authentication token
-	token, err := auth.GetAuthToken(cfg.ApiKey)
+	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
 	if err != nil {
 		return fmt.Errorf("authentication required: %w\nRun 'aussie login' to authenticate", err)
 	}

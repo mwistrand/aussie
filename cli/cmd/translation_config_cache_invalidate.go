@@ -40,7 +40,7 @@ func runTranslationConfigCacheInvalidate(cmd *cobra.Command, args []string) erro
 		cfg.Host = serverFlag
 	}
 
-	token, err := auth.GetAuthToken(cfg.ApiKey)
+	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
 	if err != nil {
 		return err
 	}

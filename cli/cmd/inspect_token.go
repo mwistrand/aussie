@@ -58,7 +58,7 @@ func runInspectToken(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get authentication token
-	authToken, err := auth.GetAuthToken(cfg.ApiKey)
+	authToken, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
 	if err != nil {
 		return err
 	}

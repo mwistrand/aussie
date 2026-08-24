@@ -40,7 +40,7 @@ func runTranslationConfigActivate(cmd *cobra.Command, args []string) error {
 		cfg.Host = serverFlag
 	}
 
-	token, err := auth.GetAuthToken(cfg.ApiKey)
+	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
 	if err != nil {
 		return err
 	}

@@ -14,7 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.common.*;
+import aussie.core.model.common.CorsConfig;
 
 @DisplayName("CorsConfig Tests")
 class CorsConfigTest {
@@ -24,7 +24,7 @@ class CorsConfigTest {
     class FactoryMethodTests {
 
         @Test
-        @DisplayName("allowAll() should create permissive config")
+        @DisplayName("allowAll() should create non-credentialed wildcard config")
         void allowAllShouldCreatePermissiveConfig() {
             var config = CorsConfig.allowAll();
 
@@ -32,7 +32,7 @@ class CorsConfigTest {
             assertTrue(config.isOriginAllowed("http://any-origin.test"));
             assertTrue(config.isMethodAllowed("GET"));
             assertTrue(config.isMethodAllowed("DELETE"));
-            assertTrue(config.allowCredentials());
+            assertFalse(config.allowCredentials());
             assertEquals(Optional.of(3600L), config.maxAge());
         }
 
@@ -83,9 +83,14 @@ class CorsConfigTest {
         @DisplayName("Should allow wildcard origin")
         void shouldAllowWildcardOrigin() {
             var config = CorsConfig.builder().allowedOrigins("*").build();
+            var credentialed = CorsConfig.builder()
+                    .allowedOrigins("*")
+                    .allowCredentials(true)
+                    .build();
 
             assertTrue(config.isOriginAllowed("http://example.com"));
             assertTrue(config.isOriginAllowed("http://any-domain.test"));
+            assertFalse(credentialed.isOriginAllowed("http://example.com"));
         }
 
         @Test
@@ -101,12 +106,12 @@ class CorsConfigTest {
         }
 
         @Test
-        @DisplayName("Should match wildcard subdomain pattern")
-        void shouldMatchWildcardSubdomainPattern() {
+        @DisplayName("Should reject wildcard subdomain pattern")
+        void shouldRejectWildcardSubdomainPattern() {
             var config = CorsConfig.builder().allowedOrigins("*.example.com").build();
 
-            assertTrue(config.isOriginAllowed("http://api.example.com"));
-            assertTrue(config.isOriginAllowed("https://sub.example.com"));
+            assertFalse(config.isOriginAllowed("http://api.example.com"));
+            assertFalse(config.isOriginAllowed("https://sub.example.com"));
             assertFalse(config.isOriginAllowed("http://example.com"));
             assertFalse(config.isOriginAllowed("http://other.com"));
         }
@@ -167,6 +172,17 @@ class CorsConfigTest {
     @Nested
     @DisplayName("String Formatters")
     class StringFormatterTests {
+
+        @Test
+        @DisplayName("areHeadersAllowed() should match every requested header case-insensitively")
+        void areHeadersAllowedShouldMatchEveryRequestedHeaderCaseInsensitively() {
+            var config = CorsConfig.builder()
+                    .allowedHeaders("Content-Type", "Authorization")
+                    .build();
+
+            assertTrue(config.areHeadersAllowed("content-type, AUTHORIZATION"));
+            assertFalse(config.areHeadersAllowed("content-type, X-Not-Allowed"));
+        }
 
         @Test
         @DisplayName("getAllowedHeadersString() should return wildcard")

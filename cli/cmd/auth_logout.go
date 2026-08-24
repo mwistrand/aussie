@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -51,6 +52,13 @@ func runLogout(cmd *cobra.Command, args []string) error {
 
 	// Optionally call server logout
 	if serverLogout && cfg.Auth.LogoutURL != "" && creds != nil {
+		logoutURL, parseErr := url.Parse(cfg.Auth.LogoutURL)
+		if parseErr != nil || logoutURL.User != nil {
+			return fmt.Errorf("refusing logout request to an invalid server URL")
+		}
+		if _, originErr := auth.CanonicalOrigin(logoutURL.Scheme + "://" + logoutURL.Host); originErr != nil {
+			return fmt.Errorf("refusing logout request to an insecure server URL")
+		}
 		if err := serverSideLogout(cfg.Auth.LogoutURL, creds.Token); err != nil {
 			fmt.Printf("Warning: Server logout failed: %v\n", err)
 		} else {

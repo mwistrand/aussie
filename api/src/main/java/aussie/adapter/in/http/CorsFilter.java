@@ -36,7 +36,9 @@ public class CorsFilter {
     private static final String ACCESS_CONTROL_ALLOW_CREDENTIALS = "Access-Control-Allow-Credentials";
     private static final String ACCESS_CONTROL_MAX_AGE = "Access-Control-Max-Age";
     private static final String ACCESS_CONTROL_REQUEST_METHOD = "Access-Control-Request-Method";
+    private static final String ACCESS_CONTROL_REQUEST_HEADERS = "Access-Control-Request-Headers";
     private static final String VARY = "Vary";
+    private static final int MAX_CORS_HEADER_LENGTH = 4096;
 
     private final Instance<GatewayCorsConfig> corsConfigInstance;
 
@@ -66,7 +68,7 @@ public class CorsFilter {
         }
 
         String origin = rc.request().getHeader(ORIGIN_HEADER);
-        if (origin == null || origin.isBlank()) {
+        if (origin == null || origin.isBlank() || origin.length() > MAX_CORS_HEADER_LENGTH) {
             rc.next();
             return; // Not a CORS request
         }
@@ -92,6 +94,7 @@ public class CorsFilter {
 
     private void handlePreflight(RoutingContext rc, String origin, CorsConfig corsConfig) {
         String requestMethod = rc.request().getHeader(ACCESS_CONTROL_REQUEST_METHOD);
+        String requestHeaders = rc.request().getHeader(ACCESS_CONTROL_REQUEST_HEADERS);
 
         // Check if origin is allowed
         if (!corsConfig.isOriginAllowed(origin)) {
@@ -106,13 +109,24 @@ public class CorsFilter {
             rc.response().setStatusCode(403).end("Forbidden");
             return;
         }
+        if (requestHeaders != null
+                && (requestHeaders.length() > MAX_CORS_HEADER_LENGTH
+                        || !corsConfig.areHeadersAllowed(requestHeaders))) {
+            LOG.debugf("CORS preflight rejected: headers not allowed");
+            rc.response().setStatusCode(403).end("Forbidden");
+            return;
+        }
 
         // Set allowed origin
         if (corsConfig.allowedOrigins().contains("*") && !corsConfig.allowCredentials()) {
             rc.response().putHeader(ACCESS_CONTROL_ALLOW_ORIGIN, "*");
         } else {
             rc.response().putHeader(ACCESS_CONTROL_ALLOW_ORIGIN, origin);
-            rc.response().putHeader(VARY, ORIGIN_HEADER);
+            rc.response()
+                    .putHeader(
+                            VARY,
+                            ORIGIN_HEADER + ", " + ACCESS_CONTROL_REQUEST_METHOD + ", "
+                                    + ACCESS_CONTROL_REQUEST_HEADERS);
         }
 
         // Set allowed methods

@@ -101,7 +101,7 @@ Waiting for authentication...
 
 If your organization has API keys enabled, add the key to your configuration:
 
-**~/.aussierc** (global) or **.aussierc** (project-local):
+Store API keys only in **~/.aussierc** (global). Project-local `.aussierc` files may select a host but cannot supply credentials:
 ```toml
 host = "http://localhost:1234"
 api_key = "your-api-key"
@@ -122,7 +122,7 @@ api_key = "your-api-key"
 
 When both IdP credentials and API key are available, the CLI uses this precedence:
 1. JWT token from `aussie login` (stored in `~/.aussie/credentials`)
-2. API key from `.aussierc`
+2. API key from `~/.aussierc`, only when the project-local configuration has not changed its host
 
 ### Checking Credentials
 Verify your credentials using the CLI:
@@ -164,14 +164,14 @@ go build -o aussie
 ```
 
 ### Configuration
-The CLI uses configuration files to store settings like the server URL and API key.
+The CLI uses configuration files for the server URL and authentication settings. Secrets such as API keys belong only in the global file.
 
 **Configuration locations (in order of precedence):**
-1. Local `.aussierc` file in the current directory
+1. Local `.aussierc` non-secret settings in the current directory
 2. Global `~/.aussierc` file in your home directory
 3. Default values
 
-**Configuration format (TOML):**
+**Global configuration format (`~/.aussierc`, TOML):**
 ```toml
 host = "http://localhost:1234"
 api_key = "your-api-key"
@@ -508,7 +508,7 @@ Setting a field to an empty string (`""`) suppresses that header entirely for th
 ### Authentication Commands
 
 #### Configuration
-Configure authentication in `~/.aussierc` (global) or `.aussierc` (project-local):
+Configure login settings in `~/.aussierc` (global) or `.aussierc` (project-local). Store API keys and the token-bearing `auth.logout_url` only in `~/.aussierc`:
 
 **For IdP authentication:**
 ```toml

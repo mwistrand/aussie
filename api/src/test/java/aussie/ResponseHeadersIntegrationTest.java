@@ -33,7 +33,11 @@ class ResponseHeadersIntegrationTest {
     public static class NoopAuthProfile implements QuarkusTestProfile {
         @Override
         public Map<String, String> getConfigOverrides() {
-            return Map.of("aussie.auth.dangerous-noop", "true");
+            return Map.of(
+                    "aussie.auth.dangerous-noop", "true",
+                    "aussie.gateway.cors.enabled", "true",
+                    "aussie.gateway.cors.allowed-origins", "https://app.example.com",
+                    "aussie.gateway.cors.allow-credentials", "true");
         }
     }
 

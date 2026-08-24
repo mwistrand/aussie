@@ -14,7 +14,7 @@ JMH benchmarks live in `api/src/jmh/java/aussie/benchmark/` and exercise pure do
 | `RevocationCacheBenchmark`   | Caffeine-backed revocation cache hit, miss, and expiry detection       |
 | `CidrMatchingBenchmark`      | Trusted proxy CIDR matching and access control evaluation              |
 | `LocalCacheBenchmark`        | `CaffeineLocalCache` get/put with TTL jitter, concurrent throughput    |
-| `CorsMatchingBenchmark`      | CORS origin and method matching                                        |
+| `CorsMatchingBenchmark`      | CORS origin, method, and requested-header matching                      |
 | `HeaderPipelineBenchmark`    | `ProxyRequestPreparer.prepare` and `filterResponseHeaders` across 10/20/40 headers, with and without a `Connection` header |
 | `TokenValidationBenchmark`   | `OidcTokenValidator.validate` cache-hit cost, with and without a configured audience |
 

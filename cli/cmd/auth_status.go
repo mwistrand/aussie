@@ -83,8 +83,12 @@ func showJWTStatus(cfg *config.Config, creds *auth.StoredCredentials) error {
 
 	fmt.Println()
 
-	// Validate token against server
-	return validateWithServer(cfg, creds.Token)
+	// Validate only against the credential's bound origin.
+	token, err := auth.GetAuthTokenForHost("", cfg.Host)
+	if err != nil {
+		return err
+	}
+	return validateWithServer(cfg, token)
 }
 
 // showAPIKeyStatus displays status for API key authentication.

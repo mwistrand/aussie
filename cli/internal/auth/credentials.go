@@ -3,8 +3,10 @@ package auth
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -12,6 +14,9 @@ import (
 type StoredCredentials struct {
 	// Token is the JWT token received from the IdP/translation layer.
 	Token string `json:"token"`
+
+	// ServerOrigin is the exact origin this credential may authenticate to.
+	ServerOrigin string `json:"server_origin"`
 
 	// ExpiresAt is when the token expires.
 	ExpiresAt time.Time `json:"expires_at"`
@@ -73,9 +78,26 @@ func StoreCredentials(creds StoredCredentials) error {
 		return fmt.Errorf("failed to marshal credentials: %w", err)
 	}
 
-	// Write with restrictive permissions (owner read/write only)
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	// Rename a private temporary file so a repository cannot redirect writes through a symlink.
+	tmp, err := os.CreateTemp(dir, ".credentials-*")
+	if err != nil {
+		return fmt.Errorf("failed to create credentials file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(0600); err != nil {
+		tmp.Close()
+		return fmt.Errorf("failed to secure credentials file: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
 		return fmt.Errorf("failed to write credentials: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("failed to close credentials file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("failed to install credentials: %w", err)
 	}
 
 	return nil
@@ -138,28 +160,43 @@ func HasCredentials() bool {
 	return err == nil
 }
 
-// GetToken returns the stored token if valid, or an error if not authenticated.
-func GetToken() (string, error) {
-	creds, err := LoadCredentials()
+// CanonicalOrigin returns the origin to which a credential may be sent.
+func CanonicalOrigin(raw string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme == "" || u.Hostname() == "" || u.User != nil || u.Path != "" && u.Path != "/" || u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("server must be an origin URL")
+	}
+	host := strings.ToLower(u.Hostname())
+	if u.Scheme != "https" && !(u.Scheme == "http" && (host == "localhost" || host == "127.0.0.1" || host == "::1")) {
+		return "", fmt.Errorf("server credentials require HTTPS (HTTP is allowed only for localhost)")
+	}
+	port := u.Port()
+	if (u.Scheme == "https" && port == "443") || (u.Scheme == "http" && port == "80") {
+		port = ""
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if port != "" {
+		host += ":" + port
+	}
+	return strings.ToLower(u.Scheme) + "://" + host, nil
+}
+
+// GetAuthTokenForHost refuses stored credentials unless their origin matches exactly.
+func GetAuthTokenForHost(apiKey, host string) (string, error) {
+	origin, err := CanonicalOrigin(host)
 	if err != nil {
 		return "", err
 	}
-	return creds.Token, nil
-}
-
-// GetAuthToken returns an authentication token, checking JWT credentials first,
-// then falling back to the provided API key if available.
-// This is the recommended way to get an auth token in CLI commands.
-func GetAuthToken(apiKey string) (string, error) {
-	// Check for JWT credentials first
-	if token, err := GetToken(); err == nil {
-		return token, nil
+	if creds, err := LoadCredentials(); err == nil {
+		if creds.ServerOrigin != origin {
+			return "", fmt.Errorf("stored credentials belong to a different server; run 'aussie login'")
+		}
+		return creds.Token, nil
 	}
-
-	// Fall back to API key if provided
 	if apiKey != "" {
 		return apiKey, nil
 	}
-
 	return "", fmt.Errorf("not authenticated: run 'aussie login' to authenticate")
 }

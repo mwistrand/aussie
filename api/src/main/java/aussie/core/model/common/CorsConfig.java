@@ -1,5 +1,6 @@
 package aussie.core.model.common;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -35,16 +36,14 @@ public record CorsConfig(
         }
     }
 
-    /**
-     * Create default CORS config that allows all origins.
-     */
+    /** Create a non-credentialed wildcard CORS config for explicit development use. */
     public static CorsConfig allowAll() {
         return new CorsConfig(
                 List.of("*"),
                 Set.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"),
                 Set.of("*"),
                 Set.of(),
-                true,
+                false,
                 Optional.of(3600L));
     }
 
@@ -68,10 +67,8 @@ public record CorsConfig(
         if (allowedOrigins.isEmpty()) {
             return false;
         }
-        if (allowedOrigins.contains("*")) {
-            return true;
-        }
-        return allowedOrigins.stream().anyMatch(allowed -> matchesOrigin(allowed, origin));
+        return (allowedOrigins.contains("*") && !allowCredentials)
+                || allowedOrigins.stream().anyMatch(origin::equals);
     }
 
     /**
@@ -100,6 +97,19 @@ public record CorsConfig(
         return String.join(", ", allowedHeaders);
     }
 
+    public boolean areHeadersAllowed(String requestedHeaders) {
+        if (requestedHeaders == null || requestedHeaders.isBlank()) {
+            return true;
+        }
+        if (allowedHeaders.contains("*")) {
+            return true;
+        }
+        return Arrays.stream(requestedHeaders.split(","))
+                .map(String::trim)
+                .filter(header -> !header.isEmpty())
+                .allMatch(header -> allowedHeaders.stream().anyMatch(header::equalsIgnoreCase));
+    }
+
     /**
      * Get the allowed methods as a comma-separated string for the response header.
      */
@@ -118,19 +128,6 @@ public record CorsConfig(
             return null;
         }
         return String.join(", ", exposedHeaders);
-    }
-
-    private boolean matchesOrigin(String pattern, String origin) {
-        if (pattern.equals(origin)) {
-            return true;
-        }
-        // Support wildcard subdomains like *.example.com
-        // This should only match subdomains, not the main domain itself
-        if (pattern.startsWith("*.")) {
-            String domain = pattern.substring(2);
-            return origin.endsWith("." + domain);
-        }
-        return false;
     }
 
     /**

@@ -107,25 +107,20 @@ public class ProductionConfigurationValidator {
             throw invalid("credentialed CORS requires an explicit allowed-origin list");
         }
         origins.forEach(origin -> {
-            if (origin.contains("*") && !origin.startsWith("*.")) {
-                throw invalid("CORS wildcard must be a subdomain pattern");
-            }
-            if (origin.startsWith("*.")) {
-                if (origin.length() < 4 || origin.indexOf('.', 2) < 0) {
-                    throw invalid("CORS wildcard must name a concrete subdomain");
-                }
-                return;
+            if (origin.contains("*")) {
+                throw invalid("CORS origins must be exact origins; wildcards are forbidden");
             }
             try {
                 final var parsed = URI.create(origin);
                 if (!parsed.isAbsolute()
+                        || !parsed.getScheme().equalsIgnoreCase("https")
                         || parsed.getHost() == null
                         || parsed.getUserInfo() != null
                         || !parsed.getPath().isEmpty()
                         || parsed.getQuery() != null
                         || parsed.getFragment() != null
                         || parsed.getPort() > 65535) {
-                    throw invalid("CORS origins must be absolute origins");
+                    throw invalid("production CORS origins must be HTTPS absolute origins");
                 }
             } catch (IllegalArgumentException e) {
                 throw invalid("CORS origins must be valid absolute origins");

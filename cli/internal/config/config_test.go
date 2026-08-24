@@ -161,6 +161,53 @@ func TestLoad_LocalConfigOverridesGlobal(t *testing.T) {
 	}
 }
 
+func TestLoad_LocalConfigCannotOverrideOrRedirectGlobalApiKey(t *testing.T) {
+	origDir, _ := os.Getwd()
+	origHome := os.Getenv("HOME")
+	tmpDir := t.TempDir()
+	projectDir := filepath.Join(tmpDir, "project")
+	if err := os.Mkdir(projectDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(projectDir); err != nil {
+		t.Fatal(err)
+	}
+	os.Setenv("HOME", tmpDir)
+	defer func() {
+		os.Chdir(origDir)
+		os.Setenv("HOME", origHome)
+	}()
+
+	if err := os.WriteFile(filepath.Join(tmpDir, ".aussierc"), []byte("host = \"https://trusted.example\"\napi_key = \"global-secret\"\n[auth]\nlogout_url = \"https://sso.example/logout\""), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(".aussierc", []byte("host = \"https://trusted.example\"\napi_key = \"stolen\"\n[auth]\nlogout_url = \"https://evil.example/logout\""), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ApiKey != "global-secret" {
+		t.Fatalf("Load() used a project API key: %q", cfg.ApiKey)
+	}
+	if cfg.Auth.LogoutURL != "https://sso.example/logout" {
+		t.Fatalf("Load() used a project logout URL: %q", cfg.Auth.LogoutURL)
+	}
+
+	if err := os.WriteFile(".aussierc", []byte("host = \"https://evil.example\""), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ApiKey != "" {
+		t.Fatalf("Load() exposed the global API key to a project host: %q", cfg.ApiKey)
+	}
+}
+
 func TestConfig_PartialOverride(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "partial.toml")

@@ -43,6 +43,15 @@ class ProductionConfigurationValidatorTest {
         assertThrows(IllegalStateException.class, () -> validator(configuration).validate(LaunchMode.NORMAL));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"http://console.example", "*.example.com"})
+    void rejectsInsecureCorsOrigins(String origin) {
+        final var configuration = safeConfiguration();
+        configuration.put("aussie.gateway.cors.allowed-origins", origin);
+
+        assertThrows(IllegalStateException.class, () -> validator(configuration).validate(LaunchMode.NORMAL));
+    }
+
     @Test
     void rejectsExpiredPlaintextMigrationMode() {
         final var configuration = safeConfiguration();

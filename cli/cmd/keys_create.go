@@ -61,7 +61,7 @@ func runKeysCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get authentication token (JWT first, then API key fallback)
-	token, err := auth.GetAuthToken(cfg.ApiKey)
+	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
 	if err != nil {
 		return err
 	}

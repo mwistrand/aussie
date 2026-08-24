@@ -14,10 +14,10 @@ Use this CLI to register services, manage routes, and monitor your API gateway.
 
 Configuration is loaded from (in order of precedence):
   1. Command-line flags
-  2. Local .aussierc file (current directory)
+  2. Local .aussierc non-secret settings (current directory)
   3. Global ~/.aussierc config file
 
-Example config file (.aussierc or ~/.aussierc):
+Example global config file (~/.aussierc):
   host = "http://localhost:1234"
   api_key = "your-api-key"`,
 }

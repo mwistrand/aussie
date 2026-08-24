@@ -162,6 +162,26 @@ class CorsFilterTest {
         }
 
         @Test
+        @DisplayName("should reject unlisted requested headers")
+        void shouldRejectUnlistedRequestedHeaders() {
+            when(request.getHeader("Access-Control-Request-Headers")).thenReturn("X-Not-Allowed");
+
+            filter.corsHandler(rc);
+
+            verify(response).setStatusCode(403);
+        }
+
+        @Test
+        @DisplayName("should vary preflight responses by all request selectors")
+        void shouldVaryPreflightResponses() {
+            when(request.getHeader("Access-Control-Request-Method")).thenReturn("POST");
+
+            filter.corsHandler(rc);
+
+            verify(response).putHeader("Vary", "Origin, Access-Control-Request-Method, Access-Control-Request-Headers");
+        }
+
+        @Test
         @DisplayName("should set wildcard origin when * configured and no credentials")
         void shouldSetWildcardOrigin() {
             when(corsConfig.allowedOrigins()).thenReturn(List.of("*"));

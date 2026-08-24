@@ -18,9 +18,7 @@ import org.openjdk.jmh.infra.Blackhole;
 import aussie.core.model.common.CorsConfig;
 
 /**
- * Benchmarks for CORS origin and method matching. Measures the exact-match, wildcard subdomain,
- * and no-match paths so that changes to origin matching do not silently regress the preflight
- * hot path.
+ * Benchmarks for CORS origin, method, and requested-header matching.
  */
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
@@ -48,14 +46,13 @@ public class CorsMatchingBenchmark {
     }
 
     @State(Scope.Benchmark)
-    public static class WildcardState {
+    public static class HeaderState {
         CorsConfig config;
 
         @Setup
         public void setup() {
             config = CorsConfig.builder()
-                    .allowedOrigins("https://app.example.com", "*.example.com", "*.internal.example.com")
-                    .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                    .allowedHeaders("Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin")
                     .build();
         }
     }
@@ -96,8 +93,8 @@ public class CorsMatchingBenchmark {
     }
 
     @Benchmark
-    public void isOriginAllowed_wildcardSubdomain(WildcardState state, Blackhole bh) {
-        bh.consume(state.config.isOriginAllowed("https://staging.internal.example.com"));
+    public void areHeadersAllowed(HeaderState state, Blackhole bh) {
+        bh.consume(state.config.areHeadersAllowed("authorization, content-type"));
     }
 
     @Benchmark

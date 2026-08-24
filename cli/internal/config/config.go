@@ -86,10 +86,7 @@ func (c *Config) IsAuthenticated() bool {
 	return c.ApiKey != ""
 }
 
-// Load loads configuration from files, with the following precedence:
-// 1. Local .aussierc file (in current directory)
-// 2. Global ~/.aussie config file
-// 3. Default values
+// Load loads global credentials and project-local non-secret configuration.
 func Load() (*Config, error) {
 	cfg := DefaultConfig()
 
@@ -103,11 +100,20 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// Try local config (higher precedence, overwrites global)
+	// Project files may select the server and login flow, but never credential destinations.
 	localPath := LocalConfigPath()
 	if data, err := os.ReadFile(localPath); err == nil {
+		apiKey := cfg.ApiKey
+		apiKeyHost := cfg.Host
+		logoutURL := cfg.Auth.LogoutURL
 		if err := toml.Unmarshal(data, cfg); err != nil {
 			return nil, err
+		}
+		cfg.Auth.LogoutURL = logoutURL
+		if cfg.Host == apiKeyHost {
+			cfg.ApiKey = apiKey
+		} else {
+			cfg.ApiKey = ""
 		}
 	}
 

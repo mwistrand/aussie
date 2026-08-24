@@ -1144,11 +1144,11 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | `AUSSIE_GATEWAY_LIMITS_MAX_HEADER_SIZE` | `8192` | Maximum single header size (bytes) |
 | `AUSSIE_GATEWAY_LIMITS_MAX_TOTAL_HEADERS_SIZE` | `32768` | Maximum total headers size (bytes) |
 | `AUSSIE_GATEWAY_CORS_ENABLED` | `true` | Enable CORS support |
-| `AUSSIE_GATEWAY_CORS_ALLOWED_ORIGINS` | `*` | Allowed CORS origins (comma-separated) |
+| `AUSSIE_GATEWAY_CORS_ALLOWED_ORIGINS` | Required | Allowed exact HTTPS origins (comma-separated; wildcards are rejected in production) |
 | `AUSSIE_GATEWAY_CORS_ALLOWED_METHODS` | `GET,POST,PUT,DELETE,PATCH,OPTIONS,HEAD` | Allowed HTTP methods |
 | `AUSSIE_GATEWAY_CORS_ALLOWED_HEADERS` | `Content-Type,Authorization,X-Requested-With,Accept,Origin` | Allowed request headers |
 | `AUSSIE_GATEWAY_CORS_EXPOSED_HEADERS` | - | Response headers exposed to the client |
-| `AUSSIE_GATEWAY_CORS_ALLOW_CREDENTIALS` | `true` | Allow credentials in CORS requests |
+| `AUSSIE_GATEWAY_CORS_ALLOW_CREDENTIALS` | `false` | Allow credentials in CORS requests |
 | `AUSSIE_GATEWAY_CORS_MAX_AGE` | `3600` | Preflight cache duration in seconds |
 | `AUSSIE_GATEWAY_TRUSTED_PROXY_ENABLED` | `false` | Enable trusted proxy validation for forwarding headers |
 | `AUSSIE_GATEWAY_TRUSTED_PROXY_PROXIES` | - | Trusted proxy IPs/CIDRs (comma-separated) |

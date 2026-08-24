@@ -77,11 +77,12 @@ func TestStoreAndLoadCredentials(t *testing.T) {
 	// Create test credentials
 	expiresAt := time.Now().Add(time.Hour).Truncate(time.Second)
 	creds := StoredCredentials{
-		Token:     "test-jwt-token",
-		ExpiresAt: expiresAt,
-		Subject:   "user@example.com",
-		Name:      "Test User",
-		Groups:    []string{"developers", "admins"},
+		Token:        "test-jwt-token",
+		ServerOrigin: "https://trusted.example",
+		ExpiresAt:    expiresAt,
+		Subject:      "user@example.com",
+		Name:         "Test User",
+		Groups:       []string{"developers", "admins"},
 	}
 
 	// Store credentials
@@ -111,6 +112,9 @@ func TestStoreAndLoadCredentials(t *testing.T) {
 	if loaded.Token != creds.Token {
 		t.Errorf("Token = %q, want %q", loaded.Token, creds.Token)
 	}
+	if loaded.ServerOrigin != creds.ServerOrigin {
+		t.Errorf("ServerOrigin = %q, want %q", loaded.ServerOrigin, creds.ServerOrigin)
+	}
 	if loaded.Subject != creds.Subject {
 		t.Errorf("Subject = %q, want %q", loaded.Subject, creds.Subject)
 	}
@@ -122,6 +126,37 @@ func TestStoreAndLoadCredentials(t *testing.T) {
 	}
 	if len(loaded.Groups) != len(creds.Groups) {
 		t.Errorf("Groups length = %d, want %d", len(loaded.Groups), len(creds.Groups))
+	}
+}
+
+func TestStoreCredentialsDoesNotFollowSymlink(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	dir := filepath.Join(tmpDir, ".aussie")
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(tmpDir, "target")
+	if err := os.WriteFile(target, []byte("unchanged"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, "credentials")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	if err := StoreCredentials(StoredCredentials{
+		Token:        "trusted-token",
+		ServerOrigin: "https://trusted.example",
+		ExpiresAt:    time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "unchanged" {
+		t.Fatal("StoreCredentials() followed the credentials symlink")
 	}
 }
 
@@ -282,118 +317,59 @@ func TestHasCredentials(t *testing.T) {
 	}
 }
 
-func TestGetAuthToken_JWTFirst(t *testing.T) {
-	// Create a temporary directory for testing
-	tmpDir, err := os.MkdirTemp("", "aussie-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	// Override home directory for testing
+func TestGetAuthTokenForHostRejectsDifferentOrigin(t *testing.T) {
+	tmpDir := t.TempDir()
 	originalHome := os.Getenv("HOME")
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", originalHome)
 
-	// Store JWT credentials
-	creds := StoredCredentials{
-		Token:     "jwt-token-from-login",
-		ExpiresAt: time.Now().Add(time.Hour),
-		Subject:   "user@example.com",
+	if err := StoreCredentials(StoredCredentials{
+		Token:        "trusted-token",
+		ServerOrigin: "https://trusted.example",
+		ExpiresAt:    time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
 	}
 
-	if err := StoreCredentials(creds); err != nil {
-		t.Fatalf("StoreCredentials() error = %v", err)
-	}
-
-	// GetAuthToken should return JWT token even when API key is provided
-	token, err := GetAuthToken("api-key-from-config")
-	if err != nil {
-		t.Fatalf("GetAuthToken() error = %v", err)
-	}
-
-	if token != "jwt-token-from-login" {
-		t.Errorf("GetAuthToken() = %q, want %q", token, "jwt-token-from-login")
+	if _, err := GetAuthTokenForHost("fallback-key", "https://evil.example"); err == nil {
+		t.Fatal("GetAuthTokenForHost() accepted credentials for a different origin")
 	}
 }
 
-func TestGetAuthToken_FallbackToAPIKey(t *testing.T) {
-	// Create a temporary directory for testing
-	tmpDir, err := os.MkdirTemp("", "aussie-test-*")
+func TestGetAuthTokenForHostReturnsMatchingCredentials(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	if err := StoreCredentials(StoredCredentials{
+		Token:        "trusted-token",
+		ServerOrigin: "https://trusted.example",
+		ExpiresAt:    time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	token, err := GetAuthTokenForHost("fallback-key", "https://TRUSTED.example:443/")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(tmpDir)
-
-	// Override home directory for testing
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", originalHome)
-
-	// No JWT credentials stored
-
-	// GetAuthToken should fall back to API key
-	token, err := GetAuthToken("api-key-from-config")
-	if err != nil {
-		t.Fatalf("GetAuthToken() error = %v", err)
-	}
-
-	if token != "api-key-from-config" {
-		t.Errorf("GetAuthToken() = %q, want %q", token, "api-key-from-config")
+	if token != "trusted-token" {
+		t.Fatalf("GetAuthTokenForHost() = %q, want trusted-token", token)
 	}
 }
 
-func TestGetAuthToken_NoAuthAvailable(t *testing.T) {
-	// Create a temporary directory for testing
-	tmpDir, err := os.MkdirTemp("", "aussie-test-*")
+func TestGetAuthTokenForHostFallsBackToAPIKey(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	token, err := GetAuthTokenForHost("fallback-key", "https://trusted.example")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(tmpDir)
-
-	// Override home directory for testing
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", originalHome)
-
-	// No JWT credentials and no API key
-	_, err = GetAuthToken("")
-	if err == nil {
-		t.Error("GetAuthToken() should return error when no auth is available")
+	if token != "fallback-key" {
+		t.Fatalf("GetAuthTokenForHost() = %q, want fallback-key", token)
 	}
 }
 
-func TestGetAuthToken_ExpiredJWT_FallbackToAPIKey(t *testing.T) {
-	// Create a temporary directory for testing
-	tmpDir, err := os.MkdirTemp("", "aussie-test-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	// Override home directory for testing
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", originalHome)
-
-	// Store expired JWT credentials
-	creds := StoredCredentials{
-		Token:     "expired-jwt-token",
-		ExpiresAt: time.Now().Add(-time.Hour), // Expired
-		Subject:   "user@example.com",
-	}
-
-	if err := StoreCredentials(creds); err != nil {
-		t.Fatalf("StoreCredentials() error = %v", err)
-	}
-
-	// GetAuthToken should fall back to API key when JWT is expired
-	token, err := GetAuthToken("api-key-from-config")
-	if err != nil {
-		t.Fatalf("GetAuthToken() error = %v", err)
-	}
-
-	if token != "api-key-from-config" {
-		t.Errorf("GetAuthToken() = %q, want %q", token, "api-key-from-config")
+func TestCanonicalOriginRejectsInsecureRemoteServer(t *testing.T) {
+	if _, err := CanonicalOrigin("http://gateway.example"); err == nil {
+		t.Fatal("CanonicalOrigin() accepted a remote HTTP server")
 	}
 }

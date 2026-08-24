@@ -189,7 +189,7 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	req.Header.Set("Content-Type", "application/json")
 
 	// Add authentication (JWT first, then API key fallback)
-	if token, err := auth.GetAuthToken(cfg.ApiKey); err == nil {
+	if token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host); err == nil {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 

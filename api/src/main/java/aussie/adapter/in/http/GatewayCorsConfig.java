@@ -19,20 +19,20 @@ public interface GatewayCorsConfig {
     /**
      * Enable CORS handling.
      *
-     * @return true if CORS is enabled (default: true)
+     * @return true if CORS is enabled (default: false)
      */
-    @WithDefault("true")
+    @WithDefault("false")
     boolean enabled();
 
     /**
      * Allowed origins for CORS requests.
      *
-     * <p>Use "*" to allow all origins, or specify a list of allowed origins.
-     * Supports wildcard subdomains like "*.example.com".
+     * <p>Use an explicit list of origins. Wildcard origins are only safe when
+     * credentials are disabled and are not the default.
      *
-     * @return List of allowed origins (default: *)
+     * @return List of allowed origins (default: a non-origin deny sentinel)
      */
-    @WithDefault("*")
+    @WithDefault("__deny_all__")
     List<String> allowedOrigins();
 
     /**
@@ -65,9 +65,9 @@ public interface GatewayCorsConfig {
      *
      * <p>Note: When true, allowedOrigins cannot be "*" for security reasons.
      *
-     * @return true if credentials are allowed (default: true)
+     * @return true if credentials are allowed (default: false)
      */
-    @WithDefault("true")
+    @WithDefault("false")
     boolean allowCredentials();
 
     /**

@@ -932,7 +932,7 @@ Aussie uses [JMH](https://github.com/openjdk/jmh) (Java Microbenchmark Harness) 
 - **Revocation cache lookups**: Caffeine cache hit/miss/expiry paths
 - **CIDR and IP matching**: trusted proxy validation, access control evaluation
 - **Local cache operations**: Caffeine get/put with TTL jitter, concurrent throughput
-- **CORS origin matching**: exact, wildcard subdomain, and miss-all-configured-origins paths
+- **CORS matching**: exact and miss-all-configured-origins paths plus requested-header validation
 
 Run benchmarks with `./gradlew jmh` from the `api/` directory. Results are written to `api/build/results/jmh/` in JSON format.
 

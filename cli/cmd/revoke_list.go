@@ -52,7 +52,7 @@ func runRevokeList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get authentication token
-	token, err := auth.GetAuthToken(cfg.ApiKey)
+	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
 	if err != nil {
 		return err
 	}
