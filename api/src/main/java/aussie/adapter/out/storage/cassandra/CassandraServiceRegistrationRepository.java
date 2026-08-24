@@ -264,6 +264,16 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     }
 
     @Override
+    public Uni<List<ServiceRegistration>> findPage(int limit, int offset) {
+        final var executor = getContextExecutor();
+        final var statement = selectAllStmt.bind().setPageSize(limit);
+        return Uni.createFrom()
+                .completionStage(() -> CassandraPageReader.readPage(
+                        session.executeAsync(statement).toCompletableFuture(), limit, offset, this::fromRow))
+                .emitOn(executor);
+    }
+
+    @Override
     public Uni<Boolean> exists(String serviceId) {
         Executor executor = getContextExecutor();
         return Uni.createFrom()

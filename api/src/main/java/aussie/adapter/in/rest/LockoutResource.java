@@ -71,7 +71,7 @@ public class LockoutResource {
             throw GatewayProblem.featureDisabled("Authentication rate limiting");
         }
 
-        final var effectiveLimit = limit != null && limit > 0 ? limit : 100;
+        final var effectiveLimit = AdminPagination.boundedLimit(limit);
 
         return rateLimitService
                 .streamAllLockouts()

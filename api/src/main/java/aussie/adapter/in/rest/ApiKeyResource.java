@@ -9,11 +9,13 @@ import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
@@ -109,15 +111,17 @@ public class ApiKeyResource {
     }
 
     /**
-     * List all API keys.
+     * List API keys.
      *
      * <p>
      * Key hashes are redacted in the response.
      */
     @GET
     @PermissionsAllowed({Permission.APIKEYS_READ_VALUE, Permission.ADMIN_VALUE})
-    public Uni<List<ApiKey>> listKeys() {
-        return apiKeyService.list();
+    public Uni<List<ApiKey>> listKeys(
+            @QueryParam("limit") @DefaultValue("50") int limit, @QueryParam("offset") @DefaultValue("0") int offset) {
+        AdminPagination.validate(limit, offset);
+        return apiKeyService.list(limit, offset);
     }
 
     /**

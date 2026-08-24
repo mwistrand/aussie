@@ -16,17 +16,20 @@ import (
 
 var keysListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List all API keys",
-	Long: `List all API keys registered with the Aussie API gateway.
+	Short: "List API keys",
+	Long: `List API keys registered with the Aussie API gateway.
 
 Displays key ID, name, permissions, creation date, expiration, and status.
 
 Examples:
-  aussie keys list`,
+  aussie keys list
+  aussie keys list --limit 25 --offset 50`,
 	RunE: runKeysList,
 }
 
 func init() {
+	keysListCmd.Flags().IntP("limit", "l", 50, "Maximum number of keys to return")
+	keysListCmd.Flags().IntP("offset", "o", 0, "Number of keys to skip")
 	keysCmd.AddCommand(keysListCmd)
 }
 
@@ -47,7 +50,9 @@ func runKeysList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	url := fmt.Sprintf("%s/admin/api-keys", cfg.Host)
+	limit, _ := cmd.Flags().GetInt("limit")
+	offset, _ := cmd.Flags().GetInt("offset")
+	url := fmt.Sprintf("%s/admin/api-keys?limit=%d&offset=%d", cfg.Host, limit, offset)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)

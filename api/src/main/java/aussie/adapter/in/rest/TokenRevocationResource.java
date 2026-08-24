@@ -227,7 +227,7 @@ public class TokenRevocationResource {
             throw GatewayProblem.featureDisabled("Token revocation");
         }
 
-        var effectiveLimit = limit != null && limit > 0 ? limit : 100;
+        final var effectiveLimit = AdminPagination.boundedLimit(limit);
 
         return revocationService
                 .streamAllRevokedJtis()
@@ -253,7 +253,7 @@ public class TokenRevocationResource {
             throw GatewayProblem.featureDisabled("Token revocation");
         }
 
-        var effectiveLimit = limit != null && limit > 0 ? limit : 100;
+        final var effectiveLimit = AdminPagination.boundedLimit(limit);
 
         return revocationService
                 .streamAllRevokedUsers()

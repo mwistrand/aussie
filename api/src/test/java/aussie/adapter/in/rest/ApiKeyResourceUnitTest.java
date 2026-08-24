@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import java.security.Principal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -61,6 +62,17 @@ class ApiKeyResourceUnitTest {
                 .createdBy("creator")
                 .expiresAt(expiresAt)
                 .build();
+    }
+
+    @Test
+    @DisplayName("listKeys delegates pagination")
+    void listKeysDelegatesPagination() {
+        final var keys = List.of(createApiKey("key-1", "Key 1", null, null));
+        when(apiKeyService.list(25, 10)).thenReturn(Uni.createFrom().item(keys));
+
+        final var result = resource.listKeys(25, 10).await().atMost(Duration.ofSeconds(5));
+
+        assertEquals(keys, result);
     }
 
     @Nested

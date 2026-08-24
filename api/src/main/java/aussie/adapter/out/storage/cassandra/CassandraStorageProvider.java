@@ -96,7 +96,7 @@ public class CassandraStorageProvider implements StorageRepositoryProvider, Auto
         }
 
         // Then connect with keyspace for all other migrations
-        try (CqlSession keyspaceSession = buildSession(config)) {
+        try (CqlSession keyspaceSession = buildSessionInternal(config, keyspace)) {
             var migrationRunner = new CassandraMigrationRunner(keyspaceSession, keyspace);
             migrationRunner.runMigrations();
         }
@@ -127,8 +127,7 @@ public class CassandraStorageProvider implements StorageRepositoryProvider, Auto
     }
 
     private CqlSession buildSession(StorageAdapterConfig config) {
-        String keyspace = config.getOrDefault("aussie.storage.cassandra.keyspace", "aussie");
-        return buildSessionInternal(config, keyspace);
+        return CassandraSessionRegistry.acquire(config, false);
     }
 
     private CqlSession buildSessionWithoutKeyspace(StorageAdapterConfig config) {
@@ -178,8 +177,9 @@ public class CassandraStorageProvider implements StorageRepositoryProvider, Auto
 
     @Override
     public void close() {
-        if (session != null && !session.isClosed()) {
-            session.close();
+        if (session != null) {
+            CassandraSessionRegistry.release(session);
+            session = null;
         }
     }
 

@@ -176,6 +176,7 @@ public class TranslationConfigResource {
     @PermissionsAllowed({Permission.TRANSLATION_CONFIG_READ_VALUE, Permission.ADMIN_VALUE})
     public Uni<List<TranslationConfigVersionSummaryDto>> listVersions(
             @QueryParam("limit") @DefaultValue("50") int limit, @QueryParam("offset") @DefaultValue("0") int offset) {
+        AdminPagination.validate(limit, offset);
         return configService.listVersions(limit, offset).map(versions -> versions.stream()
                 .map(TranslationConfigVersionSummaryDto::fromModel)
                 .toList());

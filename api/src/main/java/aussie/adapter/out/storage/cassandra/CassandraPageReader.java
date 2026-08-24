@@ -23,6 +23,12 @@ final class CassandraPageReader {
         return countPage(firstPage, 0);
     }
 
+    static <T> CompletionStage<List<T>> readPage(
+            CompletionStage<AsyncResultSet> firstPage, int limit, int offset, Function<Row, T> mapper) {
+        final var values = new ArrayList<T>(limit);
+        return readPage(firstPage, mapper, values, limit, offset).thenApply(ignored -> values);
+    }
+
     private static <T> CompletionStage<Void> readPage(
             CompletionStage<AsyncResultSet> pageStage, Function<Row, T> mapper, List<T> values) {
         return pageStage.thenCompose(page -> {
@@ -31,6 +37,24 @@ final class CassandraPageReader {
                 return CompletableFuture.completedFuture(null);
             }
             return readPage(page.fetchNextPage(), mapper, values);
+        });
+    }
+
+    private static <T> CompletionStage<Void> readPage(
+            CompletionStage<AsyncResultSet> pageStage, Function<Row, T> mapper, List<T> values, int limit, int offset) {
+        return pageStage.thenCompose(page -> {
+            var remainingOffset = offset;
+            for (var row : page.currentPage()) {
+                if (remainingOffset > 0) {
+                    remainingOffset--;
+                } else if (values.size() < limit) {
+                    values.add(mapper.apply(row));
+                }
+            }
+            if (values.size() == limit || !page.hasMorePages()) {
+                return CompletableFuture.completedFuture(null);
+            }
+            return readPage(page.fetchNextPage(), mapper, values, limit, remainingOffset);
         });
     }
 

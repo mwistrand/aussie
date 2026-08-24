@@ -148,6 +148,11 @@ public class RoleService implements RoleManagement {
     }
 
     @Override
+    public Uni<List<Role>> list(int limit, int offset) {
+        return repository.findPage(limit, offset);
+    }
+
+    @Override
     public Uni<Boolean> delete(String id) {
         return repository.delete(id).invoke(deleted -> {
             if (deleted) {

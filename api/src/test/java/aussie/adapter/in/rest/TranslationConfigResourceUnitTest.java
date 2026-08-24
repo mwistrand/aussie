@@ -73,6 +73,16 @@ class TranslationConfigResourceUnitTest {
         when(principal.getName()).thenReturn(name);
     }
 
+    @Test
+    @DisplayName("listVersions delegates pagination")
+    void listVersionsDelegatesPagination() {
+        when(configService.listVersions(25, 10)).thenReturn(Uni.createFrom().item(List.of()));
+
+        final var result = resource.listVersions(25, 10).await().atMost(Duration.ofSeconds(5));
+
+        assertTrue(result.isEmpty());
+    }
+
     @Nested
     @DisplayName("uploadConfig")
     class UploadConfig {

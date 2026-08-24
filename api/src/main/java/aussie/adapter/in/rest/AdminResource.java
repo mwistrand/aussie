@@ -9,11 +9,13 @@ import jakarta.inject.Inject;
 import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
@@ -102,9 +104,10 @@ public class AdminResource {
 
     @GET
     @PermissionsAllowed({Permission.SERVICE_CONFIG_READ_VALUE, Permission.ADMIN_VALUE})
-    public Uni<List<ServiceRegistrationResponse>> listServices() {
-        // List all services - service-level filtering could be added here if needed
-        return serviceRegistry.getAllServices().map(services -> services.stream()
+    public Uni<List<ServiceRegistrationResponse>> listServices(
+            @QueryParam("limit") @DefaultValue("50") int limit, @QueryParam("offset") @DefaultValue("0") int offset) {
+        AdminPagination.validate(limit, offset);
+        return serviceRegistry.getServices(limit, offset).map(services -> services.stream()
                 .map(ServiceRegistrationResponse::fromModel)
                 .toList());
     }

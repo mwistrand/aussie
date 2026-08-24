@@ -137,6 +137,16 @@ public class CassandraRoleRepository implements RoleRepository {
     }
 
     @Override
+    public Uni<List<Role>> findPage(int limit, int offset) {
+        final var executor = getContextExecutor();
+        final var statement = selectAllStmt.bind().setPageSize(limit);
+        return Uni.createFrom()
+                .completionStage(() -> CassandraPageReader.readPage(
+                        session.executeAsync(statement).toCompletableFuture(), limit, offset, this::fromRow))
+                .emitOn(executor);
+    }
+
+    @Override
     public Uni<Boolean> exists(String roleId) {
         final Executor executor = getContextExecutor();
         return Uni.createFrom()

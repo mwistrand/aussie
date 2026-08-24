@@ -99,6 +99,13 @@ func TestRolesListCmd_Initialized(t *testing.T) {
 	if rolesListCmd.Short == "" {
 		t.Error("rolesListCmd.Short should not be empty")
 	}
+
+	if limit := rolesListCmd.Flags().Lookup("limit"); limit == nil || limit.DefValue != "50" {
+		t.Error("rolesListCmd should have a limit flag defaulting to 50")
+	}
+	if offset := rolesListCmd.Flags().Lookup("offset"); offset == nil || offset.DefValue != "0" {
+		t.Error("rolesListCmd should have an offset flag defaulting to 0")
+	}
 }
 
 func TestRolesGetCmd_Initialized(t *testing.T) {

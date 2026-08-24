@@ -261,9 +261,10 @@ class AdminResourceUnitTest {
         void shouldReturnServiceList() {
             var service1 = createServiceRegistration("service-1");
             var service2 = createServiceRegistration("service-2");
-            when(serviceRegistry.getAllServices()).thenReturn(Uni.createFrom().item(List.of(service1, service2)));
+            when(serviceRegistry.getServices(25, 10))
+                    .thenReturn(Uni.createFrom().item(List.of(service1, service2)));
 
-            var result = resource.listServices().await().atMost(Duration.ofSeconds(5));
+            final var result = resource.listServices(25, 10).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(2, result.size());
             assertEquals("service-1", result.get(0).serviceId());
@@ -273,9 +274,9 @@ class AdminResourceUnitTest {
         @Test
         @DisplayName("Should return empty list when no services")
         void shouldReturnEmptyListWhenNoServices() {
-            when(serviceRegistry.getAllServices()).thenReturn(Uni.createFrom().item(List.of()));
+            when(serviceRegistry.getServices(50, 0)).thenReturn(Uni.createFrom().item(List.of()));
 
-            var result = resource.listServices().await().atMost(Duration.ofSeconds(5));
+            final var result = resource.listServices(50, 0).await().atMost(Duration.ofSeconds(5));
 
             assertTrue(result.isEmpty());
         }

@@ -56,6 +56,11 @@ public interface ApiKeyRepository {
      */
     Uni<List<ApiKey>> findAll();
 
+    /** Return one bounded administrative page. */
+    default Uni<List<ApiKey>> findPage(int limit, int offset) {
+        return findAll().map(values -> values.stream().skip(offset).limit(limit).toList());
+    }
+
     /**
      * Check if a key exists.
      *

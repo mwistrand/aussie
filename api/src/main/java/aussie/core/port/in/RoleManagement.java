@@ -64,6 +64,11 @@ public interface RoleManagement {
      */
     Uni<List<Role>> list();
 
+    /** Lists one bounded administrative page. */
+    default Uni<List<Role>> list(int limit, int offset) {
+        return list().map(roles -> roles.stream().skip(offset).limit(limit).toList());
+    }
+
     /**
      * Delete a role.
      *

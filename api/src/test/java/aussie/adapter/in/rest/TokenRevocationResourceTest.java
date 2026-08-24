@@ -468,6 +468,20 @@ class TokenRevocationResourceTest {
             var entity = (Map<String, Object>) response.getEntity();
             assertEquals(25, entity.get("limit"));
         }
+
+        @Test
+        @DisplayName("caps limit at 100")
+        @SuppressWarnings("unchecked")
+        void shouldCapLimit() {
+            when(config.enabled()).thenReturn(true);
+            when(revocationService.streamAllRevokedJtis())
+                    .thenReturn(Multi.createFrom().empty());
+
+            final var response = resource.listRevokedTokens(101).await().atMost(Duration.ofSeconds(5));
+
+            final var entity = (Map<String, Object>) response.getEntity();
+            assertEquals(100, entity.get("limit"));
+        }
     }
 
     @Nested
@@ -514,6 +528,20 @@ class TokenRevocationResourceTest {
             assertEquals(200, response.getStatus());
             var entity = (Map<String, Object>) response.getEntity();
             assertEquals(50, entity.get("limit"));
+        }
+
+        @Test
+        @DisplayName("caps limit at 100")
+        @SuppressWarnings("unchecked")
+        void shouldCapLimit() {
+            when(config.enabled()).thenReturn(true);
+            when(revocationService.streamAllRevokedUsers())
+                    .thenReturn(Multi.createFrom().empty());
+
+            final var response = resource.listRevokedUsers(101).await().atMost(Duration.ofSeconds(5));
+
+            final var entity = (Map<String, Object>) response.getEntity();
+            assertEquals(100, entity.get("limit"));
         }
     }
 

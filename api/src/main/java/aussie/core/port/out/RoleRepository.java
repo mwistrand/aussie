@@ -48,6 +48,11 @@ public interface RoleRepository {
      */
     Uni<List<Role>> findAll();
 
+    /** Return one bounded administrative page. */
+    default Uni<List<Role>> findPage(int limit, int offset) {
+        return findAll().map(values -> values.stream().skip(offset).limit(limit).toList());
+    }
+
     /**
      * Check if a role exists.
      *

@@ -1,6 +1,5 @@
 package aussie.adapter.out.storage.cassandra;
 
-import java.net.InetSocketAddress;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 
@@ -14,7 +13,6 @@ import aussie.core.model.common.StorageHealth;
 import aussie.core.port.out.StorageHealthIndicator;
 import aussie.core.port.out.TranslationConfigRepository;
 import aussie.spi.StorageAdapterConfig;
-import aussie.spi.StorageProviderException;
 import aussie.spi.TranslationConfigStorageProvider;
 
 /**
@@ -69,9 +67,10 @@ public class CassandraTranslationConfigStorageProvider implements TranslationCon
 
     @Override
     public void close() {
-        if (session != null && !session.isClosed()) {
-            LOG.info("Closing Cassandra session for translation config storage");
-            session.close();
+        if (session != null) {
+            LOG.info("Releasing Cassandra session for translation config storage");
+            CassandraSessionRegistry.release(session);
+            session = null;
         }
     }
 
@@ -100,31 +99,7 @@ public class CassandraTranslationConfigStorageProvider implements TranslationCon
     }
 
     private CqlSession buildSession(StorageAdapterConfig config) {
-        final var contactPoints = config.getOrDefault("aussie.storage.cassandra.contact-points", "localhost:9042");
-        final var datacenter = config.getOrDefault("aussie.storage.cassandra.datacenter", "datacenter1");
-        final var keyspace = config.getOrDefault("aussie.storage.cassandra.keyspace", "aussie");
-
-        final var builder = CqlSession.builder().withLocalDatacenter(datacenter).withKeyspace(keyspace);
-
-        for (String contactPoint : contactPoints.split(",")) {
-            final var parts = contactPoint.trim().split(":");
-            final var host = parts[0];
-            final var port = parts.length > 1 ? Integer.parseInt(parts[1]) : 9042;
-            builder.addContactPoint(new InetSocketAddress(host, port));
-        }
-
-        config.get("aussie.storage.cassandra.username").ifPresent(username -> {
-            final var password = config.get("aussie.storage.cassandra.password")
-                    .orElseThrow(() ->
-                            new StorageProviderException("Cassandra password required when username is specified"));
-            builder.withAuthCredentials(username, password);
-        });
-
-        try {
-            return builder.build();
-        } catch (Exception e) {
-            throw new StorageProviderException("Failed to connect to Cassandra for translation config storage", e);
-        }
+        return CassandraSessionRegistry.acquire(config, false);
     }
 
     private Executor getContextExecutor() {

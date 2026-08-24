@@ -77,9 +77,9 @@ class RoleResourceUnitTest {
         @DisplayName("should return list of roles")
         void shouldReturnListOfRoles() {
             var roles = List.of(createRole("role-1"), createRole("role-2"));
-            when(roleService.list()).thenReturn(Uni.createFrom().item(roles));
+            when(roleService.list(20, 5)).thenReturn(Uni.createFrom().item(roles));
 
-            var result = resource.listRoles().await().atMost(Duration.ofSeconds(5));
+            final var result = resource.listRoles(20, 5).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(2, result.size());
         }

@@ -110,7 +110,7 @@ API Key (save this - it won't be shown again):
 
 ### Managing API Keys
 ```bash
-# List all API keys
+# List the first page of API keys
 ./aussie keys list
 
 # Revoke a key
@@ -802,10 +802,12 @@ Service configuration pub/sub provides near-instant cache invalidation across in
 
 All admin endpoints require authentication. See [Authentication Configuration](#authentication-configuration) for details.
 
+Paginated administrative list endpoints default to 50 results. `limit` must be between 1 and 100, and `offset` must be between 0 and 100,000. Stream-backed lockout and token-revocation lists cap `limit` at 100.
+
 ### Service Management
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/admin/services` | GET | List all registered services |
+| `/admin/services` | GET | List registered services (`limit`, `offset`) |
 | `/admin/services` | POST | Register a new service |
 | `/admin/services/routing-status` | GET | Show local routing generation, durable generation, convergence lag, checksum, and last rejected generation |
 | `/admin/services/{id}` | GET | Get a specific service |
@@ -813,7 +815,7 @@ All admin endpoints require authentication. See [Authentication Configuration](#
 
 **CLI equivalents:**
 ```bash
-# List all services
+# List the first page of services
 ./aussie service list
 
 # Register a service
@@ -826,15 +828,15 @@ All admin endpoints require authentication. See [Authentication Configuration](#
 ### API Key Management
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/admin/api-keys` | GET | List all API keys (hashes redacted) |
+| `/admin/api-keys` | GET | List API keys (`limit`, `offset`; hashes redacted) |
 | `/admin/api-keys` | POST | Create a new API key |
 | `/admin/api-keys/{id}` | GET | Get a specific API key |
 | `/admin/api-keys/{id}` | DELETE | Revoke an API key |
 
 **CLI equivalents:**
 ```bash
-# List all keys
-./aussie keys list
+# List the first page of keys
+./aussie keys list --limit 50 --offset 0
 
 # Create a key
 ./aussie keys create --name my-key --ttl 90
@@ -846,7 +848,7 @@ All admin endpoints require authentication. See [Authentication Configuration](#
 ### Translation Config Management
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/admin/translation-config` | GET | List all config versions |
+| `/admin/translation-config` | GET | List config versions (`limit`, `offset`) |
 | `/admin/translation-config` | POST | Upload a new config version |
 | `/admin/translation-config/active` | GET | Get the active config |
 | `/admin/translation-config/{versionId}` | GET | Get a specific version |

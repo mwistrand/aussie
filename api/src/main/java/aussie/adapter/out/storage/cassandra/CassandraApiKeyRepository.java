@@ -207,6 +207,16 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
     }
 
     @Override
+    public Uni<List<ApiKey>> findPage(int limit, int offset) {
+        final var executor = getContextExecutor();
+        final var statement = selectAllStmt.bind().setPageSize(limit);
+        return Uni.createFrom()
+                .completionStage(() -> CassandraPageReader.readPage(
+                        session.executeAsync(statement).toCompletableFuture(), limit, offset, this::fromRow))
+                .emitOn(executor);
+    }
+
+    @Override
     public Uni<Boolean> exists(String keyId) {
         Executor executor = getContextExecutor();
         return Uni.createFrom()

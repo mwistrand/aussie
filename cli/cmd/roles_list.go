@@ -16,17 +16,20 @@ import (
 
 var rolesListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List all RBAC roles",
-	Long: `List all RBAC roles configured in the system.
+	Short: "List RBAC roles",
+	Long: `List RBAC roles configured in the system.
 
 Displays role ID, display name, permissions, and last update time.
 
 Examples:
-  aussie roles list`,
+  aussie roles list
+  aussie roles list --limit 25 --offset 50`,
 	RunE: runRolesList,
 }
 
 func init() {
+	rolesListCmd.Flags().IntP("limit", "l", 50, "Maximum number of roles to return")
+	rolesListCmd.Flags().IntP("offset", "o", 0, "Number of roles to skip")
 	rolesCmd.AddCommand(rolesListCmd)
 }
 
@@ -47,7 +50,9 @@ func runRolesList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	url := fmt.Sprintf("%s/admin/roles", cfg.Host)
+	limit, _ := cmd.Flags().GetInt("limit")
+	offset, _ := cmd.Flags().GetInt("offset")
+	url := fmt.Sprintf("%s/admin/roles?limit=%d&offset=%d", cfg.Host, limit, offset)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)

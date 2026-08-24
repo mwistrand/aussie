@@ -523,6 +523,10 @@ public class ServiceRegistry {
         return repository.findAll();
     }
 
+    public Uni<List<ServiceRegistration>> getServices(int limit, int offset) {
+        return repository.findPage(limit, offset);
+    }
+
     /**
      * Update an existing service registration.
      *

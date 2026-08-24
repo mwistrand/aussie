@@ -84,6 +84,13 @@ func TestKeysListCmd_Initialized(t *testing.T) {
 	if keysListCmd.Short == "" {
 		t.Error("keysListCmd.Short should not be empty")
 	}
+
+	if limit := keysListCmd.Flags().Lookup("limit"); limit == nil || limit.DefValue != "50" {
+		t.Error("keysListCmd should have a limit flag defaulting to 50")
+	}
+	if offset := keysListCmd.Flags().Lookup("offset"); offset == nil || offset.DefValue != "0" {
+		t.Error("keysListCmd should have an offset flag defaulting to 0")
+	}
 }
 
 func TestKeysRevokeCmd_Initialized(t *testing.T) {

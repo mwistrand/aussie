@@ -8,12 +8,14 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
@@ -71,14 +73,16 @@ public class RoleResource {
     }
 
     /**
-     * List all roles.
+     * List roles.
      *
-     * @return list of all roles
+     * @return the requested page of roles
      */
     @GET
     @PermissionsAllowed({Permission.AUTH_ROLES_READ_VALUE, Permission.ADMIN_VALUE})
-    public Uni<List<Role>> listRoles() {
-        return roleService.list();
+    public Uni<List<Role>> listRoles(
+            @QueryParam("limit") @DefaultValue("50") int limit, @QueryParam("offset") @DefaultValue("0") int offset) {
+        AdminPagination.validate(limit, offset);
+        return roleService.list(limit, offset);
     }
 
     /**

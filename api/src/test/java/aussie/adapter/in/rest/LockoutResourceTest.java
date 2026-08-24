@@ -198,6 +198,20 @@ class LockoutResourceTest {
             var entity = (Map<String, Object>) response.getEntity();
             assertEquals(100, entity.get("limit"));
         }
+
+        @Test
+        @DisplayName("limits results to 100")
+        @SuppressWarnings("unchecked")
+        void limitsResultsTo100() {
+            when(config.enabled()).thenReturn(true);
+            when(rateLimitService.streamAllLockouts())
+                    .thenReturn(Multi.createFrom().empty());
+
+            final var response = resource.listLockouts(101).await().atMost(Duration.ofSeconds(5));
+
+            final var entity = (Map<String, Object>) response.getEntity();
+            assertEquals(100, entity.get("limit"));
+        }
     }
 
     @Nested

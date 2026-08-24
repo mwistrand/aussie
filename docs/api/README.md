@@ -220,7 +220,7 @@ To use a different Aussie server:
 
 ### Managing Services
 ```bash
-# List all registered services
+# List the first page of registered services
 ./aussie service list
 
 # Preview a specific service's visibility settings
@@ -616,9 +616,9 @@ Create a new API key.
 | `--permissions` | `-p` | `*` | Permissions (comma-separated) |
 
 #### `keys list`
-List all API keys.
+List API keys. Results default to 50 entries; use `--limit` and `--offset` to select a page.
 ```bash
-./aussie keys list
+./aussie keys list --limit 50 --offset 0
 ```
 
 #### `keys revoke`
@@ -664,7 +664,7 @@ This checks:
 - Private network addresses (`10.x`, `172.16-31.x`, `192.168.x`) require an explicit platform exception
 
 #### `service list`
-List all registered services.
+List registered services.
 ```bash
 ./aussie service list
 ```
@@ -687,11 +687,11 @@ Preview visibility settings for a registered service.
 | `groups update <id>` | Update a group |
 | `groups delete <id>` | Delete a group |
 | `keys create` | Create a new API key |
-| `keys list` | List all API keys |
+| `keys list` | List API keys |
 | `keys revoke <id>` | Revoke an API key |
 | `service register -f <file>` | Register a service |
 | `service validate -f <file>` | Validate a service configuration |
-| `service list` | List all registered services |
+| `service list` | List registered services |
 | `service preview <id>` | Preview service visibility settings |
 | `service delete <id>` | Delete a service registration |
 

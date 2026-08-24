@@ -57,6 +57,11 @@ public interface ApiKeyManagement {
      */
     Uni<List<ApiKey>> list();
 
+    /** Lists one bounded administrative page. */
+    default Uni<List<ApiKey>> list(int limit, int offset) {
+        return list().map(keys -> keys.stream().skip(offset).limit(limit).toList());
+    }
+
     /**
      * Revokes an API key by its ID.
      *

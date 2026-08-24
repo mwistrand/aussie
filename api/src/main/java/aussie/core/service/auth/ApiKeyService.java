@@ -92,6 +92,13 @@ public class ApiKeyService implements ApiKeyManagement {
     }
 
     @Override
+    public Uni<List<ApiKey>> list(int limit, int offset) {
+        return repository
+                .findPage(limit, offset)
+                .map(keys -> keys.stream().map(ApiKey::redacted).toList());
+    }
+
+    @Override
     public Uni<Boolean> revoke(String keyId) {
         return repository.findById(keyId).flatMap(existingKey -> {
             if (existingKey.isEmpty()) {
