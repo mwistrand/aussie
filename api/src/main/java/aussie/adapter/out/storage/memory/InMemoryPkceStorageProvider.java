@@ -3,6 +3,7 @@ package aussie.adapter.out.storage.memory;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.eclipse.microprofile.health.HealthCheckResponse;
@@ -21,7 +22,7 @@ import aussie.spi.PkceStorageProvider;
  * when running multiple Aussie instances. Not recommended for production.
  */
 @ApplicationScoped
-public class InMemoryPkceStorageProvider implements PkceStorageProvider {
+public class InMemoryPkceStorageProvider implements PkceStorageProvider, AutoCloseable {
 
     private static final Logger LOG = Logger.getLogger(InMemoryPkceStorageProvider.class);
     private static final int PRIORITY = 0; // Lowest priority - fallback only
@@ -62,10 +63,20 @@ public class InMemoryPkceStorageProvider implements PkceStorageProvider {
 
     @Override
     public Optional<HealthCheckResponse> healthCheck() {
+        final var currentRepository = repository;
         return Optional.of(HealthCheckResponse.named("pkce-storage-memory")
                 .up()
                 .withData("type", "in-memory")
-                .withData("challenges", repository != null ? repository.getChallengeCount() : 0)
+                .withData("challenges", currentRepository != null ? currentRepository.getChallengeCount() : 0)
                 .build());
+    }
+
+    @PreDestroy
+    @Override
+    public synchronized void close() {
+        if (repository != null) {
+            repository.shutdown();
+            repository = null;
+        }
     }
 }

@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 import io.smallrye.mutiny.Multi;
 import io.vertx.mutiny.core.Vertx;
@@ -224,8 +226,7 @@ class RevocationBloomFilterTest {
         @DisplayName("should schedule periodic rebuild on init")
         @SuppressWarnings("unchecked")
         void shouldSchedulePeriodicRebuild() {
-            when(vertx.setPeriodic(anyLong(), any(java.util.function.Consumer.class)))
-                    .thenReturn(1L);
+            when(vertx.setPeriodic(anyLong(), any(Consumer.class))).thenReturn(1L);
 
             bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
             bloomFilter.init();
@@ -239,13 +240,50 @@ class RevocationBloomFilterTest {
         void shouldSubscribeWhenPubSubEnabled() {
             when(pubSubConfig.enabled()).thenReturn(true);
             when(eventPublisher.subscribe()).thenReturn(Multi.createFrom().empty());
-            when(vertx.setPeriodic(anyLong(), any(java.util.function.Consumer.class)))
-                    .thenReturn(1L);
+            when(vertx.setPeriodic(anyLong(), any(Consumer.class))).thenReturn(1L);
 
             bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
             bloomFilter.init();
 
             verify(eventPublisher).subscribe();
+        }
+
+        @Test
+        @DisplayName("should cancel periodic rebuild on shutdown")
+        @SuppressWarnings("unchecked")
+        void shouldCancelPeriodicRebuildOnShutdown() {
+            when(vertx.setPeriodic(anyLong(), any(Consumer.class))).thenReturn(42L);
+
+            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter.init();
+            bloomFilter.shutdown();
+
+            verify(vertx).cancelTimer(42L);
+        }
+
+        @Test
+        @DisplayName("should cancel active subscriptions on shutdown")
+        @SuppressWarnings("unchecked")
+        void shouldCancelActiveSubscriptionsOnShutdown() {
+            final var rebuildCancelled = new AtomicBoolean();
+            final var eventSubscriptionCancelled = new AtomicBoolean();
+            final var pendingRebuild =
+                    Multi.createFrom().<String>nothing().onCancellation().invoke(() -> rebuildCancelled.set(true));
+            final var pendingEvents = Multi.createFrom()
+                    .<RevocationEvent>nothing()
+                    .onCancellation()
+                    .invoke(() -> eventSubscriptionCancelled.set(true));
+            when(repository.streamAllRevokedJtis()).thenReturn(pendingRebuild);
+            when(pubSubConfig.enabled()).thenReturn(true);
+            when(eventPublisher.subscribe()).thenReturn(pendingEvents);
+            when(vertx.setPeriodic(anyLong(), any(Consumer.class))).thenReturn(42L);
+
+            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter.init();
+            bloomFilter.shutdown();
+
+            assertTrue(rebuildCancelled.get());
+            assertTrue(eventSubscriptionCancelled.get());
         }
     }
 

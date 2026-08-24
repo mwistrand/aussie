@@ -5,10 +5,12 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
+import io.smallrye.mutiny.subscription.Cancellable;
 import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.jboss.logging.Logger;
 
@@ -40,6 +42,7 @@ public class RedisPkceStorageProvider implements PkceStorageProvider {
     private volatile RedisPkceChallengeRepository repository;
     private final AtomicReference<AvailabilityState> availabilityState =
             new AtomicReference<>(AvailabilityState.CHECKING);
+    private volatile Cancellable availabilityCheck;
 
     @Inject
     public RedisPkceStorageProvider(ReactiveRedisDataSource redisDataSource, PkceConfig pkceConfig) {
@@ -50,7 +53,7 @@ public class RedisPkceStorageProvider implements PkceStorageProvider {
     @PostConstruct
     void checkAvailability() {
         // Check availability asynchronously at startup
-        redisDataSource
+        availabilityCheck = redisDataSource
                 .key(String.class)
                 .exists("test-connection")
                 .ifNoItem()
@@ -66,6 +69,14 @@ public class RedisPkceStorageProvider implements PkceStorageProvider {
                             availabilityState.set(AvailabilityState.UNAVAILABLE);
                             LOG.warnf("Redis PKCE storage is not available: %s", error.getMessage());
                         });
+    }
+
+    @PreDestroy
+    void close() {
+        if (availabilityCheck != null) {
+            availabilityCheck.cancel();
+            availabilityCheck = null;
+        }
     }
 
     @Override

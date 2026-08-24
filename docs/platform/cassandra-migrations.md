@@ -19,4 +19,6 @@ cluster before deployment.
 
 The E2E suite applies the packaged artifact's manifest to Cassandra, verifies every
 recorded migration is completed with a checksum, reruns the manifest as a no-op, and
-applies the same scripts to a non-default keyspace.
+applies the same scripts to a non-default keyspace. Unit coverage verifies that a
+failed migration with an unchanged checksum can be reclaimed and safely retried;
+there is intentionally no automatic down migration.

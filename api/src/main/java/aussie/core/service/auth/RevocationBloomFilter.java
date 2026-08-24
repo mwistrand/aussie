@@ -3,11 +3,13 @@ package aussie.core.service.auth;
 import java.nio.charset.StandardCharsets;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.subscription.Cancellable;
 import io.vertx.mutiny.core.Vertx;
 import org.jboss.logging.Logger;
 
@@ -44,6 +46,9 @@ public class RevocationBloomFilter {
     private volatile BloomFilter<CharSequence> userFilter;
     private volatile boolean initialized = false;
     private final Object writeLock = new Object();
+    private volatile long rebuildTimerId = -1L;
+    private volatile Cancellable initialRebuild;
+    private volatile Cancellable eventSubscription;
 
     public RevocationBloomFilter(
             TokenRevocationConfig config,
@@ -67,7 +72,7 @@ public class RevocationBloomFilter {
         initializeEmptyFilters();
 
         // Rebuild from remote store in background
-        rebuildFilters()
+        initialRebuild = rebuildFilters()
                 .subscribe()
                 .with(
                         v -> LOG.info("Initial bloom filter rebuild completed"),
@@ -96,7 +101,7 @@ public class RevocationBloomFilter {
 
     private void schedulePeriodicRebuild() {
         var interval = config.bloomFilter().rebuildInterval();
-        vertx.setPeriodic(interval.toMillis(), id -> rebuildFilters()
+        rebuildTimerId = vertx.setPeriodic(interval.toMillis(), id -> rebuildFilters()
                 .subscribe()
                 .with(
                         v -> LOG.debug("Scheduled bloom filter rebuild completed"),
@@ -110,11 +115,27 @@ public class RevocationBloomFilter {
             return;
         }
 
-        eventPublisher
+        eventSubscription = eventPublisher
                 .subscribe()
                 .subscribe()
                 .with(this::handleRevocationEvent, e -> LOG.warnf(e, "Revocation event subscription failed"));
         LOG.info("Subscribed to revocation events for bloom filter updates");
+    }
+
+    @PreDestroy
+    void shutdown() {
+        if (rebuildTimerId >= 0) {
+            vertx.cancelTimer(rebuildTimerId);
+            rebuildTimerId = -1L;
+        }
+        if (initialRebuild != null) {
+            initialRebuild.cancel();
+            initialRebuild = null;
+        }
+        if (eventSubscription != null) {
+            eventSubscription.cancel();
+            eventSubscription = null;
+        }
     }
 
     private void handleRevocationEvent(RevocationEvent event) {

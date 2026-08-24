@@ -2,9 +2,11 @@ package aussie.adapter.out.storage.redis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -118,6 +120,17 @@ class RedisRevocationEventPublisherTest {
     @Nested
     @DisplayName("General edge cases")
     class EdgeCases {
+
+        @Test
+        @DisplayName("completes the event stream")
+        void completesEventStream() {
+            final var completed = new AtomicBoolean();
+            handler.events().subscribe().with(received::add, ignored -> {}, () -> completed.set(true));
+
+            handler.complete();
+
+            assertTrue(completed.get());
+        }
 
         @Test
         @DisplayName("returns null for unknown message type")

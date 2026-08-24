@@ -33,6 +33,7 @@ Project layout:
 - Java 21
 - 4-space indent, braces on same line
 - No wildcard imports; group: java.*, jakarta.*, third-party, project
+- Prefer imports to fully-resolved class or object names.
 - PascalCase for classes, camelCase for methods/variables, UPPER_SNAKE_CASE for constants
 - Prefer `var` over explicit types, except when explicit types are required for understandability
 - Use `final` for variables that will not be reassigned.

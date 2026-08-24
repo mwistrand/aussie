@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 import com.datastax.oss.driver.api.core.CqlSession;
@@ -65,6 +66,46 @@ class CassandraMigrationRunnerTest {
         final var failure = assertThrows(IllegalStateException.class, runner::runMigrations);
 
         assertEquals("Migration V2 is already claimed", failure.getMessage());
+    }
+
+    @Test
+    void retriesFailedMigrationWithItsRecordedChecksum() {
+        final var session = mock(CqlSession.class);
+        final var statementResult = mock(ResultSet.class);
+        final var appliedMigrations = mock(ResultSet.class);
+        final var claimResult = mock(ResultSet.class);
+        final var rows = new ArrayList<Row>();
+
+        for (var version = 2; version <= 18; version++) {
+            final var row = mock(Row.class);
+            when(row.getInt("version")).thenReturn(version);
+            when(row.getString("status")).thenReturn(version == 18 ? "FAILED" : "COMPLETED");
+            if (version == 18) {
+                when(row.getString("checksum"))
+                        .thenReturn("c733f1acd49058d54bcd920622ae0244bb3584d0b43a7749bbdc95c995382e0b");
+            }
+            rows.add(row);
+        }
+
+        when(session.execute(anyString()))
+                .thenAnswer(
+                        invocation -> invocation.getArgument(0, String.class).startsWith("SELECT version")
+                                ? appliedMigrations
+                                : statementResult);
+        when(appliedMigrations.iterator()).thenReturn(rows.iterator());
+        when(statementResult.iterator()).thenReturn(List.<Row>of().iterator());
+        when(session.execute(anyString(), any(Object[].class))).thenReturn(claimResult);
+        when(claimResult.wasApplied()).thenReturn(true);
+
+        final var applied = new CassandraMigrationRunner(session, "aussie").runMigrations();
+
+        assertEquals(1, applied);
+        verify(session).execute(argThat((String cql) -> cql.contains("IF status = 'FAILED'")), any(Object[].class));
+        verify(session)
+                .execute(
+                        argThat((String cql) ->
+                                cql.contains("status = 'COMPLETED'") && cql.contains("IF lease_id = ?")),
+                        any(Object[].class));
     }
 
     @Test

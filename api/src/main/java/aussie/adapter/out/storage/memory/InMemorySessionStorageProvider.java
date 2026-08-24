@@ -3,6 +3,7 @@ package aussie.adapter.out.storage.memory;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.eclipse.microprofile.health.HealthCheckResponse;
@@ -21,13 +22,13 @@ import aussie.spi.SessionStorageProvider;
  * when running multiple Aussie instances. Not recommended for production.
  */
 @ApplicationScoped
-public class InMemorySessionStorageProvider implements SessionStorageProvider {
+public class InMemorySessionStorageProvider implements SessionStorageProvider, AutoCloseable {
 
     private static final Logger LOG = Logger.getLogger(InMemorySessionStorageProvider.class);
     private static final int PRIORITY = 0; // Lowest priority - fallback only
 
     private final AtomicBoolean warningLogged = new AtomicBoolean(false);
-    private InMemorySessionRepository repository;
+    private volatile InMemorySessionRepository repository;
 
     @Override
     public String name() {
@@ -45,7 +46,7 @@ public class InMemorySessionStorageProvider implements SessionStorageProvider {
     }
 
     @Override
-    public SessionRepository createRepository() {
+    public synchronized SessionRepository createRepository() {
         if (warningLogged.compareAndSet(false, true)) {
             LOG.warn("========================================================================");
             LOG.warn("  WARNING: Session storage is in-memory only!");
@@ -62,10 +63,20 @@ public class InMemorySessionStorageProvider implements SessionStorageProvider {
 
     @Override
     public Optional<HealthCheckResponse> healthCheck() {
+        final var currentRepository = repository;
         return Optional.of(HealthCheckResponse.named("session-storage-memory")
                 .up()
                 .withData("type", "in-memory")
-                .withData("sessions", repository != null ? repository.getSessionCount() : 0)
+                .withData("sessions", currentRepository != null ? currentRepository.getSessionCount() : 0)
                 .build());
+    }
+
+    @PreDestroy
+    @Override
+    public synchronized void close() {
+        if (repository != null) {
+            repository.shutdown();
+            repository = null;
+        }
     }
 }

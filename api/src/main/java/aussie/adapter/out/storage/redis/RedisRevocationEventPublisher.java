@@ -79,6 +79,9 @@ public class RedisRevocationEventPublisher implements RevocationEventPublisher {
 
     @PreDestroy
     void cleanup() {
+        if (messageHandler != null) {
+            messageHandler.complete();
+        }
         if (subscriber != null) {
             try {
                 subscriber.unsubscribe();
@@ -157,6 +160,10 @@ public class RedisRevocationEventPublisher implements RevocationEventPublisher {
 
         Multi<RevocationEvent> events() {
             return processor;
+        }
+
+        void complete() {
+            processor.onComplete();
         }
 
         private RevocationEvent parseMessage(String message) {

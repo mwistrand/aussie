@@ -6,10 +6,12 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
+import io.smallrye.mutiny.subscription.Cancellable;
 import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.jboss.logging.Logger;
 
@@ -39,6 +41,7 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
     private RedisSessionRepository repository;
     private final AtomicBoolean available = new AtomicBoolean(false);
     private final CountDownLatch checkLatch = new CountDownLatch(1);
+    private volatile Cancellable availabilityCheck;
 
     @Inject
     public RedisSessionStorageProvider(
@@ -55,7 +58,7 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
     @PostConstruct
     void checkAvailability() {
         // Check availability asynchronously at startup
-        redisDataSource
+        availabilityCheck = redisDataSource
                 .key(String.class)
                 .exists("test-connection")
                 .ifNoItem()
@@ -73,6 +76,14 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
                             checkLatch.countDown();
                             LOG.warnf("Redis session storage is not available: %s", error.getMessage());
                         });
+    }
+
+    @PreDestroy
+    void close() {
+        if (availabilityCheck != null) {
+            availabilityCheck.cancel();
+            availabilityCheck = null;
+        }
     }
 
     @Override

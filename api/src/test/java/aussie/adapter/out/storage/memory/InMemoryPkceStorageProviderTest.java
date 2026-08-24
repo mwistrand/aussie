@@ -1,11 +1,13 @@
 package aussie.adapter.out.storage.memory;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -19,6 +21,20 @@ class InMemoryPkceStorageProviderTest {
     @BeforeEach
     void setUp() {
         provider = new InMemoryPkceStorageProvider();
+    }
+
+    @AfterEach
+    void tearDown() {
+        provider.close();
+    }
+
+    @Test
+    @DisplayName("should close idempotently")
+    void shouldCloseIdempotently() {
+        provider.createRepository();
+
+        assertDoesNotThrow(provider::close);
+        assertDoesNotThrow(provider::close);
     }
 
     @Nested
