@@ -18,16 +18,33 @@ public final class SuiteContext {
     private final URI demoBaseUri;
     private final String bootstrapKey;
     private final String demoServiceId;
+    private final String cassandraHost;
+    private final int cassandraPort;
 
-    private SuiteContext(URI gatewayBaseUri, URI demoBaseUri, String bootstrapKey, String demoServiceId) {
+    private SuiteContext(
+            URI gatewayBaseUri,
+            URI demoBaseUri,
+            String bootstrapKey,
+            String demoServiceId,
+            String cassandraHost,
+            int cassandraPort) {
         this.gatewayBaseUri = gatewayBaseUri;
         this.demoBaseUri = demoBaseUri;
         this.bootstrapKey = bootstrapKey;
         this.demoServiceId = demoServiceId;
+        this.cassandraHost = cassandraHost;
+        this.cassandraPort = cassandraPort;
     }
 
-    public static SuiteContext install(URI gatewayBaseUri, URI demoBaseUri, String bootstrapKey, String demoServiceId) {
-        var ctx = new SuiteContext(gatewayBaseUri, demoBaseUri, bootstrapKey, demoServiceId);
+    public static SuiteContext install(
+            URI gatewayBaseUri,
+            URI demoBaseUri,
+            String bootstrapKey,
+            String demoServiceId,
+            String cassandraHost,
+            int cassandraPort) {
+        var ctx = new SuiteContext(
+                gatewayBaseUri, demoBaseUri, bootstrapKey, demoServiceId, cassandraHost, cassandraPort);
         if (!INSTANCE.compareAndSet(null, ctx)) {
             throw new IllegalStateException("SuiteContext already installed");
         }
@@ -60,5 +77,13 @@ public final class SuiteContext {
 
     public String demoServiceId() {
         return demoServiceId;
+    }
+
+    public String cassandraHost() {
+        return cassandraHost;
+    }
+
+    public int cassandraPort() {
+        return cassandraPort;
     }
 }

@@ -53,7 +53,13 @@ public final class SuiteBootstrapListener implements LauncherSessionListener {
             JsonNode servicePayload = readServicePayload();
             String serviceId = extractServiceId(servicePayload);
             registerDemoService(servicePayload);
-            SuiteContext.install(harness.gatewayBaseUri(), harness.demoBaseUri(), harness.bootstrapKey(), serviceId);
+            SuiteContext.install(
+                    harness.gatewayBaseUri(),
+                    harness.demoBaseUri(),
+                    harness.bootstrapKey(),
+                    serviceId,
+                    harness.cassandraHost(),
+                    harness.cassandraPort());
 
             session.getLauncher().registerTestExecutionListeners(new FailureTracker(this::markFailed));
             LOG.info("E2E suite bootstrap complete. Gateway at {}", harness.gatewayBaseUri());

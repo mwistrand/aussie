@@ -16,3 +16,7 @@ the compatible application version first; to undo a schema change, ship a new
 forward-fix migration and preserve the existing data. Take a Cassandra snapshot
 before destructive schema changes and test the forward-fix against a production-like
 cluster before deployment.
+
+The E2E suite applies the packaged artifact's manifest to Cassandra, verifies every
+recorded migration is completed with a checksum, reruns the manifest as a no-op, and
+applies the same scripts to a non-default keyspace.

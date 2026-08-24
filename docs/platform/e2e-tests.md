@@ -45,7 +45,7 @@ per test JVM:
    bootstrap key (`AUSSIE_BOOTSTRAP_KEY`), overwriting `baseUrl` to the
    in-network hostname.
 4. Publishes a `SuiteContext` that test classes read for the gateway URL, demo
-   URL, bootstrap key, and the demo's `serviceId`.
+   URL, bootstrap key, the demo's `serviceId`, and the Cassandra host and port.
 
 The suite assumes a single forked JVM (`maxParallelForks = 1`, `forkEvery = 0`)
 because the singleton harness is not safe to share across forks.

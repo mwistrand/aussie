@@ -236,6 +236,14 @@ public final class E2EHarness {
         return URI.create("http://" + demo.getHost() + ":" + demo.getMappedPort(3000));
     }
 
+    public String cassandraHost() {
+        return cassandra.getHost();
+    }
+
+    public int cassandraPort() {
+        return cassandra.getMappedPort(9042);
+    }
+
     private void dumpLogs() throws IOException {
         Path apiProjectDir = resolveApiProjectDir();
         String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
