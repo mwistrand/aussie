@@ -54,11 +54,17 @@ public class RoleResource {
 
     private final RoleService roleService;
     private final SecurityIdentity identity;
+    private final RedisAdminMutationStore mutationStore;
 
     @Inject
-    public RoleResource(RoleService roleService, SecurityIdentity identity) {
+    public RoleResource(RoleService roleService, SecurityIdentity identity, RedisAdminMutationStore mutationStore) {
         this.roleService = roleService;
         this.identity = identity;
+        this.mutationStore = mutationStore;
+    }
+
+    public RoleResource(RoleService roleService, SecurityIdentity identity) {
+        this(roleService, identity, null);
     }
 
     public RoleResource(RoleService roleService) {
@@ -77,11 +83,16 @@ public class RoleResource {
             @Valid CreateRoleRequest request, @HeaderParam("Idempotency-Key") String idempotencyKey) {
         var teamId = AdminMutationSupport.requireTeam(identity, request.teamId());
         return AdminMutationSupport.idempotent(
-                identity, "role.create", idempotencyKey, new CreateRoleFingerprint(request, teamId), () -> {
+                mutationStore,
+                identity,
+                "role.create",
+                idempotencyKey,
+                new CreateRoleFingerprint(request, teamId),
+                () -> {
                     var created = roleService.create(
                             request.id(), request.displayName(), request.description(), request.permissions(), teamId);
                     return created.map(role -> {
-                        AdminMutationSupport.audit(identity, "role.create", role.id(), "success");
+                        AdminMutationSupport.audit(mutationStore, identity, "role.create", role.id(), "success");
                         return Response.status(Response.Status.CREATED)
                                 .entity(role)
                                 .build();
@@ -171,7 +182,7 @@ public class RoleResource {
                         request.addPermissions(),
                         request.removePermissions())
                 .map(opt -> opt.map(role -> {
-                            AdminMutationSupport.audit(identity, "role.update", roleId, "success");
+                            AdminMutationSupport.audit(mutationStore, identity, "role.update", roleId, "success");
                             return Response.ok(role).build();
                         })
                         .orElseThrow(() -> GatewayProblem.resourceNotFound("Role", roleId)));
@@ -202,7 +213,7 @@ public class RoleResource {
             if (!deleted) {
                 throw GatewayProblem.resourceNotFound("Role", roleId);
             }
-            AdminMutationSupport.audit(identity, "role.delete", roleId, "success");
+            AdminMutationSupport.audit(mutationStore, identity, "role.delete", roleId, "success");
             return Response.noContent().build();
         });
     }

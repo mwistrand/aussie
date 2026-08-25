@@ -32,13 +32,21 @@ class AdminMutationSupportTest {
         var secondIdentity = identity("shared-name", "key-2");
 
         var first = AdminMutationSupport.idempotent(
-                        firstIdentity, "test.stable-principal", "shared-key", "same-request", () -> Uni.createFrom()
-                                .item(Response.ok("first").build()))
+                        null,
+                        firstIdentity,
+                        "test.stable-principal",
+                        "shared-key",
+                        "same-request",
+                        () -> Uni.createFrom().item(Response.ok("first").build()))
                 .await()
                 .indefinitely();
         var second = AdminMutationSupport.idempotent(
-                        secondIdentity, "test.stable-principal", "shared-key", "same-request", () -> Uni.createFrom()
-                                .item(Response.ok("second").build()))
+                        null,
+                        secondIdentity,
+                        "test.stable-principal",
+                        "shared-key",
+                        "same-request",
+                        () -> Uni.createFrom().item(Response.ok("second").build()))
                 .await()
                 .indefinitely();
 

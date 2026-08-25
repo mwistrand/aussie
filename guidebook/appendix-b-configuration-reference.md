@@ -221,6 +221,12 @@ JWT validation uses the provider-bound `aussie.auth.route-auth.providers.*` conf
 
 **Profile overrides:** None.
 
+### 4.7 Administrative Mutations
+
+| Property | Type | Default | Env Variable | Description |
+|----------|------|---------|--------------|-------------|
+| `aussie.admin-mutations.distributed` | `boolean` | `false` (`true` in `%prod`) | `AUSSIE_ADMIN_MUTATIONS_DISTRIBUTED` | Store 10-minute admin idempotency results and the approximately 10,000-entry admin audit stream in Redis. |
+
 ## 5. PKCE (Proof Key for Code Exchange)
 
 **Prefix:** `aussie.auth.pkce`

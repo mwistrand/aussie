@@ -13,12 +13,13 @@ import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
 import aussie.adapter.in.problem.GatewayProblem;
+import aussie.core.util.SecureHash;
 
 /** Small shared guard for tenant ownership and retried admin mutations. */
 final class AdminMutationSupport {
 
     private static final Logger AUDIT = Logger.getLogger("aussie.audit.admin");
-    // ponytail: process-local replay only; use a shared idempotency store when multi-instance replay is required.
+    // ponytail: local cache remains only for dev/tests; production enables the Redis store below.
     private static final Cache<IdempotencyKey, Entry> OPERATIONS = Caffeine.newBuilder()
             .maximumSize(10_000)
             .expireAfterWrite(Duration.ofMinutes(10))
@@ -27,7 +28,12 @@ final class AdminMutationSupport {
     private AdminMutationSupport() {}
 
     static Uni<Response> idempotent(
-            SecurityIdentity identity, String scope, String key, Object fingerprint, Supplier<Uni<Response>> action) {
+            RedisAdminMutationStore distributedStore,
+            SecurityIdentity identity,
+            String scope,
+            String key,
+            Object fingerprint,
+            Supplier<Uni<Response>> action) {
         if (key == null || key.isBlank()) {
             return action.get();
         }
@@ -47,6 +53,10 @@ final class AdminMutationSupport {
                 throw GatewayProblem.conflict("Idempotency-Key was already used for a different request");
             }
             return existing.result();
+        }
+
+        if (distributedStore != null && distributedStore.enabled()) {
+            return distributedStore.execute(operationKey(cacheKey), fingerprint, action);
         }
 
         var result = action.get().memoize().indefinitely();
@@ -102,10 +112,25 @@ final class AdminMutationSupport {
         return identity.getPrincipal() == null && team(identity) == null;
     }
 
-    static void audit(SecurityIdentity identity, String action, String target, String outcome) {
-        AUDIT.infof(
-                "admin_mutation action=%s actor=%s target=%s outcome=%s",
-                action, actor(identity), safe(target), outcome);
+    static void audit(
+            RedisAdminMutationStore distributedStore,
+            SecurityIdentity identity,
+            String action,
+            String target,
+            String outcome) {
+        var actor = actor(identity);
+        var safeTarget = safe(target);
+        AUDIT.infof("admin_mutation action=%s actor=%s target=%s outcome=%s", action, actor, safeTarget, outcome);
+        if (distributedStore != null && distributedStore.enabled()) {
+            distributedStore
+                    .appendAudit(actor, action, safeTarget, outcome)
+                    .subscribe()
+                    .with(
+                            ignored -> {},
+                            error -> AUDIT.warnf(
+                                    "Durable admin audit write failed: %s",
+                                    error.getClass().getSimpleName()));
+        }
     }
 
     private static String actor(SecurityIdentity identity) {
@@ -131,6 +156,23 @@ final class AdminMutationSupport {
 
     private static String safe(String value) {
         return value == null ? "unknown" : value.replaceAll("[^A-Za-z0-9_.:@-]", "_");
+    }
+
+    private static String operationKey(IdempotencyKey key) {
+        var value = new StringBuilder();
+        append(value, key.scope());
+        append(value, key.authenticationMethod());
+        append(value, key.issuer());
+        append(value, key.principalId());
+        append(value, key.key());
+        return SecureHash.truncatedSha256(value.toString(), 64);
+    }
+
+    private static void append(StringBuilder target, String value) {
+        target.append(value == null ? -1 : value.length()).append(':');
+        if (value != null) {
+            target.append(value);
+        }
     }
 
     private record IdempotencyKey(

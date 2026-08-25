@@ -54,15 +54,25 @@ public class AdminResource {
     private final ServiceRegistry serviceRegistry;
     private final CurrentIdentityAssociation identityAssociation;
     private final GatewaySecurityConfig securityConfig;
+    private final RedisAdminMutationStore mutationStore;
 
     @Inject
     public AdminResource(
             ServiceRegistry serviceRegistry,
             CurrentIdentityAssociation identityAssociation,
-            GatewaySecurityConfig securityConfig) {
+            GatewaySecurityConfig securityConfig,
+            RedisAdminMutationStore mutationStore) {
         this.serviceRegistry = serviceRegistry;
         this.identityAssociation = identityAssociation;
         this.securityConfig = securityConfig;
+        this.mutationStore = mutationStore;
+    }
+
+    public AdminResource(
+            ServiceRegistry serviceRegistry,
+            CurrentIdentityAssociation identityAssociation,
+            GatewaySecurityConfig securityConfig) {
+        this(serviceRegistry, identityAssociation, securityConfig, null);
     }
 
     public Uni<Response> registerService(@Valid ServiceRegistrationRequest request) {
@@ -107,6 +117,7 @@ public class AdminResource {
                     });
                 };
                 return AdminMutationSupport.idempotent(
+                        mutationStore,
                         identity,
                         "service.register",
                         idempotencyKey,
@@ -222,7 +233,7 @@ public class AdminResource {
     }
 
     private void audit(SecurityIdentity identity, String action, String target, String outcome) {
-        AdminMutationSupport.audit(identity, action, target, outcome);
+        AdminMutationSupport.audit(mutationStore, identity, action, target, outcome);
     }
 
     private record RegistrationFingerprint(ServiceRegistration service, Long expectedVersion) {}

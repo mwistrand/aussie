@@ -808,6 +808,10 @@ All admin endpoints require authentication. See [Authentication Configuration](#
 
 Paginated administrative list endpoints default to 50 results. `limit` must be between 1 and 100, and `offset` must be between 0 and 100,000. Stream-backed lockout and token-revocation lists cap `limit` at 100.
 
+Production stores administrative `Idempotency-Key` results in Redis for 10 minutes and appends audit records to the `aussie:admin:audit` stream, retained at approximately 10,000 entries. Set `AUSSIE_ADMIN_MUTATIONS_DISTRIBUTED=false` only for single-instance deployments that do not require cross-instance retries or Redis audit records.
+
+Treat Redis as sensitive storage: an idempotent API-key creation response contains the plaintext key until its 10-minute retry record expires. Restrict Redis access and use an encrypted connection in production.
+
 ### Service Management
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -1096,6 +1100,7 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | `AUSSIE_AUTH_API_KEYS_MAX_TTL` | `P365D` | Maximum TTL for API keys |
 | `AUSSIE_AUTH_ENCRYPTION_KEY` | - | Base64-encoded 256-bit AES key for encrypting API key records at rest |
 | `AUSSIE_AUTH_ENCRYPTION_KEY_ID` | `v1` | Version identifier for the encryption key (update when rotating) |
+| `AUSSIE_ADMIN_MUTATIONS_DISTRIBUTED` | `true` in production | Store admin retry results and audit records in Redis |
 
 ### Token Configuration
 

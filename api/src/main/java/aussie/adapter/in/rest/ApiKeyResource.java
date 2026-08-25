@@ -54,11 +54,18 @@ public class ApiKeyResource {
 
     private final ApiKeyManagement apiKeyService;
     private final SecurityIdentity identity;
+    private final RedisAdminMutationStore mutationStore;
 
     @Inject
-    public ApiKeyResource(ApiKeyManagement apiKeyService, SecurityIdentity identity) {
+    public ApiKeyResource(
+            ApiKeyManagement apiKeyService, SecurityIdentity identity, RedisAdminMutationStore mutationStore) {
         this.apiKeyService = apiKeyService;
         this.identity = identity;
+        this.mutationStore = mutationStore;
+    }
+
+    public ApiKeyResource(ApiKeyManagement apiKeyService, SecurityIdentity identity) {
+        this(apiKeyService, identity, null);
     }
 
     /**
@@ -79,6 +86,7 @@ public class ApiKeyResource {
         String createdBy = getCreatorId();
 
         return AdminMutationSupport.idempotent(
+                mutationStore,
                 identity,
                 "api-key.create",
                 idempotencyKey,
@@ -86,7 +94,8 @@ public class ApiKeyResource {
                 () -> apiKeyService
                         .create(request.name(), request.description(), teamId, request.permissions(), ttl, createdBy)
                         .map(result -> {
-                            AdminMutationSupport.audit(identity, "api-key.create", result.keyId(), "success");
+                            AdminMutationSupport.audit(
+                                    mutationStore, identity, "api-key.create", result.keyId(), "success");
                             // Return the plaintext key only this one time
                             var responseBody = new HashMap<String, Object>();
                             responseBody.put("keyId", result.keyId());
@@ -181,7 +190,7 @@ public class ApiKeyResource {
             if (!revoked) {
                 throw GatewayProblem.resourceNotFound("API key", keyId);
             }
-            AdminMutationSupport.audit(identity, "api-key.revoke", keyId, "success");
+            AdminMutationSupport.audit(mutationStore, identity, "api-key.revoke", keyId, "success");
             return Response.noContent().build();
         });
     }
