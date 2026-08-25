@@ -62,11 +62,12 @@ jobs:
 
       - name: Java format and tests
         working-directory: api
-        run: ./gradlew spotlessCheck check --rerun-tasks
+        run: ./gradlew --dependency-verification=strict spotlessCheck check --rerun-tasks
       - name: Go format, vet, and tests
         working-directory: cli
         run: |
           test -z "$(gofmt -l .)"
+          go mod verify
           go vet ./...
           go test -race ./...
       - name: Demo lint and build
@@ -75,6 +76,8 @@ jobs:
           npm ci
           npm run lint
           npm run build
+      - name: Verify builds did not mutate tracked files
+        run: git diff --exit-code
 
   e2e:
     needs: checks

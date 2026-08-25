@@ -16,6 +16,7 @@ jobs:
   image:
     needs: checks
     runs-on: ubuntu-latest
+    environment: production-release
     permissions:
       contents: read
       packages: write
