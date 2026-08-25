@@ -141,6 +141,27 @@ jacocoTestReport {
         xml.required = true
     }
 }
+
+jacocoTestCoverageVerification {
+    dependsOn test
+    violationRules {
+        rule {
+            limit {
+                counter = 'INSTRUCTION'
+                value = 'COVEREDRATIO'
+                minimum = 0.80
+            }
+            limit {
+                counter = 'BRANCH'
+                value = 'COVEREDRATIO'
+                minimum = 0.70
+            }
+        }
+    }
+}
+
+check.dependsOn jacocoTestCoverageVerification
+
 compileJava {
     options.encoding = 'UTF-8'
     options.compilerArgs << '-parameters'

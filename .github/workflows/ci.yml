@@ -62,7 +62,7 @@ jobs:
 
       - name: Java format and tests
         working-directory: api
-        run: ./gradlew spotlessCheck test --rerun-tasks
+        run: ./gradlew spotlessCheck check --rerun-tasks
       - name: Go format, vet, and tests
         working-directory: cli
         run: |
