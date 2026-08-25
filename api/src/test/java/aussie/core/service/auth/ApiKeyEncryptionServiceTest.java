@@ -47,6 +47,7 @@ class ApiKeyEncryptionServiceTest {
                     .createdBy("test")
                     .createdAt(Instant.parse("2025-01-01T00:00:00Z"))
                     .expiresAt(Instant.parse("2025-12-31T23:59:59Z"))
+                    .version(4L)
                     .build();
 
             var encrypted = service.encrypt(apiKey);
@@ -62,6 +63,7 @@ class ApiKeyEncryptionServiceTest {
             assertEquals(Instant.parse("2025-01-01T00:00:00Z"), decrypted.createdAt());
             assertEquals(Instant.parse("2025-12-31T23:59:59Z"), decrypted.expiresAt());
             assertFalse(decrypted.revoked());
+            assertEquals(4L, decrypted.version());
         }
 
         @Test
@@ -135,6 +137,7 @@ class ApiKeyEncryptionServiceTest {
             assertNull(apiKey.teamId());
             assertNull(apiKey.expiresAt());
             assertFalse(apiKey.revoked());
+            assertEquals(1L, apiKey.version());
         }
 
         @Test

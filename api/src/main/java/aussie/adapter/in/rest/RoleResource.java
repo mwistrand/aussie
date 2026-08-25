@@ -130,7 +130,9 @@ public class RoleResource {
     public Uni<Response> getRole(@PathParam("roleId") String roleId) {
         return roleService.get(roleId).map(opt -> opt.filter(
                         role -> AdminMutationSupport.canSee(identity, role.teamId()))
-                .map(role -> Response.ok(role).build())
+                .map(role -> Response.ok(role)
+                        .header("ETag", AdminMutationSupport.etag(role.version()))
+                        .build())
                 .orElseThrow(() -> GatewayProblem.resourceNotFound("Role", roleId)));
     }
 
@@ -150,26 +152,44 @@ public class RoleResource {
      * @param request the update request
      * @return the updated role or 404 if not found
      */
+    public Uni<Response> updateRole(
+            @PathParam("roleId") String roleId,
+            @NotNull(message = "request body is required") @Valid UpdateRoleRequest request) {
+        return updateRole(roleId, request, null);
+    }
+
     @PUT
     @Path("/{roleId}")
     @PermissionsAllowed({Permission.AUTH_ROLES_UPDATE_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> updateRole(
             @PathParam("roleId") String roleId,
-            @NotNull(message = "request body is required") @Valid UpdateRoleRequest request) {
+            @NotNull(message = "request body is required") @Valid UpdateRoleRequest request,
+            @HeaderParam("If-Match") String ifMatch) {
         // Validate mutual exclusivity
         if (request.permissions() != null
                 && (request.addPermissions() != null || request.removePermissions() != null)) {
             throw GatewayProblem.badRequest("permissions cannot be used with addPermissions or removePermissions");
         }
 
-        if (AdminMutationSupport.isGlobal(identity)) {
-            return update(roleId, request);
+        if (ifMatch == null) {
+            if (AdminMutationSupport.isGlobal(identity)) {
+                return update(roleId, request);
+            }
+            return roleService
+                    .get(roleId)
+                    .map(opt -> opt.filter(role -> AdminMutationSupport.canSee(identity, role.teamId()))
+                            .orElseThrow(() -> GatewayProblem.resourceNotFound("Role", roleId)))
+                    .flatMap(role -> update(roleId, request));
         }
         return roleService
                 .get(roleId)
                 .map(opt -> opt.filter(role -> AdminMutationSupport.canSee(identity, role.teamId()))
+                        .map(role -> {
+                            AdminMutationSupport.requireMatchingEtag(ifMatch, role.version());
+                            return role;
+                        })
                         .orElseThrow(() -> GatewayProblem.resourceNotFound("Role", roleId)))
-                .flatMap(role -> update(roleId, request));
+                .flatMap(role -> update(roleId, request, role.version()));
     }
 
     private Uni<Response> update(String roleId, UpdateRoleRequest request) {
@@ -183,9 +203,31 @@ public class RoleResource {
                         request.removePermissions())
                 .map(opt -> opt.map(role -> {
                             AdminMutationSupport.audit(mutationStore, identity, "role.update", roleId, "success");
-                            return Response.ok(role).build();
+                            return Response.ok(role)
+                                    .header("ETag", AdminMutationSupport.etag(role.version()))
+                                    .build();
                         })
                         .orElseThrow(() -> GatewayProblem.resourceNotFound("Role", roleId)));
+    }
+
+    private Uni<Response> update(String roleId, UpdateRoleRequest request, long expectedVersion) {
+        return roleService
+                .update(
+                        roleId,
+                        request.displayName(),
+                        request.description(),
+                        request.permissions(),
+                        request.addPermissions(),
+                        request.removePermissions(),
+                        expectedVersion)
+                .map(opt -> opt.map(role -> {
+                            AdminMutationSupport.audit(mutationStore, identity, "role.update", roleId, "success");
+                            return Response.ok(role)
+                                    .header("ETag", AdminMutationSupport.etag(role.version()))
+                                    .build();
+                        })
+                        .orElseThrow(() -> GatewayProblem.preconditionFailed(
+                                "The resource changed; fetch it again before retrying")));
     }
 
     /**
@@ -194,10 +236,25 @@ public class RoleResource {
      * @param roleId the role ID to delete
      * @return 204 No Content if deleted, or 404 if not found
      */
+    public Uni<Response> deleteRole(@PathParam("roleId") String roleId) {
+        return deleteRole(roleId, null);
+    }
+
     @DELETE
     @Path("/{roleId}")
     @PermissionsAllowed({Permission.AUTH_ROLES_DELETE_VALUE, Permission.ADMIN_VALUE})
-    public Uni<Response> deleteRole(@PathParam("roleId") String roleId) {
+    public Uni<Response> deleteRole(@PathParam("roleId") String roleId, @HeaderParam("If-Match") String ifMatch) {
+        if (ifMatch != null) {
+            return roleService
+                    .get(roleId)
+                    .map(opt -> opt.filter(role -> AdminMutationSupport.canSee(identity, role.teamId()))
+                            .map(role -> {
+                                AdminMutationSupport.requireMatchingEtag(ifMatch, role.version());
+                                return role;
+                            })
+                            .orElseThrow(() -> GatewayProblem.resourceNotFound("Role", roleId)))
+                    .flatMap(role -> delete(roleId, role.version()));
+        }
         if (AdminMutationSupport.isGlobal(identity)) {
             return delete(roleId);
         }
@@ -212,6 +269,16 @@ public class RoleResource {
         return roleService.delete(roleId).map(deleted -> {
             if (!deleted) {
                 throw GatewayProblem.resourceNotFound("Role", roleId);
+            }
+            AdminMutationSupport.audit(mutationStore, identity, "role.delete", roleId, "success");
+            return Response.noContent().build();
+        });
+    }
+
+    private Uni<Response> delete(String roleId, long expectedVersion) {
+        return roleService.delete(roleId, expectedVersion).map(deleted -> {
+            if (!deleted) {
+                throw GatewayProblem.preconditionFailed("The resource changed; fetch it again before retrying");
             }
             AdminMutationSupport.audit(mutationStore, identity, "role.delete", roleId, "success");
             return Response.noContent().build();

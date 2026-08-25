@@ -170,6 +170,26 @@ class RoleServiceTest {
         }
 
         @Test
+        @DisplayName("should reject a stale expected version")
+        void shouldRejectStaleExpectedVersion() {
+            service.create("stale", "Original", null, Set.of()).await().atMost(Duration.ofSeconds(1));
+            service.update("stale", "Current", null, null).await().atMost(Duration.ofSeconds(1));
+
+            final var result = service.update("stale", "Stale", null, null, null, null, 1L)
+                    .await()
+                    .atMost(Duration.ofSeconds(1));
+
+            assertTrue(result.isEmpty());
+            assertEquals(
+                    "Current",
+                    service.get("stale")
+                            .await()
+                            .atMost(Duration.ofSeconds(1))
+                            .orElseThrow()
+                            .displayName());
+        }
+
+        @Test
         @DisplayName("should preserve existing values when null provided")
         void shouldPreserveExistingValuesWhenNullProvided() {
             service.create("preserve", "Original Name", "Original Desc", Set.of("perm1"))

@@ -25,7 +25,7 @@ final class CassandraMigrationE2ETest {
         try (var session = session(ctx, "aussie")) {
             final var rows = session.execute("SELECT version, status, checksum FROM schema_migrations")
                     .all();
-            final var expectedVersions = IntStream.rangeClosed(2, 18).boxed().collect(Collectors.toSet());
+            final var expectedVersions = IntStream.rangeClosed(2, 19).boxed().collect(Collectors.toSet());
 
             assertEquals(
                     expectedVersions,
@@ -46,11 +46,11 @@ final class CassandraMigrationE2ETest {
         try (var clusterSession = session(ctx, null)) {
             new CassandraMigrationRunner(clusterSession, keyspace).runKeyspaceMigration();
             try (var keyspaceSession = session(ctx, keyspace)) {
-                assertEquals(17, new CassandraMigrationRunner(keyspaceSession, keyspace).runMigrations());
+                assertEquals(18, new CassandraMigrationRunner(keyspaceSession, keyspace).runMigrations());
                 final var versions = keyspaceSession.execute("SELECT version FROM schema_migrations").all().stream()
                         .map(row -> row.getInt("version"))
                         .collect(Collectors.toSet());
-                assertEquals(IntStream.rangeClosed(2, 18).boxed().collect(Collectors.toSet()), versions);
+                assertEquals(IntStream.rangeClosed(2, 19).boxed().collect(Collectors.toSet()), versions);
             }
         } finally {
             try (var clusterSession = session(ctx, null)) {

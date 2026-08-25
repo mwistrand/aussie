@@ -1,5 +1,6 @@
 package aussie.adapter.in.rest;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -14,6 +15,16 @@ import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
 
 class AdminMutationSupportTest {
+
+    @Test
+    void usesTheSharedVersionEtagConvention() {
+        assertEquals("\"2\"", AdminMutationSupport.etag(2L));
+        assertDoesNotThrow(() -> AdminMutationSupport.requireMatchingEtag("\"2\"", 2L));
+        assertDoesNotThrow(() -> AdminMutationSupport.requireMatchingEtag("*", 2L));
+
+        final var stale = assertThrows(HttpProblem.class, () -> AdminMutationSupport.requireMatchingEtag("\"1\"", 2L));
+        assertEquals(Response.Status.PRECONDITION_FAILED.getStatusCode(), stale.getStatusCode());
+    }
 
     @Test
     void tenantGuardRejectsCrossTenantAccess() {

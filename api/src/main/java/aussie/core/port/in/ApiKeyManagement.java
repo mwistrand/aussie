@@ -84,6 +84,9 @@ public interface ApiKeyManagement {
      */
     Uni<Boolean> revoke(String keyId);
 
+    /** Revoke only if the stored version still matches. */
+    Uni<Boolean> revoke(String keyId, long expectedVersion);
+
     /**
      * Get a specific API key by ID with hash redacted.
      *

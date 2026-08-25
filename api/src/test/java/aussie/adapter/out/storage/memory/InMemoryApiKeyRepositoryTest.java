@@ -50,6 +50,25 @@ class InMemoryApiKeyRepositoryTest {
         }
 
         @Test
+        @DisplayName("should reject stale conditional replacement")
+        void shouldRejectStaleConditionalReplacement() {
+            final var original = createTestKey("key-1", "hash-1");
+            repository.save(original).await().atMost(Duration.ofSeconds(1));
+
+            final var revoked = original.revoke();
+            assertTrue(repository
+                    .replaceIfVersion(revoked, 1)
+                    .await()
+                    .atMost(Duration.ofSeconds(1))
+                    .applied());
+            assertFalse(repository
+                    .replaceIfVersion(original, 1)
+                    .await()
+                    .atMost(Duration.ofSeconds(1))
+                    .applied());
+        }
+
+        @Test
         @DisplayName("should overwrite existing key with same id")
         void shouldOverwriteExistingKeyWithSameId() {
             var key1 = createTestKey("key-1", "hash-1");

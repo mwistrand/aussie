@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.concurrent.Executor;
 
 import com.datastax.oss.driver.api.core.CqlSession;
+import com.datastax.oss.driver.api.core.cql.AsyncResultSet;
 import com.datastax.oss.driver.api.core.cql.BatchStatement;
 import com.datastax.oss.driver.api.core.cql.BoundStatement;
 import com.datastax.oss.driver.api.core.cql.DefaultBatchType;
@@ -16,6 +17,7 @@ import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 
 import aussie.core.model.auth.ApiKey;
+import aussie.core.model.service.ConditionalWriteResult;
 import aussie.core.port.out.ApiKeyRepository;
 import aussie.core.service.auth.ApiKeyEncryptionService;
 
@@ -49,11 +51,14 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
     private final CqlSession session;
     private final ApiKeyEncryptionService encryptionService;
     private final PreparedStatement insertStmt;
+    private final PreparedStatement updateIfVersionStmt;
+    private final PreparedStatement initializeLegacyVersionStmt;
     private final PreparedStatement insertByHashStmt;
     private final PreparedStatement selectByIdStmt;
     private final PreparedStatement selectByHashStmt;
     private final PreparedStatement selectLegacyByHashStmt;
     private final PreparedStatement deleteStmt;
+    private final PreparedStatement deleteIfVersionStmt;
     private final PreparedStatement deleteByHashStmt;
     private final PreparedStatement selectAllStmt;
     private final PreparedStatement existsStmt;
@@ -62,11 +67,14 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
         this.session = session;
         this.encryptionService = encryptionService;
         this.insertStmt = prepareInsert();
+        this.updateIfVersionStmt = prepareUpdateIfVersion();
+        this.initializeLegacyVersionStmt = prepareInitializeLegacyVersion();
         this.insertByHashStmt = prepareInsertByHash();
         this.selectByIdStmt = prepareSelectById();
         this.selectByHashStmt = prepareSelectByHash();
         this.selectLegacyByHashStmt = prepareSelectLegacyByHash();
         this.deleteStmt = prepareDelete();
+        this.deleteIfVersionStmt = prepareDeleteIfVersion();
         this.deleteByHashStmt = prepareDeleteByHash();
         this.selectAllStmt = prepareSelectAll();
         this.existsStmt = prepareExists();
@@ -75,9 +83,19 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
     private PreparedStatement prepareInsert() {
         return session.prepare(
                 """
-                INSERT INTO api_keys (key_id, key_hash, encrypted_data, created_at, updated_at)
-                VALUES (?, ?, ?, toTimestamp(now()), toTimestamp(now()))
+                INSERT INTO api_keys (key_id, key_hash, encrypted_data, created_at, updated_at, version)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """);
+    }
+
+    private PreparedStatement prepareUpdateIfVersion() {
+        return session.prepare(
+                "UPDATE api_keys SET encrypted_data = ?, updated_at = toTimestamp(now()), version = ? WHERE key_id = ? IF version = ?");
+    }
+
+    private PreparedStatement prepareInitializeLegacyVersion() {
+        return session.prepare(
+                "UPDATE api_keys SET version = 1 WHERE key_id = ? IF version = NULL AND encrypted_data != NULL");
     }
 
     private PreparedStatement prepareInsertByHash() {
@@ -104,6 +122,10 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
         return session.prepare("DELETE FROM api_keys WHERE key_id = ?");
     }
 
+    private PreparedStatement prepareDeleteIfVersion() {
+        return session.prepare("DELETE FROM api_keys WHERE key_id = ? IF version = ?");
+    }
+
     private PreparedStatement prepareDeleteByHash() {
         return session.prepare("DELETE FROM api_keys_by_hash WHERE key_hash = ?");
     }
@@ -123,7 +145,13 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
                 .flatMap(existing -> Uni.createFrom().completionStage(() -> {
                     final var encryptedData = encryptionService.encrypt(apiKey);
                     final var batch = BatchStatement.builder(DefaultBatchType.LOGGED)
-                            .addStatement(insertStmt.bind(apiKey.id(), apiKey.keyHash(), encryptedData))
+                            .addStatement(insertStmt.bind(
+                                    apiKey.id(),
+                                    apiKey.keyHash(),
+                                    encryptedData,
+                                    apiKey.createdAt(),
+                                    apiKey.createdAt(),
+                                    apiKey.version()))
                             .addStatement(insertByHashStmt.bind(apiKey.keyHash(), apiKey.id(), encryptedData));
                     existing.filter(previous -> !previous.keyHash().equals(apiKey.keyHash()))
                             .ifPresent(previous -> batch.addStatement(deleteByHashStmt.bind(previous.keyHash())));
@@ -131,6 +159,18 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
                 }))
                 .emitOn(executor)
                 .replaceWithVoid();
+    }
+
+    @Override
+    public Uni<ConditionalWriteResult> replaceIfVersion(ApiKey apiKey, long expectedVersion) {
+        final var executor = getContextExecutor();
+        final var mutation = Uni.createFrom()
+                .completionStage(() -> session.executeAsync(updateIfVersionStmt.bind(
+                                encryptionService.encrypt(apiKey), apiKey.version(), apiKey.id(), expectedVersion))
+                        .toCompletableFuture())
+                .emitOn(executor)
+                .map(this::conditionalResult);
+        return retryAfterLegacyVersionInitialization(apiKey.id(), expectedVersion, mutation);
     }
 
     @Override
@@ -144,7 +184,7 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
                 .emitOn(executor)
                 .map(rs -> {
                     Row row = rs.one();
-                    return row != null ? Optional.of(fromRow(row)) : Optional.empty();
+                    return row != null ? Optional.of(fromVersionedRow(row)) : Optional.empty();
                 });
     }
 
@@ -198,11 +238,22 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
     }
 
     @Override
+    public Uni<ConditionalWriteResult> deleteIfVersion(String keyId, long expectedVersion) {
+        final var executor = getContextExecutor();
+        final var mutation = Uni.createFrom()
+                .completionStage(() -> session.executeAsync(deleteIfVersionStmt.bind(keyId, expectedVersion))
+                        .toCompletableFuture())
+                .emitOn(executor)
+                .map(this::conditionalResult);
+        return retryAfterLegacyVersionInitialization(keyId, expectedVersion, mutation);
+    }
+
+    @Override
     public Uni<List<ApiKey>> findAll() {
         Executor executor = getContextExecutor();
         return Uni.createFrom()
                 .completionStage(() -> CassandraPageReader.readAll(
-                        session.executeAsync(selectAllStmt.bind()).toCompletableFuture(), this::fromRow))
+                        session.executeAsync(selectAllStmt.bind()).toCompletableFuture(), this::fromVersionedRow))
                 .emitOn(executor);
     }
 
@@ -212,7 +263,7 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
         final var statement = selectAllStmt.bind().setPageSize(limit);
         return Uni.createFrom()
                 .completionStage(() -> CassandraPageReader.readPage(
-                        session.executeAsync(statement).toCompletableFuture(), limit, offset, this::fromRow))
+                        session.executeAsync(statement).toCompletableFuture(), limit, offset, this::fromVersionedRow))
                 .emitOn(executor);
     }
 
@@ -231,6 +282,42 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
     private ApiKey fromRow(Row row) {
         String encryptedData = row.getString("encrypted_data");
         return encryptionService.decrypt(encryptedData);
+    }
+
+    private ApiKey fromVersionedRow(Row row) {
+        final var apiKey = fromRow(row);
+        return row.isNull("version") ? apiKey : apiKey.withVersion(row.getLong("version"));
+    }
+
+    private Uni<ConditionalWriteResult> retryAfterLegacyVersionInitialization(
+            String keyId, long expectedVersion, Uni<ConditionalWriteResult> mutation) {
+        return mutation.flatMap(result -> {
+            if (expectedVersion != 1L
+                    || result.applied()
+                    || result.currentVersion().isPresent()) {
+                return Uni.createFrom().item(result);
+            }
+            final var executor = getContextExecutor();
+            return Uni.createFrom()
+                    .completionStage(() -> session.executeAsync(initializeLegacyVersionStmt.bind(keyId))
+                            .toCompletableFuture())
+                    .emitOn(executor)
+                    .map(this::conditionalResult)
+                    .flatMap(initialized -> initialized.applied()
+                                    || initialized.currentVersion().orElse(-1L) == expectedVersion
+                            ? mutation
+                            : Uni.createFrom().item(initialized));
+        });
+    }
+
+    private ConditionalWriteResult conditionalResult(AsyncResultSet resultSet) {
+        if (resultSet.wasApplied()) {
+            return ConditionalWriteResult.appliedResult();
+        }
+        final var row = resultSet.one();
+        return row == null || row.isNull("version")
+                ? ConditionalWriteResult.missing()
+                : ConditionalWriteResult.rejected(row.getLong("version"));
     }
 
     /**

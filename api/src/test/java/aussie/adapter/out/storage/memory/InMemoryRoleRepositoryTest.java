@@ -44,6 +44,25 @@ class InMemoryRoleRepositoryTest {
         }
 
         @Test
+        @DisplayName("should reject stale conditional replacement")
+        void shouldRejectStaleConditionalReplacement() {
+            final var original = Role.create("developers", "Developers", Set.of("read"));
+            repository.save(original).await().atMost(Duration.ofSeconds(1));
+
+            final var updated = original.withPermissions(Set.of("write"));
+            assertTrue(repository
+                    .replaceIfVersion(updated, 1)
+                    .await()
+                    .atMost(Duration.ofSeconds(1))
+                    .applied());
+            assertFalse(repository
+                    .replaceIfVersion(original, 1)
+                    .await()
+                    .atMost(Duration.ofSeconds(1))
+                    .applied());
+        }
+
+        @Test
         @DisplayName("should overwrite existing role with same ID")
         void shouldOverwriteExistingRole() {
             final var original = Role.create("developers", "Developers", Set.of("apikeys.read"));

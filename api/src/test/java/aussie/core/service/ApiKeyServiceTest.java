@@ -263,6 +263,27 @@ class ApiKeyServiceTest {
         }
 
         @Test
+        @DisplayName("should not advance the version when revoking an already-revoked key")
+        void shouldKeepRepeatedRevocationIdempotent() {
+            var createResult = apiKeyService
+                    .create("to-revoke", null, null, Set.of(), null, "test")
+                    .await()
+                    .atMost(Duration.ofSeconds(5));
+
+            assertTrue(apiKeyService.revoke(createResult.keyId()).await().atMost(Duration.ofSeconds(5)));
+            assertTrue(apiKeyService.revoke(createResult.keyId()).await().atMost(Duration.ofSeconds(5)));
+
+            assertEquals(
+                    2L,
+                    apiKeyService
+                            .get(createResult.keyId())
+                            .await()
+                            .atMost(Duration.ofSeconds(5))
+                            .orElseThrow()
+                            .version());
+        }
+
+        @Test
         @DisplayName("should return false when key does not exist")
         void shouldReturnFalseWhenKeyDoesNotExist() {
             boolean result = apiKeyService.revoke("non-existent").await().atMost(Duration.ofSeconds(5));

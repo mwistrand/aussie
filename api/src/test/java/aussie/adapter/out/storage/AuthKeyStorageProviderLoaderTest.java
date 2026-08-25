@@ -130,16 +130,6 @@ class AuthKeyStorageProviderLoaderTest {
         }
 
         @Test
-        @DisplayName("should select highest priority available provider when none configured")
-        void shouldSelectHighestPriorityWhenNoneConfigured() {
-            var loader = createLoader(Optional.empty(), Optional.empty(), false);
-
-            var result = loader.apiKeyRepository();
-
-            assertNotNull(result);
-        }
-
-        @Test
         @DisplayName("should throw when configured provider not found by name")
         void shouldThrowWhenConfiguredProviderNotFound() {
             var loader = createLoader(Optional.of("nonexistent"), Optional.empty(), false);

@@ -19,6 +19,7 @@ import java.util.Set;
  * @param createdAt   when the key was created
  * @param expiresAt   when the key expires (null = never)
  * @param revoked     whether the key has been revoked
+ * @param version     optimistic-concurrency version
  */
 public record ApiKey(
         String id,
@@ -30,7 +31,22 @@ public record ApiKey(
         String createdBy,
         Instant createdAt,
         Instant expiresAt,
-        boolean revoked) {
+        boolean revoked,
+        long version) {
+
+    public ApiKey(
+            String id,
+            String keyHash,
+            String name,
+            String description,
+            String teamId,
+            Set<String> permissions,
+            String createdBy,
+            Instant createdAt,
+            Instant expiresAt,
+            boolean revoked) {
+        this(id, keyHash, name, description, teamId, permissions, createdBy, createdAt, expiresAt, revoked, 1L);
+    }
 
     public ApiKey {
         if (id == null || id.isBlank()) {
@@ -54,6 +70,9 @@ public record ApiKey(
         if (createdAt == null) {
             createdAt = Instant.now();
         }
+        if (version < 1) {
+            throw new IllegalArgumentException("API key version must be positive");
+        }
     }
 
     /**
@@ -72,7 +91,17 @@ public record ApiKey(
      */
     public ApiKey redacted() {
         return new ApiKey(
-                id, "[REDACTED]", name, description, teamId, permissions, createdBy, createdAt, expiresAt, revoked);
+                id,
+                "[REDACTED]",
+                name,
+                description,
+                teamId,
+                permissions,
+                createdBy,
+                createdAt,
+                expiresAt,
+                revoked,
+                version);
     }
 
     /**
@@ -81,7 +110,37 @@ public record ApiKey(
      * @return a new ApiKey with revoked=true
      */
     public ApiKey revoke() {
-        return new ApiKey(id, keyHash, name, description, teamId, permissions, createdBy, createdAt, expiresAt, true);
+        if (revoked) {
+            return this;
+        }
+        return new ApiKey(
+                id,
+                keyHash,
+                name,
+                description,
+                teamId,
+                permissions,
+                createdBy,
+                createdAt,
+                expiresAt,
+                true,
+                version + 1);
+    }
+
+    /** Return a copy using the authoritative storage version. */
+    public ApiKey withVersion(long newVersion) {
+        return new ApiKey(
+                id,
+                keyHash,
+                name,
+                description,
+                teamId,
+                permissions,
+                createdBy,
+                createdAt,
+                expiresAt,
+                revoked,
+                newVersion);
     }
 
     public static Builder builder(String id, String keyHash) {
@@ -99,6 +158,7 @@ public record ApiKey(
         private Instant createdAt = Instant.now();
         private Instant expiresAt;
         private boolean revoked;
+        private long version = 1L;
 
         private Builder(String id, String keyHash) {
             this.id = id;
@@ -145,9 +205,24 @@ public record ApiKey(
             return this;
         }
 
+        public Builder version(long version) {
+            this.version = version;
+            return this;
+        }
+
         public ApiKey build() {
             return new ApiKey(
-                    id, keyHash, name, description, teamId, permissions, createdBy, createdAt, expiresAt, revoked);
+                    id,
+                    keyHash,
+                    name,
+                    description,
+                    teamId,
+                    permissions,
+                    createdBy,
+                    createdAt,
+                    expiresAt,
+                    revoked,
+                    version);
         }
     }
 }

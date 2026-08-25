@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import io.smallrye.mutiny.Uni;
 
 import aussie.core.model.auth.ApiKey;
+import aussie.core.model.service.ConditionalWriteResult;
 import aussie.core.port.out.ApiKeyRepository;
 
 /**
@@ -46,6 +47,24 @@ public class InMemoryApiKeyRepository implements ApiKeyRepository {
     }
 
     @Override
+    public Uni<ConditionalWriteResult> replaceIfVersion(ApiKey apiKey, long expectedVersion) {
+        return Uni.createFrom().item(() -> {
+            synchronized (writeLock) {
+                final var current = storageById.get(apiKey.id());
+                if (current == null) {
+                    return ConditionalWriteResult.missing();
+                }
+                if (current.version() != expectedVersion) {
+                    return ConditionalWriteResult.rejected(current.version());
+                }
+                storageById.put(apiKey.id(), apiKey);
+                storageByHash.put(apiKey.keyHash(), apiKey);
+                return ConditionalWriteResult.appliedResult();
+            }
+        });
+    }
+
+    @Override
     public Uni<Optional<ApiKey>> findById(String keyId) {
         return Uni.createFrom().item(() -> Optional.ofNullable(storageById.get(keyId)));
     }
@@ -65,6 +84,24 @@ public class InMemoryApiKeyRepository implements ApiKeyRepository {
                     return true;
                 }
                 return false;
+            }
+        });
+    }
+
+    @Override
+    public Uni<ConditionalWriteResult> deleteIfVersion(String keyId, long expectedVersion) {
+        return Uni.createFrom().item(() -> {
+            synchronized (writeLock) {
+                final var current = storageById.get(keyId);
+                if (current == null) {
+                    return ConditionalWriteResult.missing();
+                }
+                if (current.version() != expectedVersion) {
+                    return ConditionalWriteResult.rejected(current.version());
+                }
+                storageById.remove(keyId);
+                storageByHash.remove(current.keyHash());
+                return ConditionalWriteResult.appliedResult();
             }
         });
     }

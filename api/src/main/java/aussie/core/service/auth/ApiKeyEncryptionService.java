@@ -251,7 +251,8 @@ public class ApiKeyEncryptionService {
                 apiKey.createdAt().toString(),
                 apiKey.expiresAt() != null ? apiKey.expiresAt().toString() : "",
                 String.valueOf(apiKey.revoked()),
-                apiKey.teamId() != null ? apiKey.teamId() : "");
+                apiKey.teamId() != null ? apiKey.teamId() : "",
+                String.valueOf(apiKey.version()));
     }
 
     /**
@@ -270,15 +271,17 @@ public class ApiKeyEncryptionService {
             throw new IllegalArgumentException("Invalid serialized ApiKey format");
         }
 
-        // Handle backward compatibility: 8 fields (v1), 9 fields (v2 +createdBy), 10 fields (v3 +teamId)
+        // Handle backward compatibility: 8 fields (v1), 9 (v2 +createdBy), 10 (v3 +teamId), 11 (v4 +version)
         boolean hasCreatedBy = parts.length >= 9;
         boolean hasTeamId = parts.length >= 10;
+        boolean hasVersion = parts.length >= 11;
         int permissionsIdx = 4;
         int createdByIdx = hasCreatedBy ? 5 : -1;
         int createdAtIdx = hasCreatedBy ? 6 : 5;
         int expiresAtIdx = hasCreatedBy ? 7 : 6;
         int revokedIdx = hasCreatedBy ? 8 : 7;
         int teamIdIdx = hasTeamId ? 9 : -1;
+        int versionIdx = hasVersion ? 10 : -1;
 
         Set<String> permissions = parts[permissionsIdx].isEmpty() ? Set.of() : Set.of(parts[permissionsIdx].split(","));
         String createdBy = hasCreatedBy && !parts[createdByIdx].isEmpty() ? parts[createdByIdx] : null;
@@ -294,6 +297,7 @@ public class ApiKeyEncryptionService {
                 .createdAt(Instant.parse(parts[createdAtIdx]))
                 .expiresAt(expiresAt)
                 .revoked(Boolean.parseBoolean(parts[revokedIdx]))
+                .version(hasVersion ? Long.parseLong(parts[versionIdx]) : 1L)
                 .build();
     }
 

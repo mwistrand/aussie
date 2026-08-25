@@ -79,8 +79,16 @@ public class RoleService implements RoleManagement {
                 return Uni.createFrom().item(Optional.<Role>empty());
             }
 
-            final var updated = existing.get().withPermissions(permissions);
-            return repository.save(updated).invoke(this::invalidateCache).replaceWith(Optional.of(updated));
+            final var current = existing.get();
+            final var updated = current.withPermissions(permissions);
+            return repository
+                    .replaceIfVersion(updated, current.version())
+                    .invoke(result -> {
+                        if (result.applied()) {
+                            invalidateCache();
+                        }
+                    })
+                    .map(result -> result.applied() ? Optional.of(updated) : Optional.empty());
         });
     }
 
@@ -108,12 +116,38 @@ public class RoleService implements RoleManagement {
             Set<String> addPermissions,
             Set<String> removePermissions) {
 
+        return repository
+                .findById(id)
+                .flatMap(existing -> existing.isEmpty()
+                        ? Uni.createFrom().item(Optional.empty())
+                        : update(
+                                id,
+                                displayName,
+                                description,
+                                permissions,
+                                addPermissions,
+                                removePermissions,
+                                existing.get().version()));
+    }
+
+    public Uni<Optional<Role>> update(
+            String id,
+            String displayName,
+            String description,
+            Set<String> permissions,
+            Set<String> addPermissions,
+            Set<String> removePermissions,
+            long expectedVersion) {
+
         return repository.findById(id).flatMap(existing -> {
             if (existing.isEmpty()) {
                 return Uni.createFrom().item(Optional.<Role>empty());
             }
 
             final var current = existing.get();
+            if (current.version() != expectedVersion) {
+                return Uni.createFrom().item(Optional.<Role>empty());
+            }
 
             // Determine final permissions
             Set<String> finalPermissions;
@@ -138,9 +172,17 @@ public class RoleService implements RoleManagement {
                     .teamId(current.teamId())
                     .createdAt(current.createdAt())
                     .updatedAt(Instant.now())
+                    .version(current.version() + 1)
                     .build();
 
-            return repository.save(updated).invoke(this::invalidateCache).replaceWith(Optional.of(updated));
+            return repository
+                    .replaceIfVersion(updated, expectedVersion)
+                    .invoke(result -> {
+                        if (result.applied()) {
+                            invalidateCache();
+                        }
+                    })
+                    .map(result -> result.applied() ? Optional.of(updated) : Optional.empty());
         });
     }
 
@@ -171,10 +213,19 @@ public class RoleService implements RoleManagement {
 
     @Override
     public Uni<Boolean> delete(String id) {
-        return repository.delete(id).invoke(deleted -> {
-            if (deleted) {
+        return repository
+                .findById(id)
+                .flatMap(existing -> existing.isEmpty()
+                        ? Uni.createFrom().item(false)
+                        : delete(id, existing.get().version()));
+    }
+
+    public Uni<Boolean> delete(String id, long expectedVersion) {
+        return repository.deleteIfVersion(id, expectedVersion).map(result -> {
+            if (result.applied()) {
                 invalidateCache();
             }
+            return result.applied();
         });
     }
 

@@ -160,7 +160,9 @@ public class ApiKeyResource {
     public Uni<Response> getKey(@PathParam("keyId") String keyId) {
         return apiKeyService.get(keyId).map(opt -> opt.filter(
                         key -> AdminMutationSupport.canSee(identity, key.teamId()))
-                .map(key -> Response.ok(key).build())
+                .map(key -> Response.ok(key)
+                        .header("ETag", AdminMutationSupport.etag(key.version()))
+                        .build())
                 .orElseThrow(() -> GatewayProblem.resourceNotFound("API key", keyId)));
     }
 
@@ -171,10 +173,25 @@ public class ApiKeyResource {
      * Revoked keys cannot be used for authentication. The key record is
      * retained for audit purposes.
      */
+    public Uni<Response> revokeKey(@PathParam("keyId") String keyId) {
+        return revokeKey(keyId, null);
+    }
+
     @DELETE
     @Path("/{keyId}")
     @PermissionsAllowed({Permission.APIKEYS_WRITE_VALUE, Permission.ADMIN_VALUE})
-    public Uni<Response> revokeKey(@PathParam("keyId") String keyId) {
+    public Uni<Response> revokeKey(@PathParam("keyId") String keyId, @HeaderParam("If-Match") String ifMatch) {
+        if (ifMatch != null) {
+            return apiKeyService
+                    .get(keyId)
+                    .map(opt -> opt.filter(key -> AdminMutationSupport.canSee(identity, key.teamId()))
+                            .map(key -> {
+                                AdminMutationSupport.requireMatchingEtag(ifMatch, key.version());
+                                return key;
+                            })
+                            .orElseThrow(() -> GatewayProblem.resourceNotFound("API key", keyId)))
+                    .flatMap(key -> revoke(keyId, key.version()));
+        }
         if (AdminMutationSupport.isGlobal(identity)) {
             return revoke(keyId);
         }
@@ -189,6 +206,16 @@ public class ApiKeyResource {
         return apiKeyService.revoke(keyId).map(revoked -> {
             if (!revoked) {
                 throw GatewayProblem.resourceNotFound("API key", keyId);
+            }
+            AdminMutationSupport.audit(mutationStore, identity, "api-key.revoke", keyId, "success");
+            return Response.noContent().build();
+        });
+    }
+
+    private Uni<Response> revoke(String keyId, long expectedVersion) {
+        return apiKeyService.revoke(keyId, expectedVersion).map(revoked -> {
+            if (!revoked) {
+                throw GatewayProblem.preconditionFailed("The resource changed; fetch it again before retrying");
             }
             AdminMutationSupport.audit(mutationStore, identity, "api-key.revoke", keyId, "success");
             return Response.noContent().build();

@@ -8,6 +8,7 @@ import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 import com.datastax.oss.driver.api.core.CqlSession;
+import com.datastax.oss.driver.api.core.cql.AsyncResultSet;
 import com.datastax.oss.driver.api.core.cql.BoundStatement;
 import com.datastax.oss.driver.api.core.cql.PreparedStatement;
 import com.datastax.oss.driver.api.core.cql.Row;
@@ -18,6 +19,7 @@ import io.vertx.core.Vertx;
 
 import aussie.core.model.auth.Role;
 import aussie.core.model.auth.RoleMapping;
+import aussie.core.model.service.ConditionalWriteResult;
 import aussie.core.port.out.RoleRepository;
 import aussie.core.service.auth.RoleEncryptionService;
 
@@ -43,8 +45,11 @@ public class CassandraRoleRepository implements RoleRepository {
     private final CqlSession session;
     private final RoleEncryptionService encryptionService;
     private final PreparedStatement insertStmt;
+    private final PreparedStatement updateIfVersionStmt;
+    private final PreparedStatement initializeLegacyVersionStmt;
     private final PreparedStatement selectByIdStmt;
     private final PreparedStatement deleteStmt;
+    private final PreparedStatement deleteIfVersionStmt;
     private final PreparedStatement selectAllStmt;
     private final PreparedStatement existsStmt;
 
@@ -52,8 +57,11 @@ public class CassandraRoleRepository implements RoleRepository {
         this.session = session;
         this.encryptionService = encryptionService;
         this.insertStmt = prepareInsert();
+        this.updateIfVersionStmt = prepareUpdateIfVersion();
+        this.initializeLegacyVersionStmt = prepareInitializeLegacyVersion();
         this.selectByIdStmt = prepareSelectById();
         this.deleteStmt = prepareDelete();
+        this.deleteIfVersionStmt = prepareDeleteIfVersion();
         this.selectAllStmt = prepareSelectAll();
         this.existsStmt = prepareExists();
     }
@@ -61,9 +69,19 @@ public class CassandraRoleRepository implements RoleRepository {
     private PreparedStatement prepareInsert() {
         return session.prepare(
                 """
-                INSERT INTO roles (role_id, encrypted_data, created_at, updated_at)
-                VALUES (?, ?, toTimestamp(now()), toTimestamp(now()))
+                INSERT INTO roles (role_id, encrypted_data, created_at, updated_at, version)
+                VALUES (?, ?, ?, ?, ?)
                 """);
+    }
+
+    private PreparedStatement prepareUpdateIfVersion() {
+        return session.prepare(
+                "UPDATE roles SET encrypted_data = ?, updated_at = ?, version = ? WHERE role_id = ? IF version = ?");
+    }
+
+    private PreparedStatement prepareInitializeLegacyVersion() {
+        return session.prepare(
+                "UPDATE roles SET version = 1 WHERE role_id = ? IF version = NULL AND encrypted_data != NULL");
     }
 
     private PreparedStatement prepareSelectById() {
@@ -72,6 +90,10 @@ public class CassandraRoleRepository implements RoleRepository {
 
     private PreparedStatement prepareDelete() {
         return session.prepare("DELETE FROM roles WHERE role_id = ?");
+    }
+
+    private PreparedStatement prepareDeleteIfVersion() {
+        return session.prepare("DELETE FROM roles WHERE role_id = ? IF version = ?");
     }
 
     private PreparedStatement prepareSelectAll() {
@@ -88,11 +110,28 @@ public class CassandraRoleRepository implements RoleRepository {
         return Uni.createFrom()
                 .completionStage(() -> {
                     final String encryptedData = encryptionService.encrypt(role);
-                    final BoundStatement bound = insertStmt.bind(role.id(), encryptedData);
+                    final BoundStatement bound = insertStmt.bind(
+                            role.id(), encryptedData, role.createdAt(), role.updatedAt(), role.version());
                     return session.executeAsync(bound).toCompletableFuture();
                 })
                 .emitOn(executor)
                 .replaceWithVoid();
+    }
+
+    @Override
+    public Uni<ConditionalWriteResult> replaceIfVersion(Role role, long expectedVersion) {
+        final var executor = getContextExecutor();
+        final var mutation = Uni.createFrom()
+                .completionStage(() -> session.executeAsync(updateIfVersionStmt.bind(
+                                encryptionService.encrypt(role),
+                                role.updatedAt(),
+                                role.version(),
+                                role.id(),
+                                expectedVersion))
+                        .toCompletableFuture())
+                .emitOn(executor)
+                .map(this::conditionalResult);
+        return retryAfterLegacyVersionInitialization(role.id(), expectedVersion, mutation);
     }
 
     @Override
@@ -125,6 +164,17 @@ public class CassandraRoleRepository implements RoleRepository {
                     .emitOn(executor)
                     .map(rs -> true);
         });
+    }
+
+    @Override
+    public Uni<ConditionalWriteResult> deleteIfVersion(String roleId, long expectedVersion) {
+        final var executor = getContextExecutor();
+        final var mutation = Uni.createFrom()
+                .completionStage(() -> session.executeAsync(deleteIfVersionStmt.bind(roleId, expectedVersion))
+                        .toCompletableFuture())
+                .emitOn(executor)
+                .map(this::conditionalResult);
+        return retryAfterLegacyVersionInitialization(roleId, expectedVersion, mutation);
     }
 
     @Override
@@ -169,7 +219,39 @@ public class CassandraRoleRepository implements RoleRepository {
 
     private Role fromRow(Row row) {
         final String encryptedData = row.getString("encrypted_data");
-        return encryptionService.decrypt(encryptedData);
+        final var role = encryptionService.decrypt(encryptedData);
+        return row.isNull("version") ? role : role.withVersion(row.getLong("version"));
+    }
+
+    private Uni<ConditionalWriteResult> retryAfterLegacyVersionInitialization(
+            String roleId, long expectedVersion, Uni<ConditionalWriteResult> mutation) {
+        return mutation.flatMap(result -> {
+            if (expectedVersion != 1L
+                    || result.applied()
+                    || result.currentVersion().isPresent()) {
+                return Uni.createFrom().item(result);
+            }
+            final var executor = getContextExecutor();
+            return Uni.createFrom()
+                    .completionStage(() -> session.executeAsync(initializeLegacyVersionStmt.bind(roleId))
+                            .toCompletableFuture())
+                    .emitOn(executor)
+                    .map(this::conditionalResult)
+                    .flatMap(initialized -> initialized.applied()
+                                    || initialized.currentVersion().orElse(-1L) == expectedVersion
+                            ? mutation
+                            : Uni.createFrom().item(initialized));
+        });
+    }
+
+    private ConditionalWriteResult conditionalResult(AsyncResultSet resultSet) {
+        if (resultSet.wasApplied()) {
+            return ConditionalWriteResult.appliedResult();
+        }
+        final var row = resultSet.one();
+        return row == null || row.isNull("version")
+                ? ConditionalWriteResult.missing()
+                : ConditionalWriteResult.rejected(row.getLong("version"));
     }
 
     /**

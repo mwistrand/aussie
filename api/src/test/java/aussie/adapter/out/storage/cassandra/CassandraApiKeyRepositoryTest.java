@@ -1,5 +1,6 @@
 package aussie.adapter.out.storage.cassandra;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -21,6 +22,33 @@ import aussie.core.model.auth.ApiKey;
 import aussie.core.service.auth.ApiKeyEncryptionService;
 
 class CassandraApiKeyRepositoryTest {
+
+    @Test
+    void usesTheTableVersionAsAuthoritative() {
+        final var session = mock(CqlSession.class);
+        final var encryption = mock(ApiKeyEncryptionService.class);
+        final var otherStatement = mock(PreparedStatement.class);
+        final var selectStatement = mock(PreparedStatement.class);
+        final var selectBound = mock(BoundStatement.class);
+        final var result = mock(AsyncResultSet.class);
+        final var row = mock(Row.class);
+        final var encryptedKey = ApiKey.builder("key-id", "hash").build();
+
+        when(session.prepare(anyString())).thenReturn(otherStatement);
+        when(session.prepare("SELECT * FROM api_keys WHERE key_id = ?")).thenReturn(selectStatement);
+        when(selectStatement.bind("key-id")).thenReturn(selectBound);
+        when(session.executeAsync(selectBound)).thenReturn(CompletableFuture.completedFuture(result));
+        when(result.one()).thenReturn(row);
+        when(row.getString("encrypted_data")).thenReturn("encrypted");
+        when(row.getLong("version")).thenReturn(3L);
+        when(encryption.decrypt("encrypted")).thenReturn(encryptedKey);
+
+        final var repository = new CassandraApiKeyRepository(session, encryption);
+
+        final var found = repository.findById("key-id").await().atMost(Duration.ofSeconds(1));
+
+        assertEquals(3L, found.orElseThrow().version());
+    }
 
     @Test
     void fallsBackToLegacyIndexDuringRollingUpgrade() {

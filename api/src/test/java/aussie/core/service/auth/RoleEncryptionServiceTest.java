@@ -89,6 +89,7 @@ class RoleEncryptionServiceTest {
                     .teamId("team-a")
                     .createdAt(Instant.parse("2024-01-15T10:30:00Z"))
                     .updatedAt(Instant.parse("2024-01-15T12:00:00Z"))
+                    .version(4L)
                     .build();
 
             final String encrypted = service.encrypt(original);
@@ -101,6 +102,7 @@ class RoleEncryptionServiceTest {
             assertEquals(original.teamId(), decrypted.teamId());
             assertEquals(original.createdAt(), decrypted.createdAt());
             assertEquals(original.updatedAt(), decrypted.updatedAt());
+            assertEquals(original.version(), decrypted.version());
         }
 
         @Test

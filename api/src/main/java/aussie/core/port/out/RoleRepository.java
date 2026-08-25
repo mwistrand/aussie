@@ -7,6 +7,7 @@ import io.smallrye.mutiny.Uni;
 
 import aussie.core.model.auth.Role;
 import aussie.core.model.auth.RoleMapping;
+import aussie.core.model.service.ConditionalWriteResult;
 
 /**
  * Port interface for persistent storage of roles.
@@ -25,6 +26,8 @@ public interface RoleRepository {
      */
     Uni<Void> save(Role role);
 
+    Uni<ConditionalWriteResult> replaceIfVersion(Role role, long expectedVersion);
+
     /**
      * Find a role by its unique identifier.
      *
@@ -40,6 +43,8 @@ public interface RoleRepository {
      * @return Uni with true if deleted, false if not found
      */
     Uni<Boolean> delete(String roleId);
+
+    Uni<ConditionalWriteResult> deleteIfVersion(String roleId, long expectedVersion);
 
     /**
      * Retrieve all roles.

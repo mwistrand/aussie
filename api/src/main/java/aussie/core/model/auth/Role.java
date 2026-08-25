@@ -18,6 +18,7 @@ import java.util.Set;
  * @param teamId      owning tenant/team, or null for a fleet role
  * @param createdAt   when the role was created
  * @param updatedAt   when the role was last modified
+ * @param version     optimistic-concurrency version
  */
 public record Role(
         String id,
@@ -26,7 +27,8 @@ public record Role(
         Set<String> permissions,
         String teamId,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        long version) {
 
     public Role(
             String id,
@@ -35,7 +37,18 @@ public record Role(
             Set<String> permissions,
             Instant createdAt,
             Instant updatedAt) {
-        this(id, displayName, description, permissions, null, createdAt, updatedAt);
+        this(id, displayName, description, permissions, null, createdAt, updatedAt, 1L);
+    }
+
+    public Role(
+            String id,
+            String displayName,
+            String description,
+            Set<String> permissions,
+            String teamId,
+            Instant createdAt,
+            Instant updatedAt) {
+        this(id, displayName, description, permissions, teamId, createdAt, updatedAt, 1L);
     }
 
     public Role {
@@ -59,6 +72,9 @@ public record Role(
         if (updatedAt == null) {
             updatedAt = createdAt;
         }
+        if (version < 1) {
+            throw new IllegalArgumentException("Role version must be positive");
+        }
     }
 
     /**
@@ -81,7 +97,7 @@ public record Role(
      * @return a new Role with updated permissions and updatedAt timestamp
      */
     public Role withPermissions(Set<String> newPermissions) {
-        return new Role(id, displayName, description, newPermissions, teamId, createdAt, Instant.now());
+        return new Role(id, displayName, description, newPermissions, teamId, createdAt, Instant.now(), version + 1);
     }
 
     /**
@@ -92,7 +108,12 @@ public record Role(
      * @return a new Role with updated fields and updatedAt timestamp
      */
     public Role withDetails(String newDisplayName, String newDescription) {
-        return new Role(id, newDisplayName, newDescription, permissions, teamId, createdAt, Instant.now());
+        return new Role(id, newDisplayName, newDescription, permissions, teamId, createdAt, Instant.now(), version + 1);
+    }
+
+    /** Return a copy using the authoritative storage version. */
+    public Role withVersion(long newVersion) {
+        return new Role(id, displayName, description, permissions, teamId, createdAt, updatedAt, newVersion);
     }
 
     public static Builder builder(String id) {
@@ -107,6 +128,7 @@ public record Role(
         private String teamId;
         private Instant createdAt;
         private Instant updatedAt;
+        private long version = 1L;
 
         private Builder(String id) {
             this.id = id;
@@ -142,8 +164,13 @@ public record Role(
             return this;
         }
 
+        public Builder version(long version) {
+            this.version = version;
+            return this;
+        }
+
         public Role build() {
-            return new Role(id, displayName, description, permissions, teamId, createdAt, updatedAt);
+            return new Role(id, displayName, description, permissions, teamId, createdAt, updatedAt, version);
         }
     }
 }

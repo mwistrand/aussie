@@ -12,6 +12,7 @@ import io.smallrye.mutiny.Uni;
 
 import aussie.core.model.auth.Role;
 import aussie.core.model.auth.RoleMapping;
+import aussie.core.model.service.ConditionalWriteResult;
 import aussie.core.port.out.RoleRepository;
 
 /**
@@ -42,6 +43,26 @@ public class InMemoryRoleRepository implements RoleRepository {
     }
 
     @Override
+    public Uni<ConditionalWriteResult> replaceIfVersion(Role role, long expectedVersion) {
+        return Uni.createFrom().item(() -> {
+            final var result = new java.util.concurrent.atomic.AtomicReference<ConditionalWriteResult>();
+            storage.compute(role.id(), (ignored, current) -> {
+                if (current == null) {
+                    result.set(ConditionalWriteResult.missing());
+                    return null;
+                }
+                if (current.version() != expectedVersion) {
+                    result.set(ConditionalWriteResult.rejected(current.version()));
+                    return current;
+                }
+                result.set(ConditionalWriteResult.appliedResult());
+                return role;
+            });
+            return result.get();
+        });
+    }
+
+    @Override
     public Uni<Optional<Role>> findById(String roleId) {
         return Uni.createFrom().item(() -> Optional.ofNullable(storage.get(roleId)));
     }
@@ -49,6 +70,26 @@ public class InMemoryRoleRepository implements RoleRepository {
     @Override
     public Uni<Boolean> delete(String roleId) {
         return Uni.createFrom().item(() -> storage.remove(roleId) != null);
+    }
+
+    @Override
+    public Uni<ConditionalWriteResult> deleteIfVersion(String roleId, long expectedVersion) {
+        return Uni.createFrom().item(() -> {
+            final var result = new java.util.concurrent.atomic.AtomicReference<ConditionalWriteResult>();
+            storage.compute(roleId, (ignored, current) -> {
+                if (current == null) {
+                    result.set(ConditionalWriteResult.missing());
+                    return null;
+                }
+                if (current.version() != expectedVersion) {
+                    result.set(ConditionalWriteResult.rejected(current.version()));
+                    return current;
+                }
+                result.set(ConditionalWriteResult.appliedResult());
+                return null;
+            });
+            return result.get();
+        });
     }
 
     @Override

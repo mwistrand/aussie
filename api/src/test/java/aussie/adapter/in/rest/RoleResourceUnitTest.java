@@ -115,6 +115,7 @@ class RoleResourceUnitTest {
 
             assertEquals(200, response.getStatus());
             assertEquals(role, response.getEntity());
+            assertEquals("\"1\"", response.getHeaderString("ETag"));
         }
 
         @Test

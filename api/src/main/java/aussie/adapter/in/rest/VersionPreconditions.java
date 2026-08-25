@@ -13,7 +13,7 @@ final class VersionPreconditions {
         var value = ifMatch.trim();
         if (value.startsWith("\"") || value.endsWith("\"")) {
             if (value.length() < 2 || !value.startsWith("\"") || !value.endsWith("\"")) {
-                throw GatewayProblem.badRequest("If-Match must contain a service version");
+                throw GatewayProblem.badRequest("If-Match must contain a resource version");
             }
             value = value.substring(1, value.length() - 1);
         }
@@ -24,7 +24,7 @@ final class VersionPreconditions {
             }
             return version;
         } catch (NumberFormatException invalid) {
-            throw GatewayProblem.badRequest("If-Match must contain a service version");
+            throw GatewayProblem.badRequest("If-Match must contain a resource version");
         }
     }
 

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
@@ -34,6 +35,14 @@ class RoleStorageProviderLoaderTest {
         final var field = RoleStorageProviderLoader.class.getDeclaredField("storageProvider");
         field.setAccessible(true);
         field.set(loader, provider);
+    }
+
+    private RoleStorageProvider invokeSelectProvider(
+            RoleStorageProviderLoader loader, List<RoleStorageProvider> providers) throws Exception {
+        final var method =
+                RoleStorageProviderLoader.class.getDeclaredMethod("selectProvider", List.class, String.class);
+        method.setAccessible(true);
+        return (RoleStorageProvider) method.invoke(loader, providers, null);
     }
 
     @Nested
@@ -70,12 +79,18 @@ class RoleStorageProviderLoaderTest {
 
         @Test
         @DisplayName("should select highest priority available provider when none configured")
-        void shouldSelectHighestPriorityWhenNoneConfigured() {
+        void shouldSelectHighestPriorityWhenNoneConfigured() throws Exception {
             var loader = new RoleStorageProviderLoader(Optional.empty(), config);
+            final var low = mock(RoleStorageProvider.class);
+            final var high = mock(RoleStorageProvider.class);
+            when(low.isAvailable()).thenReturn(true);
+            when(high.isAvailable()).thenReturn(true);
+            when(low.priority()).thenReturn(1);
+            when(high.priority()).thenReturn(2);
 
-            var result = loader.roleRepository();
+            var result = invokeSelectProvider(loader, List.of(low, high));
 
-            assertNotNull(result);
+            assertEquals(high, result);
         }
 
         @Test

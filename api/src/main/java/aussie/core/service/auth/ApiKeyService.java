@@ -104,8 +104,22 @@ public class ApiKeyService implements ApiKeyManagement {
             if (existingKey.isEmpty()) {
                 return Uni.createFrom().item(false);
             }
-            var revokedKey = existingKey.get().revoke();
-            return repository.save(revokedKey).replaceWith(true);
+            return revoke(keyId, existingKey.get().version());
+        });
+    }
+
+    @Override
+    public Uni<Boolean> revoke(String keyId, long expectedVersion) {
+        return repository.findById(keyId).flatMap(existingKey -> {
+            if (existingKey.isEmpty() || existingKey.get().version() != expectedVersion) {
+                return Uni.createFrom().item(false);
+            }
+            if (existingKey.get().revoked()) {
+                return Uni.createFrom().item(true);
+            }
+            return repository
+                    .replaceIfVersion(existingKey.get().revoke(), expectedVersion)
+                    .map(result -> result.applied());
         });
     }
 

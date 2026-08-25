@@ -6,6 +6,7 @@ import java.util.Optional;
 import io.smallrye.mutiny.Uni;
 
 import aussie.core.model.auth.ApiKey;
+import aussie.core.model.service.ConditionalWriteResult;
 
 /**
  * Port interface for persistent storage of API keys.
@@ -22,6 +23,8 @@ public interface ApiKeyRepository {
      * @return Uni completing when save is durable
      */
     Uni<Void> save(ApiKey apiKey);
+
+    Uni<ConditionalWriteResult> replaceIfVersion(ApiKey apiKey, long expectedVersion);
 
     /**
      * Find an API key by its unique identifier.
@@ -48,6 +51,8 @@ public interface ApiKeyRepository {
      * @return Uni with true if deleted, false if not found
      */
     Uni<Boolean> delete(String keyId);
+
+    Uni<ConditionalWriteResult> deleteIfVersion(String keyId, long expectedVersion);
 
     /**
      * Retrieve all API keys.

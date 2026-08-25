@@ -217,6 +217,7 @@ class ApiKeyResourceUnitTest {
 
             assertEquals(200, response.getStatus());
             assertEquals(apiKey, response.getEntity());
+            assertEquals("\"1\"", response.getHeaderString("ETag"));
         }
 
         @Test

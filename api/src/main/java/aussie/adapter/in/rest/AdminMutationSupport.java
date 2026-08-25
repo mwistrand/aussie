@@ -78,6 +78,20 @@ final class AdminMutationSupport {
         return callerTeam != null && callerTeam.equals(ownerTeam);
     }
 
+    static String etag(long version) {
+        return VersionPreconditions.etag(version);
+    }
+
+    static void requireMatchingEtag(String header, long version) {
+        if ("*".equals(header)) {
+            return;
+        }
+        final var expectedVersion = VersionPreconditions.parseIfMatch(header);
+        if (expectedVersion == null || expectedVersion != version) {
+            throw GatewayProblem.preconditionFailed("The resource changed; fetch it again before retrying");
+        }
+    }
+
     static String requireTeam(SecurityIdentity identity, String requestedTeam) {
         if (isGlobal(identity)) {
             return requestedTeam;
