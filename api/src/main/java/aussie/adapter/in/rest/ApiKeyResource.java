@@ -114,6 +114,10 @@ public class ApiKeyResource {
 
                             return Response.status(Response.Status.CREATED)
                                     .entity(responseBody)
+                                    .header(
+                                            "ETag",
+                                            AdminMutationSupport.etag(
+                                                    result.metadata().version()))
                                     .build();
                         }));
     }

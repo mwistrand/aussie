@@ -100,6 +100,7 @@ class ApiKeyResourceUnitTest {
             var response = resource.createKey(request).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Response.Status.CREATED.getStatusCode(), response.getStatus());
+            assertEquals("\"1\"", response.getHeaderString("ETag"));
             var body = (Map<String, Object>) response.getEntity();
             assertEquals("k1", body.get("keyId"));
             assertEquals("plaintext-key", body.get("key"));

@@ -17,6 +17,7 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testcontainers.Testcontainers;
 import org.testcontainers.cassandra.CassandraContainer;
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.GenericContainer;
@@ -63,6 +64,9 @@ public final class E2EHarness {
     private final GenericContainer<?> demo;
     private final GenericContainer<?> api;
     private final GenericContainer<?> replica;
+    private final GenericContainer<?> alertmanager;
+    private final GenericContainer<?> prometheus;
+    private final Path alertmanagerConfig;
     private String replicaLogs = "";
 
     private E2EHarness() {
@@ -70,6 +74,7 @@ public final class E2EHarness {
         Path repoRootDir = resolveRepoRootDir(apiProjectDir);
         Path demoDir = repoRootDir.resolve("demo");
         Path translationConfig = demoDir.resolve("translation-config.json");
+        Path monitoringDir = repoRootDir.resolve("monitoring");
 
         if (!Files.exists(apiProjectDir.resolve("build/quarkus-app/quarkus-run.jar"))) {
             throw new IllegalStateException("build/quarkus-app missing - run :api:quarkusBuild before :e2eTest. Path: "
@@ -129,6 +134,42 @@ public final class E2EHarness {
 
         this.api = apiContainer(apiImage, translationConfig, "api", "e2e.api");
         this.replica = apiContainer(apiImage, translationConfig, "api-replica", "e2e.api.replica");
+        this.alertmanagerConfig = createE2eAlertmanagerConfig(apiProjectDir);
+        this.alertmanager = new GenericContainer<>(DockerImageName.parse("prom/alertmanager:v0.26.0"))
+                .withNetwork(network)
+                .withNetworkAliases("alertmanager")
+                .withExposedPorts(9093)
+                .withFileSystemBind(
+                        alertmanagerConfig.toAbsolutePath().toString(),
+                        "/etc/alertmanager/alertmanager.yml",
+                        BindMode.READ_ONLY)
+                .withCommand("--config.file=/etc/alertmanager/alertmanager.yml", "--storage.path=/alertmanager")
+                .waitingFor(Wait.forHttp("/-/ready").forStatusCode(200))
+                .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("e2e.alertmanager")));
+        this.prometheus = new GenericContainer<>(DockerImageName.parse("prom/prometheus:v2.48.0"))
+                .withNetwork(network)
+                .withNetworkAliases("prometheus")
+                .withExposedPorts(9090)
+                .withFileSystemBind(
+                        monitoringDir
+                                .resolve("prometheus/prometheus.yml")
+                                .toAbsolutePath()
+                                .toString(),
+                        "/etc/prometheus/prometheus.yml",
+                        BindMode.READ_ONLY)
+                .withFileSystemBind(
+                        monitoringDir
+                                .resolve("prometheus/alerts")
+                                .toAbsolutePath()
+                                .toString(),
+                        "/etc/prometheus/alerts",
+                        BindMode.READ_ONLY)
+                .withCommand(
+                        "--config.file=/etc/prometheus/prometheus.yml",
+                        "--storage.tsdb.path=/prometheus",
+                        "--web.enable-lifecycle")
+                .waitingFor(Wait.forHttp("/-/ready").forStatusCode(200))
+                .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("e2e.prometheus")));
     }
 
     private GenericContainer<?> apiContainer(
@@ -208,6 +249,8 @@ public final class E2EHarness {
         // Reverse start order: API replicas -> demo -> redis -> cassandra -> network.
         runQuietly(failures, "api-replica", h.replica::stop);
         runQuietly(failures, "api", h.api::stop);
+        runQuietly(failures, "prometheus", h.prometheus::stop);
+        runQuietly(failures, "alertmanager", h.alertmanager::stop);
         runQuietly(failures, "demo", h.demo::stop);
         runQuietly(failures, "redis", h.redis::stop);
         runQuietly(failures, "cassandra", h.cassandra::stop);
@@ -244,6 +287,23 @@ public final class E2EHarness {
 
     public URI demoBaseUri() {
         return URI.create("http://" + demo.getHost() + ":" + demo.getMappedPort(3000));
+    }
+
+    public synchronized void startObservabilityStack() {
+        if (prometheus.isRunning()) {
+            return;
+        }
+        Testcontainers.exposeHostPorts(9099);
+        alertmanager.start();
+        prometheus.start();
+    }
+
+    public URI prometheusBaseUri() {
+        return URI.create("http://" + prometheus.getHost() + ":" + prometheus.getMappedPort(9090));
+    }
+
+    public URI alertmanagerBaseUri() {
+        return URI.create("http://" + alertmanager.getHost() + ":" + alertmanager.getMappedPort(9093));
     }
 
     public synchronized void startReplica() {
@@ -292,6 +352,18 @@ public final class E2EHarness {
         return cassandra.getMappedPort(9042);
     }
 
+    public String adminAuditStream() {
+        try {
+            return redis.execInContainer("redis-cli", "XRANGE", "aussie:admin:audit", "-", "+")
+                    .getStdout();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Could not read the admin audit stream", e);
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not read the admin audit stream", e);
+        }
+    }
+
     private void dumpLogs() throws IOException {
         Path apiProjectDir = resolveApiProjectDir();
         String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
@@ -299,6 +371,8 @@ public final class E2EHarness {
         Files.createDirectories(outDir);
         Files.writeString(outDir.resolve("api.log"), api.getLogs());
         Files.writeString(outDir.resolve("api-replica.log"), replica.isRunning() ? replica.getLogs() : replicaLogs);
+        Files.writeString(outDir.resolve("prometheus.log"), prometheus.isRunning() ? prometheus.getLogs() : "");
+        Files.writeString(outDir.resolve("alertmanager.log"), alertmanager.isRunning() ? alertmanager.getLogs() : "");
         Files.writeString(outDir.resolve("demo.log"), demo.getLogs());
         Files.writeString(outDir.resolve("redis.log"), redis.getLogs());
         Files.writeString(outDir.resolve("cassandra.log"), cassandra.getLogs());
@@ -319,6 +393,31 @@ public final class E2EHarness {
             });
         } catch (IOException e) {
             LOG.warn("Failed to clear stale Next.js dev state at {}", nextDevDir, e);
+        }
+    }
+
+    private static Path createE2eAlertmanagerConfig(Path apiProjectDir) {
+        try {
+            var path = apiProjectDir.resolve("build/e2e-alertmanager.yml");
+            Files.createDirectories(path.getParent());
+            Files.writeString(
+                    path,
+                    """
+                    global: {}
+                    route:
+                      group_by: ['alertname']
+                      group_wait: 1s
+                      group_interval: 1s
+                      repeat_interval: 1h
+                      receiver: e2e-webhook
+                    receivers:
+                      - name: e2e-webhook
+                        webhook_configs:
+                          - url: 'http://host.testcontainers.internal:9099/alerts'
+                    """);
+            return path;
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not create the E2E Alertmanager configuration", e);
         }
     }
 

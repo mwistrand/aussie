@@ -95,6 +95,7 @@ public class RoleResource {
                         AdminMutationSupport.audit(mutationStore, identity, "role.create", role.id(), "success");
                         return Response.status(Response.Status.CREATED)
                                 .entity(role)
+                                .header("ETag", AdminMutationSupport.etag(role.version()))
                                 .build();
                     });
                 });
