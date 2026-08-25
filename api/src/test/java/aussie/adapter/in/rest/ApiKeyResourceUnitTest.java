@@ -7,6 +7,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.security.Principal;
@@ -50,6 +54,7 @@ class ApiKeyResourceUnitTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(identity.hasRole("admin")).thenReturn(true);
         resource = new ApiKeyResource(apiKeyService, identity);
     }
 
@@ -248,6 +253,21 @@ class ApiKeyResourceUnitTest {
                     HttpProblem.class,
                     () -> resource.revokeKey("unknown").await().atMost(Duration.ofSeconds(5)));
             assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
+        }
+
+        @Test
+        @DisplayName("should not let an unscoped caller bypass ownership checks")
+        void shouldNotLetUnscopedCallerBypassOwnershipChecks() {
+            var scopedIdentity = mock(SecurityIdentity.class);
+            when(scopedIdentity.getPrincipal()).thenReturn(() -> "user-1");
+            when(apiKeyService.get("k1"))
+                    .thenReturn(Uni.createFrom().item(Optional.of(createApiKey("k1", "key", "team-a", null))));
+            var scopedResource = new ApiKeyResource(apiKeyService, scopedIdentity);
+
+            assertThrows(
+                    HttpProblem.class,
+                    () -> scopedResource.revokeKey("k1").await().atMost(Duration.ofSeconds(5)));
+            verify(apiKeyService, never()).revoke("k1");
         }
     }
 

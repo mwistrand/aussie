@@ -15,6 +15,7 @@ import java.util.Set;
  * @param displayName human-readable name (e.g., "Platform Team")
  * @param description optional description of this role's purpose
  * @param permissions set of permission strings granted to members of this role
+ * @param teamId      owning tenant/team, or null for a fleet role
  * @param createdAt   when the role was created
  * @param updatedAt   when the role was last modified
  */
@@ -23,8 +24,19 @@ public record Role(
         String displayName,
         String description,
         Set<String> permissions,
+        String teamId,
         Instant createdAt,
         Instant updatedAt) {
+
+    public Role(
+            String id,
+            String displayName,
+            String description,
+            Set<String> permissions,
+            Instant createdAt,
+            Instant updatedAt) {
+        this(id, displayName, description, permissions, null, createdAt, updatedAt);
+    }
 
     public Role {
         if (id == null || id.isBlank()) {
@@ -59,7 +71,7 @@ public record Role(
      */
     public static Role create(String id, String displayName, Set<String> permissions) {
         final var now = Instant.now();
-        return new Role(id, displayName, null, permissions, now, now);
+        return new Role(id, displayName, null, permissions, null, now, now);
     }
 
     /**
@@ -69,7 +81,7 @@ public record Role(
      * @return a new Role with updated permissions and updatedAt timestamp
      */
     public Role withPermissions(Set<String> newPermissions) {
-        return new Role(id, displayName, description, newPermissions, createdAt, Instant.now());
+        return new Role(id, displayName, description, newPermissions, teamId, createdAt, Instant.now());
     }
 
     /**
@@ -80,7 +92,7 @@ public record Role(
      * @return a new Role with updated fields and updatedAt timestamp
      */
     public Role withDetails(String newDisplayName, String newDescription) {
-        return new Role(id, newDisplayName, newDescription, permissions, createdAt, Instant.now());
+        return new Role(id, newDisplayName, newDescription, permissions, teamId, createdAt, Instant.now());
     }
 
     public static Builder builder(String id) {
@@ -92,6 +104,7 @@ public record Role(
         private String displayName;
         private String description;
         private Set<String> permissions = Set.of();
+        private String teamId;
         private Instant createdAt;
         private Instant updatedAt;
 
@@ -114,6 +127,11 @@ public record Role(
             return this;
         }
 
+        public Builder teamId(String teamId) {
+            this.teamId = teamId;
+            return this;
+        }
+
         public Builder createdAt(Instant createdAt) {
             this.createdAt = createdAt;
             return this;
@@ -125,7 +143,7 @@ public record Role(
         }
 
         public Role build() {
-            return new Role(id, displayName, description, permissions, createdAt, updatedAt);
+            return new Role(id, displayName, description, permissions, teamId, createdAt, updatedAt);
         }
     }
 }

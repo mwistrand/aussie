@@ -21,14 +21,11 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import io.quarkiverse.resteasy.problem.HttpProblem;
 import io.quarkus.security.PermissionsAllowed;
 import io.quarkus.security.identity.CurrentIdentityAssociation;
 import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
-import org.jboss.logging.Logger;
 
 import aussie.adapter.in.dto.ServiceRegistrationRequest;
 import aussie.adapter.in.dto.ServiceRegistrationResponse;
@@ -53,13 +50,6 @@ import aussie.core.service.routing.ServiceRegistry;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class AdminResource {
-
-    private static final Logger AUDIT = Logger.getLogger("aussie.audit.admin");
-    // ponytail: process-local replay only; move keys to shared storage when cross-instance replay is required.
-    private static final Cache<IdempotencyCacheKey, IdempotentOperation> IDEMPOTENT_OPERATIONS = Caffeine.newBuilder()
-            .maximumSize(10_000)
-            .expireAfterWrite(java.time.Duration.ofMinutes(10))
-            .build();
 
     private final ServiceRegistry serviceRegistry;
     private final CurrentIdentityAssociation identityAssociation;
@@ -116,8 +106,12 @@ public class AdminResource {
                         }
                     });
                 };
-                return idempotent(
-                        identity, idempotencyKey, new RegistrationFingerprint(service, expectedVersion), operation);
+                return AdminMutationSupport.idempotent(
+                        identity,
+                        "service.register",
+                        idempotencyKey,
+                        new RegistrationFingerprint(service, expectedVersion),
+                        operation);
             });
         } catch (IllegalArgumentException e) {
             throw GatewayProblem.validationError("Invalid service registration");
@@ -227,76 +221,9 @@ public class AdminResource {
         };
     }
 
-    private Uni<Response> idempotent(
-            SecurityIdentity identity,
-            String idempotencyKey,
-            RegistrationFingerprint fingerprint,
-            Supplier<Uni<Response>> action) {
-        if (idempotencyKey == null || idempotencyKey.isBlank()) {
-            return action.get();
-        }
-        if (idempotencyKey.length() > 128) {
-            throw GatewayProblem.badRequest("Idempotency-Key must be 128 characters or less");
-        }
-
-        var cacheKey = new IdempotencyCacheKey(
-                identityAttribute(identity, "authenticationMethod"),
-                identityAttribute(identity, "issuer"),
-                principalId(identity),
-                idempotencyKey);
-        var existing = IDEMPOTENT_OPERATIONS.getIfPresent(cacheKey);
-        if (existing != null) {
-            if (!existing.fingerprint().equals(fingerprint)) {
-                throw GatewayProblem.conflict("Idempotency-Key was already used for a different request");
-            }
-            return existing.result();
-        }
-
-        var result = action.get().memoize().indefinitely();
-        var prior = IDEMPOTENT_OPERATIONS.asMap().putIfAbsent(cacheKey, new IdempotentOperation(fingerprint, result));
-        return prior == null
-                ? result
-                : prior.fingerprint().equals(fingerprint)
-                        ? prior.result()
-                        : Uni.createFrom()
-                                .failure(GatewayProblem.conflict(
-                                        "Idempotency-Key was already used for a different request"));
-    }
-
     private void audit(SecurityIdentity identity, String action, String target, String outcome) {
-        AUDIT.infof(
-                "admin_mutation action=%s actor=%s target=%s outcome=%s",
-                action, actor(identity), auditValue(target), outcome);
+        AdminMutationSupport.audit(identity, action, target, outcome);
     }
-
-    private String actor(SecurityIdentity identity) {
-        var principalId = principalId(identity);
-        var issuer = identityAttribute(identity, "issuer");
-        return auditValue(issuer == null ? principalId : issuer + ":" + principalId);
-    }
-
-    private String principalId(SecurityIdentity identity) {
-        var principalId = identityAttribute(identity, "principalId");
-        if (principalId != null) {
-            return principalId;
-        }
-        var principal = identity == null ? null : identity.getPrincipal();
-        var name = principal == null ? "anonymous" : principal.getName();
-        return name == null ? "unknown" : name;
-    }
-
-    private String identityAttribute(SecurityIdentity identity, String name) {
-        Object value = identity == null ? null : identity.getAttribute(name);
-        return value == null ? null : value.toString();
-    }
-
-    private String auditValue(String value) {
-        return value.replaceAll("[^A-Za-z0-9_.:@-]", "_");
-    }
-
-    private record IdempotencyCacheKey(String authenticationMethod, String issuer, String principalId, String key) {}
 
     private record RegistrationFingerprint(ServiceRegistration service, Long expectedVersion) {}
-
-    private record IdempotentOperation(RegistrationFingerprint fingerprint, Uni<Response> result) {}
 }

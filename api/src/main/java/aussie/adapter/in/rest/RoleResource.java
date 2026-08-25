@@ -10,6 +10,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -20,6 +21,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import io.quarkus.security.PermissionsAllowed;
+import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
 
 import aussie.adapter.in.dto.CreateRoleRequest;
@@ -51,10 +53,16 @@ import aussie.core.service.auth.RoleService;
 public class RoleResource {
 
     private final RoleService roleService;
+    private final SecurityIdentity identity;
 
     @Inject
-    public RoleResource(RoleService roleService) {
+    public RoleResource(RoleService roleService, SecurityIdentity identity) {
         this.roleService = roleService;
+        this.identity = identity;
+    }
+
+    public RoleResource(RoleService roleService) {
+        this(roleService, null);
     }
 
     /**
@@ -65,11 +73,24 @@ public class RoleResource {
      */
     @POST
     @PermissionsAllowed({Permission.AUTH_ROLES_CREATE_VALUE, Permission.ADMIN_VALUE})
+    public Uni<Response> createRole(
+            @Valid CreateRoleRequest request, @HeaderParam("Idempotency-Key") String idempotencyKey) {
+        var teamId = AdminMutationSupport.requireTeam(identity, request.teamId());
+        return AdminMutationSupport.idempotent(
+                identity, "role.create", idempotencyKey, new CreateRoleFingerprint(request, teamId), () -> {
+                    var created = roleService.create(
+                            request.id(), request.displayName(), request.description(), request.permissions(), teamId);
+                    return created.map(role -> {
+                        AdminMutationSupport.audit(identity, "role.create", role.id(), "success");
+                        return Response.status(Response.Status.CREATED)
+                                .entity(role)
+                                .build();
+                    });
+                });
+    }
+
     public Uni<Response> createRole(@Valid CreateRoleRequest request) {
-        return roleService
-                .create(request.id(), request.displayName(), request.description(), request.permissions())
-                .map(role ->
-                        Response.status(Response.Status.CREATED).entity(role).build());
+        return createRole(request, null);
     }
 
     /**
@@ -82,7 +103,8 @@ public class RoleResource {
     public Uni<List<Role>> listRoles(
             @QueryParam("limit") @DefaultValue("50") int limit, @QueryParam("offset") @DefaultValue("0") int offset) {
         AdminPagination.validate(limit, offset);
-        return roleService.list(limit, offset);
+        var teamId = AdminMutationSupport.requireTeam(identity, null);
+        return teamId == null ? roleService.list(limit, offset) : roleService.listForTeam(teamId, limit, offset);
     }
 
     /**
@@ -95,8 +117,9 @@ public class RoleResource {
     @Path("/{roleId}")
     @PermissionsAllowed({Permission.AUTH_ROLES_READ_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> getRole(@PathParam("roleId") String roleId) {
-        return roleService.get(roleId).map(opt -> opt.map(
-                        role -> Response.ok(role).build())
+        return roleService.get(roleId).map(opt -> opt.filter(
+                        role -> AdminMutationSupport.canSee(identity, role.teamId()))
+                .map(role -> Response.ok(role).build())
                 .orElseThrow(() -> GatewayProblem.resourceNotFound("Role", roleId)));
     }
 
@@ -128,6 +151,17 @@ public class RoleResource {
             throw GatewayProblem.badRequest("permissions cannot be used with addPermissions or removePermissions");
         }
 
+        if (AdminMutationSupport.isGlobal(identity)) {
+            return update(roleId, request);
+        }
+        return roleService
+                .get(roleId)
+                .map(opt -> opt.filter(role -> AdminMutationSupport.canSee(identity, role.teamId()))
+                        .orElseThrow(() -> GatewayProblem.resourceNotFound("Role", roleId)))
+                .flatMap(role -> update(roleId, request));
+    }
+
+    private Uni<Response> update(String roleId, UpdateRoleRequest request) {
         return roleService
                 .update(
                         roleId,
@@ -136,7 +170,10 @@ public class RoleResource {
                         request.permissions(),
                         request.addPermissions(),
                         request.removePermissions())
-                .map(opt -> opt.map(role -> Response.ok(role).build())
+                .map(opt -> opt.map(role -> {
+                            AdminMutationSupport.audit(identity, "role.update", roleId, "success");
+                            return Response.ok(role).build();
+                        })
                         .orElseThrow(() -> GatewayProblem.resourceNotFound("Role", roleId)));
     }
 
@@ -150,12 +187,25 @@ public class RoleResource {
     @Path("/{roleId}")
     @PermissionsAllowed({Permission.AUTH_ROLES_DELETE_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> deleteRole(@PathParam("roleId") String roleId) {
+        if (AdminMutationSupport.isGlobal(identity)) {
+            return delete(roleId);
+        }
+        return roleService
+                .get(roleId)
+                .map(opt -> opt.filter(role -> AdminMutationSupport.canSee(identity, role.teamId()))
+                        .orElseThrow(() -> GatewayProblem.resourceNotFound("Role", roleId)))
+                .flatMap(role -> delete(roleId));
+    }
+
+    private Uni<Response> delete(String roleId) {
         return roleService.delete(roleId).map(deleted -> {
-            if (deleted) {
-                return Response.noContent().build();
-            } else {
+            if (!deleted) {
                 throw GatewayProblem.resourceNotFound("Role", roleId);
             }
+            AdminMutationSupport.audit(identity, "role.delete", roleId, "success");
+            return Response.noContent().build();
         });
     }
+
+    private record CreateRoleFingerprint(CreateRoleRequest request, String teamId) {}
 }

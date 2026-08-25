@@ -2,6 +2,7 @@ package aussie.core.service.auth;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -46,6 +47,10 @@ public class RoleService implements RoleManagement {
 
     @Override
     public Uni<Role> create(String id, String displayName, String description, Set<String> permissions) {
+        return create(id, displayName, description, permissions, null);
+    }
+
+    public Uni<Role> create(String id, String displayName, String description, Set<String> permissions, String teamId) {
         if (id == null || id.isBlank()) {
             return Uni.createFrom().failure(new IllegalArgumentException("Role ID cannot be null or blank"));
         }
@@ -60,6 +65,7 @@ public class RoleService implements RoleManagement {
                     .displayName(displayName)
                     .description(description)
                     .permissions(permissions != null ? permissions : Set.of())
+                    .teamId(teamId)
                     .build();
 
             return repository.save(role).invoke(this::invalidateCache).replaceWith(role);
@@ -129,6 +135,7 @@ public class RoleService implements RoleManagement {
                     .displayName(displayName != null ? displayName : current.displayName())
                     .description(description != null ? description : current.description())
                     .permissions(finalPermissions)
+                    .teamId(current.teamId())
                     .createdAt(current.createdAt())
                     .updatedAt(Instant.now())
                     .build();
@@ -150,6 +157,16 @@ public class RoleService implements RoleManagement {
     @Override
     public Uni<List<Role>> list(int limit, int offset) {
         return repository.findPage(limit, offset);
+    }
+
+    public Uni<List<Role>> listForTeam(String teamId, int limit, int offset) {
+        // ponytail: filter in memory until repositories expose a team-scoped query.
+        return repository.findAll().map(roles -> roles.stream()
+                .filter(role -> teamId.equals(role.teamId()))
+                .sorted(Comparator.comparing(Role::id))
+                .skip(offset)
+                .limit(limit)
+                .toList());
     }
 
     @Override

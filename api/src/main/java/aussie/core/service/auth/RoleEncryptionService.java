@@ -192,7 +192,8 @@ public class RoleEncryptionService {
                 role.description() != null ? role.description() : "",
                 String.join(",", role.permissions()),
                 role.createdAt().toString(),
-                role.updatedAt().toString());
+                role.updatedAt().toString(),
+                role.teamId() != null ? role.teamId() : "");
     }
 
     private Role deserialize(String data) {
@@ -207,6 +208,7 @@ public class RoleEncryptionService {
                 .displayName(parts[1])
                 .description(parts[2].isEmpty() ? null : parts[2])
                 .permissions(permissions)
+                .teamId(parts.length > 6 && !parts[6].isEmpty() ? parts[6] : null)
                 .createdAt(Instant.parse(parts[4]))
                 .updatedAt(Instant.parse(parts[5]))
                 .build();

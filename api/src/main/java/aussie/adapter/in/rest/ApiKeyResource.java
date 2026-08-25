@@ -11,6 +11,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -69,34 +70,47 @@ public class ApiKeyResource {
      */
     @POST
     @PermissionsAllowed({Permission.APIKEYS_WRITE_VALUE, Permission.ADMIN_VALUE})
-    public Uni<Response> createKey(@Valid CreateApiKeyRequest request) {
+    public Uni<Response> createKey(
+            @Valid CreateApiKeyRequest request, @HeaderParam("Idempotency-Key") String idempotencyKey) {
         Duration ttl = request.ttlDays() != null ? Duration.ofDays(request.ttlDays()) : null;
+        final var teamId = AdminMutationSupport.requireTeam(identity, request.teamId());
 
         // Get the creator's identity
         String createdBy = getCreatorId();
 
-        return apiKeyService
-                .create(request.name(), request.description(), request.teamId(), request.permissions(), ttl, createdBy)
-                .map(result -> {
-                    // Return the plaintext key only this one time
-                    var responseBody = new HashMap<String, Object>();
-                    responseBody.put("keyId", result.keyId());
-                    responseBody.put("key", result.plaintextKey());
-                    responseBody.put("name", result.metadata().name());
-                    responseBody.put("permissions", result.metadata().permissions());
-                    responseBody.put("createdBy", result.metadata().createdBy());
-                    if (result.metadata().teamId() != null) {
-                        responseBody.put("teamId", result.metadata().teamId());
-                    }
-                    if (result.metadata().expiresAt() != null) {
-                        responseBody.put(
-                                "expiresAt", result.metadata().expiresAt().toString());
-                    }
+        return AdminMutationSupport.idempotent(
+                identity,
+                "api-key.create",
+                idempotencyKey,
+                new CreateFingerprint(request, teamId, ttl),
+                () -> apiKeyService
+                        .create(request.name(), request.description(), teamId, request.permissions(), ttl, createdBy)
+                        .map(result -> {
+                            AdminMutationSupport.audit(identity, "api-key.create", result.keyId(), "success");
+                            // Return the plaintext key only this one time
+                            var responseBody = new HashMap<String, Object>();
+                            responseBody.put("keyId", result.keyId());
+                            responseBody.put("key", result.plaintextKey());
+                            responseBody.put("name", result.metadata().name());
+                            responseBody.put("permissions", result.metadata().permissions());
+                            responseBody.put("createdBy", result.metadata().createdBy());
+                            if (result.metadata().teamId() != null) {
+                                responseBody.put("teamId", result.metadata().teamId());
+                            }
+                            if (result.metadata().expiresAt() != null) {
+                                responseBody.put(
+                                        "expiresAt",
+                                        result.metadata().expiresAt().toString());
+                            }
 
-                    return Response.status(Response.Status.CREATED)
-                            .entity(responseBody)
-                            .build();
-                });
+                            return Response.status(Response.Status.CREATED)
+                                    .entity(responseBody)
+                                    .build();
+                        }));
+    }
+
+    public Uni<Response> createKey(@Valid CreateApiKeyRequest request) {
+        return createKey(request, null);
     }
 
     /**
@@ -121,7 +135,8 @@ public class ApiKeyResource {
     public Uni<List<ApiKey>> listKeys(
             @QueryParam("limit") @DefaultValue("50") int limit, @QueryParam("offset") @DefaultValue("0") int offset) {
         AdminPagination.validate(limit, offset);
-        return apiKeyService.list(limit, offset);
+        var teamId = AdminMutationSupport.requireTeam(identity, null);
+        return teamId == null ? apiKeyService.list(limit, offset) : apiKeyService.listForTeam(teamId, limit, offset);
     }
 
     /**
@@ -134,8 +149,9 @@ public class ApiKeyResource {
     @Path("/{keyId}")
     @PermissionsAllowed({Permission.APIKEYS_READ_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> getKey(@PathParam("keyId") String keyId) {
-        return apiKeyService.get(keyId).map(opt -> opt.map(
-                        key -> Response.ok(key).build())
+        return apiKeyService.get(keyId).map(opt -> opt.filter(
+                        key -> AdminMutationSupport.canSee(identity, key.teamId()))
+                .map(key -> Response.ok(key).build())
                 .orElseThrow(() -> GatewayProblem.resourceNotFound("API key", keyId)));
     }
 
@@ -150,12 +166,25 @@ public class ApiKeyResource {
     @Path("/{keyId}")
     @PermissionsAllowed({Permission.APIKEYS_WRITE_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> revokeKey(@PathParam("keyId") String keyId) {
+        if (AdminMutationSupport.isGlobal(identity)) {
+            return revoke(keyId);
+        }
+        return apiKeyService
+                .get(keyId)
+                .map(opt -> opt.filter(key -> AdminMutationSupport.canSee(identity, key.teamId()))
+                        .orElseThrow(() -> GatewayProblem.resourceNotFound("API key", keyId)))
+                .flatMap(key -> revoke(keyId));
+    }
+
+    private Uni<Response> revoke(String keyId) {
         return apiKeyService.revoke(keyId).map(revoked -> {
-            if (revoked) {
-                return Response.noContent().build();
-            } else {
+            if (!revoked) {
                 throw GatewayProblem.resourceNotFound("API key", keyId);
             }
+            AdminMutationSupport.audit(identity, "api-key.revoke", keyId, "success");
+            return Response.noContent().build();
         });
     }
+
+    private record CreateFingerprint(CreateApiKeyRequest request, String teamId, Duration ttl) {}
 }

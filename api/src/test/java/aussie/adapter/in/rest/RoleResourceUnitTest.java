@@ -58,13 +58,29 @@ class RoleResourceUnitTest {
         @DisplayName("should return 201 on success")
         void shouldReturn201OnSuccess() {
             var role = createRole("platform-team");
-            when(roleService.create(eq("platform-team"), eq("Platform Team"), eq("desc"), eq(Set.of("read"))))
+            when(roleService.create(eq("platform-team"), eq("Platform Team"), eq("desc"), eq(Set.of("read")), isNull()))
                     .thenReturn(Uni.createFrom().item(role));
 
             var request = new CreateRoleRequest("platform-team", "Platform Team", "desc", Set.of("read"));
             var response = resource.createRole(request).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Response.Status.CREATED.getStatusCode(), response.getStatus());
+            assertEquals(role, response.getEntity());
+        }
+
+        @Test
+        @DisplayName("should retain a requested team in direct construction")
+        void shouldRetainRequestedTeamInDirectConstruction() {
+            var role = Role.builder("team-role")
+                    .teamId("team-a")
+                    .permissions(Set.of("read"))
+                    .build();
+            when(roleService.create("team-role", null, null, Set.of("read"), "team-a"))
+                    .thenReturn(Uni.createFrom().item(role));
+
+            var request = new CreateRoleRequest("team-role", null, null, Set.of("read"), "team-a");
+            var response = resource.createRole(request).await().atMost(Duration.ofSeconds(5));
+
             assertEquals(role, response.getEntity());
         }
     }

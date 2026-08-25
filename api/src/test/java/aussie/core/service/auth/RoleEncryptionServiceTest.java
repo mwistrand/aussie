@@ -86,6 +86,7 @@ class RoleEncryptionServiceTest {
                     .displayName("Developers")
                     .description("Development team")
                     .permissions(Set.of("apikeys.read", "service.config.read"))
+                    .teamId("team-a")
                     .createdAt(Instant.parse("2024-01-15T10:30:00Z"))
                     .updatedAt(Instant.parse("2024-01-15T12:00:00Z"))
                     .build();
@@ -97,6 +98,7 @@ class RoleEncryptionServiceTest {
             assertEquals(original.displayName(), decrypted.displayName());
             assertEquals(original.description(), decrypted.description());
             assertEquals(original.permissions(), decrypted.permissions());
+            assertEquals(original.teamId(), decrypted.teamId());
             assertEquals(original.createdAt(), decrypted.createdAt());
             assertEquals(original.updatedAt(), decrypted.updatedAt());
         }

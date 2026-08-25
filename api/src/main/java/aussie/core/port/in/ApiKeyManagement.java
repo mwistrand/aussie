@@ -1,6 +1,7 @@
 package aussie.core.port.in;
 
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -60,6 +61,16 @@ public interface ApiKeyManagement {
     /** Lists one bounded administrative page. */
     default Uni<List<ApiKey>> list(int limit, int offset) {
         return list().map(keys -> keys.stream().skip(offset).limit(limit).toList());
+    }
+
+    default Uni<List<ApiKey>> listForTeam(String teamId, int limit, int offset) {
+        // ponytail: filter in memory until repositories expose a team-scoped query.
+        return list().map(keys -> keys.stream()
+                .filter(key -> teamId.equals(key.teamId()))
+                .sorted(Comparator.comparing(ApiKey::id))
+                .skip(offset)
+                .limit(limit)
+                .toList());
     }
 
     /**
