@@ -34,7 +34,6 @@ import aussie.core.port.out.TrafficAttributing;
  * <ul>
  *   <li>{@code service_id} - Target service</li>
  *   <li>{@code team_id} - Owning/consuming team</li>
- *   <li>{@code tenant_id} - Multi-tenant identifier</li>
  *   <li>{@code environment} - Deployment environment</li>
  * </ul>
  */
@@ -153,7 +152,6 @@ public class TrafficAttributionService implements TrafficAttributing {
         return Tags.of(
                 "service_id", attribution.serviceIdOrUnknown(),
                 "team_id", attribution.teamIdOrUnknown(),
-                "tenant_id", attribution.tenantIdOrUnknown(),
                 "environment", attribution.environmentOrUnknown());
     }
 

@@ -86,6 +86,7 @@ aussie.telemetry.attribution.client-app-header=X-Client-App
 ```
 
 Team ID is derived from the authenticated principal (API key `teamId` field), not from request headers. Set the `teamId` when creating API keys to enable team-based cost attribution.
+Caller-supplied tenant and client-application headers are not exported as metric labels because their values are unbounded.
 
 ## Backend Integrations
 
@@ -207,7 +208,7 @@ These metrics expose configured bulkhead limits. For actual pool usage metrics, 
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `aussie.attributed.requests.total` | Counter | `service_id`, `team_id`, `tenant_id`, `environment` | Attributed request count |
+| `aussie.attributed.requests.total` | Counter | `service_id`, `team_id`, `environment` | Attributed request count |
 | `aussie.attributed.bytes.ingress` | Counter | (same) | Incoming data volume |
 | `aussie.attributed.bytes.egress` | Counter | (same) | Outgoing data volume |
 | `aussie.attributed.compute.units` | Counter | (same) | Normalized compute cost |
@@ -350,6 +351,7 @@ aussie.telemetry.attribution.client-app-header=X-Client-App
 ```
 
 Team ID is derived from the authenticated API key's `teamId` field, not from request headers.
+Caller-supplied tenant and client-application headers are not exported as metric labels because their values are unbounded.
 
 ### Compute Units
 
@@ -368,9 +370,9 @@ compute_units = 1.0 (base) +
 sum(rate(aussie_attributed_requests_total[5m])) by (team_id)
 ```
 
-**Data transfer by tenant:**
+**Data transfer by team:**
 ```promql
-sum(rate(aussie_attributed_bytes_ingress[5m]) + rate(aussie_attributed_bytes_egress[5m])) by (tenant_id)
+sum(rate(aussie_attributed_bytes_ingress[5m]) + rate(aussie_attributed_bytes_egress[5m])) by (team_id)
 ```
 
 **Compute units by service:**

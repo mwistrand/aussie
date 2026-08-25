@@ -105,6 +105,9 @@ class TrafficAttributionServiceTest {
                     .counter();
             assertNotNull(requestCounter);
             assertEquals(1.0, requestCounter.count());
+            assertNull(registry.find("aussie.attributed.requests.total")
+                    .tag("tenant_id", "tenant-1")
+                    .counter());
 
             var ingressCounter = registry.find("aussie.attributed.bytes.ingress")
                     .tag("service_id", "svc-1")
@@ -156,7 +159,6 @@ class TrafficAttributionServiceTest {
             var counter = registry.find("aussie.attributed.requests.total")
                     .tag("service_id", "unknown")
                     .tag("team_id", "unknown")
-                    .tag("tenant_id", "unknown")
                     .tag("environment", "unknown")
                     .counter();
             assertNotNull(counter);

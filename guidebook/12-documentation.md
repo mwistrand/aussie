@@ -427,8 +427,8 @@ The observability guide in `docs/platform/observability.md` does not stop at lis
 # Requests by team
 sum(rate(aussie_attributed_requests_total[5m])) by (team_id)
 
-# Data transfer by tenant
-sum(rate(aussie_attributed_bytes_ingress[5m]) + rate(aussie_attributed_bytes_egress[5m])) by (tenant_id)
+# Data transfer by team
+sum(rate(aussie_attributed_bytes_ingress[5m]) + rate(aussie_attributed_bytes_egress[5m])) by (team_id)
 
 # Compute units by service
 sum(rate(aussie_attributed_compute_units[5m])) by (service_id)

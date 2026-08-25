@@ -510,7 +510,7 @@ public record TrafficAttribution(
 }
 ```
 
-Team ID is derived from the authenticated principal (bound to the API key at creation time or extracted from JWT claims), not from request headers. This prevents callers from spoofing team attribution. Tenant and client application headers remain configurable, defaulting to `X-Tenant-ID` and `X-Client-Application`. The environment comes from an environment variable because it is a deployment-time constant, not a per-request value.
+Team ID is derived from the authenticated principal (bound to the API key at creation time or extracted from JWT claims), not from request headers. This prevents callers from spoofing team attribution. Tenant and client application headers remain configurable, defaulting to `X-Tenant-ID` and `X-Client-Application`, but their unbounded caller-supplied values are not exported as metric labels. The environment comes from an environment variable because it is a deployment-time constant, not a per-request value.
 
 The service records five metric families, all tagged with the same attribution dimensions:
 
@@ -554,12 +554,11 @@ private Tags buildTags(TrafficAttribution attribution) {
     return Tags.of(
             "service_id", attribution.serviceIdOrUnknown(),
             "team_id", attribution.teamIdOrUnknown(),
-            "tenant_id", attribution.tenantIdOrUnknown(),
             "environment", attribution.environmentOrUnknown());
 }
 ```
 
-The `*OrUnknown()` methods on `TrafficAttribution` ensure that missing dimensions are tagged as `"unknown"` rather than `null`, preventing Micrometer exceptions from null tag values and keeping the cardinality bounded.
+The `*OrUnknown()` methods used here ensure that missing dimensions are tagged as `"unknown"` rather than `null`, preventing Micrometer exceptions from null tag values. Excluding caller-supplied tenant and client-application values keeps metric cardinality bounded.
 
 ### Compute Units
 
@@ -586,15 +585,15 @@ The platform observability documentation provides PromQL examples for common bil
 # Requests by team (from docs/platform/observability.md, lines 342-343)
 sum(rate(aussie_attributed_requests_total[5m])) by (team_id)
 
-# Data transfer by tenant (lines 346-347)
+# Data transfer by team (lines 346-347)
 sum(rate(aussie_attributed_bytes_ingress[5m])
-  + rate(aussie_attributed_bytes_egress[5m])) by (tenant_id)
+  + rate(aussie_attributed_bytes_egress[5m])) by (team_id)
 
 # Compute units by service (lines 350-351)
 sum(rate(aussie_attributed_compute_units[5m])) by (service_id)
 ```
 
-These queries work because the tag dimensions are consistent across all five metric families. You can slice by any combination of `service_id`, `team_id`, `tenant_id`, and `environment`.
+These queries work because the tag dimensions are consistent across all five metric families. You can slice by any combination of `service_id`, `team_id`, and `environment`.
 
 ### Trade-offs
 

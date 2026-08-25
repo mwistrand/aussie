@@ -1,5 +1,6 @@
 package aussie.adapter.out.telemetry;
 
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -70,6 +71,20 @@ public class GatewayMetrics implements Metrics {
     private static final Set<String> ACCESS_REASONS =
             Set.of("ip_blocked", "visibility_private", "network_policy_denied", "forbidden", "other");
     private static final Set<String> LIMIT_TYPES = Set.of("http", "ws_connection", "ws_message", "other");
+    private static final Set<String> HTTP_METHODS =
+            Set.of("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "CONNECT", "TRACE", "other");
+    private static final Set<String> AUTH_METHODS =
+            Set.of("api_key", "session", "jwt", "oidc", "bearer", "unknown", "other");
+    private static final Set<String> TIMEOUT_TYPES = Set.of("dns", "connect", "tls", "request", "response", "other");
+    private static final Set<String> PROXY_ERRORS = Set.of(
+            "connection_refused",
+            "connection_reset",
+            "connection_error",
+            "dns_resolution_failed",
+            "host_unreachable",
+            "tls_handshake_failed",
+            "other");
+    private static final Set<String> FALLBACK_MODES = Set.of("allow", "deny", "local-bucket", "other");
 
     private final MeterRegistry registry;
     private final TelemetryConfig config;
@@ -132,8 +147,8 @@ public class GatewayMetrics implements Metrics {
         Counter.builder("aussie.requests.total")
                 .description("Total number of requests processed")
                 .tag("service_id", nullSafe(serviceId))
-                .tag("method", method)
-                .tag("status", String.valueOf(statusCode))
+                .tag("method", known(method == null ? null : method.toUpperCase(Locale.ROOT), HTTP_METHODS))
+                .tag("status", statusTag(statusCode))
                 .tag("status_class", statusClass(statusCode))
                 .register(registry)
                 .increment();
@@ -156,7 +171,7 @@ public class GatewayMetrics implements Metrics {
         Timer.builder("aussie.proxy.latency")
                 .description("Time to receive response from upstream service")
                 .tag("service_id", nullSafe(serviceId))
-                .tag("method", method)
+                .tag("method", known(method == null ? null : method.toUpperCase(Locale.ROOT), HTTP_METHODS))
                 .tag("status_class", statusClass(statusCode))
                 .publishPercentileHistogram()
                 .publishPercentiles(0.5, 0.9, 0.95, 0.99)
@@ -283,7 +298,7 @@ public class GatewayMetrics implements Metrics {
 
         Counter.builder("aussie.auth.success.total")
                 .description("Successful authentications")
-                .tag("method", method)
+                .tag("method", known(method, AUTH_METHODS))
                 .register(registry)
                 .increment();
     }
@@ -479,7 +494,7 @@ public class GatewayMetrics implements Metrics {
         Counter.builder("aussie.ratelimit.fallback.activations")
                 .description("Rate limit fallback activations (Redis backend unavailable)")
                 .tag("service_id", nullSafe(serviceId))
-                .tag("mode", mode)
+                .tag("mode", known(mode, FALLBACK_MODES))
                 .register(registry)
                 .increment();
     }
@@ -516,6 +531,10 @@ public class GatewayMetrics implements Metrics {
         };
     }
 
+    private String statusTag(int statusCode) {
+        return statusCode >= 100 && statusCode <= 599 ? String.valueOf(statusCode) : "other";
+    }
+
     private String nullSafe(String value) {
         return value != null ? value : "unknown";
     }
@@ -539,7 +558,7 @@ public class GatewayMetrics implements Metrics {
         Counter.builder("aussie.proxy.timeouts.total")
                 .description("HTTP proxy timeout events")
                 .tag("service_id", nullSafe(serviceId))
-                .tag("timeout_type", timeoutType)
+                .tag("timeout_type", known(timeoutType, TIMEOUT_TYPES))
                 .register(registry)
                 .increment();
     }
@@ -559,7 +578,7 @@ public class GatewayMetrics implements Metrics {
         Counter.builder("aussie.proxy.connection.failures.total")
                 .description("HTTP proxy connection failure events (non-timeout)")
                 .tag("service_id", nullSafe(serviceId))
-                .tag("error_type", errorType)
+                .tag("error_type", known(errorType, PROXY_ERRORS))
                 .register(registry)
                 .increment();
     }

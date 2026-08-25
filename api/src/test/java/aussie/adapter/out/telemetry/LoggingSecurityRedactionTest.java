@@ -21,10 +21,27 @@ class LoggingSecurityRedactionTest {
                 new SecurityEvent.AuthenticationLockout(Instant.now(), "client-hash", "secret-prefix:value", 5, 60, 1);
         final var session = new SecurityEvent.SessionInvalidated(
                 Instant.now(), "client-hash", "session-secret", "user-secret", "logout");
+        final var authentication = new SecurityEvent.AuthenticationFailure(
+                Instant.now(), "client-secret", "token-secret", "credential-secret", 1);
+        final var access = new SecurityEvent.AccessDenied(
+                Instant.now(),
+                "client-secret",
+                "service-secret",
+                "/secret-path",
+                "reason-secret",
+                "source-secret",
+                "peer-secret",
+                "trust-secret",
+                1);
+        final var rateLimit =
+                new SecurityEvent.RateLimitExceeded(Instant.now(), "client-secret", "service-secret", 10, 5, 60);
 
         final var lockoutLog = handler.formatEvent(lockout);
         final var unknownLockoutLog = handler.formatEvent(unknownLockout);
         final var sessionLog = handler.formatEvent(session);
+        final var authenticationLog = handler.formatEvent(authentication);
+        final var accessLog = handler.formatEvent(access);
+        final var rateLimitLog = handler.formatEvent(rateLimit);
 
         assertTrue(lockoutLog.contains("key_type=ip"));
         assertFalse(lockoutLog.contains("192.0.2.10"));
@@ -32,6 +49,9 @@ class LoggingSecurityRedactionTest {
         assertFalse(unknownLockoutLog.contains("secret-prefix"));
         assertFalse(sessionLog.contains("session-secret"));
         assertFalse(sessionLog.contains("user-secret"));
+        assertFalse(authenticationLog.contains("secret"));
+        assertFalse(accessLog.contains("secret"));
+        assertFalse(rateLimitLog.contains("secret"));
         assertFalse(handler.formatEvent(new SecurityEvent.SuspiciousPattern(
                         Instant.now(), "client-hash", "brute_force_attempt", "token=secret", 0.8))
                 .contains("token=secret"));

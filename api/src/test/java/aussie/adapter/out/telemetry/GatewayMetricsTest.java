@@ -457,15 +457,34 @@ class GatewayMetricsTest {
             for (int i = 0; i < 1_000; i++) {
                 metrics.recordError("my-svc", "error-" + i);
                 metrics.recordAuthFailure("reason-" + i, null);
+                metrics.recordAuthSuccess("method-" + i);
+                metrics.recordRequest("my-svc", "method-" + i, 1_000 + i);
                 metrics.recordAccessDenied("my-svc", "reason-" + i);
                 metrics.recordRateLimitExceeded("my-svc", "limit-" + i);
+                metrics.recordRateLimitFallback("my-svc", "mode-" + i);
+                metrics.recordProxyTimeout("my-svc", "timeout-" + i);
+                metrics.recordProxyConnectionFailure("my-svc", "error-" + i);
             }
 
+            assertEquals(1, registry.find("aussie.requests.total").meters().size());
             assertEquals(1, registry.find("aussie.errors.total").meters().size());
             assertEquals(1, registry.find("aussie.auth.failures.total").meters().size());
+            assertEquals(1, registry.find("aussie.auth.success.total").meters().size());
             assertEquals(1, registry.find("aussie.access.denied.total").meters().size());
             assertEquals(
                     1, registry.find("aussie.ratelimit.exceeded.total").meters().size());
+            assertEquals(
+                    1,
+                    registry.find("aussie.ratelimit.fallback.activations")
+                            .meters()
+                            .size());
+            assertEquals(
+                    1, registry.find("aussie.proxy.timeouts.total").meters().size());
+            assertEquals(
+                    1,
+                    registry.find("aussie.proxy.connection.failures.total")
+                            .meters()
+                            .size());
         }
 
         @Test
@@ -646,6 +665,19 @@ class GatewayMetricsTest {
         }
 
         @Test
+        @DisplayName("recordRateLimitFallback preserves configured fallback mode")
+        void recordRateLimitFallback() {
+            metrics.recordRateLimitFallback("my-svc", "local-bucket");
+
+            var counter = registry.find("aussie.ratelimit.fallback.activations")
+                    .tag("service_id", "my-svc")
+                    .tag("mode", "local-bucket")
+                    .counter();
+            assertNotNull(counter);
+            assertEquals(1.0, counter.count());
+        }
+
+        @Test
         @DisplayName("recordProxyTimeout increments timeout counter")
         void recordProxyTimeout() {
             metrics.recordProxyTimeout("my-svc", "connect");
@@ -659,13 +691,13 @@ class GatewayMetricsTest {
         }
 
         @Test
-        @DisplayName("recordProxyConnectionFailure increments failure counter")
+        @DisplayName("recordProxyConnectionFailure preserves classified failure type")
         void recordProxyConnectionFailure() {
-            metrics.recordProxyConnectionFailure("my-svc", "connection_refused");
+            metrics.recordProxyConnectionFailure("my-svc", "tls_handshake_failed");
 
             var counter = registry.find("aussie.proxy.connection.failures.total")
                     .tag("service_id", "my-svc")
-                    .tag("error_type", "connection_refused")
+                    .tag("error_type", "tls_handshake_failed")
                     .counter();
             assertNotNull(counter);
             assertEquals(1.0, counter.count());

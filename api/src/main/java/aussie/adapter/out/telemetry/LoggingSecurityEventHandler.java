@@ -1,5 +1,7 @@
 package aussie.adapter.out.telemetry;
 
+import java.util.Set;
+
 import org.jboss.logging.Logger;
 
 import aussie.spi.SecurityEvent;
@@ -19,6 +21,25 @@ import aussie.spi.SecurityEventHandler;
 public class LoggingSecurityEventHandler implements SecurityEventHandler {
 
     private static final Logger LOG = Logger.getLogger("aussie.security");
+    private static final Set<String> AUTH_REASONS = Set.of(
+            "invalid_key",
+            "invalid_api_key_format",
+            "invalid_authorization",
+            "invalid_session",
+            "expired_session",
+            "invalid_token",
+            "ambiguous_credential",
+            "conflicting_authentication",
+            "other");
+    private static final Set<String> AUTH_METHODS =
+            Set.of("api_key", "authorization", "bearer", "jwt", "multiple", "oidc", "session", "unknown");
+    private static final Set<String> ACCESS_REASONS =
+            Set.of("ip_blocked", "visibility_private", "network_policy_denied", "forbidden", "other");
+    private static final Set<String> SOURCES = Set.of("forwarded", "socket", "unknown");
+    private static final Set<String> PATTERNS =
+            Set.of("brute_force", "brute_force_attempt", "high_error_rate", "request_spike", "other");
+    private static final Set<String> ATTACKS = Set.of("request_flood", "slowloris", "other");
+    private static final Set<String> INVALIDATION_REASONS = Set.of("logout", "timeout", "forced", "other");
 
     @Override
     public String name() {
@@ -50,46 +71,67 @@ public class LoggingSecurityEventHandler implements SecurityEventHandler {
     String formatEvent(SecurityEvent event) {
         return switch (event) {
             case SecurityEvent.AuthenticationFailure e -> String.format(
-                    "AUTH_FAILURE: client=%s reason=%s method=%s failures=%d",
-                    e.clientIdentifier(), e.reason(), e.attemptedMethod(), e.failureCount());
+                    "AUTH_FAILURE: client_present=%s reason=%s method=%s failures=%d",
+                    present(e.clientIdentifier()),
+                    known(e.reason(), AUTH_REASONS),
+                    known(e.attemptedMethod(), AUTH_METHODS),
+                    e.failureCount());
 
             case SecurityEvent.AuthenticationLockout e -> String.format(
-                    "AUTH_LOCKOUT: client=%s key_type=%s attempts=%d duration=%ds lockout_count=%d",
-                    e.clientIdentifier(),
+                    "AUTH_LOCKOUT: client_present=%s key_type=%s attempts=%d duration=%ds lockout_count=%d",
+                    present(e.clientIdentifier()),
                     keyType(e.lockedKey()),
                     e.failedAttempts(),
                     e.lockoutDurationSeconds(),
                     e.lockoutCount());
 
             case SecurityEvent.AccessDenied e -> String.format(
-                    "ACCESS_DENIED: client=%s source=%s direct_peer=%s trust_path=%s service=%s route=%s reason=%s policy_version=%d",
-                    e.clientIdentifier(),
-                    e.source(),
-                    e.directPeerIdentifier(),
-                    e.trustPath(),
-                    e.serviceId(),
-                    e.path(),
-                    e.reason(),
+                    "ACCESS_DENIED: client_present=%s source=%s direct_peer_present=%s trust_path_present=%s service_present=%s route_present=%s reason=%s policy_version=%d",
+                    present(e.clientIdentifier()),
+                    known(e.source(), SOURCES),
+                    present(e.directPeerIdentifier()),
+                    present(e.trustPath()),
+                    present(e.serviceId()),
+                    present(e.path()),
+                    known(e.reason(), ACCESS_REASONS),
                     e.policyVersion());
 
             case SecurityEvent.RateLimitExceeded e -> String.format(
-                    "RATE_LIMIT: client=%s service=%s requests=%d threshold=%d window=%ds",
-                    e.clientIdentifier(), e.serviceId(), e.requestCount(), e.threshold(), e.windowSeconds());
+                    "RATE_LIMIT: client_present=%s service_present=%s requests=%d threshold=%d window=%ds",
+                    present(e.clientIdentifier()),
+                    present(e.serviceId()),
+                    e.requestCount(),
+                    e.threshold(),
+                    e.windowSeconds());
 
             case SecurityEvent.SuspiciousPattern e -> String.format(
-                    "SUSPICIOUS: client=%s type=%s confidence=%.2f details_present=%s",
-                    e.clientIdentifier(), e.patternType(), e.confidenceScore(), e.details() != null);
+                    "SUSPICIOUS: client_present=%s type=%s confidence=%.2f details_present=%s",
+                    present(e.clientIdentifier()),
+                    known(e.patternType(), PATTERNS),
+                    e.confidenceScore(),
+                    present(e.details()));
 
             case SecurityEvent.DosAttackDetected e -> String.format(
-                    "DOS_ATTACK: client=%s type=%s evidence_present=%s",
-                    e.clientIdentifier(),
-                    e.attackType(),
+                    "DOS_ATTACK: client_present=%s type=%s evidence_present=%s",
+                    present(e.clientIdentifier()),
+                    known(e.attackType(), ATTACKS),
                     e.evidence() != null && !e.evidence().isEmpty());
 
             case SecurityEvent.SessionInvalidated e -> String.format(
-                    "SESSION_INVALIDATED: client=%s session_present=%s user_present=%s reason=%s",
-                    e.clientIdentifier(), e.sessionId() != null, e.userId() != null, e.reason());
+                    "SESSION_INVALIDATED: client_present=%s session_present=%s user_present=%s reason=%s",
+                    present(e.clientIdentifier()),
+                    present(e.sessionId()),
+                    present(e.userId()),
+                    known(e.reason(), INVALIDATION_REASONS));
         };
+    }
+
+    private static String known(String value, Set<String> allowed) {
+        return value != null && allowed.contains(value) ? value : "other";
+    }
+
+    private static boolean present(String value) {
+        return value != null && !value.isBlank();
     }
 
     private static String keyType(String key) {

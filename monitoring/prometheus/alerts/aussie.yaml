@@ -9,8 +9,10 @@ groups:
         for: 1m
         labels:
           severity: critical
+          owner: platform-oncall
         annotations:
           summary: "Aussie gateway is down"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#availability"
           description: "Aussie gateway instance {{ $labels.instance }} has been down for more than 1 minute."
 
   - name: aussie-errors
@@ -23,8 +25,10 @@ groups:
         for: 5m
         labels:
           severity: warning
+          owner: platform-oncall
         annotations:
           summary: "High error rate for service {{ $labels.service_id }}"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#availability"
           description: "Error rate is {{ $value | humanizePercentage }} for service {{ $labels.service_id }}."
 
       - alert: VeryHighErrorRate
@@ -34,8 +38,10 @@ groups:
         for: 2m
         labels:
           severity: critical
+          owner: platform-oncall
         annotations:
           summary: "Critical error rate for service {{ $labels.service_id }}"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#availability"
           description: "Error rate is {{ $value | humanizePercentage }} for service {{ $labels.service_id }}."
 
   - name: aussie-latency
@@ -49,8 +55,10 @@ groups:
         for: 5m
         labels:
           severity: warning
+          owner: platform-oncall
         annotations:
           summary: "High p99 latency for service {{ $labels.service_id }}"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#latency"
           description: "P99 latency is {{ $value | humanizeDuration }} for service {{ $labels.service_id }}."
 
       - alert: HighLatencyP50
@@ -61,8 +69,10 @@ groups:
         for: 5m
         labels:
           severity: warning
+          owner: platform-oncall
         annotations:
           summary: "High median latency for service {{ $labels.service_id }}"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#latency"
           description: "Median latency is {{ $value | humanizeDuration }} for service {{ $labels.service_id }}."
 
   - name: aussie-security
@@ -73,8 +83,10 @@ groups:
         for: 1m
         labels:
           severity: critical
+          owner: platform-oncall
         annotations:
           summary: "Aussie signing authority is unavailable"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#keyjwks-and-certificate-expiry"
           description: "Required token issuance has no active key matching the published JWKS. Follow the signing-key rollback runbook."
 
       - alert: AuthFailureSpike
@@ -83,8 +95,10 @@ groups:
         for: 2m
         labels:
           severity: critical
+          owner: platform-oncall
         annotations:
           summary: "Authentication failure spike detected"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#rate-limit-fallback-or-traffic-spike"
           description: "Authentication failures are spiking at {{ $value }} failures/second."
 
       - alert: SecurityEventsCritical
@@ -93,8 +107,10 @@ groups:
         for: 1m
         labels:
           severity: critical
+          owner: platform-oncall
         annotations:
           summary: "Critical security events detected"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#rate-limit-fallback-or-traffic-spike"
           description: "{{ $value }} critical security events detected per second."
 
       - alert: SuspiciousActivityDetected
@@ -103,8 +119,10 @@ groups:
         for: 1m
         labels:
           severity: critical
+          owner: platform-oncall
         annotations:
           summary: "Potential DoS attack detected"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#rate-limit-fallback-or-traffic-spike"
           description: "DoS attack pattern detected at {{ $value }} events/second."
 
   - name: aussie-websocket
@@ -116,8 +134,10 @@ groups:
         for: 5m
         labels:
           severity: warning
+          owner: platform-oncall
         annotations:
           summary: "High number of WebSocket connections"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#resource-saturation-and-websocket-drain"
           description: "{{ $value }} active WebSocket connections."
 
   - name: aussie-traffic
@@ -129,8 +149,10 @@ groups:
         for: 5m
         labels:
           severity: info
+          owner: platform-oncall
         annotations:
           summary: "High traffic volume"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#rate-limit-fallback-or-traffic-spike"
           description: "Traffic volume is {{ $value }} requests/second."
 
   - name: aussie-ratelimit
@@ -143,8 +165,10 @@ groups:
         for: 2m
         labels:
           severity: warning
+          owner: platform-oncall
         annotations:
           summary: "HTTP rate limit exceeded spike for {{ $labels.service_id }}"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#rate-limit-fallback-or-traffic-spike"
           description: "{{ $value | humanize }} rate limit exceeded events/second for service {{ $labels.service_id }}."
 
       - alert: RateLimitExceededCritical
@@ -153,8 +177,10 @@ groups:
         for: 1m
         labels:
           severity: critical
+          owner: platform-oncall
         annotations:
           summary: "Critical HTTP rate limit exceeded for {{ $labels.service_id }}"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#rate-limit-fallback-or-traffic-spike"
           description: "{{ $value | humanize }} rate limit exceeded events/second for service {{ $labels.service_id }}. Possible abuse or misconfigured client."
 
       # WebSocket Rate Limiting Alerts
@@ -164,8 +190,10 @@ groups:
         for: 2m
         labels:
           severity: warning
+          owner: platform-oncall
         annotations:
           summary: "WebSocket connection rate limit exceeded"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#rate-limit-fallback-or-traffic-spike"
           description: "{{ $value | humanize }} WebSocket connection rate limit events/second."
 
       - alert: WebSocketMessageRateLimitSpike
@@ -174,8 +202,10 @@ groups:
         for: 2m
         labels:
           severity: warning
+          owner: platform-oncall
         annotations:
           summary: "WebSocket message rate limit exceeded"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#rate-limit-fallback-or-traffic-spike"
           description: "{{ $value | humanize }} WebSocket message rate limit events/second."
 
       # Rate Limit Effectiveness
@@ -186,8 +216,10 @@ groups:
         for: 5m
         labels:
           severity: warning
+          owner: platform-oncall
         annotations:
           summary: "High rate limit rejection ratio for {{ $labels.service_id }}"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#rate-limit-fallback-or-traffic-spike"
           description: "{{ $value | humanizePercentage }} of requests are being rate limited for service {{ $labels.service_id }}. Consider adjusting limits or investigating traffic patterns."
 
       # Potential DoS via Rate Limiting
@@ -197,6 +229,8 @@ groups:
         for: 1m
         labels:
           severity: critical
+          owner: platform-oncall
         annotations:
           summary: "Potential DoS attack detected via rate limiting"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#rate-limit-fallback-or-traffic-spike"
           description: "{{ $value | humanize }} rate limit events/second across all services. This may indicate a coordinated attack."
