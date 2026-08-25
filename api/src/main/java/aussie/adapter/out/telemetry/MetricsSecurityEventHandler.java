@@ -98,7 +98,6 @@ public class MetricsSecurityEventHandler implements SecurityEventHandler {
                 .description("Authentication failures")
                 .tag("reason", event.reason())
                 .tag("method", event.attemptedMethod())
-                .tag("client_ip_hash", event.clientIdentifier())
                 .register(registry)
                 .increment();
     }
@@ -107,7 +106,6 @@ public class MetricsSecurityEventHandler implements SecurityEventHandler {
         Counter.builder("aussie.security.auth.lockouts")
                 .description("Authentication lockouts (brute force protection)")
                 .tag("key_type", extractKeyType(event.lockedKey()))
-                .tag("client_ip_hash", event.clientIdentifier())
                 .register(registry)
                 .increment();
     }
@@ -133,7 +131,6 @@ public class MetricsSecurityEventHandler implements SecurityEventHandler {
         Counter.builder("aussie.security.rate_limit.exceeded")
                 .description("Rate limit violations")
                 .tag("service_id", nullSafe(event.serviceId()))
-                .tag("client_ip_hash", event.clientIdentifier())
                 .register(registry)
                 .increment();
     }
@@ -142,7 +139,6 @@ public class MetricsSecurityEventHandler implements SecurityEventHandler {
         Counter.builder("aussie.security.suspicious.patterns")
                 .description("Suspicious traffic patterns detected")
                 .tag("pattern_type", event.patternType())
-                .tag("client_ip_hash", event.clientIdentifier())
                 .register(registry)
                 .increment();
     }
@@ -151,7 +147,6 @@ public class MetricsSecurityEventHandler implements SecurityEventHandler {
         Counter.builder("aussie.security.dos.detected")
                 .description("DoS attacks detected")
                 .tag("attack_type", event.attackType())
-                .tag("client_ip_hash", event.clientIdentifier())
                 .register(registry)
                 .increment();
     }

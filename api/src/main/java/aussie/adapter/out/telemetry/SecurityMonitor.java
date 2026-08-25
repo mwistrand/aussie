@@ -3,13 +3,14 @@ package aussie.adapter.out.telemetry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.jboss.logging.Logger;
 
 import aussie.common.context.ClientContext;
@@ -37,20 +38,40 @@ public class SecurityMonitor implements SecurityMonitoring {
 
     private static final Logger LOG = Logger.getLogger(SecurityMonitor.class);
 
-    private final TelemetryConfig config;
     private final SecurityEventDispatcher dispatcher;
     private final boolean enabled;
+    private final Duration rateLimitWindow;
+    private final int rateLimitThreshold;
+    private final boolean dosDetectionEnabled;
+    private final double dosSpikeThreshold;
+    private final double dosErrorRateThreshold;
 
     // Per-client request tracking
-    private final ConcurrentHashMap<String, SlidingWindowCounter> clientRequestCounts = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, SlidingWindowCounter> clientErrorCounts = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, AtomicInteger> authFailureCounts = new ConcurrentHashMap<>();
+    private final Cache<String, ClientCounters> clientCounters;
 
     @Inject
     public SecurityMonitor(TelemetryConfig config, SecurityEventDispatcher dispatcher) {
-        this.config = config;
         this.dispatcher = dispatcher;
-        this.enabled = config != null && config.enabled() && config.security().enabled();
+        final var security = config == null ? null : config.security();
+        final var dos = security == null ? null : security.dosDetection();
+        this.enabled = config != null && config.enabled() && security != null && security.enabled();
+        this.rateLimitWindow = security == null ? Duration.ofMinutes(1) : security.rateLimitWindow();
+        this.rateLimitThreshold = security == null ? 1_000 : security.rateLimitThreshold();
+        this.dosDetectionEnabled = dos != null && dos.enabled();
+        this.dosSpikeThreshold = dos == null ? 5.0 : dos.spikeThreshold();
+        this.dosErrorRateThreshold = dos == null ? 0.5 : dos.errorRateThreshold();
+        final var maxClients =
+                security == null || security.maxTrackedClients() <= 0 ? 10_000 : security.maxTrackedClients();
+        final var ttl = security == null
+                        || security.clientTrackingTtl() == null
+                        || security.clientTrackingTtl().isNegative()
+                        || security.clientTrackingTtl().isZero()
+                ? Duration.ofMinutes(10)
+                : security.clientTrackingTtl();
+        clientCounters = Caffeine.newBuilder()
+                .maximumSize(maxClients)
+                .expireAfterAccess(ttl)
+                .build();
     }
 
     /**
@@ -74,18 +95,15 @@ public class SecurityMonitor implements SecurityMonitoring {
             return;
         }
 
-        var window = config.security().rateLimitWindow();
-
-        var counter = clientRequestCounts.computeIfAbsent(hashIp(clientIp), k -> new SlidingWindowCounter(window));
-        counter.increment();
+        final var hashedIp = hashIp(clientIp);
+        final var counters = clientCounters.get(hashedIp, ignored -> new ClientCounters(rateLimitWindow));
+        counters.requests().increment();
 
         if (isError) {
-            var errorCounter =
-                    clientErrorCounts.computeIfAbsent(hashIp(clientIp), k -> new SlidingWindowCounter(window));
-            errorCounter.increment();
+            counters.errors().increment();
         }
 
-        checkForAnomalies(clientIp, serviceId, counter.getCount());
+        checkForAnomalies(hashedIp, serviceId, counters);
     }
 
     /**
@@ -100,10 +118,9 @@ public class SecurityMonitor implements SecurityMonitoring {
             return;
         }
 
-        var hashedIp = hashIp(clientIp);
-        var count = authFailureCounts
-                .computeIfAbsent(hashedIp, k -> new AtomicInteger(0))
-                .incrementAndGet();
+        final var hashedIp = hashIp(clientIp);
+        final var counters = clientCounters.get(hashedIp, ignored -> new ClientCounters(rateLimitWindow));
+        final var count = counters.authFailures().incrementAndGet();
 
         var event = new SecurityEvent.AuthenticationFailure(Instant.now(), hashedIp, reason, method, count);
         dispatcher.dispatch(event);
@@ -192,37 +209,30 @@ public class SecurityMonitor implements SecurityMonitoring {
      * @param clientIp the client IP address
      */
     public void resetClient(String clientIp) {
-        var hashedIp = hashIp(clientIp);
-        clientRequestCounts.remove(hashedIp);
-        clientErrorCounts.remove(hashedIp);
-        authFailureCounts.remove(hashedIp);
+        clientCounters.invalidate(hashIp(clientIp));
     }
 
-    private void checkForAnomalies(String clientIp, String serviceId, long requestCount) {
-        var securityConfig = config.security();
-        var threshold = securityConfig.rateLimitThreshold();
-        var hashedIp = hashIp(clientIp);
+    private void checkForAnomalies(String hashedIp, String serviceId, ClientCounters counters) {
+        final var requestCount = counters.requests().getCount();
 
         // Rate limit check
-        if (requestCount > threshold) {
+        if (requestCount > rateLimitThreshold) {
             var event = new SecurityEvent.RateLimitExceeded(
-                    Instant.now(), hashedIp, serviceId, (int) requestCount, threshold, (int)
-                            securityConfig.rateLimitWindow().toSeconds());
+                    Instant.now(), hashedIp, serviceId, (int) requestCount, rateLimitThreshold, (int)
+                            rateLimitWindow.toSeconds());
             dispatcher.dispatch(event);
         }
 
         // DoS detection
-        if (securityConfig.dosDetection().enabled()) {
-            detectDosPatterns(hashedIp, serviceId, requestCount, threshold);
+        if (dosDetectionEnabled) {
+            detectDosPatterns(hashedIp, serviceId, counters.errors(), requestCount);
         }
     }
 
-    private void detectDosPatterns(String hashedIp, String serviceId, long requestCount, int threshold) {
-        var dosConfig = config.security().dosDetection();
-        var spikeThreshold = dosConfig.spikeThreshold();
-
+    private void detectDosPatterns(
+            String hashedIp, String serviceId, SlidingWindowCounter errorCounter, long requestCount) {
         // Sudden spike detection
-        if (requestCount > threshold * spikeThreshold) {
+        if (requestCount > rateLimitThreshold * dosSpikeThreshold) {
             var event = new SecurityEvent.DosAttackDetected(
                     Instant.now(),
                     hashedIp,
@@ -231,23 +241,22 @@ public class SecurityMonitor implements SecurityMonitoring {
                             "request_count",
                             requestCount,
                             "threshold",
-                            threshold,
+                            rateLimitThreshold,
                             "spike_factor",
-                            requestCount / (double) threshold,
+                            requestCount / (double) rateLimitThreshold,
                             "service_id",
                             serviceId != null ? serviceId : "unknown"));
             dispatcher.dispatch(event);
 
             LOG.warnf(
                     "Potential DoS attack detected: Client %s exceeding rate limits by %.1fx",
-                    hashedIp, requestCount / (double) threshold);
+                    hashedIp, requestCount / (double) rateLimitThreshold);
         }
 
         // High error rate detection
-        var errorCounter = clientErrorCounts.get(hashedIp);
-        if (errorCounter != null && requestCount > 0) {
+        if (requestCount > 0) {
             double errorRate = errorCounter.getCount() / (double) requestCount;
-            if (errorRate > dosConfig.errorRateThreshold()) {
+            if (errorRate > dosErrorRateThreshold) {
                 var event = new SecurityEvent.SuspiciousPattern(
                         Instant.now(),
                         hashedIp,
@@ -258,6 +267,14 @@ public class SecurityMonitor implements SecurityMonitoring {
                         errorRate);
                 dispatcher.dispatch(event);
             }
+        }
+    }
+
+    private record ClientCounters(
+            SlidingWindowCounter requests, SlidingWindowCounter errors, AtomicInteger authFailures) {
+
+        private ClientCounters(Duration window) {
+            this(new SlidingWindowCounter(window), new SlidingWindowCounter(window), new AtomicInteger());
         }
     }
 

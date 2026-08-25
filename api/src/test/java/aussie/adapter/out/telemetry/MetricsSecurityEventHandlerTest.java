@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
@@ -115,6 +116,7 @@ class MetricsSecurityEventHandlerTest {
                     .counter();
             assertNotNull(counter);
             assertEquals(1.0, counter.count());
+            assertNull(counter.getId().getTag("client_ip_hash"));
         }
 
         @Test
@@ -128,6 +130,7 @@ class MetricsSecurityEventHandlerTest {
                     .counter();
             assertNotNull(counter);
             assertEquals(1.0, counter.count());
+            assertNull(counter.getId().getTag("client_ip_hash"));
         }
 
         @Test
@@ -201,6 +204,7 @@ class MetricsSecurityEventHandlerTest {
                     .tag("service_id", "svc-1")
                     .counter();
             assertNotNull(counter);
+            assertNull(counter.getId().getTag("client_ip_hash"));
         }
 
         @Test
@@ -213,6 +217,7 @@ class MetricsSecurityEventHandlerTest {
                     .tag("pattern_type", "brute_force")
                     .counter();
             assertNotNull(counter);
+            assertNull(counter.getId().getTag("client_ip_hash"));
         }
 
         @Test
@@ -225,6 +230,7 @@ class MetricsSecurityEventHandlerTest {
                     .tag("attack_type", "request_flood")
                     .counter();
             assertNotNull(counter);
+            assertNull(counter.getId().getTag("client_ip_hash"));
         }
 
         @Test

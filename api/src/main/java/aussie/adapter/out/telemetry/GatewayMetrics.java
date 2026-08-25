@@ -125,6 +125,7 @@ public class GatewayMetrics implements Metrics {
                 .tag("service_id", nullSafe(serviceId))
                 .tag("method", method)
                 .tag("status_class", statusClass(statusCode))
+                .publishPercentileHistogram()
                 .publishPercentiles(0.5, 0.9, 0.95, 0.99)
                 .register(registry)
                 .record(latencyMs, TimeUnit.MILLISECONDS);
@@ -221,7 +222,7 @@ public class GatewayMetrics implements Metrics {
      * Record an authentication failure.
      *
      * @param reason the failure reason (e.g., "invalid_key", "expired_session")
-     * @param clientIp the client IP address (will be hashed for privacy)
+     * @param clientIp the client IP address (not included in metrics)
      */
     @Override
     public void recordAuthFailure(String reason, String clientIp) {
@@ -232,7 +233,6 @@ public class GatewayMetrics implements Metrics {
         Counter.builder("aussie.auth.failures.total")
                 .description("Authentication failures")
                 .tag("reason", reason)
-                .tag("client_ip_hash", hashIp(clientIp))
                 .register(registry)
                 .increment();
     }
@@ -481,15 +481,6 @@ public class GatewayMetrics implements Metrics {
 
     private String nullSafe(String value) {
         return value != null ? value : "unknown";
-    }
-
-    private String hashIp(String ip) {
-        if (ip == null) {
-            return "unknown";
-        }
-        // Hash IP for privacy - only keep first 8 hex chars
-        var hash = Integer.toHexString(ip.hashCode());
-        return hash.substring(0, Math.min(8, hash.length()));
     }
 
     // -------------------------------------------------------------------------

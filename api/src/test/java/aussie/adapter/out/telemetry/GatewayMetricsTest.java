@@ -439,7 +439,7 @@ class GatewayMetricsTest {
         }
 
         @Test
-        @DisplayName("recordAuthFailure increments failure counter with reason and hashed IP")
+        @DisplayName("recordAuthFailure increments failure counter without client labels")
         void recordAuthFailure() {
             metrics.recordAuthFailure("invalid_key", "127.0.0.1");
 
@@ -448,19 +448,20 @@ class GatewayMetricsTest {
                     .counter();
             assertNotNull(counter);
             assertEquals(1.0, counter.count());
+            assertNull(counter.getId().getTag("client_ip_hash"));
         }
 
         @Test
-        @DisplayName("recordAuthFailure uses 'unknown' for null IP")
+        @DisplayName("recordAuthFailure does not create a client label for null IP")
         void recordAuthFailureNullIp() {
             metrics.recordAuthFailure("expired_session", null);
 
             var counter = registry.find("aussie.auth.failures.total")
                     .tag("reason", "expired_session")
-                    .tag("client_ip_hash", "unknown")
                     .counter();
             assertNotNull(counter);
             assertEquals(1.0, counter.count());
+            assertNull(counter.getId().getTag("client_ip_hash"));
         }
 
         @Test

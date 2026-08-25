@@ -89,7 +89,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(aussie_gateway_requests_total[5m])) by (service_id)",
+          "expr": "sum(rate(aussie_requests_total[5m])) by (service_id)",
           "legendFormat": "{{ service_id }}",
           "refId": "A"
         }
@@ -178,7 +178,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(aussie_gateway_errors_total[5m])) by (service_id) / sum(rate(aussie_gateway_requests_total[5m])) by (service_id)",
+          "expr": "sum(rate(aussie_errors_total[5m])) by (service_id) / sum(rate(aussie_requests_total[5m])) by (service_id)",
           "legendFormat": "{{ service_id }}",
           "refId": "A"
         }
@@ -365,8 +365,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(aussie_websocket_active) by (service_id)",
-          "legendFormat": "{{ service_id }}",
+          "expr": "sum(aussie_websockets_active)",
+          "legendFormat": "total",
           "refId": "A"
         }
       ],
@@ -423,7 +423,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(aussie_gateway_requests_total[24h]))",
+          "expr": "sum(increase(aussie_requests_total[24h]))",
           "legendFormat": "",
           "refId": "A"
         }
@@ -489,7 +489,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(aussie_gateway_errors_total[5m])) / sum(rate(aussie_gateway_requests_total[5m]))",
+          "expr": "sum(rate(aussie_errors_total[5m])) / sum(rate(aussie_requests_total[5m]))",
           "legendFormat": "",
           "refId": "A"
         }
@@ -613,7 +613,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(aussie_websocket_active)",
+          "expr": "sum(aussie_websockets_active)",
           "legendFormat": "",
           "refId": "A"
         }

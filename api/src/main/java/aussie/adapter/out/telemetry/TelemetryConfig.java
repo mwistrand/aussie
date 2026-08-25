@@ -9,8 +9,8 @@ import io.smallrye.config.WithName;
 /**
  * Configuration for telemetry features including tracing, metrics, and security monitoring.
  *
- * <p>All telemetry features are disabled by default. Platform teams must explicitly enable
- * the features they need via configuration.
+ * <p>Telemetry is enabled explicitly by the production profile; development and test profiles
+ * may opt into individual features.
  *
  * <p>Example configuration:
  * <pre>{@code
@@ -111,6 +111,16 @@ public interface TelemetryConfig {
         @WithName("rate-limit-threshold")
         @WithDefault("1000")
         int rateLimitThreshold();
+
+        /** Maximum number of clients retained by in-process anomaly detection. */
+        @WithName("max-tracked-clients")
+        @WithDefault("10000")
+        int maxTrackedClients();
+
+        /** How long an inactive client entry remains eligible for eviction. */
+        @WithName("client-tracking-ttl")
+        @WithDefault("PT10M")
+        Duration clientTrackingTtl();
 
         /**
          * DoS detection configuration.

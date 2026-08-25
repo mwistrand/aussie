@@ -11,7 +11,9 @@ Aussie provides comprehensive observability through:
 - **Security Monitoring** - Anomaly detection and security event handling via SPI
 - **Traffic Attribution** - Cost allocation and billing metrics
 
-All telemetry features are **disabled by default** and must be explicitly enabled.
+The production profile enables metrics and security telemetry, and the production configuration
+validator rejects attempts to disable them. Development and test profiles may enable individual
+features as needed.
 
 ## Quick Start
 
@@ -47,6 +49,8 @@ aussie.telemetry.attribution.enabled=true
 | `aussie.telemetry.security.dos-detection.enabled` | `true` | Enable automatic DoS pattern detection |
 | `aussie.telemetry.security.dos-detection.spike-threshold` | `5.0` | Request rate spike multiplier for DoS detection |
 | `aussie.telemetry.security.dos-detection.error-rate-threshold` | `0.5` | Error rate threshold for DoS detection |
+| `aussie.telemetry.security.max-tracked-clients` | `10000` | Maximum clients retained for in-process anomaly detection |
+| `aussie.telemetry.security.client-tracking-ttl` | `PT10M` | Inactivity TTL for anomaly-detection entries |
 | `aussie.telemetry.attribution.enabled` | `false` | Enable traffic attribution |
 
 ### OpenTelemetry Configuration
@@ -111,7 +115,7 @@ Aussie exposes metrics at `/q/metrics` in Prometheus format.
 scrape_configs:
   - job_name: 'aussie'
     static_configs:
-      - targets: ['aussie:8080']
+      - targets: ['api:8080']
     metrics_path: /q/metrics
 ```
 
@@ -190,13 +194,13 @@ These metrics expose configured bulkhead limits. For actual pool usage metrics, 
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `aussie.auth.failures.total` | Counter | `reason`, `client_ip_hash` | Authentication failures |
+| `aussie.auth.failures.total` | Counter | `reason` | Authentication failures |
 | `aussie.auth.success.total` | Counter | `method` | Successful authentications |
 | `aussie.access.denied.total` | Counter | `service_id`, `reason` | Access denied events |
 | `aussie.security.events.total` | Counter | `event_type`, `severity` | Security events (via SPI handlers) |
-| `aussie.security.auth.failures` | Counter | `reason`, `method`, `client_ip_hash` | Auth failures (via SPI handlers) |
-| `aussie.security.rate_limit.exceeded` | Counter | `service_id`, `client_ip_hash` | Rate limit violations |
-| `aussie.security.dos.detected` | Counter | `attack_type`, `client_ip_hash` | DoS attack detections |
+| `aussie.security.auth.failures` | Counter | `reason`, `method` | Auth failures (via SPI handlers) |
+| `aussie.security.rate_limit.exceeded` | Counter | `service_id` | Rate limit violations |
+| `aussie.security.dos.detected` | Counter | `attack_type` | DoS attack detections |
 | `aussie.signing.key.ready` | Gauge | - | `1` when required token issuance has one active key published in JWKS; otherwise `0` |
 
 ### Traffic Attribution Metrics
@@ -473,6 +477,22 @@ Access:
 1. Verify security monitoring is enabled: `aussie.telemetry.security.enabled=true`
 2. Check logs for handler initialization
 3. Verify SPI registration in `META-INF/services/`
+
+## Operational contract
+
+- Production must keep `aussie.telemetry.enabled`, metrics, and security monitoring enabled;
+  the normal-mode validator rejects missing required signals.
+- Metric labels are limited to service, route/method class, status class, reason code, and
+  other bounded categories. Client, session, token, user, and IP identifiers are never labels.
+- In-process anomaly detection is bounded by `max-tracked-clients` and
+  `client-tracking-ttl`; use the distributed abuse-control backend for cluster-wide decisions.
+- The Prometheus Compose target is the `api` service. Validate `/q/metrics` and alert rules after
+  changing metric names or labels.
+
+For an outage, first verify `/q/health/ready` and `/q/metrics`, then check the dependency-specific
+readiness reason, Redis/Cassandra health, route convergence, and signing-key readiness. Keep
+traffic blocked while a required security dependency is unavailable; do not enable a local or
+fail-open fallback in production.
 
 ## Hierarchical Trace Sampling
 

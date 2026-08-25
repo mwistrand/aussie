@@ -41,6 +41,8 @@ class SecurityMonitorTest {
         when(securityConfig.enabled()).thenReturn(true);
         when(securityConfig.rateLimitWindow()).thenReturn(Duration.ofMinutes(1));
         when(securityConfig.rateLimitThreshold()).thenReturn(100);
+        when(securityConfig.maxTrackedClients()).thenReturn(10_000);
+        when(securityConfig.clientTrackingTtl()).thenReturn(Duration.ofMinutes(10));
         when(securityConfig.dosDetection()).thenReturn(dosConfig);
         when(dosConfig.enabled()).thenReturn(false);
     }
@@ -157,6 +159,23 @@ class SecurityMonitorTest {
                     .anyMatch(e -> e instanceof SecurityEvent.SuspiciousPattern sp
                             && "brute_force_attempt".equals(sp.patternType()));
             assertTrue(hasSuspicious);
+        }
+
+        @Test
+        @DisplayName("should reset failures after client tracking expires")
+        void shouldResetFailuresAfterTrackingExpires() throws InterruptedException {
+            when(securityConfig.clientTrackingTtl()).thenReturn(Duration.ofMillis(1));
+            final var monitor = createEnabled();
+            monitor.recordAuthFailure("1.2.3.4", "invalid_key", "api_key");
+
+            Thread.sleep(10);
+            monitor.recordAuthFailure("1.2.3.4", "invalid_key", "api_key");
+
+            final var captor = ArgumentCaptor.forClass(SecurityEvent.class);
+            verify(dispatcher, times(2)).dispatch(captor.capture());
+            final var event =
+                    (SecurityEvent.AuthenticationFailure) captor.getAllValues().get(1);
+            assertEquals(1, event.failureCount());
         }
     }
 
