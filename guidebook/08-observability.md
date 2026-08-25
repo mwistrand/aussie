@@ -427,45 +427,28 @@ The trade-off is that `ServiceLoader`-discovered handlers cannot use CDI injecti
 `GatewayProblem` provides factory methods that create RFC 9457 structured error responses using the `quarkus-resteasy-problem` library:
 
 ```java
-// api/src/main/java/aussie/adapter/in/problem/GatewayProblem.java (lines 17-191)
+// api/src/main/java/aussie/adapter/in/problem/GatewayProblem.java
 
 public final class GatewayProblem {
 
     private GatewayProblem() {}
 
+    private static HttpProblem build(ProblemDetail problem) {
+        var builder = HttpProblem.builder()
+                .withType(URI.create(problem.type()))
+                .withTitle(problem.title())
+                .withStatus(problem.status())
+                .withDetail(problem.detail())
+                .with("code", problem.code());
+        problem.extras().forEach(builder::with);
+        return builder.build();
+    }
+
     public static HttpProblem serviceNotFound(String serviceId) {
-        return HttpProblem.builder()
-                .withTitle("Service Not Found")
-                .withStatus(Status.NOT_FOUND)
-                .withDetail("Service '%s' is not registered".formatted(serviceId))
-                .build();
+        return build(ProblemDetail.serviceNotFound(serviceId));
     }
 
-    public static HttpProblem tooManyRequests(
-            String detail, long retryAfterSeconds, long limit,
-            long remaining, long resetAt) {
-        return HttpProblem.builder()
-                .withTitle("Too Many Requests")
-                .withStatus(Status.fromStatusCode(429))
-                .withDetail(detail)
-                .with("retryAfter", retryAfterSeconds)
-                .with("limit", limit)
-                .with("remaining", remaining)
-                .with("resetAt", resetAt)
-                .build();
-    }
-
-    public static HttpProblem badGateway(String detail) {
-        return HttpProblem.builder()
-                .withTitle("Bad Gateway")
-                .withStatus(Status.BAD_GATEWAY)
-                .withDetail(detail)
-                .build();
-    }
-
-    // Also: routeNotFound, badRequest, validationError, unauthorized,
-    //       forbidden, payloadTooLarge, headerTooLarge, conflict,
-    //       internalError, featureDisabled
+    // Other factories delegate to the matching ProblemDetail factory.
 }
 ```
 
@@ -473,10 +456,11 @@ This produces JSON responses like:
 
 ```json
 {
-  "type": "about:blank",
+  "type": "urn:aussie:problem:too_many_requests",
   "title": "Too Many Requests",
   "status": 429,
   "detail": "Rate limit exceeded. Retry after 30 seconds.",
+  "code": "too_many_requests",
   "retryAfter": 30,
   "limit": 100,
   "remaining": 0,
@@ -490,13 +474,11 @@ Structured error responses serve two audiences.
 
 **API consumers** get machine-parseable errors. A client can check `status == 429`, read `retryAfter`, and implement exponential backoff without parsing error message strings. The `tooManyRequests` factory method (lines 115-126) enriches the standard RFC 9457 fields with rate-limit-specific extension members (`retryAfter`, `limit`, `remaining`, `resetAt`). A client SDK can map these directly to retry logic.
 
-**Operations teams** get consistent error taxonomy. When every error goes through `GatewayProblem`, the `title` field is always one of a known set of values. You can write log aggregation queries like `title:"Bad Gateway"` and get every upstream failure, regardless of which service produced it. Without this, error messages vary by code path and become unfilterable at scale.
+**Operations teams** get consistent error taxonomy. Every problem has a stable `code`, including errors created by framework exception mappers. You can write log aggregation queries like `code:"bad_gateway"` and get every upstream failure without parsing human-readable messages.
 
 ### Design Decision: Utility Class with Static Factories
 
-`GatewayProblem` is a utility class, not a CDI bean. This is intentional. Error construction has no dependencies. It simply builds immutable `HttpProblem` instances. Making it a CDI bean would add injection overhead with no benefit. The static factory pattern also makes the error catalog self-documenting: open `GatewayProblem.java` and you see every error the gateway can produce.
-
-A senior engineer might argue for an enum-based error catalog with error codes. That approach works but requires maintaining a parallel code registry and mapping between codes and HTTP statuses. The factory method approach keeps the error definition close to the HTTP semantics. The trade-off is that error types are not enumerable at compile time: you discover the full error catalog by reading the class, not by iterating an enum.
+`GatewayProblem` is a utility class, not a CDI bean. Error construction has no dependencies, and the static factories keep each HTTP problem close to its `ProblemDetail` definition. `GlobalExceptionMappers` enriches framework-generated problems with the same `type` and `code` contract.
 
 ## 8.5 Traffic Attribution for Cost Allocation
 

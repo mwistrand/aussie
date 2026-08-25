@@ -84,7 +84,7 @@ public class AdminResource {
                 });
             });
         } catch (IllegalArgumentException e) {
-            throw GatewayProblem.validationError(e.getMessage());
+            throw GatewayProblem.validationError("Invalid service registration");
         }
     }
 

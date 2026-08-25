@@ -8,8 +8,8 @@ import io.vertx.core.json.JsonObject;
  * {@code quarkus-resteasy-problem}'s own Jackson serializer (which conditionally
  * omits {@code type} when not set).
  *
- * <p>Wire shape: {@code status, title, detail?, instance?, extras...}.
- * {@code detail} is omitted when null or empty; {@code instance} is omitted
+ * <p>Wire shape: {@code type, status, title, detail?, instance?, code, extras...}.
+ * {@code detail} is omitted when null; {@code instance} is omitted
  * when null. The JAX-RS path always emits {@code instance} because
  * {@code ProblemDefaultsProvider} backfills it from the request path; callers
  * on the Vert.x path should pass the request path for parity with that body.
@@ -25,14 +25,18 @@ public final class ProblemJson {
     }
 
     public static String serialize(ProblemDetail problem, String instance) {
-        final var json = new JsonObject().put("status", problem.status()).put("title", problem.title());
+        final var json = new JsonObject()
+                .put("type", problem.type())
+                .put("status", problem.status())
+                .put("title", problem.title());
         final var detail = problem.detail();
-        if (detail != null && !detail.isEmpty()) {
+        if (detail != null) {
             json.put("detail", detail);
         }
         if (instance != null && !instance.isEmpty()) {
             json.put("instance", instance);
         }
+        json.put("code", problem.code());
         problem.extras().forEach(json::put);
         return json.encode();
     }

@@ -2,6 +2,7 @@ package aussie.adapter.in.problem;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -15,14 +16,15 @@ import java.util.Set;
  * from the wire body in that case); {@code extras} preserve insertion order
  * on the wire to match the Jackson serializer used by the JAX-RS path, and
  * may not use keys reserved by RFC 9457 §3 ({@code type}, {@code title},
- * {@code status}, {@code detail}, {@code instance}).
+ * {@code status}, {@code detail}, {@code instance}) or the gateway's
+ * {@code code} extension.
  */
 public record ProblemDetail(String title, int status, String detail, Map<String, Object> extras) {
 
-    private static final Set<String> RESERVED_KEYS = Set.of("type", "title", "status", "detail", "instance");
+    private static final Set<String> RESERVED_KEYS = Set.of("type", "title", "status", "detail", "instance", "code");
 
     public ProblemDetail {
-        if (title == null) {
+        if (title == null || title.isBlank()) {
             throw new IllegalArgumentException("title is required");
         }
         if (extras == null || extras.isEmpty()) {
@@ -39,6 +41,42 @@ public record ProblemDetail(String title, int status, String detail, Map<String,
 
     public ProblemDetail(String title, int status, String detail) {
         this(title, status, detail, Map.of());
+    }
+
+    /** Stable machine-readable code shared by every HTTP error path. */
+    public String code() {
+        return codeFor(title);
+    }
+
+    static String codeFor(String title) {
+        final var code =
+                switch (title) {
+                    case "Service Not Found" -> "service_not_found";
+                    case "Route Not Found" -> "route_not_found";
+                    case "Not Found" -> "not_found";
+                    case "Bad Request" -> "bad_request";
+                    case "Validation Error" -> "validation_error";
+                    case "Unauthorized" -> "unauthorized";
+                    case "Forbidden" -> "forbidden";
+                    case "Bad Gateway" -> "bad_gateway";
+                    case "Gateway Timeout" -> "gateway_timeout";
+                    case "Too Many Requests" -> "too_many_requests";
+                    case "Payload Too Large" -> "payload_too_large";
+                    case "Request Header Fields Too Large" -> "headers_too_large";
+                    case "Conflict" -> "conflict";
+                    case "Internal Server Error" -> "internal_error";
+                    case "Service Unavailable" -> "service_unavailable";
+                    case "Feature Disabled" -> "feature_disabled";
+                    default -> title.toLowerCase(Locale.ROOT)
+                            .replaceAll("[^a-z0-9]+", "_")
+                            .replaceAll("^_|_$", "");
+                };
+        return code.isEmpty() ? "unknown" : code;
+    }
+
+    /** Stable type URI for the versioned problem contract. */
+    public String type() {
+        return "urn:aussie:problem:" + code();
     }
 
     // ========== Not Found ==========

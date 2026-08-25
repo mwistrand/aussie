@@ -1,47 +1,58 @@
 package aussie.adapter.in.problem;
 
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.ws.rs.core.Response;
+import java.net.URI;
 
+import jakarta.annotation.Priority;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.ws.rs.Priorities;
+import jakarta.ws.rs.ext.Provider;
+
+import io.quarkiverse.resteasy.problem.ExceptionMapperBase;
 import io.quarkiverse.resteasy.problem.HttpProblem;
-import org.jboss.logging.Logger;
-import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
+import io.quarkiverse.resteasy.problem.postprocessing.ProblemContext;
+import io.quarkiverse.resteasy.problem.postprocessing.ProblemPostProcessor;
 
 import aussie.core.service.auth.JwksCacheService.JwksFetchException;
 
 /**
- * Global exception mappers for converting exceptions to RFC 9457 Problem Details.
+ * Global fallback mapper and contract enricher for RFC 9457 Problem Details.
  *
- * <p>These mappers prevent internal exceptions from returning 500 Internal Server Error
- * when a more appropriate status code should be used.
+ * <p>Specific mappers, including {@code HttpProblemMapper}, still take precedence.
+ * Unknown failures remain opaque 500 responses so implementation exceptions
+ * cannot become 400s.
  */
 @ApplicationScoped
-public class GlobalExceptionMappers {
+@Provider
+@Priority(Priorities.USER - 1)
+public class GlobalExceptionMappers extends ExceptionMapperBase<Exception> implements ProblemPostProcessor {
 
-    private static final Logger LOG = Logger.getLogger(GlobalExceptionMappers.class);
-
-    @ServerExceptionMapper
-    public Response mapJwksFetchException(JwksFetchException e) {
-        LOG.warnv("JWKS fetch failed: {0}", e.getMessage());
-        return toResponse(GatewayProblem.badGateway("Identity provider unavailable"));
+    @Override
+    protected HttpProblem toProblem(Exception exception) {
+        if (exception instanceof JwksFetchException) {
+            return GatewayProblem.badGateway("Identity provider unavailable");
+        }
+        return GatewayProblem.internalError("Internal server error");
     }
 
-    @ServerExceptionMapper
-    public Response mapIllegalArgumentException(IllegalArgumentException e) {
-        LOG.infov("Validation error: {0}", e.getMessage());
-        return toResponse(GatewayProblem.validationError("Invalid request"));
-    }
+    @Override
+    public HttpProblem apply(HttpProblem problem, ProblemContext context) {
+        final var existingCode = problem.getParameters().get("code");
+        if (problem.getType() != null && existingCode instanceof String value && !value.isBlank()) {
+            return problem;
+        }
 
-    @ServerExceptionMapper
-    public Response mapIllegalStateException(IllegalStateException e) {
-        LOG.infov("State error: {0}", e.getMessage());
-        return toResponse(GatewayProblem.badRequest("Invalid request"));
-    }
-
-    private Response toResponse(HttpProblem problem) {
-        return Response.status(problem.getStatusCode())
-                .type(ProblemJson.CONTENT_TYPE)
-                .entity(problem)
-                .build();
+        final var code = existingCode instanceof String value && !value.isBlank()
+                ? value
+                : problem.getTitle() == null || problem.getTitle().isBlank()
+                        ? "http_" + problem.getStatusCode()
+                        : ProblemDetail.codeFor(problem.getTitle());
+        final var builder = HttpProblem.builder(problem);
+        if (problem.getType() == null) {
+            builder.withType(URI.create("urn:aussie:problem:" + code));
+        }
+        if (!(existingCode instanceof String value) || value.isBlank()) {
+            builder.with("code", code);
+        }
+        return builder.build();
     }
 }

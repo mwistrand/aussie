@@ -95,6 +95,8 @@ class RoleResourceTest {
                 .then()
                 .statusCode(400)
                 .contentType("application/problem+json")
+                .body("type", equalTo("urn:aussie:problem:bad_request"))
+                .body("code", equalTo("bad_request"))
                 .body("violations[0].message", equalTo("id is required"));
     }
 }

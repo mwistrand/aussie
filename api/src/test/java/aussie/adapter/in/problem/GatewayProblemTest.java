@@ -23,6 +23,9 @@ class GatewayProblemTest {
             assertEquals(Status.NOT_FOUND.getStatusCode(), problem.getStatusCode());
             assertEquals("Service Not Found", problem.getTitle());
             assertNotNull(problem.getDetail());
+            assertEquals(
+                    "urn:aussie:problem:service_not_found", problem.getType().toString());
+            assertEquals("service_not_found", problem.getParameters().get("code"));
         }
 
         @Test

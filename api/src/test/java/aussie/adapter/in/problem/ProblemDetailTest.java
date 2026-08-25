@@ -22,6 +22,13 @@ class ProblemDetailTest {
         @DisplayName("requires a non-null title")
         void titleRequired() {
             assertThrows(IllegalArgumentException.class, () -> new ProblemDetail(null, 404, "x"));
+            assertThrows(IllegalArgumentException.class, () -> new ProblemDetail(" ", 404, "x"));
+        }
+
+        @Test
+        @DisplayName("uses a valid fallback code for titles without ASCII letters or digits")
+        void fallbackCode() {
+            assertEquals("unknown", new ProblemDetail("🔥", 500, "x").code());
         }
 
         @Test
@@ -53,9 +60,9 @@ class ProblemDetailTest {
         }
 
         @Test
-        @DisplayName("rejects extras keys that collide with RFC 9457 base fields")
+        @DisplayName("rejects extras keys that collide with base fields")
         void reservedKeysRejected() {
-            for (var reserved : new String[] {"type", "title", "status", "detail", "instance"}) {
+            for (var reserved : new String[] {"type", "title", "status", "detail", "instance", "code"}) {
                 var extras = new HashMap<String, Object>();
                 extras.put(reserved, "x");
                 assertThrows(IllegalArgumentException.class, () -> new ProblemDetail("Title", 400, "d", extras));

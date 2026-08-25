@@ -546,7 +546,7 @@ These packages translate HTTP, WebSocket, and lifecycle events into calls on cor
 | Class | Description |
 |---|---|
 | `GatewayProblem` | Static factory for `HttpProblem` instances: `serviceNotFound`, `routeNotFound`, `rateLimited`, `unauthorized`, `forbidden`, `badGateway`, `payloadTooLarge`, etc. |
-| `GlobalExceptionMappers` | `@ServerExceptionMapper` methods converting `JwksFetchException`, `IllegalArgumentException`, and `IllegalStateException` to RFC 9457 responses. |
+| `GlobalExceptionMappers` | Fallback exception mapper and post-processor that keeps unexpected errors opaque and adds stable `type` and `code` fields to framework-generated problems. |
 
 **Allowed dependencies:** `core/service/auth` (for exception types). Quarkus resteasy-problem.
 

@@ -122,8 +122,8 @@ public class TokenRevocationResource {
                     ? Instant.ofEpochSecond(claims.getExpirationTime().getValue())
                     : null;
         } catch (InvalidJwtException | MalformedClaimException e) {
-            LOG.warnf("Failed to parse token for revocation: %s", e.getMessage());
-            throw GatewayProblem.badRequest("Invalid token format: " + e.getMessage());
+            LOG.warn("Failed to parse token for revocation");
+            throw GatewayProblem.badRequest("Invalid token format");
         }
 
         var reason = request.reason();
@@ -327,8 +327,8 @@ public class TokenRevocationResource {
 
             return Response.ok(response).build();
         } catch (InvalidJwtException | MalformedClaimException e) {
-            LOG.warnf("Failed to parse token for inspection: %s", e.getMessage());
-            throw GatewayProblem.badRequest("Invalid token format: " + e.getMessage());
+            LOG.warn("Failed to parse token for inspection");
+            throw GatewayProblem.badRequest("Invalid token format");
         }
     }
 

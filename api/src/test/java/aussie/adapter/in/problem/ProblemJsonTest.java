@@ -19,27 +19,28 @@ class ProblemJsonTest {
     class FieldShape {
 
         @Test
-        @DisplayName("emits status, title, detail (no synthetic type field)")
+        @DisplayName("emits stable type, code, status, title, and detail")
         void emitsBaseFields() {
             var problem = new ProblemDetail("Not Found", 404, "missing");
 
             var serialized = ProblemJson.serialize(problem);
             var json = new JsonObject(serialized);
 
-            assertFalse(json.containsKey("type"), serialized);
+            assertEquals("urn:aussie:problem:not_found", json.getString("type"));
+            assertEquals("not_found", json.getString("code"));
             assertEquals("Not Found", json.getString("title"));
             assertEquals(404, json.getInteger("status"));
             assertEquals("missing", json.getString("detail"));
         }
 
         @Test
-        @DisplayName("omits detail when null or empty (matches Jackson serializer)")
-        void omitsEmptyDetail() {
+        @DisplayName("omits null detail and preserves empty detail (matches Jackson serializer)")
+        void detailField() {
             var nullDetail = ProblemJson.serialize(new ProblemDetail("X", 502, null));
             var emptyDetail = ProblemJson.serialize(new ProblemDetail("X", 502, ""));
 
             assertFalse(new JsonObject(nullDetail).containsKey("detail"), nullDetail);
-            assertFalse(new JsonObject(emptyDetail).containsKey("detail"), emptyDetail);
+            assertEquals("", new JsonObject(emptyDetail).getString("detail"), emptyDetail);
         }
 
         @Test
@@ -85,7 +86,8 @@ class ProblemJsonTest {
             assertEquals(0L, json.getLong("remaining"));
             assertEquals(1234567890L, json.getLong("resetAt"));
             assertTrue(
-                    serialized.indexOf("\"retryAfter\"") < serialized.indexOf("\"limit\"")
+                    serialized.indexOf("\"code\"") < serialized.indexOf("\"retryAfter\"")
+                            && serialized.indexOf("\"retryAfter\"") < serialized.indexOf("\"limit\"")
                             && serialized.indexOf("\"limit\"") < serialized.indexOf("\"remaining\"")
                             && serialized.indexOf("\"remaining\"") < serialized.indexOf("\"resetAt\""),
                     serialized);

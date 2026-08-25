@@ -1,5 +1,7 @@
 package aussie.adapter.in.problem;
 
+import java.net.URI;
+
 import io.quarkiverse.resteasy.problem.HttpProblem;
 
 import aussie.core.model.gateway.GatewayResult;
@@ -19,9 +21,11 @@ public final class GatewayProblem {
 
     private static HttpProblem build(ProblemDetail problem) {
         final var builder = HttpProblem.builder()
+                .withType(URI.create(problem.type()))
                 .withTitle(problem.title())
                 .withStatus(problem.status())
-                .withDetail(problem.detail());
+                .withDetail(problem.detail())
+                .with("code", problem.code());
         problem.extras().forEach(builder::with);
         return builder.build();
     }

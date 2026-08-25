@@ -14,10 +14,12 @@ Content-Type for every error body is `application/problem+json`.
 
 ```json
 {
+  "type": "urn:aussie:problem:too_many_requests",
   "status": 429,
   "title": "Too Many Requests",
   "detail": "Rate limit exceeded. Retry after 30 seconds.",
   "instance": "/some/service/endpoint",
+  "code": "too_many_requests",
   "retryAfter": 30,
   "limit": 100,
   "remaining": 0,
@@ -29,20 +31,20 @@ Content-Type for every error body is `application/problem+json`.
 
 | Field      | Type    | Always present | Notes |
 | ---------- | ------- | -------------- | ----- |
+| `type`     | string  | yes            | Stable problem URI in the form `urn:aussie:problem:<code>`. |
 | `status`   | number  | yes            | Matches the HTTP status code on the response. |
-| `title`    | string  | yes            | Short, human-readable summary. Stable across patch releases. |
-| `detail`   | string  | no             | Per-occurrence explanation. Omitted when null or empty. |
+| `title`    | string  | yes            | Short, human-readable summary. |
+| `detail`   | string  | no             | Per-occurrence explanation. Omitted when null. |
 | `instance` | string  | yes            | Request path that produced the error. |
+| `code`     | string  | yes            | Stable machine-readable discriminator. |
 | extras     | varies  | no             | Status-specific extension members listed below. |
 
-The RFC 9457 `type` field is not emitted; treat `title` as the discriminator
-(it is part of the contract).
+Clients should branch on `code`, not parse `title` or `detail`.
 
 ### Field order
 
-Base fields appear in the order shown above (`status`, `title`, `detail`,
-`instance`), followed by extension members in caller-defined insertion order.
-Order is stable across releases on both the JAX-RS and Vert.x paths.
+Fields normally appear in the order shown above, followed by status-specific
+extension members. JSON object order is not part of the API contract.
 
 ## Extension members on `429 Too Many Requests`
 
@@ -81,13 +83,13 @@ same regardless of which adapter served the response.
 ## Custom extension members
 
 Callers may attach additional fields via the `extras` map on `ProblemDetail`.
-Keys reserved by RFC 9457 (`type`, `title`, `status`, `detail`, `instance`)
-are rejected by the constructor to prevent silent collisions with the base
-fields.
+Keys reserved by RFC 9457 (`type`, `title`, `status`, `detail`, `instance`) and
+the Aussie `code` extension are rejected by the constructor to prevent silent
+collisions with the base fields.
 
 ## Observability
 
-Every problem response increments the `aussie.errors.total` counter tagged by
-service ID and problem title; 5xx responses are also logged at WARN with the
-status, title, and request URI. Dashboards can break errors down by title
-without parsing log lines.
+Native Vert.x problem responses increment the `aussie.errors.total` counter
+tagged by service ID and problem title. Problem post-processors log JAX-RS
+errors, and native 5xx responses are logged with their status, title, and
+request URI.

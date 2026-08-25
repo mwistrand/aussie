@@ -85,10 +85,11 @@ When your client receives a 429 response:
 
 ```json
 {
-  "type": "about:blank",
+  "type": "urn:aussie:problem:too_many_requests",
   "title": "Too Many Requests",
   "status": 429,
   "detail": "Rate limit exceeded. Retry after 3 seconds.",
+  "code": "too_many_requests",
   "retryAfter": 3
 }
 ```
