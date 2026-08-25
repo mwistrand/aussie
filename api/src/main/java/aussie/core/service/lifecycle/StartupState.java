@@ -8,6 +8,7 @@ import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 
+import io.quarkus.runtime.ShutdownDelayInitiatedEvent;
 import io.quarkus.runtime.ShutdownEvent;
 
 /** Tracks the small set of startup conditions required before serving traffic. */
@@ -67,6 +68,10 @@ public class StartupState {
     }
 
     void onShutdown(@Observes @Priority(1) ShutdownEvent event) {
+        drain();
+    }
+
+    void onShutdownDelayInitiated(@Observes ShutdownDelayInitiatedEvent event) {
         drain();
     }
 

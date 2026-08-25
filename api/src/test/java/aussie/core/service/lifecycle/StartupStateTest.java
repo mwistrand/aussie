@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Optional;
 
+import io.quarkus.runtime.ShutdownDelayInitiatedEvent;
 import io.quarkus.runtime.ShutdownEvent;
 import org.junit.jupiter.api.Test;
 
@@ -43,6 +44,19 @@ class StartupStateTest {
         assertTrue(state.isReady());
 
         state.onShutdown(new ShutdownEvent());
+
+        assertFalse(state.isReady());
+        assertEquals("DRAINING", state.snapshot().phase());
+    }
+
+    @Test
+    void becomesUnreadyWhenShutdownDelayBegins() {
+        final var state = new StartupState();
+        for (final var phase : StartupState.Phase.values()) {
+            state.complete(phase);
+        }
+
+        state.onShutdownDelayInitiated(new ShutdownDelayInitiatedEvent());
 
         assertFalse(state.isReady());
         assertEquals("DRAINING", state.snapshot().phase());

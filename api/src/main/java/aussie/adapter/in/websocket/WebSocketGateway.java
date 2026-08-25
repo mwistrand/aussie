@@ -14,6 +14,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -75,6 +76,7 @@ public class WebSocketGateway {
     private final Map<String, WebSocketProxySession> activeSessions = new ConcurrentHashMap<>();
     private final AtomicInteger connectionReservations = new AtomicInteger();
     private final AtomicBoolean draining = new AtomicBoolean();
+    private final AtomicLong drainTimerId = new AtomicLong(-1);
 
     private final WebSocketGatewayUseCase gatewayUseCase;
     private final WebSocketConfig config;
@@ -156,6 +158,7 @@ public class WebSocketGateway {
             revocationSubscription.cancel();
             revocationSubscription = null;
         }
+        cancelDrainTimer();
     }
 
     /**
@@ -366,6 +369,7 @@ public class WebSocketGateway {
                                                                                     err,
                                                                                     "Failed to cleanup rate limit state for session {0}",
                                                                                     sessionId));
+                                                            cancelDrainTimerIfDrained();
                                                         }
                                                         releaseConnection.run();
                                                     };
@@ -554,11 +558,37 @@ public class WebSocketGateway {
     }
 
     void onShutdownDelayInitiated(@Observes ShutdownDelayInitiatedEvent event) {
-        draining.set(true);
+        if (draining.compareAndSet(false, true)) {
+            drainTimerId.set(vertx.setTimer(config.drainTimeout().toMillis(), ignored -> {
+                drainTimerId.set(-1);
+                closeActiveSessions();
+            }));
+            cancelDrainTimerIfDrained();
+        }
     }
 
     void onShutdown(@Observes ShutdownEvent event) {
         draining.set(true);
+        cancelDrainTimer();
+        closeActiveSessions();
+    }
+
+    private void cancelDrainTimerIfDrained() {
+        synchronized (activeSessions) {
+            if (draining.get() && activeSessions.isEmpty()) {
+                cancelDrainTimer();
+            }
+        }
+    }
+
+    private void cancelDrainTimer() {
+        final var timerId = drainTimerId.getAndSet(-1);
+        if (timerId != -1) {
+            vertx.cancelTimer(timerId);
+        }
+    }
+
+    private void closeActiveSessions() {
         final List<WebSocketProxySession> sessions;
         synchronized (activeSessions) {
             sessions = List.copyOf(activeSessions.values());

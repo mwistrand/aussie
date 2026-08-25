@@ -11,14 +11,17 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
 import io.smallrye.mutiny.Uni;
+import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpServerRequest;
@@ -117,6 +120,7 @@ class WebSocketGatewayUnitTest {
         lenient().when(response.setStatusCode(anyInt())).thenReturn(response);
         lenient().when(response.putHeader(anyString(), anyString())).thenReturn(response);
         lenient().when(clientContextResolver.getOrCompute(ctx)).thenReturn(new ClientContext(null, false, null));
+        lenient().when(config.drainTimeout()).thenReturn(Duration.ofSeconds(30));
         lenient()
                 .when(addressResolver.resolve(any(URI.class)))
                 .thenReturn(Uni.createFrom().item(SocketAddress.inetSocketAddress(443, "203.0.113.1")));
@@ -426,6 +430,41 @@ class WebSocketGatewayUnitTest {
 
         gateway.onShutdown(null);
         verify(session).closeWithReason((short) 1001, "Server shutting down");
+        verify(vertx).cancelTimer(anyLong());
+    }
+
+    @Test
+    @DisplayName("shutdown delay should schedule a bounded forced close")
+    void shutdownDelayShouldScheduleForcedClose() throws Exception {
+        final var activeSessionsField = WebSocketGateway.class.getDeclaredField("activeSessions");
+        activeSessionsField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        final var activeSessions = (java.util.Map<String, WebSocketProxySession>) activeSessionsField.get(gateway);
+        final var session = mock(WebSocketProxySession.class);
+        activeSessions.put("ws-session-1", session);
+
+        when(vertx.setTimer(anyLong(), any())).thenReturn(7L);
+
+        gateway.onShutdownDelayInitiated(null);
+
+        verify(vertx).setTimer(eq(30_000L), any());
+        gateway.onShutdownDelayInitiated(null);
+        verify(vertx, times(1)).setTimer(eq(30_000L), any());
+
+        final var timer = ArgumentCaptor.forClass(Handler.class);
+        verify(vertx).setTimer(eq(30_000L), timer.capture());
+        timer.getValue().handle(7L);
+        verify(session).closeWithReason((short) 1001, "Server shutting down");
+    }
+
+    @Test
+    @DisplayName("shutdown delay should cancel its timer when no sessions need draining")
+    void shutdownDelayShouldCancelTimerWithoutSessions() {
+        when(vertx.setTimer(anyLong(), any())).thenReturn(7L);
+
+        gateway.onShutdownDelayInitiated(null);
+
+        verify(vertx).cancelTimer(7L);
     }
 
     @Nested
