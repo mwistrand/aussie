@@ -8,13 +8,13 @@ import java.util.concurrent.atomic.AtomicReference;
  * the bootstrap admin key) and consumed by individual test classes.
  *
  * <p>Populated by {@link SuiteBootstrapListener} once per JUnit launcher
- * session; read-only thereafter.
+ * session. The gateway URI is refreshed when the gateway container restarts.
  */
 public final class SuiteContext {
 
     private static final AtomicReference<SuiteContext> INSTANCE = new AtomicReference<>();
 
-    private final URI gatewayBaseUri;
+    private volatile URI gatewayBaseUri;
     private final URI demoBaseUri;
     private final String bootstrapKey;
     private final String demoServiceId;
@@ -57,6 +57,10 @@ public final class SuiteContext {
             throw new IllegalStateException("SuiteContext not installed - is the LauncherSession listener registered?");
         }
         return ctx;
+    }
+
+    static void updateGatewayBaseUri(URI gatewayBaseUri) {
+        get().gatewayBaseUri = gatewayBaseUri;
     }
 
     static void clear() {

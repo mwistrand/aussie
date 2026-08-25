@@ -50,6 +50,11 @@ per test JVM:
 The suite assumes a single forked JVM (`maxParallelForks = 1`, `forkEvery = 0`)
 because the singleton harness is not safe to share across forks.
 
+The lifecycle lane restarts the packaged gateway three times while retaining
+the shared Cassandra/Redis dependencies. After each restart it waits for
+readiness and sends repeated routed health requests, catching lost route state
+and restart/readiness regressions without relying on developer-local services.
+
 ## Demo test API
 
 When the demo runs under the e2e harness, it exposes a small state-mutation

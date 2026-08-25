@@ -236,6 +236,13 @@ public final class E2EHarness {
         return URI.create("http://" + demo.getHost() + ":" + demo.getMappedPort(3000));
     }
 
+    /** Restart the packaged gateway while keeping its dependencies and network alive. */
+    public synchronized void restartApi() {
+        api.stop();
+        api.start();
+        SuiteContext.updateGatewayBaseUri(gatewayBaseUri());
+    }
+
     public String cassandraHost() {
         return cassandra.getHost();
     }
