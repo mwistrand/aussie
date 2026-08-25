@@ -270,8 +270,9 @@ public class ProductionConfigurationValidator {
         }
         final var idleTimeout = duration("aussie.websocket.idle-timeout", Duration.ofMinutes(5));
         final var maxLifetime = duration("aussie.websocket.max-lifetime", Duration.ofHours(24));
-        if (idleTimeout.toMillis() < 1 || maxLifetime.toMillis() < 1) {
-            throw invalid("WebSocket idle timeout and maximum lifetime must be positive");
+        final var drainTimeout = duration("aussie.websocket.drain-timeout", Duration.ofSeconds(30));
+        if (idleTimeout.toMillis() < 1 || maxLifetime.toMillis() < 1 || drainTimeout.toMillis() < 1) {
+            throw invalid("WebSocket idle timeout, maximum lifetime, and drain timeout must be positive");
         }
         if (enabled("aussie.websocket.ping.enabled", true)) {
             final var interval = duration("aussie.websocket.ping.interval", Duration.ofSeconds(30));

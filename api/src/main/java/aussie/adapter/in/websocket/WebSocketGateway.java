@@ -22,6 +22,7 @@ import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.event.ObservesAsync;
 import jakarta.inject.Inject;
 
+import io.quarkus.runtime.ShutdownDelayInitiatedEvent;
 import io.quarkus.runtime.ShutdownEvent;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.subscription.Cancellable;
@@ -552,10 +553,12 @@ public class WebSocketGateway {
                 .forEach(session -> session.closeWithReason((short) 1008, "Authentication revoked"));
     }
 
+    void onShutdownDelayInitiated(@Observes ShutdownDelayInitiatedEvent event) {
+        draining.set(true);
+    }
+
     void onShutdown(@Observes ShutdownEvent event) {
-        if (!draining.compareAndSet(false, true)) {
-            return;
-        }
+        draining.set(true);
         final List<WebSocketProxySession> sessions;
         synchronized (activeSessions) {
             sessions = List.copyOf(activeSessions.values());

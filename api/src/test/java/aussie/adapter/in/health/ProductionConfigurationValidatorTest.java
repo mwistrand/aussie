@@ -113,6 +113,14 @@ class ProductionConfigurationValidatorTest {
     }
 
     @Test
+    void rejectsNonPositiveWebSocketDrainTimeout() {
+        final var configuration = safeConfiguration();
+        configuration.put("aussie.websocket.drain-timeout", "PT0S");
+
+        assertThrows(IllegalStateException.class, () -> validator(configuration).validate(LaunchMode.NORMAL));
+    }
+
+    @Test
     void ignoresInactiveRemoteTokenTranslationPolicy() {
         final var configuration = safeConfiguration();
         enableRouteAuthentication(configuration);

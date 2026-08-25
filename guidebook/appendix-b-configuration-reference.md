@@ -616,6 +616,7 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | `aussie.websocket.idle-timeout` | `Duration` | `PT5M` | `AUSSIE_WEBSOCKET_IDLE_TIMEOUT` | Close connection if no messages in either direction. |
 | `aussie.websocket.max-lifetime` | `Duration` | `PT24H` | `AUSSIE_WEBSOCKET_MAX_LIFETIME` | Hard limit on connection lifetime regardless of activity. |
 | `aussie.websocket.max-connections` | `int` | `10000` | `AUSSIE_WEBSOCKET_MAX_CONNECTIONS` | Maximum concurrent WebSocket connections **per instance** (not cluster-wide). |
+| `aussie.websocket.drain-timeout` | `Duration` | `PT30S` | `AUSSIE_WEBSOCKET_DRAIN_TIMEOUT` | Production pre-shutdown period for active sessions to drain; remaining sessions close with status `1001`. |
 | `aussie.websocket.max-queue-bytes` | `int` | `1048576` | `AUSSIE_WEBSOCKET_MAX_QUEUE_BYTES` | Apply backpressure after this many queued bytes per direction. |
 | `aussie.websocket.max-message-bytes` | `int` | `1048576` | `AUSSIE_WEBSOCKET_MAX_MESSAGE_BYTES` | Maximum logical WebSocket message size, including fragments. |
 | `aussie.websocket.allowed-subprotocols` | `List<String>` | empty | `AUSSIE_WEBSOCKET_ALLOWED_SUBPROTOCOLS` | Exact subprotocols allowed on both handshakes; client extensions are not forwarded upstream. |

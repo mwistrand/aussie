@@ -52,6 +52,10 @@ public interface WebSocketConfig {
     @WithDefault("10000")
     int maxConnections();
 
+    /** Maximum time allowed for active WebSocket sessions to drain on shutdown. */
+    @WithDefault("PT30S")
+    Duration drainTimeout();
+
     /** Maximum queued bytes per WebSocket direction before backpressure. */
     @WithDefault("1048576")
     int maxQueueBytes();

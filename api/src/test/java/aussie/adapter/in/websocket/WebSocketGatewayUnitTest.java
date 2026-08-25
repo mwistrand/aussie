@@ -404,7 +404,7 @@ class WebSocketGatewayUnitTest {
     }
 
     @Test
-    @DisplayName("shutdown should close active sessions and reject new connections")
+    @DisplayName("shutdown delay should drain active sessions and reject new connections")
     void shutdownShouldDrainConnections() throws Exception {
         final var activeSessionsField = WebSocketGateway.class.getDeclaredField("activeSessions");
         activeSessionsField.setAccessible(true);
@@ -413,16 +413,19 @@ class WebSocketGatewayUnitTest {
         final var session = mock(WebSocketProxySession.class);
         activeSessions.put("ws-session-1", session);
 
-        gateway.onShutdown(null);
+        gateway.onShutdownDelayInitiated(null);
         mockRequestPath("/gateway/ws");
         gateway.handleGatewayUpgrade(ctx);
 
-        verify(session).closeWithReason((short) 1001, "Server shutting down");
+        verify(session, never()).closeWithReason(any(short.class), anyString());
         verify(errorWriter)
                 .write(
                         eq(ctx),
                         argThat(problem ->
                                 problem.status() == 503 && "Gateway is shutting down".equals(problem.detail())));
+
+        gateway.onShutdown(null);
+        verify(session).closeWithReason((short) 1001, "Server shutting down");
     }
 
     @Nested
