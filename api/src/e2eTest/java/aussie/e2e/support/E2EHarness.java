@@ -149,6 +149,7 @@ public final class E2EHarness {
                 .withEnv("AUSSIE_AUTH_TOKEN_TRANSLATION_ENABLED", "true")
                 .withEnv("AUSSIE_AUTH_TOKEN_TRANSLATION_PROVIDER", "config")
                 .withEnv("AUSSIE_AUTH_TOKEN_TRANSLATION_CONFIG_PATH", "/etc/aussie/translation-config.json")
+                .withEnv("AUSSIE_ADMIN_MUTATIONS_DISTRIBUTED", "true")
                 .withEnv("AUSSIE_BOOTSTRAP_ENABLED", "true")
                 .withEnv("AUSSIE_BOOTSTRAP_KEY", BOOTSTRAP_KEY)
                 .withEnv("AUSSIE_JWS_SIGNING_KEY", JWS_SIGNING_KEY)
