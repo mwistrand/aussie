@@ -37,6 +37,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.core.config.WebSocketConfig;
+import aussie.core.model.auth.RevocationEvent;
 import aussie.core.model.ratelimit.MessageRateLimitHandler;
 import aussie.core.model.session.SessionInvalidatedEvent;
 
@@ -675,6 +676,60 @@ class WebSocketProxySessionTest {
             final var event = SessionInvalidatedEvent.forUser("user-1");
 
             assertFalse(session.shouldCloseFor(event));
+        }
+    }
+
+    @Nested
+    @DisplayName("distributed revocation")
+    class RevocationTests {
+
+        @Test
+        void shouldCloseForMatchingTokenRevocation() {
+            final var now = Instant.now();
+            final var session = new WebSocketProxySession(
+                    "s1",
+                    clientSocket,
+                    backendSocket,
+                    vertx,
+                    config,
+                    Optional.empty(),
+                    Optional.of("user-1"),
+                    Optional.of("jti-1"),
+                    Optional.of(now.minusSeconds(60)),
+                    Optional.of(now.plusSeconds(60)),
+                    MessageRateLimitHandler.noOp(),
+                    () -> {});
+
+            assertTrue(session.shouldCloseFor(new RevocationEvent.JtiRevoked("jti-1", now.plusSeconds(60))));
+            assertFalse(session.shouldCloseFor(new RevocationEvent.JtiRevoked("other", now.plusSeconds(60))));
+            assertFalse(session.shouldCloseFor(new RevocationEvent.JtiRevoked("jti-1", now.minusSeconds(1))));
+        }
+
+        @Test
+        void shouldCloseForOlderUserRevocation() {
+            final var issuedAt = Instant.now().minusSeconds(120);
+            final var session = new WebSocketProxySession(
+                    "s1",
+                    clientSocket,
+                    backendSocket,
+                    vertx,
+                    config,
+                    Optional.empty(),
+                    Optional.of("user-1"),
+                    Optional.empty(),
+                    Optional.of(issuedAt),
+                    Optional.of(Instant.now().plusSeconds(60)),
+                    MessageRateLimitHandler.noOp(),
+                    () -> {});
+
+            assertTrue(session.shouldCloseFor(new RevocationEvent.UserRevoked(
+                    "user-1", issuedAt.plusSeconds(60), Instant.now().plusSeconds(60))));
+            assertFalse(session.shouldCloseFor(new RevocationEvent.UserRevoked(
+                    "user-1", issuedAt, Instant.now().plusSeconds(60))));
+            assertFalse(session.shouldCloseFor(new RevocationEvent.UserRevoked(
+                    "other-user", issuedAt.plusSeconds(60), Instant.now().plusSeconds(60))));
+            assertFalse(session.shouldCloseFor(new RevocationEvent.UserRevoked(
+                    "user-1", issuedAt.plusSeconds(60), Instant.now().minusSeconds(1))));
         }
     }
 

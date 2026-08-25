@@ -197,6 +197,22 @@ class RsaTokenIssuerTest {
         }
 
         @Test
+        @DisplayName("should preserve identity revocation metadata")
+        void shouldPreserveIdentityRevocationMetadata() {
+            final var issuedAt = Instant.now().minusSeconds(60);
+            final var validated = new TokenValidationResult.Valid(
+                    "user-1",
+                    "issuer",
+                    Map.of("sub", "user-1", "jti", "identity-jti", "iat", issuedAt),
+                    Instant.now().plusSeconds(3600));
+
+            final var token = createIssuer().issue(validated, jwsConfig());
+
+            assertEquals(Optional.of("identity-jti"), token.identityTokenId());
+            assertEquals(Optional.of(issuedAt), token.identityIssuedAt());
+        }
+
+        @Test
         @DisplayName("should use key registry when rotation enabled")
         void shouldUseKeyRegistryWhenRotationEnabled() throws Exception {
             when(keyRegistry.isReady()).thenReturn(true);

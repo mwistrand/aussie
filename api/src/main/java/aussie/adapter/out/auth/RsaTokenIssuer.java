@@ -1,6 +1,7 @@
 package aussie.adapter.out.auth;
 
 import java.security.PrivateKey;
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -93,10 +94,33 @@ public class RsaTokenIssuer implements TokenIssuerProvider {
                 }
             }
 
-            return new AussieToken(jws, validated.subject(), expiresAt, forwardedClaims);
+            return new AussieToken(
+                    jws,
+                    validated.subject(),
+                    expiresAt,
+                    forwardedClaims,
+                    validated.identity().tokenId(),
+                    issuedAt(validated.claims().get("iat")));
         } catch (JoseException e) {
             throw new TokenIssuanceException("Failed to sign token: " + e.getMessage(), e);
         }
+    }
+
+    private Optional<Instant> issuedAt(Object value) {
+        try {
+            if (value instanceof Instant instant) {
+                return Optional.of(instant);
+            }
+            if (value instanceof Number number) {
+                return Optional.of(Instant.ofEpochSecond(number.longValue()));
+            }
+            if (value instanceof String text) {
+                return Optional.of(Instant.ofEpochSecond(Long.parseLong(text)));
+            }
+        } catch (DateTimeException | NumberFormatException ignored) {
+            return Optional.empty();
+        }
+        return Optional.empty();
     }
 
     private JwtClaims buildClaims(

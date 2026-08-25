@@ -1,6 +1,8 @@
 package aussie.adapter.in.websocket;
 
 import java.net.URI;
+import java.time.DateTimeException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -13,6 +15,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.event.ObservesAsync;
@@ -20,6 +24,7 @@ import jakarta.inject.Inject;
 
 import io.quarkus.runtime.ShutdownEvent;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.subscription.Cancellable;
 import io.vertx.core.MultiMap;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpClient;
@@ -34,6 +39,8 @@ import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.core.config.WebSocketConfig;
+import aussie.core.model.auth.AussieToken;
+import aussie.core.model.auth.RevocationEvent;
 import aussie.core.model.ratelimit.MessageRateLimitHandler;
 import aussie.core.model.session.SessionInvalidatedEvent;
 import aussie.core.model.websocket.WebSocketProxySession;
@@ -41,6 +48,7 @@ import aussie.core.model.websocket.WebSocketUpgradeRequest;
 import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
 import aussie.core.port.out.OutboundHttpClients;
+import aussie.core.port.out.RevocationEventPublisher;
 import aussie.core.service.auth.JwksCacheService.JwksFetchException;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
 import aussie.core.service.routing.UpstreamAddressResolver;
@@ -77,6 +85,33 @@ public class WebSocketGateway {
     private final ClientContextResolver clientContextResolver;
     private final UpstreamAddressResolver addressResolver;
     private final GatewayCorsConfig globalCorsConfig;
+    private final RevocationEventPublisher revocationEventPublisher;
+    private Cancellable revocationSubscription;
+
+    public WebSocketGateway(
+            WebSocketGatewayUseCase gatewayUseCase,
+            WebSocketConfig config,
+            Vertx vertx,
+            OutboundHttpClients outboundClient,
+            GatewayMetrics metrics,
+            WebSocketRateLimitService rateLimitService,
+            ProxyErrorWriter errorWriter,
+            ClientContextResolver clientContextResolver,
+            UpstreamAddressResolver addressResolver,
+            GatewayCorsConfig globalCorsConfig) {
+        this(
+                gatewayUseCase,
+                config,
+                vertx,
+                outboundClient,
+                metrics,
+                rateLimitService,
+                errorWriter,
+                clientContextResolver,
+                addressResolver,
+                globalCorsConfig,
+                null);
+    }
 
     @Inject
     public WebSocketGateway(
@@ -89,7 +124,8 @@ public class WebSocketGateway {
             ProxyErrorWriter errorWriter,
             ClientContextResolver clientContextResolver,
             UpstreamAddressResolver addressResolver,
-            GatewayCorsConfig globalCorsConfig) {
+            GatewayCorsConfig globalCorsConfig,
+            RevocationEventPublisher revocationEventPublisher) {
         this.gatewayUseCase = gatewayUseCase;
         this.config = config;
         this.vertx = vertx;
@@ -100,6 +136,25 @@ public class WebSocketGateway {
         this.clientContextResolver = clientContextResolver;
         this.addressResolver = addressResolver;
         this.globalCorsConfig = globalCorsConfig;
+        this.revocationEventPublisher = revocationEventPublisher;
+    }
+
+    @PostConstruct
+    void subscribeToRevocations() {
+        if (revocationEventPublisher != null) {
+            revocationSubscription = revocationEventPublisher
+                    .subscribe()
+                    .subscribe()
+                    .with(this::onRevocation, error -> LOG.warnv(error, "WebSocket revocation subscription stopped"));
+        }
+    }
+
+    @PreDestroy
+    void stopRevocationSubscription() {
+        if (revocationSubscription != null) {
+            revocationSubscription.cancel();
+            revocationSubscription = null;
+        }
     }
 
     /**
@@ -322,6 +377,10 @@ public class WebSocketGateway {
                                                             config,
                                                             authSessionId,
                                                             userId,
+                                                            auth.token().flatMap(token -> token.identityTokenId()
+                                                                    .or(() -> claim(token, "jti"))),
+                                                            auth.token().flatMap(token -> token.identityIssuedAt()
+                                                                    .or(() -> instantClaim(token, "iat"))),
                                                             auth.token().map(token -> token.expiresAt()),
                                                             messageHandler,
                                                             cleanup);
@@ -487,6 +546,12 @@ public class WebSocketGateway {
         }
     }
 
+    void onRevocation(RevocationEvent event) {
+        activeSessions.values().stream()
+                .filter(session -> session.shouldCloseFor(event))
+                .forEach(session -> session.closeWithReason((short) 1008, "Authentication revoked"));
+    }
+
     void onShutdown(@Observes ShutdownEvent event) {
         if (!draining.compareAndSet(false, true)) {
             return;
@@ -496,6 +561,27 @@ public class WebSocketGateway {
             sessions = List.copyOf(activeSessions.values());
         }
         sessions.forEach(session -> session.closeWithReason((short) 1001, "Server shutting down"));
+    }
+
+    private static Optional<String> claim(AussieToken token, String name) {
+        return Optional.ofNullable(token.claims().get(name))
+                .map(Object::toString)
+                .filter(value -> !value.isBlank());
+    }
+
+    private static Optional<Instant> instantClaim(AussieToken token, String name) {
+        final var value = token.claims().get(name);
+        try {
+            if (value instanceof Instant instant) {
+                return Optional.of(instant);
+            }
+            if (value != null) {
+                return Optional.of(Instant.ofEpochSecond(Long.parseLong(value.toString())));
+            }
+        } catch (DateTimeException | NumberFormatException ignored) {
+            return Optional.empty();
+        }
+        return Optional.empty();
     }
 
     private int mapErrorToStatusCode(Throwable error) {

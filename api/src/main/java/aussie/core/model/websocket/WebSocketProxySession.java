@@ -17,6 +17,7 @@ import io.vertx.core.http.WebSocketFrame;
 import org.jboss.logging.Logger;
 
 import aussie.core.config.WebSocketConfig;
+import aussie.core.model.auth.RevocationEvent;
 import aussie.core.model.ratelimit.MessageRateLimitHandler;
 import aussie.core.model.session.SessionInvalidatedEvent;
 
@@ -45,6 +46,8 @@ public class WebSocketProxySession {
     private final WebSocketConfig config;
     private final Optional<String> authSessionId;
     private final Optional<String> userId;
+    private final Optional<String> tokenId;
+    private final Optional<Instant> identityIssuedAt;
     private final Optional<Instant> identityExpiresAt;
     private final MessageRateLimitHandler messageRateLimitHandler;
     private final Runnable closeListener;
@@ -77,6 +80,8 @@ public class WebSocketProxySession {
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
                 MessageRateLimitHandler.noOp(),
                 () -> {});
     }
@@ -97,6 +102,8 @@ public class WebSocketProxySession {
                 config,
                 authSessionId,
                 userId,
+                Optional.empty(),
+                Optional.empty(),
                 Optional.empty(),
                 MessageRateLimitHandler.noOp(),
                 () -> {});
@@ -120,6 +127,8 @@ public class WebSocketProxySession {
                 authSessionId,
                 userId,
                 Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
                 messageRateLimitHandler,
                 () -> {});
     }
@@ -135,6 +144,34 @@ public class WebSocketProxySession {
             Optional<Instant> identityExpiresAt,
             MessageRateLimitHandler messageRateLimitHandler,
             Runnable closeListener) {
+        this(
+                sessionId,
+                clientSocket,
+                backendSocket,
+                vertx,
+                config,
+                authSessionId,
+                userId,
+                Optional.empty(),
+                Optional.empty(),
+                identityExpiresAt,
+                messageRateLimitHandler,
+                closeListener);
+    }
+
+    public WebSocketProxySession(
+            String sessionId,
+            ServerWebSocket clientSocket,
+            WebSocket backendSocket,
+            Vertx vertx,
+            WebSocketConfig config,
+            Optional<String> authSessionId,
+            Optional<String> userId,
+            Optional<String> tokenId,
+            Optional<Instant> identityIssuedAt,
+            Optional<Instant> identityExpiresAt,
+            MessageRateLimitHandler messageRateLimitHandler,
+            Runnable closeListener) {
         this.sessionId = sessionId;
         this.clientSocket = clientSocket;
         this.backendSocket = backendSocket;
@@ -142,6 +179,8 @@ public class WebSocketProxySession {
         this.config = config;
         this.authSessionId = authSessionId;
         this.userId = userId;
+        this.tokenId = tokenId;
+        this.identityIssuedAt = identityIssuedAt;
         this.identityExpiresAt = identityExpiresAt;
         this.messageRateLimitHandler = messageRateLimitHandler;
         this.closeListener = closeListener;
@@ -457,6 +496,23 @@ public class WebSocketProxySession {
             return false;
         }
         return event.appliesTo(authSessionId.get(), userId.orElse(null));
+    }
+
+    /** Check whether a distributed revocation applies to this connection. */
+    public boolean shouldCloseFor(RevocationEvent event) {
+        final var now = Instant.now();
+        if (event instanceof RevocationEvent.JtiRevoked revoked) {
+            return revoked.expiresAt().isAfter(now)
+                    && tokenId.filter(revoked.jti()::equals).isPresent();
+        }
+        if (event instanceof RevocationEvent.UserRevoked revoked) {
+            return revoked.expiresAt().isAfter(now)
+                    && userId.filter(revoked.userId()::equals).isPresent()
+                    && identityIssuedAt
+                            .map(issuedAt -> issuedAt.isBefore(revoked.issuedBefore()))
+                            .orElse(true);
+        }
+        return false;
     }
 
     /**

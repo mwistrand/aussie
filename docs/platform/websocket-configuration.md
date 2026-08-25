@@ -99,7 +99,7 @@ Browser connections must send an exact allowed `Origin`. A service-level CORS or
 | `1000` | Normal closure | Idle timeout, max lifetime, user disconnect |
 | `1001` | Going away | Client upgrade failed after backend connected |
 | `1002` | Protocol error | Ping timeout (no pong received) |
-| `1008` | Policy violation | Authentication expired |
+| `1008` | Policy violation | Authentication expired or was revoked |
 | `1011` | Unexpected error | Client or backend error |
 
 ## Routing Modes

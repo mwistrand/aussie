@@ -42,6 +42,7 @@ import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.common.context.ClientContext;
 import aussie.core.config.WebSocketConfig;
+import aussie.core.model.auth.RevocationEvent;
 import aussie.core.model.session.SessionInvalidatedEvent;
 import aussie.core.model.websocket.WebSocketProxySession;
 import aussie.core.model.websocket.WebSocketUpgradeRequest;
@@ -313,6 +314,23 @@ class WebSocketGatewayUnitTest {
             verify(session2, never()).closeWithReason(any(short.class), anyString());
             verify(session3).closeWithReason((short) 1000, "Session logged out");
         }
+    }
+
+    @Test
+    @DisplayName("should close sessions matching distributed token revocations")
+    void shouldCloseSessionsOnRevocation() throws Exception {
+        final var activeSessionsField = WebSocketGateway.class.getDeclaredField("activeSessions");
+        activeSessionsField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        final var activeSessions = (java.util.Map<String, WebSocketProxySession>) activeSessionsField.get(gateway);
+        final var session = mock(WebSocketProxySession.class);
+        when(session.shouldCloseFor(any(RevocationEvent.class))).thenReturn(true);
+        activeSessions.put("ws-session-1", session);
+
+        gateway.onRevocation(
+                new RevocationEvent.JtiRevoked("jti-1", Instant.now().plusSeconds(60)));
+
+        verify(session).closeWithReason((short) 1008, "Authentication revoked");
     }
 
     @Nested
