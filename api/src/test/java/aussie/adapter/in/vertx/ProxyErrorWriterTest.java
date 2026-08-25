@@ -77,7 +77,7 @@ class ProxyErrorWriterTest {
 
             verify(response).setStatusCode(404);
             verify(response).putHeader(HttpHeaders.CONTENT_TYPE, (CharSequence) ProblemJson.CONTENT_TYPE);
-            verify(metrics).recordError("my-service", "Service Not Found");
+            verify(metrics).recordError("my-service", "service_not_found");
             var bodyCaptor = ArgumentCaptor.forClass(String.class);
             verify(response).end(bodyCaptor.capture());
             assertEquals(ProblemJson.serialize(problem, "/some/path"), bodyCaptor.getValue());
@@ -142,7 +142,7 @@ class ProxyErrorWriterTest {
                     .putHeader(
                             argThat((CharSequence h) -> "X-RateLimit-Reset".contentEquals(h)),
                             argThat((CharSequence v) -> "1700000000".contentEquals(v)));
-            verify(metrics).recordError("my-service", "Too Many Requests");
+            verify(metrics).recordError("my-service", "too_many_requests");
             var bodyCaptor = ArgumentCaptor.forClass(String.class);
             verify(response).end(bodyCaptor.capture());
             assertNotNull(bodyCaptor.getValue());

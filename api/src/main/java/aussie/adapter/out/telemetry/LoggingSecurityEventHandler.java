@@ -47,16 +47,16 @@ public class LoggingSecurityEventHandler implements SecurityEventHandler {
         }
     }
 
-    private String formatEvent(SecurityEvent event) {
+    String formatEvent(SecurityEvent event) {
         return switch (event) {
             case SecurityEvent.AuthenticationFailure e -> String.format(
                     "AUTH_FAILURE: client=%s reason=%s method=%s failures=%d",
                     e.clientIdentifier(), e.reason(), e.attemptedMethod(), e.failureCount());
 
             case SecurityEvent.AuthenticationLockout e -> String.format(
-                    "AUTH_LOCKOUT: client=%s key=%s attempts=%d duration=%ds lockout_count=%d",
+                    "AUTH_LOCKOUT: client=%s key_type=%s attempts=%d duration=%ds lockout_count=%d",
                     e.clientIdentifier(),
-                    e.lockedKey(),
+                    keyType(e.lockedKey()),
                     e.failedAttempts(),
                     e.lockoutDurationSeconds(),
                     e.lockoutCount());
@@ -77,15 +77,29 @@ public class LoggingSecurityEventHandler implements SecurityEventHandler {
                     e.clientIdentifier(), e.serviceId(), e.requestCount(), e.threshold(), e.windowSeconds());
 
             case SecurityEvent.SuspiciousPattern e -> String.format(
-                    "SUSPICIOUS: client=%s type=%s confidence=%.2f details=%s",
-                    e.clientIdentifier(), e.patternType(), e.confidenceScore(), e.details());
+                    "SUSPICIOUS: client=%s type=%s confidence=%.2f details_present=%s",
+                    e.clientIdentifier(), e.patternType(), e.confidenceScore(), e.details() != null);
 
             case SecurityEvent.DosAttackDetected e -> String.format(
-                    "DOS_ATTACK: client=%s type=%s evidence=%s", e.clientIdentifier(), e.attackType(), e.evidence());
+                    "DOS_ATTACK: client=%s type=%s evidence_present=%s",
+                    e.clientIdentifier(),
+                    e.attackType(),
+                    e.evidence() != null && !e.evidence().isEmpty());
 
             case SecurityEvent.SessionInvalidated e -> String.format(
-                    "SESSION_INVALIDATED: client=%s session=%s user=%s reason=%s",
-                    e.clientIdentifier(), e.sessionId(), e.userId(), e.reason());
+                    "SESSION_INVALIDATED: client=%s session_present=%s user_present=%s reason=%s",
+                    e.clientIdentifier(), e.sessionId() != null, e.userId() != null, e.reason());
+        };
+    }
+
+    private static String keyType(String key) {
+        if (key == null) {
+            return "unknown";
+        }
+        final var colon = key.indexOf(':');
+        return switch (colon > 0 ? key.substring(0, colon) : "") {
+            case "ip", "user", "apikey" -> key.substring(0, colon);
+            default -> "unknown";
         };
     }
 }

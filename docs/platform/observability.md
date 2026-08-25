@@ -213,6 +213,17 @@ These metrics expose configured bulkhead limits. For actual pool usage metrics, 
 | `aussie.attributed.compute.units` | Counter | (same) | Normalized compute cost |
 | `aussie.attributed.duration` | Timer | (same) | Request duration |
 
+## SLOs and runbooks
+
+The checked-in Prometheus rules publish gateway availability and p99 latency recording
+rules. The availability objective is 99.9% successful server responses; alerts use
+short- and medium-window error-budget burn so low traffic does not create a fixed-rate
+false positive. New SLO alerts carry the `owner: platform-oncall` label and a runbook URL.
+
+Operational actions are documented in the [observability runbooks](runbooks/observability.md)
+for dependency outages, route/key failures, rate-limit fallback, traffic spikes,
+migrations/rollback, capacity saturation, and WebSocket drain.
+
 ## Distributed Tracing
 
 ### Trace Context Propagation

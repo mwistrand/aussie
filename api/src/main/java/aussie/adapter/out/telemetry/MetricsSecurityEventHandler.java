@@ -1,5 +1,7 @@
 package aussie.adapter.out.telemetry;
 
+import java.util.Set;
+
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 
@@ -21,6 +23,25 @@ import aussie.spi.SecurityEventHandler;
  * </ul>
  */
 public class MetricsSecurityEventHandler implements SecurityEventHandler {
+
+    private static final Set<String> AUTH_REASONS = Set.of(
+            "invalid_key",
+            "invalid_api_key_format",
+            "invalid_authorization",
+            "invalid_session",
+            "expired_session",
+            "invalid_token",
+            "ambiguous_credential",
+            "conflicting_authentication",
+            "other");
+    private static final Set<String> AUTH_METHODS =
+            Set.of("api_key", "authorization", "bearer", "jwt", "multiple", "oidc", "session", "unknown");
+    private static final Set<String> ACCESS_REASONS =
+            Set.of("ip_blocked", "visibility_private", "network_policy_denied", "forbidden", "other");
+    private static final Set<String> PATTERNS =
+            Set.of("brute_force", "brute_force_attempt", "high_error_rate", "request_spike", "other");
+    private static final Set<String> ATTACKS = Set.of("request_flood", "slowloris", "other");
+    private static final Set<String> INVALIDATION_REASONS = Set.of("logout", "timeout", "forced", "other");
 
     private MeterRegistry registry;
 
@@ -96,8 +117,8 @@ public class MetricsSecurityEventHandler implements SecurityEventHandler {
     private void recordAuthFailure(SecurityEvent.AuthenticationFailure event) {
         Counter.builder("aussie.security.auth.failures")
                 .description("Authentication failures")
-                .tag("reason", event.reason())
-                .tag("method", event.attemptedMethod())
+                .tag("reason", known(event.reason(), AUTH_REASONS))
+                .tag("method", known(event.attemptedMethod(), AUTH_METHODS))
                 .register(registry)
                 .increment();
     }
@@ -114,15 +135,18 @@ public class MetricsSecurityEventHandler implements SecurityEventHandler {
         if (lockedKey == null) {
             return "unknown";
         }
-        int colonIndex = lockedKey.indexOf(':');
-        return colonIndex > 0 ? lockedKey.substring(0, colonIndex) : "unknown";
+        final var colonIndex = lockedKey.indexOf(':');
+        return switch (colonIndex > 0 ? lockedKey.substring(0, colonIndex) : "") {
+            case "ip", "user", "apikey" -> lockedKey.substring(0, colonIndex);
+            default -> "unknown";
+        };
     }
 
     private void recordAccessDenied(SecurityEvent.AccessDenied event) {
         Counter.builder("aussie.security.access.denied")
                 .description("Access denied events")
                 .tag("service_id", nullSafe(event.serviceId()))
-                .tag("reason", event.reason())
+                .tag("reason", known(event.reason(), ACCESS_REASONS))
                 .register(registry)
                 .increment();
     }
@@ -138,7 +162,7 @@ public class MetricsSecurityEventHandler implements SecurityEventHandler {
     private void recordSuspiciousPattern(SecurityEvent.SuspiciousPattern event) {
         Counter.builder("aussie.security.suspicious.patterns")
                 .description("Suspicious traffic patterns detected")
-                .tag("pattern_type", event.patternType())
+                .tag("pattern_type", known(event.patternType(), PATTERNS))
                 .register(registry)
                 .increment();
     }
@@ -146,7 +170,7 @@ public class MetricsSecurityEventHandler implements SecurityEventHandler {
     private void recordDosAttack(SecurityEvent.DosAttackDetected event) {
         Counter.builder("aussie.security.dos.detected")
                 .description("DoS attacks detected")
-                .tag("attack_type", event.attackType())
+                .tag("attack_type", known(event.attackType(), ATTACKS))
                 .register(registry)
                 .increment();
     }
@@ -154,9 +178,13 @@ public class MetricsSecurityEventHandler implements SecurityEventHandler {
     private void recordSessionInvalidated(SecurityEvent.SessionInvalidated event) {
         Counter.builder("aussie.security.session.invalidated")
                 .description("Session invalidations")
-                .tag("reason", event.reason())
+                .tag("reason", known(event.reason(), INVALIDATION_REASONS))
                 .register(registry)
                 .increment();
+    }
+
+    private String known(String value, Set<String> allowed) {
+        return value != null && allowed.contains(value) ? value : "other";
     }
 
     private String nullSafe(String value) {

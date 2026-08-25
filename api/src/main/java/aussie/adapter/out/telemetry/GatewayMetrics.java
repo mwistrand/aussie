@@ -1,5 +1,6 @@
 package aussie.adapter.out.telemetry;
 
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -37,6 +38,38 @@ import aussie.core.port.out.Metrics;
  */
 @ApplicationScoped
 public class GatewayMetrics implements Metrics {
+
+    private static final Set<String> ERROR_TYPES = Set.of(
+            "upstream_timeout",
+            "connection_refused",
+            "connection_reset",
+            "connection_error",
+            "upstream_capacity",
+            "upstream_error",
+            "service_not_found",
+            "route_not_found",
+            "bad_request",
+            "unauthorized",
+            "forbidden",
+            "bad_gateway",
+            "gateway_timeout",
+            "too_many_requests",
+            "service_unavailable",
+            "internal_error",
+            "other");
+    private static final Set<String> AUTH_REASONS = Set.of(
+            "invalid_key",
+            "invalid_api_key_format",
+            "invalid_authorization",
+            "invalid_session",
+            "expired_session",
+            "invalid_token",
+            "ambiguous_credential",
+            "conflicting_authentication",
+            "other");
+    private static final Set<String> ACCESS_REASONS =
+            Set.of("ip_blocked", "visibility_private", "network_policy_denied", "forbidden", "other");
+    private static final Set<String> LIMIT_TYPES = Set.of("http", "ws_connection", "ws_message", "other");
 
     private final MeterRegistry registry;
     private final TelemetryConfig config;
@@ -209,7 +242,7 @@ public class GatewayMetrics implements Metrics {
         Counter.builder("aussie.errors.total")
                 .description("Total number of errors")
                 .tag("service_id", nullSafe(serviceId))
-                .tag("error_type", errorType)
+                .tag("error_type", known(errorType, ERROR_TYPES))
                 .register(registry)
                 .increment();
     }
@@ -232,7 +265,7 @@ public class GatewayMetrics implements Metrics {
 
         Counter.builder("aussie.auth.failures.total")
                 .description("Authentication failures")
-                .tag("reason", reason)
+                .tag("reason", known(reason, AUTH_REASONS))
                 .register(registry)
                 .increment();
     }
@@ -270,7 +303,7 @@ public class GatewayMetrics implements Metrics {
         Counter.builder("aussie.access.denied.total")
                 .description("Access denied events")
                 .tag("service_id", nullSafe(serviceId))
-                .tag("reason", reason)
+                .tag("reason", known(reason, ACCESS_REASONS))
                 .register(registry)
                 .increment();
     }
@@ -429,7 +462,7 @@ public class GatewayMetrics implements Metrics {
         Counter.builder("aussie.ratelimit.exceeded.total")
                 .description("Rate limit exceeded events")
                 .tag("service_id", nullSafe(serviceId))
-                .tag("limit_type", limitType)
+                .tag("limit_type", known(limitType, LIMIT_TYPES))
                 .register(registry)
                 .increment();
     }
@@ -466,6 +499,10 @@ public class GatewayMetrics implements Metrics {
             case GatewayResult.Forbidden f -> "forbidden";
             case GatewayResult.BadRequest b -> "bad_request";
         };
+    }
+
+    private String known(String value, Set<String> allowed) {
+        return value != null && allowed.contains(value) ? value : "other";
     }
 
     private String statusClass(int statusCode) {

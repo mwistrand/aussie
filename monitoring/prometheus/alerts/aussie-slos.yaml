@@ -1,0 +1,40 @@
+# Gateway-wide recording rules and SLO alerts. Per-service labels are
+# deliberately aggregated away.
+groups:
+  - name: aussie-slos
+    interval: 30s
+    rules:
+      - record: aussie:gateway:requests:rate5m
+        expr: sum(rate(aussie_requests_total[5m]))
+      - record: aussie:gateway:server_errors:rate5m
+        expr: sum(rate(aussie_requests_total{status_class="5xx"}[5m]))
+      - record: aussie:gateway:availability:ratio5m
+        expr: 1 - (aussie:gateway:server_errors:rate5m / clamp_min(aussie:gateway:requests:rate5m, 1e-9))
+      - record: aussie:gateway:availability:ratio30m
+        expr: 1 - (sum(rate(aussie_requests_total{status_class="5xx"}[30m])) / clamp_min(sum(rate(aussie_requests_total[30m])), 1e-9))
+      - record: aussie:gateway:latency:p99_5m
+        expr: histogram_quantile(0.99, sum(rate(aussie_proxy_latency_seconds_bucket[5m])) by (le))
+
+      - alert: AussieAvailabilityErrorBudgetBurn
+        expr: |
+          (1 - aussie:gateway:availability:ratio5m) > 14.4 * 0.001
+          and (1 - aussie:gateway:availability:ratio30m) > 14.4 * 0.001
+        for: 5m
+        labels:
+          severity: critical
+          owner: platform-oncall
+        annotations:
+          summary: "Aussie availability error budget is burning quickly"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#availability"
+          description: "Server-error burn exceeds the multi-window availability budget; inspect dependency and upstream failure panels."
+
+      - alert: AussieProxyLatencySLOViolation
+        expr: aussie:gateway:latency:p99_5m > 2
+        for: 10m
+        labels:
+          severity: warning
+          owner: platform-oncall
+        annotations:
+          summary: "Aussie proxy latency SLO is violated"
+          runbook_url: "https://github.com/mwistrand/aussie/blob/main/docs/platform/runbooks/observability.md#latency"
+          description: "Gateway p99 upstream latency is above two seconds."

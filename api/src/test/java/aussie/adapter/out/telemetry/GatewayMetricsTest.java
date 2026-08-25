@@ -430,12 +430,42 @@ class GatewayMetricsTest {
         void recordError() {
             metrics.recordError("my-svc", "upstream_timeout");
 
-            var counter = registry.find("aussie.errors.total")
+            final var counter = registry.find("aussie.errors.total")
                     .tag("service_id", "my-svc")
                     .tag("error_type", "upstream_timeout")
                     .counter();
             assertNotNull(counter);
             assertEquals(1.0, counter.count());
+        }
+
+        @Test
+        @DisplayName("recordError preserves stable problem codes")
+        void recordProblemCode() {
+            metrics.recordError("my-svc", "service_not_found");
+
+            final var counter = registry.find("aussie.errors.total")
+                    .tag("service_id", "my-svc")
+                    .tag("error_type", "service_not_found")
+                    .counter();
+            assertNotNull(counter);
+            assertEquals(1.0, counter.count());
+        }
+
+        @Test
+        @DisplayName("unrecognized labels share bounded fallback series")
+        void unrecognizedLabelsUseOther() {
+            for (int i = 0; i < 1_000; i++) {
+                metrics.recordError("my-svc", "error-" + i);
+                metrics.recordAuthFailure("reason-" + i, null);
+                metrics.recordAccessDenied("my-svc", "reason-" + i);
+                metrics.recordRateLimitExceeded("my-svc", "limit-" + i);
+            }
+
+            assertEquals(1, registry.find("aussie.errors.total").meters().size());
+            assertEquals(1, registry.find("aussie.auth.failures.total").meters().size());
+            assertEquals(1, registry.find("aussie.access.denied.total").meters().size());
+            assertEquals(
+                    1, registry.find("aussie.ratelimit.exceeded.total").meters().size());
         }
 
         @Test
@@ -454,10 +484,10 @@ class GatewayMetricsTest {
         @Test
         @DisplayName("recordAuthFailure does not create a client label for null IP")
         void recordAuthFailureNullIp() {
-            metrics.recordAuthFailure("expired_session", null);
+            metrics.recordAuthFailure("invalid_session", null);
 
             var counter = registry.find("aussie.auth.failures.total")
-                    .tag("reason", "expired_session")
+                    .tag("reason", "invalid_session")
                     .counter();
             assertNotNull(counter);
             assertEquals(1.0, counter.count());

@@ -17,7 +17,7 @@ import aussie.adapter.out.telemetry.GatewayMetrics;
  *
  * <p>Used by the native Vert.x error paths (WebSocket upgrade, proxy failure)
  * so they share the wire shape of the JAX-RS exception-mapper output. Records
- * an {@code aussie.errors.total} counter tagged by service and problem title.
+ * an {@code aussie.errors.total} counter tagged by service and stable problem code.
  */
 @ApplicationScoped
 public class ProxyErrorWriter {
@@ -96,7 +96,7 @@ public class ProxyErrorWriter {
 
     private void recordMetric(String serviceId, ProblemDetail problem) {
         if (metrics.isEnabled()) {
-            metrics.recordError(serviceId != null ? serviceId : "unknown", problem.title());
+            metrics.recordError(serviceId != null ? serviceId : "unknown", problem.code());
         }
     }
 
