@@ -1,0 +1,6 @@
+# Security, data-plane, migration, and release changes require the repository owner.
+/api/src/main/java/aussie/adapter/in/auth/ @mwistrand
+/api/src/main/java/aussie/adapter/in/websocket/ @mwistrand
+/api/src/main/java/aussie/adapter/out/storage/ @mwistrand
+/.github/ @mwistrand
+/Dockerfile* @mwistrand
