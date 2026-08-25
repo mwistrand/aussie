@@ -56,7 +56,9 @@ jobs:
           upload-artifact: false
 
       - name: Create release checksums
-        run: sha256sum "aussie-${GITHUB_REF_NAME}.cdx.json" > "aussie-${GITHUB_REF_NAME}.sha256"
+        run: |
+          sha256sum "aussie-${GITHUB_REF_NAME}.cdx.json" > "aussie-${GITHUB_REF_NAME}.sha256"
+          sha256sum --check "aussie-${GITHUB_REF_NAME}.sha256"
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3.7.0
@@ -65,6 +67,16 @@ jobs:
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: cosign sign --yes "${IMAGE}@${DIGEST}"
+
+      - name: Verify image signature
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: >-
+          cosign verify
+          --certificate-identity-regexp
+          "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}"
+          --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          "${IMAGE}@${DIGEST}"
 
       - name: Attach SBOM attestation
         env:
@@ -75,12 +87,40 @@ jobs:
           --predicate "aussie-${GITHUB_REF_NAME}.cdx.json"
           "${IMAGE}@${DIGEST}"
 
+      - name: Verify SBOM attestation
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: >-
+          cosign verify-attestation
+          --type cyclonedx
+          --certificate-identity-regexp
+          "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}"
+          --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          "${IMAGE}@${DIGEST}"
+
       - name: Attach GitHub build provenance
         uses: actions/attest-build-provenance@v1
         with:
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+
+      - name: Write release evidence manifest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          SBOM_SHA256=$(cut -d ' ' -f 1 "aussie-${GITHUB_REF_NAME}.sha256")
+          jq -n \
+            --arg version "${GITHUB_REF_NAME}" \
+            --arg commit "${GITHUB_SHA}" \
+            --arg image "${IMAGE}" \
+            --arg digest "${DIGEST}" \
+            --arg sbom "aussie-${GITHUB_REF_NAME}.cdx.json" \
+            --arg sbomSha256 "${SBOM_SHA256}" \
+            '{version: $version, commit: $commit, image: $image, digest: $digest,
+              sbom: $sbom, sbom_sha256: $sbomSha256,
+              compatibility: "docs/platform/release.md", rollback: "docs/platform/release.md"}' \
+            > "aussie-${GITHUB_REF_NAME}.evidence.json"
 
       - name: Upload release evidence
         uses: actions/upload-artifact@v4
@@ -89,3 +129,4 @@ jobs:
           path: |
             aussie-${{ github.ref_name }}.cdx.json
             aussie-${{ github.ref_name }}.sha256
+            aussie-${{ github.ref_name }}.evidence.json

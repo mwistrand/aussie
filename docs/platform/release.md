@@ -11,7 +11,8 @@ also verified on every change.
 
 The successful job publishes the JVM image to GHCR, emits BuildKit provenance
 and an SBOM, signs the image with keyless Cosign, attaches a CycloneDX SBOM
-attestation, and uploads the SBOM plus SHA-256 checksum as release evidence.
+attestation, verifies both signatures, and uploads an evidence manifest with the
+image digest, SBOM checksum, compatibility note, and rollback instructions.
 
 Verify a published image with:
 
@@ -29,3 +30,7 @@ Before publishing, attach the migration/compatibility note to the release
 evidence and record the previous verified image tag. During rollback, verify
 the image signature and provenance, deploy that tag, and run the packaged E2E
 smoke plus readiness checks before restoring traffic.
+
+The uploaded `*.evidence.json` manifest is the release handoff. Verify its
+`digest` against the registry image and its `sbom_sha256` against the uploaded
+CycloneDX file before deployment.
