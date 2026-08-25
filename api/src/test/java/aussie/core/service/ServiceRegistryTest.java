@@ -23,6 +23,7 @@ import aussie.adapter.out.storage.memory.InMemoryServiceRegistrationRepository;
 import aussie.core.cache.LocalCacheConfig;
 import aussie.core.model.auth.GatewaySecurityConfig;
 import aussie.core.model.auth.OperationPermission;
+import aussie.core.model.auth.Permission;
 import aussie.core.model.auth.ServicePermissionPolicy;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
@@ -180,6 +181,30 @@ class ServiceRegistryTest {
             var services = registry.getAllServices().await().atMost(TIMEOUT);
             assertTrue(services.isEmpty());
         }
+
+        @Test
+        @DisplayName("Should filter service pages before applying offset")
+        void shouldFilterServicePagesBeforeApplyingOffset() {
+            var policy = new ServicePermissionPolicy(Map.of(
+                    Permission.CONFIG_READ.value(), new OperationPermission(Set.of("owned-service.config.read"))));
+            registry.register(ServiceRegistration.builder("owned-service")
+                            .baseUrl("http://192.0.2.10:8080")
+                            .permissionPolicy(policy)
+                            .build())
+                    .await()
+                    .atMost(TIMEOUT);
+            registry.register(createService("hidden-service", "http://192.0.2.10:8081"))
+                    .await()
+                    .atMost(TIMEOUT);
+
+            var services = registry.getServicesAuthorized(1, 0, Set.of("owned-service.config.read"))
+                    .await()
+                    .atMost(TIMEOUT);
+
+            assertEquals(
+                    List.of("owned-service"),
+                    services.stream().map(ServiceRegistration::serviceId).toList());
+        }
     }
 
     @Nested
@@ -193,6 +218,20 @@ class ServiceRegistryTest {
             var result = registry.register(service).await().atMost(TIMEOUT);
 
             assertInstanceOf(RegistrationResult.Success.class, result);
+        }
+
+        @Test
+        @DisplayName("Should reject If-Match when the service does not exist")
+        void shouldRejectIfMatchForNewService() {
+            var service = createServiceWithVersion("test-service", "http://192.0.2.10:8080", 1);
+
+            var result = registry.register(service, Set.of("*"), 1L).await().atMost(TIMEOUT);
+
+            assertEquals(
+                    412,
+                    assertInstanceOf(RegistrationResult.Failure.class, result).statusCode());
+            assertTrue(
+                    repository.findById("test-service").await().atMost(TIMEOUT).isEmpty());
         }
 
         @Test
@@ -707,7 +746,7 @@ class ServiceRegistryTest {
                     .permissionPolicy(policy)
                     .version(2)
                     .build();
-            var result = registry.register(updatedService, READONLY_PERMISSIONS)
+            var result = registry.register(updatedService, READONLY_PERMISSIONS, 0L)
                     .await()
                     .atMost(TIMEOUT);
 
@@ -812,7 +851,7 @@ class ServiceRegistryTest {
             registry.register(service, ADMIN_PERMISSIONS).await().atMost(TIMEOUT);
 
             // Try to delete with readonly permissions
-            var result = registry.unregisterAuthorized("test-service", READONLY_PERMISSIONS)
+            var result = registry.unregisterAuthorized("test-service", READONLY_PERMISSIONS, 0L)
                     .await()
                     .atMost(TIMEOUT);
 

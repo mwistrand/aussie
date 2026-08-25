@@ -128,6 +128,10 @@ public final class GatewayProblem {
         return build(ProblemDetail.conflict(detail));
     }
 
+    public static HttpProblem preconditionFailed(String detail) {
+        return build(ProblemDetail.preconditionFailed(detail));
+    }
+
     // ========== Server Errors ==========
 
     public static HttpProblem internalError(String detail) {

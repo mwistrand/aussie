@@ -83,6 +83,7 @@ public class ServicePermissionsResource {
                         .orElse(null);
 
                 return Response.ok(new PermissionPolicyResponse(policyDto, service.version()))
+                        .header("ETag", VersionPreconditions.etag(service.version()))
                         .build();
             });
         });
@@ -98,10 +99,11 @@ public class ServicePermissionsResource {
     @PermissionsAllowed({Permission.SERVICE_PERMISSIONS_WRITE_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> updatePermissions(
             @PathParam("serviceId") String serviceId,
-            @HeaderParam("If-Match") Long ifMatch,
+            @HeaderParam("If-Match") String ifMatch,
             ServicePermissionPolicyDto policyDto) {
 
-        if (ifMatch == null) {
+        var expectedVersion = VersionPreconditions.parseIfMatch(ifMatch);
+        if (expectedVersion == null) {
             throw GatewayProblem.badRequest("If-Match header is required for permission updates");
         }
 
@@ -121,9 +123,8 @@ public class ServicePermissionsResource {
                 }
 
                 // Check version for optimistic locking
-                if (service.version() != ifMatch) {
-                    throw GatewayProblem.conflict("Version mismatch: expected %d, got %d. Reload and try again."
-                            .formatted(service.version(), ifMatch));
+                if (service.version() != expectedVersion) {
+                    throw GatewayProblem.preconditionFailed("If-Match does not match the current service version");
                 }
 
                 // Update the service with new policy and incremented version
@@ -137,11 +138,11 @@ public class ServicePermissionsResource {
                                 .map(ServicePermissionPolicyDto::fromModel)
                                 .orElse(null);
                         yield Response.ok(new PermissionPolicyResponse(responsePolicyDto, updatedService.version()))
-                                .header("ETag", updatedService.version())
+                                .header("ETag", VersionPreconditions.etag(updatedService.version()))
                                 .build();
                     }
                     case RegistrationResult.Failure failure -> throw switch (failure.statusCode()) {
-                        case 409 -> GatewayProblem.conflict(failure.reason());
+                        case 409 -> GatewayProblem.preconditionFailed(failure.reason());
                         default -> GatewayProblem.badRequest(failure.reason());
                     };
                 });

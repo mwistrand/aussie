@@ -314,6 +314,11 @@ public class ServiceRegistry {
      * @return Uni with the registration result (success or failure with reason)
      */
     public Uni<RegistrationResult> register(ServiceRegistration service, Set<String> claims) {
+        return register(service, claims, null);
+    }
+
+    /** Register or update a service with an optional current-version precondition. */
+    public Uni<RegistrationResult> register(ServiceRegistration service, Set<String> claims, Long expectedVersion) {
         // Validate against gateway policies
         ValidationResult validationResult = validator.validate(service);
         if (validationResult instanceof ValidationResult.Invalid invalid) {
@@ -323,6 +328,19 @@ public class ServiceRegistry {
         // Check version constraint and authorization
         return repository.findById(service.serviceId()).flatMap(existingOpt -> {
             if (existingOpt.isEmpty()) {
+                // Check create authorization if claims provided
+                if (claims != null && !authService.canCreateService(service.serviceId(), claims)) {
+                    return Uni.createFrom()
+                            .item(RegistrationResult.failure(
+                                    "Not authorized to create service: " + service.serviceId(), 403));
+                }
+
+                if (expectedVersion != null) {
+                    return Uni.createFrom()
+                            .item(RegistrationResult.failure(
+                                    "If-Match requires an existing service registration", 412));
+                }
+
                 // New service: version must be 1
                 if (service.version() != 1L) {
                     return Uni.createFrom()
@@ -330,32 +348,30 @@ public class ServiceRegistry {
                                     "New service registration must have version 1, got " + service.version(), 409));
                 }
 
-                // Check create authorization if claims provided
-                if (claims != null && !authService.canCreateService(claims)) {
-                    return Uni.createFrom()
-                            .item(RegistrationResult.failure(
-                                    "Not authorized to create service: " + service.serviceId(), 403));
-                }
             } else {
                 var existing = existingOpt.get();
 
-                // Update: version must be current + 1
-                long currentVersion = existing.version();
-                long expectedVersion = currentVersion + 1;
-                if (service.version() != expectedVersion) {
-                    return Uni.createFrom()
-                            .item(RegistrationResult.failure(
-                                    "Version conflict: expected version " + expectedVersion + " (current is "
-                                            + currentVersion + "), got " + service.version(),
-                                    409));
-                }
-
-                // Check update authorization if claims provided
+                // Check update authorization before exposing version state
                 if (claims != null
                         && !authService.isAuthorizedForService(existing, Permission.CONFIG_UPDATE.value(), claims)) {
                     return Uni.createFrom()
                             .item(RegistrationResult.failure(
                                     "Not authorized to update service: " + service.serviceId(), 403));
+                }
+
+                if (expectedVersion != null && existing.version() != expectedVersion) {
+                    return Uni.createFrom().item(preconditionFailed());
+                }
+
+                // Update: version must be current + 1
+                long currentVersion = existing.version();
+                long nextVersion = currentVersion + 1;
+                if (service.version() != nextVersion) {
+                    return Uni.createFrom()
+                            .item(RegistrationResult.failure(
+                                    "Version conflict: expected version " + nextVersion + " (current is "
+                                            + currentVersion + "), got " + service.version(),
+                                    409));
                 }
 
                 // Check if permission policy is changing (not just present)
@@ -380,7 +396,8 @@ public class ServiceRegistry {
                     : repository.replaceIfVersion(service, existingOpt.get().version());
             return write.flatMap(result -> {
                 if (!result.applied()) {
-                    return Uni.createFrom().item(versionConflict(result));
+                    return Uni.createFrom()
+                            .item(expectedVersion == null ? versionConflict(result) : preconditionFailed());
                 }
                 return publishChange(service).replaceWith(RegistrationResult.success(service));
             });
@@ -452,6 +469,11 @@ public class ServiceRegistry {
      * @return Uni with the unregistration result
      */
     public Uni<RegistrationResult> unregisterAuthorized(String serviceId, Set<String> claims) {
+        return unregisterAuthorized(serviceId, claims, null);
+    }
+
+    /** Delete a service only when its current version matches the supplied ETag. */
+    public Uni<RegistrationResult> unregisterAuthorized(String serviceId, Set<String> claims, Long expectedVersion) {
         return repository.findById(serviceId).flatMap(opt -> {
             if (opt.isEmpty()) {
                 return Uni.createFrom().item(RegistrationResult.failure("Service not found: " + serviceId, 404));
@@ -459,16 +481,21 @@ public class ServiceRegistry {
 
             var existing = opt.get();
 
-            // Check delete authorization if claims provided
+            // Check delete authorization before exposing version state
             if (claims != null
                     && !authService.isAuthorizedForService(existing, Permission.CONFIG_DELETE.value(), claims)) {
                 return Uni.createFrom()
                         .item(RegistrationResult.failure("Not authorized to delete service: " + serviceId, 403));
             }
 
+            if (expectedVersion != null && existing.version() != expectedVersion) {
+                return Uni.createFrom().item(preconditionFailed());
+            }
+
             return repository.deleteIfVersion(serviceId, existing.version()).flatMap(result -> {
                 if (!result.applied()) {
-                    return Uni.createFrom().item(versionConflict(result));
+                    return Uni.createFrom()
+                            .item(expectedVersion == null ? versionConflict(result) : preconditionFailed());
                 }
                 return publishRemoval(serviceId).replaceWith(RegistrationResult.success(existing));
             });
@@ -525,6 +552,28 @@ public class ServiceRegistry {
 
     public Uni<List<ServiceRegistration>> getServices(int limit, int offset) {
         return repository.findPage(limit, offset);
+    }
+
+    /**
+     * Return only services the caller can read, then apply the page bounds.
+     *
+     * <p>The repository contract has no ownership predicate, so authorization
+     * must happen before pagination or a caller could infer hidden rows from
+     * page boundaries. The result remains bounded; a storage-level scoped query
+     * is the follow-up when tenant ownership is persisted as a column.
+     */
+    public Uni<List<ServiceRegistration>> getServicesAuthorized(int limit, int offset, Set<String> claims) {
+        // ponytail: full scan preserves authorization before pagination; add a scoped repository query at scale.
+        return repository.findAll().map(services -> services.stream()
+                .filter(service -> authService.isAuthorizedForService(service, Permission.CONFIG_READ.value(), claims))
+                .sorted(Comparator.comparing(ServiceRegistration::serviceId))
+                .skip(offset)
+                .limit(limit)
+                .toList());
+    }
+
+    private RegistrationResult preconditionFailed() {
+        return RegistrationResult.failure("If-Match does not match the current service version", 412);
     }
 
     /**

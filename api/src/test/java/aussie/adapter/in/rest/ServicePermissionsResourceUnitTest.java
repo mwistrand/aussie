@@ -1,7 +1,6 @@
 package aussie.adapter.in.rest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -177,7 +176,7 @@ class ServicePermissionsResourceUnitTest {
             when(serviceRegistry.getService("unknown-svc"))
                     .thenReturn(Uni.createFrom().item(Optional.empty()));
 
-            var ex = assertThrows(HttpProblem.class, () -> resource.updatePermissions("unknown-svc", 1L, null)
+            var ex = assertThrows(HttpProblem.class, () -> resource.updatePermissions("unknown-svc", "1", null)
                     .await()
                     .atMost(Duration.ofSeconds(5)));
             assertEquals(Response.Status.NOT_FOUND.getStatusCode(), ex.getStatusCode());
@@ -195,7 +194,7 @@ class ServicePermissionsResourceUnitTest {
 
             var ex = assertThrows(
                     HttpProblem.class,
-                    () -> resource.updatePermissions("svc1", 1L, null).await().atMost(Duration.ofSeconds(5)));
+                    () -> resource.updatePermissions("svc1", "1", null).await().atMost(Duration.ofSeconds(5)));
             assertEquals(Response.Status.FORBIDDEN.getStatusCode(), ex.getStatusCode());
         }
 
@@ -211,8 +210,8 @@ class ServicePermissionsResourceUnitTest {
 
             var ex = assertThrows(
                     HttpProblem.class,
-                    () -> resource.updatePermissions("svc1", 3L, null).await().atMost(Duration.ofSeconds(5)));
-            assertEquals(Response.Status.CONFLICT.getStatusCode(), ex.getStatusCode());
+                    () -> resource.updatePermissions("svc1", "3", null).await().atMost(Duration.ofSeconds(5)));
+            assertEquals(Response.Status.PRECONDITION_FAILED.getStatusCode(), ex.getStatusCode());
         }
 
         @Test
@@ -227,7 +226,7 @@ class ServicePermissionsResourceUnitTest {
             when(serviceRegistry.update(any(ServiceRegistration.class)))
                     .thenReturn(Uni.createFrom().item(RegistrationResult.success(service.withIncrementedVersion())));
 
-            var response = resource.updatePermissions("svc1", 5L, null).await().atMost(Duration.ofSeconds(5));
+            var response = resource.updatePermissions("svc1", "5", null).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(200, response.getStatus());
             verify(serviceRegistry).update(any(ServiceRegistration.class));
@@ -247,7 +246,7 @@ class ServicePermissionsResourceUnitTest {
 
             var policyDto = new ServicePermissionPolicyDto(Map.of());
             var response =
-                    resource.updatePermissions("svc1", 5L, policyDto).await().atMost(Duration.ofSeconds(5));
+                    resource.updatePermissions("svc1", "5", policyDto).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(200, response.getStatus());
         }
@@ -264,12 +263,12 @@ class ServicePermissionsResourceUnitTest {
             when(serviceRegistry.update(any(ServiceRegistration.class)))
                     .thenReturn(Uni.createFrom().item(RegistrationResult.success(service.withIncrementedVersion())));
 
-            var response = resource.updatePermissions("svc1", 5L, null).await().atMost(Duration.ofSeconds(5));
+            var response = resource.updatePermissions("svc1", "5", null).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(200, response.getStatus());
             var entity = (ServicePermissionsResource.PermissionPolicyResponse) response.getEntity();
             assertEquals(6L, entity.version());
-            assertNotNull(response.getHeaderString("ETag"));
+            assertEquals("\"6\"", response.getHeaderString("ETag"));
         }
     }
 

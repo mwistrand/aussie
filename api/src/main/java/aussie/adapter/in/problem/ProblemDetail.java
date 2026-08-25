@@ -64,6 +64,7 @@ public record ProblemDetail(String title, int status, String detail, Map<String,
                     case "Payload Too Large" -> "payload_too_large";
                     case "Request Header Fields Too Large" -> "headers_too_large";
                     case "Conflict" -> "conflict";
+                    case "Precondition Failed" -> "precondition_failed";
                     case "Internal Server Error" -> "internal_error";
                     case "Service Unavailable" -> "service_unavailable";
                     case "Feature Disabled" -> "feature_disabled";
@@ -158,6 +159,10 @@ public record ProblemDetail(String title, int status, String detail, Map<String,
 
     public static ProblemDetail conflict(String detail) {
         return new ProblemDetail("Conflict", 409, detail);
+    }
+
+    public static ProblemDetail preconditionFailed(String detail) {
+        return new ProblemDetail("Precondition Failed", 412, detail);
     }
 
     // ========== Server ==========

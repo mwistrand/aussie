@@ -194,6 +194,15 @@ class GatewayProblemTest {
         }
 
         @Test
+        @DisplayName("preconditionFailed should return 412")
+        void preconditionFailed() {
+            var problem = GatewayProblem.preconditionFailed("Version changed");
+            assertEquals(Status.PRECONDITION_FAILED.getStatusCode(), problem.getStatusCode());
+            assertEquals("Precondition Failed", problem.getTitle());
+            assertEquals("precondition_failed", problem.getParameters().get("code"));
+        }
+
+        @Test
         @DisplayName("internalError should return 500")
         void internalError() {
             var problem = GatewayProblem.internalError("Unexpected error");

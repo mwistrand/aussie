@@ -346,15 +346,25 @@ class ServiceRegistryMultiInstanceTest {
 
             try (var executor = Executors.newFixedThreadPool(2)) {
                 var resultA = CompletableFuture.supplyAsync(
-                        () -> instanceA.register(updateA).await().atMost(TIMEOUT), executor);
+                        () -> instanceA.register(updateA, null, 1L).await().atMost(TIMEOUT), executor);
                 var resultB = CompletableFuture.supplyAsync(
-                        () -> instanceB.register(updateB).await().atMost(TIMEOUT), executor);
+                        () -> instanceB.register(updateB, null, 1L).await().atMost(TIMEOUT), executor);
+
+                var results = List.of(resultA.join(), resultB.join());
 
                 assertEquals(
                         1,
-                        List.of(resultA.join(), resultB.join()).stream()
+                        results.stream()
                                 .filter(result -> result instanceof RegistrationResult.Success)
                                 .count());
+                assertEquals(
+                        412,
+                        results.stream()
+                                .filter(RegistrationResult.Failure.class::isInstance)
+                                .map(RegistrationResult.Failure.class::cast)
+                                .findFirst()
+                                .orElseThrow()
+                                .statusCode());
             }
             assertEquals(
                     2,

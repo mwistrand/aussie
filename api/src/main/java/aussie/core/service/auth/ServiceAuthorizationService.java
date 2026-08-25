@@ -63,14 +63,14 @@ public class ServiceAuthorizationService {
     /**
      * Check if a principal can create a new service.
      * Uses the global default policy since the service doesn't exist yet.
-     * Also accepts service-scoped create/update permissions (e.g.,
-     * "demo-service.config.create") since teams with write access to any
-     * service should be able to register new services.
+     * Also accepts create/update permissions scoped to the target service (e.g.,
+     * "demo-service.config.create").
      *
+     * @param serviceId the target service namespace
      * @param claims the claims from the authenticated principal (roles + permissions)
      * @return true if authorized to create services, false otherwise
      */
-    public boolean canCreateService(Set<String> claims) {
+    public boolean canCreateService(String serviceId, Set<String> claims) {
         if (claims != null && claims.contains(Permission.ALL.value())) {
             return true;
         }
@@ -80,15 +80,7 @@ public class ServiceAuthorizationService {
             return true;
         }
 
-        // Also allow if the principal has any service-scoped config write permission
-        if (claims != null) {
-            for (var claim : claims) {
-                if (claim.endsWith(".config.create") || claim.endsWith(".config.update")) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return claims != null
+                && (claims.contains(serviceId + ".config.create") || claims.contains(serviceId + ".config.update"));
     }
 }

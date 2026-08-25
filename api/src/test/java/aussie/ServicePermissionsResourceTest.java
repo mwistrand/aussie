@@ -59,6 +59,7 @@ class ServicePermissionsResourceTest {
                 .response();
 
         var version = initialResponse.jsonPath().getInt("version");
+        var etag = initialResponse.header("ETag");
 
         var policy =
                 """
@@ -72,7 +73,7 @@ class ServicePermissionsResourceTest {
                 """;
 
         given().contentType(ContentType.JSON)
-                .header("If-Match", String.valueOf(version))
+                .header("If-Match", etag)
                 .body(policy)
                 .when()
                 .put("/admin/services/" + TEST_SERVICE_ID + "/permissions")
@@ -81,14 +82,14 @@ class ServicePermissionsResourceTest {
                 .body("permissionPolicy.permissions", hasKey("service.config.read"))
                 .body("version", equalTo(version + 1));
 
-        // Stale version must conflict
+        // Stale ETag must fail its precondition
         given().contentType(ContentType.JSON)
-                .header("If-Match", String.valueOf(version))
+                .header("If-Match", etag)
                 .body(policy)
                 .when()
                 .put("/admin/services/" + TEST_SERVICE_ID + "/permissions")
                 .then()
-                .statusCode(409);
+                .statusCode(412);
     }
 
     private void registerTestService(String serviceId) {

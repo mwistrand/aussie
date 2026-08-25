@@ -6,7 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
@@ -94,7 +97,15 @@ class AdminResourceUnitTest {
         var identity = mock(SecurityIdentity.class);
         when(identity.isAnonymous()).thenReturn(false);
         when(identity.getAttribute("permissions")).thenReturn(permissions);
-        when(identity.getAttribute("roles")).thenReturn(null);
+        return identity;
+    }
+
+    private SecurityIdentity createIdempotencyIdentity(Set<String> permissions, String principalId) {
+        var identity = mock(SecurityIdentity.class);
+        when(identity.isAnonymous()).thenReturn(false);
+        lenient().when(identity.getAttribute("permissions")).thenReturn(permissions);
+        lenient().when(identity.getAttribute("principalId")).thenReturn(principalId);
+        lenient().when(identity.getAttribute("authenticationMethod")).thenReturn("test");
         return identity;
     }
 
@@ -118,6 +129,99 @@ class AdminResourceUnitTest {
             assertEquals(Response.Status.CREATED.getStatusCode(), response.getStatus());
             assertNotNull(response.getEntity());
             assertTrue(response.getEntity() instanceof ServiceRegistrationResponse);
+            assertEquals("\"1\"", response.getHeaderString("ETag"));
+        }
+
+        @Test
+        @DisplayName("Should replay an idempotent registration without repeating the write")
+        void shouldReplayIdempotentRegistration() {
+            when(securityConfig.allowPrivateUpstreams()).thenReturn(true);
+            var registration = createServiceRegistration("idempotent-service");
+            var identity = createIdempotencyIdentity(Set.of("service.config.create"), "test-principal");
+            mockIdentity(identity);
+            when(serviceRegistry.register(any(ServiceRegistration.class), any()))
+                    .thenReturn(Uni.createFrom().item(RegistrationResult.success(registration)));
+
+            var request = createRequest("idempotent-service");
+            resource.registerService(request, null, "idempotency-test").await().atMost(Duration.ofSeconds(5));
+            resource.registerService(request, null, "idempotency-test").await().atMost(Duration.ofSeconds(5));
+
+            verify(serviceRegistry, times(1)).register(any(ServiceRegistration.class), any());
+        }
+
+        @Test
+        @DisplayName("Should bind idempotency replay to the complete request")
+        void shouldRejectIdempotencyKeyReuseWithDifferentPrecondition() {
+            when(securityConfig.allowPrivateUpstreams()).thenReturn(true);
+            var registration = createServiceRegistration("idempotency-fingerprint-service");
+            var identity = createIdempotencyIdentity(Set.of("service.config.create"), "test-principal");
+            mockIdentity(identity);
+            when(serviceRegistry.register(any(ServiceRegistration.class), any()))
+                    .thenReturn(Uni.createFrom().item(RegistrationResult.success(registration)));
+
+            var request = createRequest("idempotency-fingerprint-service");
+            resource.registerService(request, null, "idempotency-fingerprint-test")
+                    .await()
+                    .atMost(Duration.ofSeconds(5));
+            var problem = assertThrows(
+                    HttpProblem.class, () -> resource.registerService(request, "\"1\"", "idempotency-fingerprint-test")
+                            .await()
+                            .atMost(Duration.ofSeconds(5)));
+
+            assertEquals(Response.Status.CONFLICT.getStatusCode(), problem.getStatusCode());
+        }
+
+        @Test
+        @DisplayName("Should isolate idempotency keys by stable principal ID")
+        void shouldIsolateIdempotencyKeysByPrincipalId() {
+            when(securityConfig.allowPrivateUpstreams()).thenReturn(true);
+            var registration = createServiceRegistration("idempotency-actor-service");
+            var firstIdentity = createIdempotencyIdentity(Set.of("service.config.create"), "first-principal");
+            var secondIdentity = createIdempotencyIdentity(Set.of("service.config.create"), "second-principal");
+            when(identityAssociation.getDeferredIdentity())
+                    .thenReturn(
+                            Uni.createFrom().item(firstIdentity),
+                            Uni.createFrom().item(secondIdentity));
+            when(serviceRegistry.register(any(ServiceRegistration.class), any()))
+                    .thenReturn(Uni.createFrom().item(RegistrationResult.success(registration)));
+
+            var request = createRequest("idempotency-actor-service");
+            resource.registerService(request, null, "shared-idempotency-test")
+                    .await()
+                    .atMost(Duration.ofSeconds(5));
+            resource.registerService(request, null, "shared-idempotency-test")
+                    .await()
+                    .atMost(Duration.ofSeconds(5));
+
+            verify(serviceRegistry, times(2)).register(any(ServiceRegistration.class), any());
+        }
+
+        @Test
+        @DisplayName("Should accept a quoted If-Match service version")
+        void shouldAcceptQuotedIfMatch() {
+            when(securityConfig.allowPrivateUpstreams()).thenReturn(true);
+            var registration = createServiceRegistration("conditional-service");
+            mockIdentity(createIdentityWithPermissions(Set.of("service.config.update")));
+            when(serviceRegistry.register(any(ServiceRegistration.class), any(), eq(1L)))
+                    .thenReturn(Uni.createFrom().item(RegistrationResult.success(registration)));
+
+            var response = resource.registerService(createRequest("conditional-service"), "\"1\"", null)
+                    .await()
+                    .atMost(Duration.ofSeconds(5));
+
+            assertEquals("\"1\"", response.getHeaderString("ETag"));
+        }
+
+        @Test
+        @DisplayName("Should reject a malformed If-Match service version")
+        void shouldRejectMalformedIfMatch() {
+            when(securityConfig.allowPrivateUpstreams()).thenReturn(true);
+
+            var problem = assertThrows(
+                    HttpProblem.class,
+                    () -> resource.registerService(createRequest("conditional-service"), "\"1", null));
+
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), problem.getStatusCode());
         }
 
         @Test
@@ -261,7 +365,8 @@ class AdminResourceUnitTest {
         void shouldReturnServiceList() {
             var service1 = createServiceRegistration("service-1");
             var service2 = createServiceRegistration("service-2");
-            when(serviceRegistry.getServices(25, 10))
+            mockIdentity(createIdentityWithPermissions(Set.of("service.config.read")));
+            when(serviceRegistry.getServicesAuthorized(25, 10, Set.of("service.config.read")))
                     .thenReturn(Uni.createFrom().item(List.of(service1, service2)));
 
             final var result = resource.listServices(25, 10).await().atMost(Duration.ofSeconds(5));
@@ -274,7 +379,9 @@ class AdminResourceUnitTest {
         @Test
         @DisplayName("Should return empty list when no services")
         void shouldReturnEmptyListWhenNoServices() {
-            when(serviceRegistry.getServices(50, 0)).thenReturn(Uni.createFrom().item(List.of()));
+            mockIdentity(createIdentityWithPermissions(Set.of("service.config.read")));
+            when(serviceRegistry.getServicesAuthorized(50, 0, Set.of("service.config.read")))
+                    .thenReturn(Uni.createFrom().item(List.of()));
 
             final var result = resource.listServices(50, 0).await().atMost(Duration.ofSeconds(5));
 
@@ -358,7 +465,6 @@ class AdminResourceUnitTest {
             var identity = mock(SecurityIdentity.class);
             when(identity.isAnonymous()).thenReturn(false);
             when(identity.getAttribute("permissions")).thenReturn(permissions);
-            when(identity.getAttribute("roles")).thenReturn(null);
             mockIdentity(identity);
 
             var registration = createServiceRegistration("test-service");
@@ -371,36 +477,17 @@ class AdminResourceUnitTest {
         }
 
         @Test
-        @DisplayName("Should include roles as Set in claims")
-        void shouldIncludeRolesAsSetInClaims() {
+        @DisplayName("Should ignore roles that were not expanded into permissions")
+        void shouldIgnoreUnexpandedRoles() {
             var roles = Set.of("admin", "editor");
             var identity = mock(SecurityIdentity.class);
             when(identity.isAnonymous()).thenReturn(false);
             when(identity.getAttribute("permissions")).thenReturn(null);
-            when(identity.getAttribute("roles")).thenReturn(roles);
+            lenient().when(identity.getAttribute("roles")).thenReturn(roles);
             mockIdentity(identity);
 
             var registration = createServiceRegistration("test-service");
-            when(serviceRegistry.getServiceAuthorized(eq("test-service"), eq(roles)))
-                    .thenReturn(Uni.createFrom().item(RegistrationResult.success(registration)));
-
-            var response = resource.getService("test-service").await().atMost(Duration.ofSeconds(5));
-
-            assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
-        }
-
-        @Test
-        @DisplayName("Should include roles as List in claims")
-        void shouldIncludeRolesAsListInClaims() {
-            var rolesList = List.of("admin", "editor");
-            var identity = mock(SecurityIdentity.class);
-            when(identity.isAnonymous()).thenReturn(false);
-            when(identity.getAttribute("permissions")).thenReturn(null);
-            when(identity.getAttribute("roles")).thenReturn(rolesList);
-            mockIdentity(identity);
-
-            var registration = createServiceRegistration("test-service");
-            when(serviceRegistry.getServiceAuthorized(eq("test-service"), eq(Set.of("admin", "editor"))))
+            when(serviceRegistry.getServiceAuthorized(eq("test-service"), eq(Set.of())))
                     .thenReturn(Uni.createFrom().item(RegistrationResult.success(registration)));
 
             var response = resource.getService("test-service").await().atMost(Duration.ofSeconds(5));
@@ -414,7 +501,6 @@ class AdminResourceUnitTest {
             var identity = mock(SecurityIdentity.class);
             when(identity.isAnonymous()).thenReturn(false);
             when(identity.getAttribute("permissions")).thenReturn(null);
-            when(identity.getAttribute("roles")).thenReturn(null);
             mockIdentity(identity);
 
             var registration = createServiceRegistration("test-service");
@@ -434,11 +520,11 @@ class AdminResourceUnitTest {
             var identity = mock(SecurityIdentity.class);
             when(identity.isAnonymous()).thenReturn(false);
             when(identity.getAttribute("permissions")).thenReturn(permissions);
-            when(identity.getAttribute("roles")).thenReturn(roles);
+            lenient().when(identity.getAttribute("roles")).thenReturn(roles);
             mockIdentity(identity);
 
             var registration = createServiceRegistration("test-service");
-            when(serviceRegistry.getServiceAuthorized(eq("test-service"), eq(Set.of("service.config.read", "admin"))))
+            when(serviceRegistry.getServiceAuthorized(eq("test-service"), eq(Set.of("service.config.read"))))
                     .thenReturn(Uni.createFrom().item(RegistrationResult.success(registration)));
 
             var response = resource.getService("test-service").await().atMost(Duration.ofSeconds(5));

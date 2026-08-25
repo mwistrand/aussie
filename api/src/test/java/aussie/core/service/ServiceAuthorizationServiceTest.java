@@ -107,55 +107,61 @@ class ServiceAuthorizationServiceTest {
         @Test
         @DisplayName("Should allow wildcard permission")
         void shouldAllowWildcardPermission() {
-            assertTrue(authService.canCreateService(Set.of("*")));
+            assertTrue(authService.canCreateService("demo-service", Set.of("*")));
         }
 
         @Test
         @DisplayName("Should allow aussie:admin permission")
         void shouldAllowAdminPermission() {
-            assertTrue(authService.canCreateService(Set.of("aussie:admin")));
+            assertTrue(authService.canCreateService("demo-service", Set.of("aussie:admin")));
         }
 
         @Test
         @DisplayName("Should deny other permissions")
         void shouldDenyOtherPermissions() {
-            assertFalse(authService.canCreateService(Set.of("other-permission")));
+            assertFalse(authService.canCreateService("demo-service", Set.of("other-permission")));
         }
 
         @Test
         @DisplayName("Should deny null permissions")
         void shouldDenyNullPermissions() {
-            assertFalse(authService.canCreateService(null));
+            assertFalse(authService.canCreateService("demo-service", null));
         }
 
         @Test
         @DisplayName("Should allow service-scoped .config.create claim")
         void shouldAllowScopedConfigCreate() {
-            assertTrue(authService.canCreateService(Set.of("demo-service.config.create")));
+            assertTrue(authService.canCreateService("demo-service", Set.of("demo-service.config.create")));
         }
 
         @Test
         @DisplayName("Should allow service-scoped .config.update claim")
         void shouldAllowScopedConfigUpdate() {
-            assertTrue(authService.canCreateService(Set.of("demo-service.config.update")));
+            assertTrue(authService.canCreateService("demo-service", Set.of("demo-service.config.update")));
         }
 
         @Test
         @DisplayName("Should allow un-scoped service.config.create claim")
         void shouldAllowUnscopedConfigCreate() {
-            assertTrue(authService.canCreateService(Set.of(Permission.SERVICE_CONFIG_CREATE_VALUE)));
+            assertTrue(authService.canCreateService("demo-service", Set.of(Permission.SERVICE_CONFIG_CREATE_VALUE)));
         }
 
         @Test
         @DisplayName("Should deny service-scoped .config.read claim")
         void shouldDenyScopedConfigRead() {
-            assertFalse(authService.canCreateService(Set.of("demo-service.config.read")));
+            assertFalse(authService.canCreateService("demo-service", Set.of("demo-service.config.read")));
         }
 
         @Test
         @DisplayName("Should deny service-scoped .config.delete claim")
         void shouldDenyScopedConfigDelete() {
-            assertFalse(authService.canCreateService(Set.of("demo-service.config.delete")));
+            assertFalse(authService.canCreateService("demo-service", Set.of("demo-service.config.delete")));
+        }
+
+        @Test
+        @DisplayName("Should not allow a scoped claim to create another service")
+        void shouldBindScopedCreateToServiceId() {
+            assertFalse(authService.canCreateService("other-service", Set.of("demo-service.config.create")));
         }
     }
 

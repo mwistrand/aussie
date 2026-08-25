@@ -110,6 +110,8 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
                                 List.copyOf(tokenRoles),
                                 "principalId",
                                 subject,
+                                "issuer",
+                                issuer,
                                 "credentialId",
                                 validResult.identity().tokenId().orElse(null),
                                 "expiresAt",
