@@ -1,9 +1,10 @@
 # CI gates
 
 Every pull request runs the Java, CLI, and demo checks in `.github/workflows/ci.yml`.
-Tests that require Redis provision it through Testcontainers and do not depend on
-developer-local ports. The packaged-artifact E2E job runs on pushes to `main`
-because it builds and starts multiple containers.
+The Java job provisions pinned Redis and Cassandra service containers, so tests
+that discover those providers never depend on developer-local ports. The packaged-
+artifact E2E job runs on pushes to `main` because it builds and starts multiple
+containers.
 
 The order is intentional: formatting and tests pass before any image is built.
 The JVM Dockerfile uses `spotlessCheck`, never rewrites source files, and its

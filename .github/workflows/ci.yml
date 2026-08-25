@@ -15,6 +15,33 @@ concurrency:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    env:
+      CASSANDRA_CONTACT_POINTS: localhost:9042
+    services:
+      cassandra:
+        image: cassandra:4.1.4
+        env:
+          CASSANDRA_CLUSTER_NAME: aussie-ci
+          CASSANDRA_DC: datacenter1
+          HEAP_NEWSIZE: 128M
+          MAX_HEAP_SIZE: 512M
+        ports:
+          - 9042:9042
+        options: >-
+          --health-cmd "cqlsh -e 'describe keyspaces'"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 20
+          --health-start-period 60s
+      redis:
+        image: redis:7.2.5-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
