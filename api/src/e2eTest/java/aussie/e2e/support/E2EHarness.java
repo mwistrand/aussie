@@ -62,6 +62,8 @@ public final class E2EHarness {
     private final GenericContainer<?> redis;
     private final GenericContainer<?> demo;
     private final GenericContainer<?> api;
+    private final GenericContainer<?> replica;
+    private String replicaLogs = "";
 
     private E2EHarness() {
         Path apiProjectDir = resolveApiProjectDir();
@@ -125,9 +127,15 @@ public final class E2EHarness {
                 .withFileFromPath("build/quarkus-app", apiProjectDir.resolve("build/quarkus-app"))
                 .withFileFromPath("Dockerfile", apiProjectDir.resolve("src/main/docker/Dockerfile.e2e"));
 
-        this.api = new GenericContainer<>(apiImage)
+        this.api = apiContainer(apiImage, translationConfig, "api", "e2e.api");
+        this.replica = apiContainer(apiImage, translationConfig, "api-replica", "e2e.api.replica");
+    }
+
+    private GenericContainer<?> apiContainer(
+            ImageFromDockerfile apiImage, Path translationConfig, String networkAlias, String logName) {
+        return new GenericContainer<>(apiImage)
                 .withNetwork(network)
-                .withNetworkAliases("api")
+                .withNetworkAliases(networkAlias)
                 .withExposedPorts(8080)
                 .withCopyFileToContainer(
                         MountableFile.forHostPath(translationConfig), "/etc/aussie/translation-config.json")
@@ -152,7 +160,7 @@ public final class E2EHarness {
                 .withEnv("CASSANDRA_RUN_MIGRATIONS", "true")
                 .waitingFor(
                         Wait.forHttp("/q/health/ready").forStatusCode(200).withStartupTimeout(Duration.ofMinutes(2)))
-                .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("e2e.api")));
+                .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger(logName)));
     }
 
     public static synchronized E2EHarness start() {
@@ -196,7 +204,8 @@ public final class E2EHarness {
             }
         }
         List<Throwable> failures = new ArrayList<>();
-        // Reverse start order: api -> demo -> redis -> cassandra -> network.
+        // Reverse start order: API replicas -> demo -> redis -> cassandra -> network.
+        runQuietly(failures, "api-replica", h.replica::stop);
         runQuietly(failures, "api", h.api::stop);
         runQuietly(failures, "demo", h.demo::stop);
         runQuietly(failures, "redis", h.redis::stop);
@@ -236,6 +245,37 @@ public final class E2EHarness {
         return URI.create("http://" + demo.getHost() + ":" + demo.getMappedPort(3000));
     }
 
+    public synchronized void startReplica() {
+        if (!replica.isRunning()) {
+            replica.start();
+        }
+    }
+
+    public URI replicaBaseUri() {
+        return URI.create("http://" + replica.getHost() + ":" + replica.getMappedPort(8080));
+    }
+
+    public synchronized void stopPrimary() {
+        api.stop();
+    }
+
+    public synchronized void restartPrimary() {
+        api.stop();
+        api.start();
+        SuiteContext.updateGatewayBaseUri(gatewayBaseUri());
+    }
+
+    public synchronized void stopReplica() {
+        try {
+            if (replica.isRunning()) {
+                replicaLogs = replica.getLogs();
+            }
+        } catch (RuntimeException e) {
+            LOG.warn("Failed to retain replica logs", e);
+        }
+        replica.stop();
+    }
+
     /** Restart the packaged gateway while keeping its dependencies and network alive. */
     public synchronized void restartApi() {
         api.stop();
@@ -257,6 +297,7 @@ public final class E2EHarness {
         Path outDir = apiProjectDir.resolve("build/e2e-logs/" + stamp);
         Files.createDirectories(outDir);
         Files.writeString(outDir.resolve("api.log"), api.getLogs());
+        Files.writeString(outDir.resolve("api-replica.log"), replica.isRunning() ? replica.getLogs() : replicaLogs);
         Files.writeString(outDir.resolve("demo.log"), demo.getLogs());
         Files.writeString(outDir.resolve("redis.log"), redis.getLogs());
         Files.writeString(outDir.resolve("cassandra.log"), cassandra.getLogs());

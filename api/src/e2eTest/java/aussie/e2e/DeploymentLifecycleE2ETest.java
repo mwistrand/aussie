@@ -3,6 +3,7 @@ package aussie.e2e;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.equalTo;
 
+import java.net.URI;
 import java.time.Duration;
 
 import org.awaitility.Awaitility;
@@ -43,5 +44,54 @@ final class DeploymentLifecycleE2ETest {
                         .body("service", equalTo("demo-service"));
             }
         }
+    }
+
+    @Test
+    @DisplayName("a second instance serves traffic during a rolling restart")
+    void rollingRestartKeepsReplicaServingTraffic() {
+        final var harness = E2EHarness.start();
+        final var context = SuiteContext.get();
+        var primaryStopAttempted = false;
+
+        try {
+            harness.startReplica();
+            awaitReady(harness.replicaBaseUri());
+            assertRouted(harness.replicaBaseUri(), context);
+
+            primaryStopAttempted = true;
+            harness.stopPrimary();
+            for (var request = 0; request < 25; request++) {
+                assertRouted(harness.replicaBaseUri(), context);
+            }
+        } finally {
+            try {
+                if (primaryStopAttempted) {
+                    harness.restartPrimary();
+                }
+            } finally {
+                harness.stopReplica();
+            }
+        }
+    }
+
+    private static void awaitReady(URI baseUri) {
+        Awaitility.await("gateway readiness")
+                .atMost(Duration.ofMinutes(2))
+                .pollInterval(Duration.ofSeconds(1))
+                .ignoreExceptions()
+                .untilAsserted(() -> given().baseUri(baseUri.toString())
+                        .get("/q/health/ready")
+                        .then()
+                        .statusCode(200));
+    }
+
+    private static void assertRouted(URI baseUri, SuiteContext context) {
+        given().baseUri(baseUri.toString())
+                .when()
+                .get("/{serviceId}/api/health", context.demoServiceId())
+                .then()
+                .statusCode(200)
+                .body("status", equalTo("healthy"))
+                .body("service", equalTo("demo-service"));
     }
 }

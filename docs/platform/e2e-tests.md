@@ -55,6 +55,11 @@ the shared Cassandra/Redis dependencies. After each restart it waits for
 readiness and sends repeated routed health requests, catching lost route state
 and restart/readiness regressions without relying on developer-local services.
 
+It also starts a second packaged gateway against the same Cassandra/Redis
+network, verifies that it loads the existing route snapshot, stops the first
+instance, and continues routed requests through the replica before restoring
+the suite's original instance.
+
 ## Demo test API
 
 When the demo runs under the e2e harness, it exposes a small state-mutation
