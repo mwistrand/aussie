@@ -233,7 +233,7 @@ function extractClaims(req) {
  * Handle /ws/echo - Public echo endpoint.
  * Echoes any message back to the sender with a timestamp.
  */
-function handleEchoConnection(ws, req) {
+function handleEchoConnection(ws) {
   console.log("[Echo] Client connected");
 
   ws.on("message", (data) => {
@@ -418,7 +418,7 @@ app.prepare().then(() => {
 
     if (pathname === "/ws/echo") {
       wss.handleUpgrade(req, socket, head, (ws) => {
-        handleEchoConnection(ws, req);
+        handleEchoConnection(ws);
       });
     } else if (pathname === "/ws/chat") {
       wss.handleUpgrade(req, socket, head, (ws) => {

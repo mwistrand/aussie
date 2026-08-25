@@ -2,7 +2,7 @@
 ####
 # Multi-stage Dockerfile for building and running the Quarkus application in JVM mode.
 #
-# This Dockerfile performs the Gradle build (including `spotlessApply`) in a builder
+# This Dockerfile performs the Gradle build in a builder
 # stage and copies the assembled `build/quarkus-app` into a minimal runtime image.
 #
 # Build with (from repository root):
@@ -13,8 +13,7 @@
 # Notes:
 # - The builder stage uses the Gradle image and leverages a build cache mount for
 #   `/home/gradle/.gradle` to speed up dependency downloads when using BuildKit.
-# - Tests are skipped by default in the image build to keep build times reasonable.
-#   Remove `-x test` if you want tests to run during the image build.
+# - Tests are a separate gate because the image build has no live service dependencies.
 ###
 
 # ---- Builder stage ----
@@ -32,10 +31,9 @@ RUN chmod +x gradlew
 # Copy the rest of the project (context for this Dockerfile is the `api` directory)
 COPY . .
 
-# Run formatting and build. Uses BuildKit cache for Gradle dependencies when available.
-# Skip tests by default (-x test). Remove that flag if you want tests.
+# Verify formatting and build without coupling the builder to live services.
 RUN --mount=type=cache,target=/home/gradle/.gradle \
-    ./gradlew clean spotlessApply build -x test
+    ./gradlew clean spotlessCheck build -x test
 
 # ---- Runtime stage ----
 FROM registry.access.redhat.com/ubi9/openjdk-21:1.23

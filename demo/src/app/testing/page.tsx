@@ -33,11 +33,6 @@ interface WebSocketMessage {
   timestamp: Date;
 }
 
-// Utility functions
-function formatTimestamp(): string {
-  return new Date().toLocaleTimeString();
-}
-
 function parseJwt(token: string): Record<string, unknown> | null {
   try {
     const base64Url = token.split(".")[1];
