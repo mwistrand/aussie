@@ -1,6 +1,5 @@
 package aussie.core.service.gateway;
 
-import java.util.List;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -11,6 +10,7 @@ import org.jboss.logging.Logger;
 
 import aussie.core.config.SessionConfig;
 import aussie.core.model.auth.AussieToken;
+import aussie.core.model.auth.InboundCredentials;
 import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.RouteAuthResult;
@@ -33,8 +33,6 @@ import aussie.core.service.session.SessionTokenService;
 public class RouteAuthenticationService {
 
     private static final Logger LOG = Logger.getLogger(RouteAuthenticationService.class);
-    private static final String BEARER_PREFIX = "Bearer ";
-
     private final TokenValidationService validationService;
     private final TokenIssuanceService issuanceService;
     private final SessionManagement sessionManagement;
@@ -76,14 +74,17 @@ public class RouteAuthenticationService {
             return Uni.createFrom().item(new RouteAuthResult.NotRequired());
         }
 
-        // Extract both auth methods
-        String bearerToken = extractBearerToken(request);
-        Optional<String> sessionId = extractSessionCookie(request);
+        final var credentials = InboundCredentials.from(
+                request.headers(),
+                sessionConfig.enabled() ? sessionConfig.cookie().name() : null);
+        final var bearerToken = credentials.bearerToken();
+        final Optional<String> sessionId = credentials.sessionId();
         LOG.debugv(
-                "Bearer token present: {0}, Session cookie present: {1}", bearerToken != null, sessionId.isPresent());
+                "Bearer token present: {0}, Session cookie present: {1}",
+                bearerToken.isPresent(), sessionId.isPresent());
 
         // Check if both auth methods are present - this is not allowed
-        if (bearerToken != null && sessionId.isPresent()) {
+        if (credentials.hasConflictingCredentials()) {
             LOG.warnf(
                     "Both bearer token and session cookie provided for route %s",
                     route.endpointConfig().path());
@@ -99,7 +100,7 @@ public class RouteAuthenticationService {
         }
 
         // Fall back to bearer token authentication
-        if (bearerToken == null) {
+        if (bearerToken.isEmpty()) {
             LOG.debugv(
                     "No authentication provided for protected route {0}",
                     route.endpointConfig().path());
@@ -107,7 +108,7 @@ public class RouteAuthenticationService {
         }
 
         return validationService
-                .validate(bearerToken)
+                .validate(bearerToken.get())
                 .flatMap(validationResult -> handleValidationResult(validationResult, route));
     }
 
@@ -187,53 +188,5 @@ public class RouteAuthenticationService {
                 yield Uni.createFrom().item(new RouteAuthResult.Unauthorized("Authentication required"));
             }
         };
-    }
-
-    private String extractBearerToken(GatewayRequest request) {
-        var authHeaders = request.headers().get("Authorization");
-        if (authHeaders == null || authHeaders.isEmpty()) {
-            authHeaders = request.headers().get("authorization");
-        }
-        if (authHeaders == null || authHeaders.isEmpty()) {
-            return null;
-        }
-
-        String authHeader = authHeaders.get(0);
-        if (authHeader != null && authHeader.startsWith(BEARER_PREFIX)) {
-            return authHeader.substring(BEARER_PREFIX.length()).trim();
-        }
-        return null;
-    }
-
-    private Optional<String> extractSessionCookie(GatewayRequest request) {
-        if (!sessionConfig.enabled()) {
-            return Optional.empty();
-        }
-
-        List<String> cookieHeaders = request.headers().get("Cookie");
-        if (cookieHeaders == null || cookieHeaders.isEmpty()) {
-            cookieHeaders = request.headers().get("cookie");
-        }
-        if (cookieHeaders == null || cookieHeaders.isEmpty()) {
-            return Optional.empty();
-        }
-
-        String cookieName = sessionConfig.cookie().name();
-
-        // Parse cookies from all Cookie headers
-        for (String cookieHeader : cookieHeaders) {
-            String[] cookies = cookieHeader.split(";");
-            for (String cookie : cookies) {
-                String trimmed = cookie.trim();
-                if (trimmed.startsWith(cookieName + "=")) {
-                    String value = trimmed.substring(cookieName.length() + 1);
-                    if (!value.isBlank()) {
-                        return Optional.of(value);
-                    }
-                }
-            }
-        }
-
-        return Optional.empty();
     }
 }

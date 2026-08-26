@@ -1,6 +1,7 @@
 package aussie.adapter.in.auth;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -26,6 +27,7 @@ import aussie.adapter.out.telemetry.SecurityMonitor;
 import aussie.common.context.RouteContextAttributes;
 import aussie.core.config.ApiKeyConfig;
 import aussie.core.config.SessionConfig;
+import aussie.core.model.auth.InboundCredentials;
 import aussie.core.model.auth.Permission;
 import aussie.core.model.session.Session;
 import aussie.core.port.in.SessionManagement;
@@ -40,7 +42,6 @@ public class CredentialAuthenticationMechanism implements HttpAuthenticationMech
 
     private static final Logger LOG = Logger.getLogger(CredentialAuthenticationMechanism.class);
     private static final String AUTHORIZATION = "Authorization";
-    private static final String BEARER = "Bearer ";
 
     private final TokenValidationService tokenValidationService;
     private final SessionConfig sessionConfig;
@@ -85,14 +86,18 @@ public class CredentialAuthenticationMechanism implements HttpAuthenticationMech
         final var request = context.request();
         final var authorizationHeaders = request.headers().getAll(AUTHORIZATION);
         final var hasSessionCookie = sessionConfig.enabled() && cookieManager.hasSessionCookie(request);
+        final var credentials = new InboundCredentials(authorizationHeaders, Optional.empty());
 
         final Uni<SecurityIdentity> result;
-        if (authorizationHeaders.size() > 1 || (!authorizationHeaders.isEmpty() && hasSessionCookie)) {
+        if (credentials.hasConflictingCredentials() || (!authorizationHeaders.isEmpty() && hasSessionCookie)) {
             result = reject(context, "conflicting_authentication", "multiple");
         } else if (!authorizationHeaders.isEmpty()) {
-            result = authenticateAuthorization(context, authorizationHeaders.getFirst(), identityProviderManager);
+            result = authenticateCredential(context, credentials.bearerToken().orElse(null), identityProviderManager);
         } else if (hasSessionCookie) {
-            result = authenticateSession(context);
+            final var sessionId = cookieManager.extractSessionId(request);
+            result = sessionId.isPresent()
+                    ? authenticateSession(context, sessionId.get())
+                    : reject(context, "invalid_session", "session");
         } else {
             result = Uni.createFrom().nullItem();
         }
@@ -109,15 +114,11 @@ public class CredentialAuthenticationMechanism implements HttpAuthenticationMech
         }
     }
 
-    private Uni<SecurityIdentity> authenticateAuthorization(
-            RoutingContext context, String authorization, IdentityProviderManager identityProviderManager) {
-        if (authorization == null
-                || authorization.length() <= BEARER.length()
-                || !authorization.regionMatches(true, 0, BEARER, 0, BEARER.length())) {
+    private Uni<SecurityIdentity> authenticateCredential(
+            RoutingContext context, String credential, IdentityProviderManager identityProviderManager) {
+        if (credential == null) {
             return reject(context, "invalid_authorization", "authorization");
         }
-
-        final var credential = authorization.substring(BEARER.length()).trim();
         if (credential.isEmpty() || credential.indexOf(' ') >= 0) {
             return reject(context, "invalid_authorization", "bearer");
         }
@@ -142,21 +143,17 @@ public class CredentialAuthenticationMechanism implements HttpAuthenticationMech
         return reject(context, "ambiguous_credential", "bearer");
     }
 
-    private Uni<SecurityIdentity> authenticateSession(RoutingContext context) {
-        final var sessionId = cookieManager.extractSessionId(context.request());
-        if (sessionId.isEmpty()) {
-            return reject(context, "invalid_session", "session");
-        }
+    private Uni<SecurityIdentity> authenticateSession(RoutingContext context, String sessionId) {
         if (LOG.isDebugEnabled()) {
-            LOG.debugf("session_present hash=%s", SecureHash.truncatedSha256(sessionId.get(), 8));
+            LOG.debugf("session_present hash=%s", SecureHash.truncatedSha256(sessionId, 8));
         }
 
-        return sessionManagement.getSession(sessionId.get()).flatMap(session -> {
+        return sessionManagement.getSession(sessionId).flatMap(session -> {
             if (session.isEmpty()) {
                 return reject(context, "invalid_session", "session");
             }
             if (sessionConfig.slidingExpiration()) {
-                refreshSession(sessionId.get());
+                refreshSession(sessionId);
             }
             return Uni.createFrom().item(createSessionIdentity(session.get()));
         });
