@@ -1,4 +1,4 @@
-package aussie.core.service.routing;
+package aussie.adapter.out.http;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -16,7 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.service.routing.UpstreamAddressResolver.EgressPolicyException;
+import aussie.adapter.out.http.UpstreamAddressResolver.EgressPolicyException;
 
 @DisplayName("UpstreamAddressResolver")
 class UpstreamAddressResolverTest {

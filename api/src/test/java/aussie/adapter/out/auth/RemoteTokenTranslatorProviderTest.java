@@ -34,11 +34,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.out.http.UpstreamAddressResolver;
 import aussie.adapter.out.telemetry.TokenTranslationMetrics;
 import aussie.core.config.TokenTranslationConfig;
 import aussie.core.config.TokenTranslationConfig.Remote.FailMode;
 import aussie.core.port.out.OutboundHttpClients;
-import aussie.core.service.routing.UpstreamAddressResolver;
 
 /**
  * Unit tests for RemoteTokenTranslatorProvider.

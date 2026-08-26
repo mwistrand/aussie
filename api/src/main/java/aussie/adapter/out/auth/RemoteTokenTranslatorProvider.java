@@ -18,12 +18,12 @@ import io.vertx.mutiny.ext.web.client.WebClient;
 import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.out.http.UpstreamAddressResolver;
 import aussie.adapter.out.telemetry.TokenTranslationMetrics;
 import aussie.core.config.TokenTranslationConfig;
 import aussie.core.config.TokenTranslationConfig.Remote.FailMode;
 import aussie.core.model.auth.TranslatedClaims;
 import aussie.core.port.out.OutboundHttpClients;
-import aussie.core.service.routing.UpstreamAddressResolver;
 import aussie.spi.TokenTranslatorProvider;
 
 /**

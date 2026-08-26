@@ -32,12 +32,12 @@ import org.jose4j.jwk.JsonWebKey;
 import org.jose4j.jwk.JsonWebKeySet;
 import org.jose4j.lang.JoseException;
 
+import aussie.adapter.out.http.UpstreamAddressResolver;
 import aussie.core.config.ResiliencyConfig;
 import aussie.core.port.out.JwksCache;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.service.auth.JwksFetchException;
-import aussie.core.service.routing.UpstreamAddressResolver;
 
 /**
  * Service for caching and retrieving JSON Web Key Sets (JWKS).

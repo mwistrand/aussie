@@ -39,6 +39,7 @@ import aussie.adapter.in.http.GatewayCorsConfig;
 import aussie.adapter.in.problem.ProblemDetail;
 import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
+import aussie.adapter.out.http.UpstreamAddressResolver;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.core.config.WebSocketConfig;
 import aussie.core.model.auth.AussieToken;
@@ -52,7 +53,6 @@ import aussie.core.port.out.RevocationEventPublisher;
 import aussie.core.service.auth.JwksFetchException;
 import aussie.core.service.ratelimit.MessageRateLimitHandler;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
-import aussie.core.service.routing.UpstreamAddressResolver;
 import aussie.core.util.SecureHash;
 
 /**

@@ -21,12 +21,12 @@ import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.jboss.logging.Logger;
 
 import aussie.adapter.in.problem.GatewayProblem;
+import aussie.adapter.out.http.UpstreamAddressResolver;
 import aussie.core.config.OidcConfig;
 import aussie.core.model.auth.OidcTokenExchangeRequest;
 import aussie.core.model.auth.OidcTokenExchangeRequest.ClientAuthMethod;
 import aussie.core.model.auth.OidcTokenExchangeResponse;
 import aussie.core.port.out.OutboundHttpClients;
-import aussie.core.service.routing.UpstreamAddressResolver;
 import aussie.spi.OidcTokenExchangeProvider;
 
 /**

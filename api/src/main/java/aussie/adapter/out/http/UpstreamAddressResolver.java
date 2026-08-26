@@ -1,4 +1,4 @@
-package aussie.core.service.routing;
+package aussie.adapter.out.http;
 
 import java.net.InetAddress;
 import java.net.URI;
@@ -16,6 +16,7 @@ import io.vertx.core.net.SocketAddress;
 import io.vertx.mutiny.core.Vertx;
 
 import aussie.core.model.auth.GatewaySecurityConfig;
+import aussie.core.service.routing.UpstreamAddressPolicy;
 
 /** Resolves, authorizes, and pins the address used for an outbound connection. */
 @ApplicationScoped

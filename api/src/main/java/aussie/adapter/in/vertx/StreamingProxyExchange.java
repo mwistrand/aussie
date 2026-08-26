@@ -36,6 +36,7 @@ import org.jboss.logging.Logger;
 import org.jboss.resteasy.reactive.RestMulti;
 
 import aussie.adapter.in.problem.GatewayProblem;
+import aussie.adapter.out.http.UpstreamAddressResolver;
 import aussie.adapter.out.telemetry.SpanAttributes;
 import aussie.adapter.out.telemetry.TelemetryHelper;
 import aussie.core.config.LimitsConfig;
@@ -48,7 +49,6 @@ import aussie.core.port.out.Metrics;
 import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.port.out.TrafficAttributing;
 import aussie.core.service.gateway.ProxyRequestPreparer;
-import aussie.core.service.routing.UpstreamAddressResolver;
 
 /** Streams one inbound HTTP exchange to its resolved upstream with demand-based flow control. */
 @ApplicationScoped

@@ -28,6 +28,7 @@ import io.vertx.mutiny.core.http.HttpClientResponse;
 import io.vertx.mutiny.core.http.HttpServerRequest;
 import org.junit.jupiter.api.Test;
 
+import aussie.adapter.out.http.UpstreamAddressResolver;
 import aussie.adapter.out.telemetry.TelemetryHelper;
 import aussie.core.config.LimitsConfig;
 import aussie.core.config.ResiliencyConfig;
@@ -41,7 +42,6 @@ import aussie.core.port.out.Metrics;
 import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.port.out.TrafficAttributing;
 import aussie.core.service.gateway.ProxyRequestPreparer;
-import aussie.core.service.routing.UpstreamAddressResolver;
 
 class StreamingProxyExchangeTest {
 

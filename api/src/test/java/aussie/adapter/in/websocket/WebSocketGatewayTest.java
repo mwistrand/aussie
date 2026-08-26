@@ -35,6 +35,7 @@ import aussie.adapter.in.http.GatewayCorsConfig;
 import aussie.adapter.in.problem.ProblemDetail;
 import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
+import aussie.adapter.out.http.UpstreamAddressResolver;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.common.context.ClientContext;
 import aussie.core.config.WebSocketConfig;
@@ -47,7 +48,6 @@ import aussie.core.port.in.WebSocketGatewayUseCase;
 import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.service.auth.JwksFetchException;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
-import aussie.core.service.routing.UpstreamAddressResolver;
 
 @DisplayName("WebSocketGateway")
 @ExtendWith(MockitoExtension.class)

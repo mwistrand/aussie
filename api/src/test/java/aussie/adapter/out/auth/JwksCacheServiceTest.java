@@ -40,11 +40,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.out.http.UpstreamAddressResolver;
 import aussie.core.config.ResiliencyConfig;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.service.auth.JwksFetchException;
-import aussie.core.service.routing.UpstreamAddressResolver;
 
 @DisplayName("JwksCacheService")
 @ExtendWith(MockitoExtension.class)

@@ -36,11 +36,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.out.http.UpstreamAddressResolver;
 import aussie.core.config.OidcConfig;
 import aussie.core.model.auth.OidcTokenExchangeRequest;
 import aussie.core.model.auth.OidcTokenExchangeRequest.ClientAuthMethod;
 import aussie.core.port.out.OutboundHttpClients;
-import aussie.core.service.routing.UpstreamAddressResolver;
 
 @DisplayName("DefaultOidcTokenExchangeProvider")
 @ExtendWith(MockitoExtension.class)

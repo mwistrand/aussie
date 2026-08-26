@@ -12,8 +12,8 @@ import io.smallrye.mutiny.Uni;
 import io.vertx.core.net.SocketAddress;
 import io.vertx.mutiny.core.Vertx;
 
+import aussie.adapter.out.http.UpstreamAddressResolver;
 import aussie.core.model.auth.GatewaySecurityConfig;
-import aussie.core.service.routing.UpstreamAddressResolver;
 
 /** Allows only loopback egress used by Quarkus integration-test backend listeners. */
 @Mock

@@ -123,6 +123,20 @@ class HexagonalArchitectureTest {
 
             rule.check(importedClasses);
         }
+
+        @Test
+        @DisplayName("Routing services should not own Vert.x egress implementations")
+        void routingServicesShouldNotOwnVertxEgressImplementations() {
+            ArchRule rule = noClasses()
+                    .that()
+                    .resideInAPackage("aussie.core.service.routing..")
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAnyPackage("io.vertx..")
+                    .because("outbound DNS and socket implementations belong at the adapter boundary");
+
+            rule.check(importedClasses);
+        }
     }
 
     @Nested
