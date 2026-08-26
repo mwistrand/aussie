@@ -17,7 +17,7 @@ interface LoginFormProps {
   errorMessage?: string;
   callbackUrl?: string;
   flow?: string;
-  deviceCode?: string;
+  userCode?: string;
   oidcParams?: OidcParams;
 }
 
@@ -43,12 +43,13 @@ export default function LoginForm({
   errorMessage,
   callbackUrl,
   flow,
-  deviceCode,
+  userCode,
   oidcParams,
 }: LoginFormProps) {
   const [selectedGroup, setSelectedGroup] = useState('demo-service.dev');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(errorMessage || '');
+  const [enteredUserCode, setEnteredUserCode] = useState(userCode || '');
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -60,14 +61,14 @@ export default function LoginForm({
       const username = getUsernameFromRole(selectedGroup);
 
       // Device code flow: authorize the pending device code
-      if (flow === 'device' && deviceCode) {
+      if (flow === 'device') {
         const response = await fetch('/api/auth/device', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            device_code: deviceCode,
+            user_code: enteredUserCode,
             username,
             group: selectedGroup,
           }),
@@ -191,6 +192,23 @@ export default function LoginForm({
         </div>
       )
 }
+
+{flow === 'device' && (
+  <div>
+    <label htmlFor="user-code" className="block text-sm font-medium text-gray-700 mb-2">
+      Device code
+    </label>
+    <input
+      id="user-code"
+      type="text"
+      value={enteredUserCode}
+      onChange={(event) => setEnteredUserCode(event.target.value)}
+      autoComplete="one-time-code"
+      required
+      className="block w-full rounded-md border border-gray-300 px-3 py-2 uppercase text-gray-900"
+    />
+  </div>
+)}
 
 < div >
       <label className="block text-sm font-medium text-gray-700 mb-2" >

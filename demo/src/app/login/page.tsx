@@ -25,7 +25,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
   const errorMessage = params.error;
   const callbackUrl = params.callback;
   const flow = params.flow;
-  const deviceCode = params.code;
+  const userCode = params.code;
 
   // OIDC PKCE parameters
   const oidcParams =
@@ -60,7 +60,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
               errorMessage={errorMessage}
               callbackUrl={callbackUrl}
               flow={flow}
-              deviceCode={deviceCode}
+              userCode={userCode}
               oidcParams={oidcParams}
             />
           </Suspense>

@@ -291,8 +291,9 @@ Your translation layer must return a JWT with this structure:
 1. CLI POSTs to `login_url?flow=device_code`
 2. Translation layer returns device code and verification URL
 3. User opens verification URL, enters code, authenticates
-4. CLI polls for token
-5. Translation layer returns Aussie JWT when auth completes
+4. CLI POSTs `grant_type=urn:ietf:params:oauth:grant-type:device_code`, the device code, and client ID to `token_url` (or `login_url` when omitted)
+5. The token endpoint returns `authorization_pending` or `slow_down` as typed OAuth errors until authorization completes
+6. Translation layer returns an `access_token` (the CLI also accepts the legacy `token` response field)
 
 ### Group Mapping Example
 

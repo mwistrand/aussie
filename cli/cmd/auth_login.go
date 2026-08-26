@@ -23,6 +23,38 @@ import (
 	"github.com/aussie/cli/internal/config"
 )
 
+const (
+	deviceClientID        = "aussie-cli"
+	deviceGrantType       = "urn:ietf:params:oauth:grant-type:device_code"
+	devicePendingError    = "authorization_pending"
+	defaultPollInterval   = 5 * time.Second
+	maxPollInterval       = 5 * time.Minute
+	slowDownIncrement     = 5 * time.Second
+	maxDeviceCodeLifetime = 24 * time.Hour
+)
+
+type deviceGrantError struct {
+	code string
+}
+
+func (e *deviceGrantError) Error() string { return e.code }
+
+type deviceCodeResponse struct {
+	DeviceCode              string `json:"device_code"`
+	UserCode                string `json:"user_code"`
+	VerificationURI         string `json:"verification_uri"`
+	VerificationURL         string `json:"verification_url"`
+	VerificationURIComplete string `json:"verification_uri_complete"`
+	ExpiresIn               int    `json:"expires_in"`
+	Interval                int    `json:"interval"`
+}
+
+type deviceTokenResponse struct {
+	Token       string `json:"token"`
+	AccessToken string `json:"access_token"`
+	Error       string `json:"error"`
+}
+
 var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Authenticate with your organization's identity provider",
@@ -102,56 +134,94 @@ func browserLogin(cfg *config.Config) error {
 
 // deviceCodeLogin uses device code flow for headless environments.
 func deviceCodeLogin(cfg *config.Config) error {
-	// Request device code from translation layer
 	deviceURL, err := url.Parse(cfg.Auth.LoginURL)
 	if err != nil {
 		return fmt.Errorf("invalid login URL: %w", err)
+	}
+	if err := validateOAuthURL(deviceURL); err != nil {
+		return err
 	}
 	q := deviceURL.Query()
 	q.Set("flow", "device_code")
 	deviceURL.RawQuery = q.Encode()
 
-	resp, err := http.Post(deviceURL.String(), "application/json", nil)
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	request, err := http.NewRequest(http.MethodPost, deviceURL.String(), strings.NewReader(url.Values{
+		"client_id": {deviceClientID},
+	}.Encode()))
+	if err != nil {
+		return fmt.Errorf("failed to create device code request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := client.Do(request)
 	if err != nil {
 		return fmt.Errorf("failed to initiate device code flow: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("device code request failed with status %d", resp.StatusCode)
+		return oauthDeviceError(resp, "device code request failed")
 	}
 
-	var deviceResp struct {
-		DeviceCode      string `json:"device_code"`
-		UserCode        string `json:"user_code"`
-		VerificationURL string `json:"verification_url"`
-		ExpiresIn       int    `json:"expires_in"`
-		Interval        int    `json:"interval"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&deviceResp); err != nil {
+	var deviceResp deviceCodeResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&deviceResp); err != nil {
 		return fmt.Errorf("failed to parse device code response: %w", err)
 	}
+	_ = resp.Body.Close()
+	if deviceResp.DeviceCode == "" || deviceResp.UserCode == "" || deviceResp.ExpiresIn <= 0 {
+		return errors.New("device code response was incomplete")
+	}
+	if deviceResp.ExpiresIn > int(maxDeviceCodeLifetime/time.Second) {
+		return errors.New("device code lifetime is too long")
+	}
+	verificationURI := deviceResp.VerificationURI
+	if verificationURI == "" {
+		verificationURI = deviceResp.VerificationURL
+	}
+	if verificationURI == "" {
+		return errors.New("device code response did not contain a verification URI")
+	}
 
-	fmt.Printf("\nTo authenticate, visit:\n  %s\n\n", deviceResp.VerificationURL)
+	fmt.Printf("\nTo authenticate, visit:\n  %s\n\n", verificationURI)
+	if deviceResp.VerificationURIComplete != "" {
+		fmt.Printf("Or visit:\n  %s\n\n", deviceResp.VerificationURIComplete)
+	}
 	fmt.Printf("And enter code: %s\n\n", deviceResp.UserCode)
 	fmt.Printf("Waiting for authentication...\n")
 
-	// Poll for token
-	interval := time.Duration(deviceResp.Interval) * time.Second
-	if interval < time.Second {
-		interval = 5 * time.Second
+	interval := defaultPollInterval
+	if deviceResp.Interval > 0 {
+		if deviceResp.Interval > int(maxPollInterval/time.Second) {
+			return errors.New("device poll interval is too long")
+		}
+		interval = time.Duration(deviceResp.Interval) * time.Second
 	}
 
 	deadline := time.Now().Add(time.Duration(deviceResp.ExpiresIn) * time.Second)
+	pollURL := cfg.Auth.TokenURL
+	if pollURL == "" {
+		pollURL = cfg.Auth.LoginURL
+	}
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
 
-	for time.Now().Before(deadline) {
-		time.Sleep(interval)
+	for {
+		if err := waitForDevicePoll(ctx, interval); err != nil {
+			return errors.New("device code expired")
+		}
 
-		token, err := pollForToken(cfg.Auth.LoginURL, deviceResp.DeviceCode)
+		token, err := pollForTokenContext(ctx, client, pollURL, deviceResp.DeviceCode)
 		if err != nil {
-			// Check if it's a "pending" error (user hasn't authenticated yet)
-			if strings.Contains(err.Error(), "pending") || strings.Contains(err.Error(), "authorization_pending") {
+			if ctx.Err() != nil {
+				return errors.New("device code expired")
+			}
+			if nextInterval, retry := nextDevicePollInterval(interval, err); retry {
+				interval = nextInterval
 				continue
 			}
 			return err
@@ -159,8 +229,35 @@ func deviceCodeLogin(cfg *config.Config) error {
 
 		return storeAndPrintCredentials(token, cfg.Host)
 	}
+}
 
-	return fmt.Errorf("device code expired")
+func nextDevicePollInterval(interval time.Duration, err error) (time.Duration, bool) {
+	var grantErr *deviceGrantError
+	if errors.As(err, &grantErr) {
+		switch grantErr.code {
+		case devicePendingError:
+			return interval, true
+		case "slow_down":
+			return min(interval+slowDownIncrement, maxPollInterval), true
+		}
+	}
+
+	var networkErr net.Error
+	if errors.As(err, &networkErr) && networkErr.Timeout() {
+		return min(interval*2, maxPollInterval), true
+	}
+	return interval, false
+}
+
+func waitForDevicePoll(ctx context.Context, interval time.Duration) error {
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // callbackLogin starts a local server and waits for callback (similar to browser but no browser open).
@@ -343,49 +440,65 @@ func exchangeOAuthCode(cfg *config.Config, code, verifier, state, redirectURI st
 	return "", errors.New("OAuth token response did not contain a token")
 }
 
-// pollForToken polls the translation layer for a token using the device code.
-func pollForToken(loginURL, deviceCode string) (string, error) {
-	pollURL, err := url.Parse(loginURL)
-	if err != nil {
-		return "", fmt.Errorf("invalid login URL: %w", err)
-	}
-	q := pollURL.Query()
-	q.Set("flow", "device_code")
-	q.Set("device_code", deviceCode)
-	pollURL.RawQuery = q.Encode()
+// pollForToken polls the token endpoint using the OAuth device authorization grant.
+func pollForToken(tokenURL, deviceCode string) (string, error) {
+	client := &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	return pollForTokenContext(context.Background(), client, tokenURL, deviceCode)
+}
 
-	resp, err := http.Get(pollURL.String())
+func pollForTokenContext(ctx context.Context, client *http.Client, tokenURL, deviceCode string) (string, error) {
+	pollURL, err := url.Parse(tokenURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid token URL: %w", err)
+	}
+	if err := validateOAuthURL(pollURL); err != nil {
+		return "", err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, pollURL.String(), strings.NewReader(url.Values{
+		"grant_type":  {deviceGrantType},
+		"device_code": {deviceCode},
+		"client_id":   {deviceClientID},
+	}.Encode()))
+	if err != nil {
+		return "", fmt.Errorf("failed to create poll request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := client.Do(request)
 	if err != nil {
 		return "", fmt.Errorf("poll request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusAccepted || resp.StatusCode == http.StatusTooEarly {
-		return "", fmt.Errorf("authorization_pending")
+	var tokenResp deviceTokenResponse
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&tokenResp); err != nil {
+		return "", fmt.Errorf("failed to parse poll response: %w", err)
 	}
-
+	if tokenResp.Error != "" {
+		return "", &deviceGrantError{code: tokenResp.Error}
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("poll failed with status %d", resp.StatusCode)
 	}
-
-	var tokenResp struct {
-		Token string `json:"token"`
-		Error string `json:"error,omitempty"`
+	token := tokenResp.AccessToken
+	if token == "" {
+		token = tokenResp.Token
 	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", fmt.Errorf("failed to parse poll response: %w", err)
+	if token == "" {
+		return "", errors.New("token response did not contain a token")
 	}
+	return token, nil
+}
 
-	if tokenResp.Error != "" {
-		return "", fmt.Errorf(tokenResp.Error)
+func oauthDeviceError(resp *http.Response, fallback string) error {
+	var body struct {
+		Error string `json:"error"`
 	}
-
-	if tokenResp.Token == "" {
-		return "", fmt.Errorf("authorization_pending")
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&body); err == nil && body.Error != "" {
+		return &deviceGrantError{code: body.Error}
 	}
-
-	return tokenResp.Token, nil
+	return fmt.Errorf("%s with status %d", fallback, resp.StatusCode)
 }
 
 // storeAndPrintCredentials parses the token, stores credentials, and prints status.

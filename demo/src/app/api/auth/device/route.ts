@@ -19,8 +19,8 @@ export interface DeviceAuthRequest {
  * This endpoint is called from the browser after the user has authenticated.
  * It authorizes the pending device code with the user's claims.
  *
- * The CLI will poll /api/auth/login?flow=device_code&device_code=xxx to get
- * the token once this endpoint has been called.
+ * The CLI polls the login endpoint with the OAuth device authorization grant
+ * once this endpoint has been called.
  */
 export async function POST(request: NextRequest) {
   try {

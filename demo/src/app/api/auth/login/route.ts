@@ -4,10 +4,21 @@ import {
   parseRedirectUrl,
   createDeviceCode,
   getDeviceCode,
+  consumeDeviceCode,
   createAuthorizationCode,
   exchangeAuthorizationCode,
   USER_GROUPS,
 } from '@/lib/auth';
+
+const DEVICE_CLIENT_ID = 'aussie-cli';
+const DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
+
+function oauthResponse(body: Record<string, unknown>, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: { 'Cache-Control': 'no-store', Pragma: 'no-cache' },
+  });
+}
 
 export interface LoginRequest {
   username: string;
@@ -22,7 +33,7 @@ export interface LoginRequest {
  *
  * 1. POST (browser flow): Form-based login that generates a token and callback URL
  * 2. POST with flow=device_code: Initiate device code flow for CLI
- * 3. GET with flow=device_code&device_code=xxx: Poll for device code authorization
+ * 3. POST with the device authorization grant: Poll for device code authorization
  *
  * The "isAdmin" flag adds admin groups to the token.
  * Users can also select specific groups to include.
@@ -42,35 +53,74 @@ export async function POST(request: NextRequest) {
       if (formData.get('grant_type') === 'authorization_code') {
         const result = exchangeAuthorizationCode(
           String(formData.get('code') || ''),
-          'aussie-cli',
+          DEVICE_CLIENT_ID,
           String(formData.get('redirect_uri') || ''),
           String(formData.get('code_verifier') || '')
         );
 
         if ('error' in result && result.error) {
-          return NextResponse.json({ error: result.error }, { status: 400 });
+          return oauthResponse({ error: result.error }, 400);
         }
         if (!result.claims) {
-          return NextResponse.json({ error: 'Invalid authorization code' }, { status: 400 });
+          return oauthResponse({ error: 'invalid_grant' }, 400);
         }
 
         const token = await generateToken(result.claims);
-        return NextResponse.json({
+        return oauthResponse({
           access_token: token,
           token_type: 'Bearer',
           expires_in: 3600,
         });
       }
+
+      if (formData.get('grant_type') === DEVICE_GRANT_TYPE) {
+        const deviceCode = String(formData.get('device_code') || '');
+        const clientId = String(formData.get('client_id') || '');
+        if (!deviceCode || !clientId) {
+          return oauthResponse({ error: 'invalid_request' }, 400);
+        }
+        const entry = getDeviceCode(deviceCode);
+        if (!entry) {
+          return oauthResponse({ error: 'expired_token' }, 400);
+        }
+        if (entry.clientId !== clientId || clientId !== DEVICE_CLIENT_ID) {
+          return oauthResponse({ error: 'invalid_grant' }, 400);
+        }
+        switch (entry.status) {
+          case 'pending':
+            return oauthResponse({ error: 'authorization_pending' }, 400);
+          case 'authorized': {
+            const token = consumeDeviceCode(deviceCode, clientId);
+            if (!token) {
+              return oauthResponse({ error: 'invalid_grant' }, 400);
+            }
+            return oauthResponse({
+              access_token: token,
+              token_type: 'Bearer',
+            });
+          }
+          case 'expired':
+            return oauthResponse({ error: 'expired_token' }, 400);
+          default:
+            return oauthResponse({ error: 'invalid_grant' }, 400);
+        }
+      }
     }
 
     // Device code flow initiation
     if (flow === 'device_code') {
-      const { deviceCode, userCode, expiresIn } = createDeviceCode();
-      const verificationUrl = `${request.nextUrl.origin}/login?flow=device&code=${deviceCode}`;
+      const clientId = String(formData?.get('client_id') || '');
+      if (clientId !== DEVICE_CLIENT_ID) {
+        return oauthResponse({ error: 'invalid_client' }, 400);
+      }
+      const { deviceCode, userCode, expiresIn } = createDeviceCode(clientId);
+      const verificationUrl = `${request.nextUrl.origin}/login?flow=device`;
 
-      return NextResponse.json({
+      return oauthResponse({
         device_code: deviceCode,
         user_code: userCode,
+        verification_uri: verificationUrl,
+        verification_uri_complete: `${verificationUrl}&code=${encodeURIComponent(userCode)}`,
         verification_url: verificationUrl,
         expires_in: expiresIn,
         interval: 5,
@@ -193,11 +243,9 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET: Device code polling or browser login redirect
+// GET: Browser login redirect. Device token polling uses the POST grant above.
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const flow = searchParams.get('flow');
-  const deviceCode = searchParams.get('device_code');
   const callback = searchParams.get('callback');
 
   // Browser login flow: redirect to login page with callback
@@ -221,38 +269,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(loginPageUrl.toString());
   }
 
-  if (flow !== 'device_code' || !deviceCode) {
-    return NextResponse.json(
-      { error: 'Invalid request. Use POST to initiate device code flow.' },
-      { status: 400 }
-    );
-  }
-
-  const entry = getDeviceCode(deviceCode);
-
-  if (!entry) {
-    return NextResponse.json({ error: 'expired_token' }, { status: 400 });
-  }
-
-  switch (entry.status) {
-    case 'pending':
-      // Return 202 Accepted to indicate authorization is still pending
-      return NextResponse.json(
-        { error: 'authorization_pending' },
-        { status: 202 }
-      );
-
-    case 'authorized':
-      // Return the token
-      return NextResponse.json({
-        token: entry.token,
-        token_type: 'Bearer',
-      });
-
-    case 'expired':
-      return NextResponse.json({ error: 'expired_token' }, { status: 400 });
-
-    default:
-      return NextResponse.json({ error: 'unknown_error' }, { status: 500 });
-  }
+  return NextResponse.json(
+    { error: 'Invalid request. Use POST with the device authorization grant.' },
+    { status: 400 }
+  );
 }

@@ -165,6 +165,7 @@ export function isBlacklisted(token: string): boolean {
 // Device code storage for device_code flow
 // Maps device_code -> { userCode, status, token, expiresAt }
 interface DeviceCodeEntry {
+  clientId: string;
   userCode: string;
   status: 'pending' | 'authorized' | 'expired';
   token?: string;
@@ -182,7 +183,7 @@ export function generateUserCode(): string {
   let code = '';
   for (let i = 0; i < 8; i++) {
     if (i === 4) code += '-';
-    code += chars[Math.floor(Math.random() * chars.length)];
+    code += chars[crypto.randomInt(chars.length)];
   }
   return code;
 }
@@ -192,16 +193,20 @@ export function generateUserCode(): string {
  *
  * @returns The device code and user code
  */
-export function createDeviceCode(): {
+export function createDeviceCode(clientId: string): {
   deviceCode: string;
   userCode: string;
   expiresIn: number;
 } {
   const deviceCode = crypto.randomUUID();
-  const userCode = generateUserCode();
+  let userCode = generateUserCode();
+  while (findDeviceCodeByUserCode(userCode)) {
+    userCode = generateUserCode();
+  }
   const expiresIn = 300; // 5 minutes
 
   deviceCodes.set(deviceCode, {
+    clientId,
     userCode,
     status: 'pending',
     expiresAt: Date.now() + expiresIn * 1000,
@@ -210,7 +215,7 @@ export function createDeviceCode(): {
   // Clean up after expiry
   setTimeout(() => {
     const entry = deviceCodes.get(deviceCode);
-    if (entry && entry.status === 'pending') {
+    if (entry) {
       entry.status = 'expired';
     }
     // Remove after additional grace period
@@ -224,7 +229,11 @@ export function createDeviceCode(): {
  * Get a device code entry.
  */
 export function getDeviceCode(deviceCode: string): DeviceCodeEntry | undefined {
-  return deviceCodes.get(deviceCode);
+  const entry = deviceCodes.get(deviceCode);
+  if (entry && entry.expiresAt <= Date.now()) {
+    entry.status = 'expired';
+  }
+  return entry;
 }
 
 /**
@@ -233,8 +242,9 @@ export function getDeviceCode(deviceCode: string): DeviceCodeEntry | undefined {
 export function findDeviceCodeByUserCode(
   userCode: string
 ): { deviceCode: string; entry: DeviceCodeEntry } | undefined {
+  const normalized = userCode.toUpperCase().replace(/-/g, '');
   for (const [deviceCode, entry] of deviceCodes.entries()) {
-    if (entry.userCode === userCode.toUpperCase().replace(/-/g, '')) {
+    if (entry.userCode.replace(/-/g, '') === normalized) {
       return { deviceCode, entry };
     }
   }
@@ -248,16 +258,34 @@ export async function authorizeDeviceCode(
   deviceCode: string,
   claims: TokenClaims
 ): Promise<boolean> {
-  const entry = deviceCodes.get(deviceCode);
+  const entry = getDeviceCode(deviceCode);
   if (!entry || entry.status !== 'pending') {
     return false;
   }
 
   const token = await generateToken(claims);
+  if (entry.status !== 'pending' || entry.expiresAt <= Date.now()) {
+    return false;
+  }
   entry.status = 'authorized';
   entry.token = token;
   entry.claims = claims;
   return true;
+}
+
+/**
+ * Consume an authorized device code exactly once.
+ */
+export function consumeDeviceCode(deviceCode: string, clientId: string): string | undefined {
+  const entry = getDeviceCode(deviceCode);
+  if (entry?.status !== 'authorized' || entry.clientId !== clientId || !entry.token) {
+    return undefined;
+  }
+
+  const token = entry.token;
+  entry.status = 'expired';
+  entry.token = undefined;
+  return token;
 }
 
 /**
