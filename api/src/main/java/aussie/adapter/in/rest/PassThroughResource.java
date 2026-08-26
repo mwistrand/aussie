@@ -15,12 +15,11 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.Context;
 
 import io.smallrye.mutiny.Multi;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.ext.web.RoutingContext;
-import io.vertx.mutiny.core.http.HttpServerRequest;
 
 import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.in.vertx.StreamingProxyExchange;
-import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.port.in.PassThroughUseCase;
 
 /**
@@ -38,9 +37,7 @@ import aussie.core.port.in.PassThroughUseCase;
 public class PassThroughResource {
 
     private final PassThroughUseCase passThroughUseCase;
-    private final RoutingContext routingContext;
-    private final ClientContextResolver clientContextResolver;
-    private final StreamingProxyExchange proxyExchange;
+    private final ProxyResourceSupport proxySupport;
 
     @Inject
     public PassThroughResource(
@@ -49,14 +46,12 @@ public class PassThroughResource {
             ClientContextResolver clientContextResolver,
             StreamingProxyExchange proxyExchange) {
         this.passThroughUseCase = passThroughUseCase;
-        this.routingContext = routingContext;
-        this.clientContextResolver = clientContextResolver;
-        this.proxyExchange = proxyExchange;
+        this.proxySupport = new ProxyResourceSupport(routingContext, clientContextResolver, proxyExchange);
     }
 
     @GET
     @Path("{path:.*}")
-    public Multi<io.vertx.core.buffer.Buffer> proxyGet(
+    public Multi<Buffer> proxyGet(
             @PathParam("serviceId") String serviceId,
             @PathParam("path") String path,
             @Context ContainerRequestContext requestContext) {
@@ -65,7 +60,7 @@ public class PassThroughResource {
 
     @POST
     @Path("{path:.*}")
-    public Multi<io.vertx.core.buffer.Buffer> proxyPost(
+    public Multi<Buffer> proxyPost(
             @PathParam("serviceId") String serviceId,
             @PathParam("path") String path,
             @Context ContainerRequestContext requestContext) {
@@ -74,7 +69,7 @@ public class PassThroughResource {
 
     @PUT
     @Path("{path:.*}")
-    public Multi<io.vertx.core.buffer.Buffer> proxyPut(
+    public Multi<Buffer> proxyPut(
             @PathParam("serviceId") String serviceId,
             @PathParam("path") String path,
             @Context ContainerRequestContext requestContext) {
@@ -83,7 +78,7 @@ public class PassThroughResource {
 
     @DELETE
     @Path("{path:.*}")
-    public Multi<io.vertx.core.buffer.Buffer> proxyDelete(
+    public Multi<Buffer> proxyDelete(
             @PathParam("serviceId") String serviceId,
             @PathParam("path") String path,
             @Context ContainerRequestContext requestContext) {
@@ -92,7 +87,7 @@ public class PassThroughResource {
 
     @PATCH
     @Path("{path:.*}")
-    public Multi<io.vertx.core.buffer.Buffer> proxyPatch(
+    public Multi<Buffer> proxyPatch(
             @PathParam("serviceId") String serviceId,
             @PathParam("path") String path,
             @Context ContainerRequestContext requestContext) {
@@ -101,7 +96,7 @@ public class PassThroughResource {
 
     @HEAD
     @Path("{path:.*}")
-    public Multi<io.vertx.core.buffer.Buffer> proxyHead(
+    public Multi<Buffer> proxyHead(
             @PathParam("serviceId") String serviceId,
             @PathParam("path") String path,
             @Context ContainerRequestContext requestContext) {
@@ -110,40 +105,21 @@ public class PassThroughResource {
 
     @OPTIONS
     @Path("{path:.*}")
-    public Multi<io.vertx.core.buffer.Buffer> proxyOptions(
+    public Multi<Buffer> proxyOptions(
             @PathParam("serviceId") String serviceId,
             @PathParam("path") String path,
             @Context ContainerRequestContext requestContext) {
         return proxyRequest(serviceId, path, requestContext);
     }
 
-    private Multi<io.vertx.core.buffer.Buffer> proxyRequest(
-            String serviceId, String path, ContainerRequestContext requestContext) {
+    private Multi<Buffer> proxyRequest(String serviceId, String path, ContainerRequestContext requestContext) {
         return proxyRequest(serviceId, path, requestContext, false);
     }
 
-    private Multi<io.vertx.core.buffer.Buffer> proxyRequest(
+    private Multi<Buffer> proxyRequest(
             String serviceId, String path, ContainerRequestContext requestContext, boolean suppressResponseBody) {
-        var targetPath = path.isEmpty() ? "/" : "/" + path;
-        final var request = HttpServerRequest.newInstance(routingContext.request());
-        final var prepared = passThroughUseCase.prepare(serviceId, toGatewayRequest(targetPath, requestContext));
-        return proxyExchange.forward(prepared, request, suppressResponseBody);
-    }
-
-    private GatewayRequest toGatewayRequest(String path, ContainerRequestContext requestContext) {
-        // MultivaluedMap<String, String> IS-A Map<String, List<String>>. The map is read-only
-        // for the rest of this request, so passing it directly avoids a per-request HashMap +
-        // per-value List.copyOf round-trip.
-        final var clientContext = clientContextResolver.getOrCompute(routingContext);
-        return new GatewayRequest(
-                requestContext.getMethod(),
-                path,
-                requestContext.getHeaders(),
-                requestContext.getUriInfo().getRequestUri(),
-                null,
-                clientContext.resolvedIp(),
-                clientContext.externalScheme(),
-                clientContext.externalHost(),
-                clientContext.externalPort());
+        final var targetPath = path.isEmpty() ? "/" : "/" + path;
+        final var gatewayRequest = proxySupport.request(targetPath, requestContext);
+        return proxySupport.forward(passThroughUseCase.prepare(serviceId, gatewayRequest), suppressResponseBody);
     }
 }
