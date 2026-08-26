@@ -26,7 +26,9 @@ import org.jose4j.jwt.consumer.JwtConsumerBuilder;
 import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.config.TokenRevocationConfig;
 import aussie.core.model.auth.Permission;
+import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.service.auth.TokenRevocationService;
+import aussie.core.service.auth.TokenValidationService;
 
 /**
  * REST resource for token revocation administration.
@@ -49,10 +51,15 @@ public class TokenRevocationResource {
 
     private final TokenRevocationService revocationService;
     private final TokenRevocationConfig config;
+    private final TokenValidationService tokenValidationService;
 
-    public TokenRevocationResource(TokenRevocationService revocationService, TokenRevocationConfig config) {
+    public TokenRevocationResource(
+            TokenRevocationService revocationService,
+            TokenRevocationConfig config,
+            TokenValidationService tokenValidationService) {
         this.revocationService = revocationService;
         this.config = config;
+        this.tokenValidationService = tokenValidationService;
     }
 
     /**
@@ -89,8 +96,8 @@ public class TokenRevocationResource {
     /**
      * Revoke a token by providing the full JWT.
      *
-     * <p>This endpoint extracts the JTI claim from the provided token and revokes it.
-     * This is useful when you have the full token but not the JTI value.
+     * <p>This endpoint validates the provided token, then extracts its JTI and revokes it.
+     * This is useful when you have the full valid token but not the JTI value.
      *
      * @param request the request containing the full JWT token
      * @return 200 OK with the extracted JTI on success
@@ -108,50 +115,31 @@ public class TokenRevocationResource {
             throw GatewayProblem.badRequest("Token is required");
         }
 
-        // Extract JTI from token without signature verification
-        // (we're revoking it, so we don't care if it's valid)
-        String jti;
-        Instant expiresAt;
-        try {
-            var claims = extractClaimsWithoutValidation(request.token());
-            jti = claims.getJwtId();
-            if (jti == null || jti.isBlank()) {
-                throw GatewayProblem.badRequest("Token does not contain a JTI claim");
+        return tokenValidationService.validate(request.token()).flatMap(result -> {
+            if (!(result instanceof TokenValidationResult.Valid valid)) {
+                LOG.warn("Failed to validate token for revocation");
+                throw GatewayProblem.badRequest("Token is not valid");
             }
-            expiresAt = claims.getExpirationTime() != null
-                    ? Instant.ofEpochSecond(claims.getExpirationTime().getValue())
-                    : null;
-        } catch (InvalidJwtException | MalformedClaimException e) {
-            LOG.warn("Failed to parse token for revocation");
-            throw GatewayProblem.badRequest("Invalid token format");
-        }
 
-        var reason = request.reason();
-        LOG.infof("Revoking token by JWT: jti=%s, reason=%s", jti, reason);
+            final var identity = valid.identity();
+            final var jti = identity.tokenId()
+                    .filter(tokenId -> !tokenId.isBlank())
+                    .orElseThrow(() -> GatewayProblem.badRequest("Token does not contain a JTI claim"));
+            final var expiresAt = identity.expiresAt();
+            LOG.infof("Revoking token by JWT: jti=%s, reason=%s", jti, request.reason());
 
-        final var extractedJti = jti;
-        return revocationService.revokeToken(jti, expiresAt).map(v -> {
-            LOG.infof("Token revoked: jti=%s", extractedJti);
-            return Response.ok(Map.of(
-                            "jti",
-                            extractedJti,
-                            "status",
-                            "revoked",
-                            "revokedAt",
-                            Instant.now().toString()))
-                    .build();
+            return revocationService.revokeToken(jti, expiresAt).map(v -> {
+                LOG.infof("Token revoked: jti=%s", jti);
+                return Response.ok(Map.of(
+                                "jti",
+                                jti,
+                                "status",
+                                "revoked",
+                                "revokedAt",
+                                Instant.now().toString()))
+                        .build();
+            });
         });
-    }
-
-    private JwtClaims extractClaimsWithoutValidation(String token) throws InvalidJwtException {
-        // Build a consumer that skips all validation - we just want to read claims
-        var consumer = new JwtConsumerBuilder()
-                .setSkipSignatureVerification()
-                .setSkipAllValidators()
-                .setDisableRequireSignature()
-                .setSkipAllDefaultValidators()
-                .build();
-        return consumer.processToClaims(token);
     }
 
     /**
@@ -285,7 +273,7 @@ public class TokenRevocationResource {
         }
 
         try {
-            var claims = extractClaimsWithoutValidation(request.token());
+            var claims = parseClaimsForInspection(request.token());
 
             // Build response with key claims highlighted
             var response = new java.util.LinkedHashMap<String, Object>();
@@ -330,6 +318,16 @@ public class TokenRevocationResource {
             LOG.warn("Failed to parse token for inspection");
             throw GatewayProblem.badRequest("Invalid token format");
         }
+    }
+
+    private JwtClaims parseClaimsForInspection(String token) throws InvalidJwtException {
+        var consumer = new JwtConsumerBuilder()
+                .setSkipSignatureVerification()
+                .setSkipAllValidators()
+                .setDisableRequireSignature()
+                .setSkipAllDefaultValidators()
+                .build();
+        return consumer.processToClaims(token);
     }
 
     /**

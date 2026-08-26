@@ -97,6 +97,10 @@ Content-Type: application/json
 
 ### Revoke a Token by Full JWT
 
+The JWT must be accepted by an enabled, configured route-auth provider. Unsigned,
+expired, invalid, and already-revoked tokens are rejected; use the JTI endpoint
+when the full token cannot be validated.
+
 ```bash
 POST /admin/tokens/revoke
 Content-Type: application/json

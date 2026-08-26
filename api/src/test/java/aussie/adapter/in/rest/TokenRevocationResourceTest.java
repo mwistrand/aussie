@@ -8,12 +8,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import jakarta.ws.rs.core.Response;
 
@@ -37,7 +40,10 @@ import aussie.adapter.in.rest.TokenRevocationResource.RevokeByTokenRequest;
 import aussie.adapter.in.rest.TokenRevocationResource.RevokeTokenRequest;
 import aussie.adapter.in.rest.TokenRevocationResource.RevokeUserTokensRequest;
 import aussie.core.config.TokenRevocationConfig;
+import aussie.core.model.auth.TokenValidationResult;
+import aussie.core.model.auth.ValidatedIdentity;
 import aussie.core.service.auth.TokenRevocationService;
+import aussie.core.service.auth.TokenValidationService;
 
 @DisplayName("TokenRevocationResource")
 @ExtendWith(MockitoExtension.class)
@@ -49,11 +55,29 @@ class TokenRevocationResourceTest {
     @Mock
     private TokenRevocationConfig config;
 
+    @Mock
+    private TokenValidationService tokenValidationService;
+
     private TokenRevocationResource resource;
 
     @BeforeEach
     void setUp() {
-        resource = new TokenRevocationResource(revocationService, config);
+        resource = new TokenRevocationResource(revocationService, config, tokenValidationService);
+    }
+
+    private void whenTokenIsValidated(String token, String jti, Instant expiresAt) {
+        var identity = ValidatedIdentity.fromValidatedClaims(
+                "test-provider",
+                "test-subject",
+                "https://issuer.example",
+                Set.of("test-audience"),
+                Optional.of(Instant.now()),
+                Optional.ofNullable(jti),
+                Map.of("iat", Instant.now().minusSeconds(1).getEpochSecond()),
+                Optional.empty(),
+                expiresAt);
+        when(tokenValidationService.validate(token))
+                .thenReturn(Uni.createFrom().item(new TokenValidationResult.Valid(identity)));
     }
 
     private String createTestJwt(JwtClaims claims) throws Exception {
@@ -189,10 +213,30 @@ class TokenRevocationResourceTest {
             var claims = new JwtClaims();
             claims.setSubject("user123");
             var token = createTestJwt(claims);
+            whenTokenIsValidated(token, null, Instant.now().plusSeconds(3600));
 
             var request = new RevokeByTokenRequest(token, null);
-            var ex = assertThrows(HttpProblem.class, () -> resource.revokeByToken(request));
+            var ex = assertThrows(
+                    HttpProblem.class,
+                    () -> resource.revokeByToken(request).await().atMost(Duration.ofSeconds(5)));
             assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
+            verifyNoInteractions(revocationService);
+        }
+
+        @Test
+        @DisplayName("throws HttpProblem when validated JTI is blank")
+        void shouldThrowWhenValidatedJtiIsBlank() throws Exception {
+            when(config.enabled()).thenReturn(true);
+
+            var token = createTestJwt(new JwtClaims());
+            whenTokenIsValidated(token, "   ", Instant.now().plusSeconds(3600));
+
+            var request = new RevokeByTokenRequest(token, null);
+            var ex = assertThrows(
+                    HttpProblem.class,
+                    () -> resource.revokeByToken(request).await().atMost(Duration.ofSeconds(5)));
+            assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
+            verifyNoInteractions(revocationService);
         }
 
         @Test
@@ -208,6 +252,7 @@ class TokenRevocationResourceTest {
             var token = createTestJwt(claims);
 
             var expectedExpiry = Instant.ofEpochSecond(1893456000);
+            whenTokenIsValidated(token, "jwt-id-123", expectedExpiry);
             when(revocationService.revokeToken("jwt-id-123", expectedExpiry))
                     .thenReturn(Uni.createFrom().voidItem());
 
@@ -223,16 +268,18 @@ class TokenRevocationResourceTest {
         }
 
         @Test
-        @DisplayName("revokes token with jti and no expiration")
+        @DisplayName("uses the validated token expiration")
         @SuppressWarnings("unchecked")
-        void shouldRevokeTokenWithJtiAndNoExpiration() throws Exception {
+        void shouldRevokeTokenWithValidatedJtiAndExpiration() throws Exception {
             when(config.enabled()).thenReturn(true);
 
             var claims = new JwtClaims();
             claims.setJwtId("jwt-id-456");
             var token = createTestJwt(claims);
 
-            when(revocationService.revokeToken(eq("jwt-id-456"), isNull()))
+            var expectedExpiry = Instant.now().plusSeconds(3600);
+            whenTokenIsValidated(token, "jwt-id-456", expectedExpiry);
+            when(revocationService.revokeToken("jwt-id-456", expectedExpiry))
                     .thenReturn(Uni.createFrom().voidItem());
 
             var request = new RevokeByTokenRequest(token, null);
@@ -242,17 +289,26 @@ class TokenRevocationResourceTest {
             var entity = (Map<String, Object>) response.getEntity();
             assertEquals("jwt-id-456", entity.get("jti"));
             assertEquals("revoked", entity.get("status"));
-            verify(revocationService).revokeToken("jwt-id-456", null);
+            verify(revocationService).revokeToken("jwt-id-456", expectedExpiry);
         }
 
         @Test
-        @DisplayName("throws HttpProblem for invalid token format")
-        void shouldThrowWhenTokenFormatIsInvalid() {
+        @DisplayName("rejects an unsigned token before revocation")
+        void shouldRejectUnsignedTokenBeforeRevocation() throws Exception {
             when(config.enabled()).thenReturn(true);
 
-            var request = new RevokeByTokenRequest("not-a-valid-jwt", null);
-            var ex = assertThrows(HttpProblem.class, () -> resource.revokeByToken(request));
+            var claims = new JwtClaims();
+            claims.setJwtId("forged-jti");
+            var token = createTestJwt(claims);
+            when(tokenValidationService.validate(token))
+                    .thenReturn(Uni.createFrom().item(new TokenValidationResult.Invalid("invalid signature")));
+
+            var request = new RevokeByTokenRequest(token, null);
+            var ex = assertThrows(
+                    HttpProblem.class,
+                    () -> resource.revokeByToken(request).await().atMost(Duration.ofSeconds(5)));
             assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), ex.getStatusCode());
+            verifyNoInteractions(revocationService);
         }
     }
 

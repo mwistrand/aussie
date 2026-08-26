@@ -9,6 +9,7 @@ import java.time.Instant;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
+import org.jose4j.jwa.AlgorithmConstraints;
 import org.jose4j.jws.AlgorithmIdentifiers;
 import org.jose4j.jws.JsonWebSignature;
 import org.jose4j.jwt.JwtClaims;
@@ -49,18 +50,22 @@ public class TokenRevocationResourceTest {
     }
 
     @Test
-    @DisplayName("should revoke by full JWT and extract JTI")
-    void shouldRevokeByFullToken() throws Exception {
-        var token = createTestToken("revoke-by-token-jti", "test-subject", "https://test.issuer");
+    @DisplayName("should reject an unsigned full JWT before revocation")
+    void shouldRejectUnsignedFullToken() throws Exception {
+        var token = createUnsignedTestToken("forged-jti", "test-subject", "https://test.issuer");
 
         given().contentType(ContentType.JSON)
                 .body("{\"token\": \"" + token + "\", \"reason\": \"test\"}")
                 .when()
                 .post("/admin/tokens/revoke")
                 .then()
+                .statusCode(400);
+
+        given().when()
+                .get("/admin/tokens/forged-jti/status")
+                .then()
                 .statusCode(200)
-                .body("jti", equalTo("revoke-by-token-jti"))
-                .body("status", equalTo("revoked"));
+                .body("revoked", equalTo(false));
     }
 
     @Test
@@ -97,6 +102,23 @@ public class TokenRevocationResourceTest {
         jws.setKeyIdHeaderValue("test-key");
         jws.setAlgorithmHeaderValue(AlgorithmIdentifiers.RSA_USING_SHA256);
 
+        return jws.getCompactSerialization();
+    }
+
+    private String createUnsignedTestToken(String jti, String subject, String issuer) throws Exception {
+        var claims = new JwtClaims();
+        claims.setJwtId(jti);
+        claims.setSubject(subject);
+        claims.setIssuer(issuer);
+        claims.setAudience("test-audience");
+        claims.setExpirationTime(
+                NumericDate.fromSeconds(Instant.now().plusSeconds(3600).getEpochSecond()));
+        claims.setIssuedAt(NumericDate.now());
+
+        var jws = new JsonWebSignature();
+        jws.setPayload(claims.toJson());
+        jws.setAlgorithmConstraints(AlgorithmConstraints.NO_CONSTRAINTS);
+        jws.setAlgorithmHeaderValue("none");
         return jws.getCompactSerialization();
     }
 }

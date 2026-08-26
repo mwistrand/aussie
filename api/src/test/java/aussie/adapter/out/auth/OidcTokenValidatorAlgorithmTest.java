@@ -16,6 +16,7 @@ import java.util.Set;
 import javax.crypto.spec.SecretKeySpec;
 
 import io.smallrye.mutiny.Uni;
+import org.jose4j.jwa.AlgorithmConstraints;
 import org.jose4j.jwk.RsaJsonWebKey;
 import org.jose4j.jws.AlgorithmIdentifiers;
 import org.jose4j.jws.JsonWebSignature;
@@ -110,6 +111,25 @@ class OidcTokenValidatorAlgorithmTest {
                 invalid.reason().toLowerCase().contains("signature")
                         || invalid.reason().toLowerCase().contains("validation"),
                 "expected signature/validation rejection, got: " + invalid.reason());
+    }
+
+    @Test
+    @DisplayName("rejects unsigned token")
+    void rejectsUnsignedToken() throws Exception {
+        final var claims = baseClaims();
+        claims.setGeneratedJwtId();
+
+        final var jws = new JsonWebSignature();
+        jws.setPayload(claims.toJson());
+        jws.setAlgorithmConstraints(AlgorithmConstraints.NO_CONSTRAINTS);
+        jws.setAlgorithmHeaderValue("none");
+        final var token = jws.getCompactSerialization();
+
+        when(jwksCache.getKey(JWKS_URI, null)).thenReturn(Uni.createFrom().item(Optional.of(rsaJwk)));
+
+        final var result = validator.validate(token, config).await().atMost(Duration.ofSeconds(1));
+
+        assertInstanceOf(TokenValidationResult.Invalid.class, result);
     }
 
     @Test
