@@ -99,7 +99,18 @@ public final class RedisRateLimiterProvider implements RateLimiterProvider {
             throw new IllegalStateException(
                     "Provider not configured. Use RateLimiterProviderLoader for proper initialization.");
         }
-        return new RedisRateLimiter(redisDataSource, enabled, algorithm, fallback, fallbackBehavior, metrics);
+        try {
+            return new RedisRateLimiter(redisDataSource, enabled, algorithm, fallback, fallbackBehavior, metrics);
+        } catch (RuntimeException | Error error) {
+            if (fallback != null) {
+                try {
+                    fallback.close();
+                } catch (RuntimeException | Error closeError) {
+                    error.addSuppressed(closeError);
+                }
+            }
+            throw error;
+        }
     }
 
     /**

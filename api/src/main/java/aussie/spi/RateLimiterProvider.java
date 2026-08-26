@@ -64,6 +64,7 @@ public interface RateLimiterProvider {
      *
      * <p>Called once during application startup. The returned instance should
      * be thread-safe and suitable for CDI injection.
+     * The caller owns the returned limiter and closes it during shutdown.
      *
      * @return the rate limiter instance
      */

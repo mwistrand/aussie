@@ -61,8 +61,8 @@ class RateLimiterProviderLoaderTest {
 
     @AfterEach
     void tearDown() {
-        if (producedLimiter instanceof InMemoryRateLimiter inMemory) {
-            inMemory.shutdown();
+        if (producedLimiter != null) {
+            producedLimiter.close();
         }
     }
 
@@ -170,14 +170,14 @@ class RateLimiterProviderLoaderTest {
     class DisposeRateLimiterTests {
 
         @Test
-        @DisplayName("should call shutdown on InMemoryRateLimiter")
-        void shouldShutdownInMemoryRateLimiter() {
-            final var inMemoryLimiter = mock(InMemoryRateLimiter.class);
+        @DisplayName("should close the limiter through the port lifecycle")
+        void shouldCloseRateLimiterThroughPortLifecycle() {
+            final var rateLimiter = mock(RateLimiter.class);
 
             final var loader = createLoader();
-            loader.disposeRateLimiter(inMemoryLimiter);
+            loader.disposeRateLimiter(rateLimiter);
 
-            verify(inMemoryLimiter).shutdown();
+            verify(rateLimiter).close();
         }
 
         @Test

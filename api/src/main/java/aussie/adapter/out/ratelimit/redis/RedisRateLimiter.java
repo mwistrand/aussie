@@ -317,8 +317,13 @@ public final class RedisRateLimiter implements RateLimiter {
     }
 
     public void shutdown() {
-        if (fallback instanceof aussie.adapter.out.ratelimit.memory.InMemoryRateLimiter inMemory) {
-            inMemory.shutdown();
+        close();
+    }
+
+    @Override
+    public void close() {
+        if (fallback != null) {
+            fallback.close();
         }
     }
 

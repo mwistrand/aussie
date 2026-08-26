@@ -177,6 +177,11 @@ public final class InMemoryRateLimiter implements RateLimiter {
         }
     }
 
+    @Override
+    public void close() {
+        shutdown();
+    }
+
     /**
      * Run stale entry cleanup immediately. Package-private for testing.
      */

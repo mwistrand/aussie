@@ -399,7 +399,7 @@ Both replace inbound forwarding metadata with the gateway's canonical client con
 The rate limiter port at `api/src/main/java/aussie/core/port/out/RateLimiter.java` (lines 17-74) is clean and minimal:
 
 ```java
-public interface RateLimiter {
+public interface RateLimiter extends AutoCloseable {
 
     Uni<RateLimitDecision> checkAndConsume(RateLimitKey key, EffectiveRateLimit limit);
 
@@ -410,10 +410,12 @@ public interface RateLimiter {
     Uni<Void> removeKeysMatching(String pattern);
 
     boolean isEnabled();
+
+    default void close() {}
 }
 ```
 
-Five methods, all speaking in domain terms (`RateLimitKey`, `EffectiveRateLimit`, `RateLimitDecision`). The interface says nothing about storage mechanism, algorithm implementation, or clustering. The core service calls `checkAndConsume` and gets back a decision. How that decision was computed, whether by checking a local `ConcurrentHashMap` or executing a Redis Lua script, is invisible to the caller.
+Five operations plus one lifecycle hook, all speaking in domain terms (`RateLimitKey`, `EffectiveRateLimit`, `RateLimitDecision`). The interface says nothing about storage mechanism, algorithm implementation, or clustering. The core service calls `checkAndConsume` and gets back a decision. How that decision was computed, whether by checking a local `ConcurrentHashMap` or executing a Redis Lua script, is invisible to the caller. Resource-owning implementations override `close()`; resource-free implementations inherit the no-op default.
 
 ### In-Memory Default
 
@@ -461,7 +463,7 @@ private RateLimitDecision computeDecision(
 
 ### SPI Provider for ServiceLoader Discovery
 
-The provider interface at `api/src/main/java/aussie/spi/RateLimiterProvider.java` (lines 26-71) adds lifecycle methods that the port interface does not have:
+The provider interface at `api/src/main/java/aussie/spi/RateLimiterProvider.java` (lines 26-71) adds discovery and construction methods that the port interface does not have:
 
 ```java
 public interface RateLimiterProvider {
@@ -1148,7 +1150,7 @@ SPI design is staff-level work because it requires thinking about users you will
 
 The key principles demonstrated in Aussie's extension points:
 
-1. **Ports define what core needs. SPIs define how extensions register.** These are often similar but not identical. The SPI adds lifecycle concerns (priority, availability, factory methods) that core code should not see.
+1. **Ports define what core needs. SPIs define how extensions register.** These are often similar but not identical. The SPI adds discovery and construction concerns (priority, availability, factory methods) that core code should not see.
 
 2. **Contract tests are the only reliable way to ensure SPI compliance.** Documentation is necessary but insufficient. An abstract test class that implementors extend gives them immediate feedback on every behavioral requirement.
 

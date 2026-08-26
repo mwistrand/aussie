@@ -12,9 +12,18 @@ import aussie.core.model.ratelimit.RateLimitKey;
  * <p>Implementations handle the actual rate limit checking and state management,
  * whether in-memory, Redis-based, or other storage backends.
  *
- * <p>All operations are non-blocking and return reactive types.
+ * <p>Rate-limit operations are non-blocking and return reactive types. Resource
+ * cleanup is synchronous and occurs during application shutdown.
  */
-public interface RateLimiter {
+public interface RateLimiter extends AutoCloseable {
+
+    /**
+     * Release resources owned by this limiter.
+     *
+     * <p>Resource-free implementations may keep the default no-op behavior.
+     */
+    @Override
+    default void close() {}
 
     /**
      * Check if a request is allowed and consume a token if so.

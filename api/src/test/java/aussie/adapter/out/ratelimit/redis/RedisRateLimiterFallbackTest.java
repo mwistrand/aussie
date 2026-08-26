@@ -2,8 +2,10 @@ package aussie.adapter.out.ratelimit.redis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -51,6 +53,32 @@ class RedisRateLimiterFallbackTest {
                         null));
     }
 
+    @Test
+    @DisplayName("closes the fallback when limiter construction fails")
+    void closesFallbackWhenConstructionFails() {
+        final var failure = new IllegalStateException("Redis unavailable");
+        final var closeFailure = new IllegalStateException("Fallback close failed");
+        final var dataSource = mock(ReactiveRedisDataSource.class);
+        final var fallback = mock(RateLimiter.class);
+        when(dataSource.key(String.class)).thenThrow(failure);
+        doThrow(closeFailure).when(fallback).close();
+        final var provider = RedisRateLimiterProvider.configured(
+                dataSource,
+                true,
+                true,
+                RateLimitAlgorithm.BUCKET,
+                fallback,
+                RateLimitFallbackBehavior.LOCAL_BUCKET,
+                null);
+
+        final var thrown = assertThrows(IllegalStateException.class, provider::createRateLimiter);
+
+        assertSame(failure, thrown);
+        assertEquals(1, thrown.getSuppressed().length);
+        assertSame(closeFailure, thrown.getSuppressed()[0]);
+        verify(fallback).close();
+    }
+
     private RedisRateLimiter newLimiter(RateLimitFallbackBehavior behavior, RateLimiter fallback) {
         // Default answer: all execute(...) calls fail with a synthetic Redis error so the
         // limiter always hits the fallback path. Other methods get Mockito's default
@@ -90,6 +118,17 @@ class RedisRateLimiterFallbackTest {
             assertTrue(decision.allowed());
             verify(localFallback, times(1)).checkAndConsume(KEY, LIMIT);
             verify(metrics).recordRateLimitFallback("service-a", "local-bucket");
+        }
+
+        @Test
+        @DisplayName("closes the local fallback with the Redis limiter")
+        void closesFallback() {
+            localFallback = mock(RateLimiter.class);
+            final var limiter = newLimiter(RateLimitFallbackBehavior.LOCAL_BUCKET, localFallback);
+
+            limiter.close();
+
+            verify(localFallback).close();
         }
 
         @Test
