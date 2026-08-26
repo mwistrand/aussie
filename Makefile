@@ -93,12 +93,11 @@ demo-deps:
 # Run the e2e suite (Aussie + demo + Cassandra + Redis in Testcontainers).
 # Requires Docker. Standalone from :check; this is intentionally opt-in because
 # container boot is slow. See docs/platform/e2e-tests.md.
-e2e: demo-deps
-	cd api && ./gradlew e2eTest
+e2e: cd api && ./gradlew e2eTest
 
 # Repeat the packaged-artifact resilience suite so restart and dependency
 # lifecycle regressions are visible in the scheduled gate.
-e2e-soak: demo-deps
+e2e-soak:
 	@i=1; while [ "$$i" -le "$(SOAK_RUNS)" ]; do \
 		echo "Packaged resilience run $$i/$(SOAK_RUNS)"; \
 		(cd api && ./gradlew e2eTest --rerun-tasks); \

@@ -1,7 +1,5 @@
 package aussie.core.service.gateway;
 
-import java.util.Optional;
-
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -10,7 +8,6 @@ import io.smallrye.mutiny.Uni;
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.GatewayResult;
 import aussie.core.model.gateway.ProxyPlan;
-import aussie.core.model.gateway.RouteAuthResult;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.port.in.GatewayUseCase;
 import aussie.core.service.routing.ServiceRegistry;
@@ -35,17 +32,17 @@ import aussie.core.service.routing.ServiceRegistry;
 public class GatewayService implements GatewayUseCase {
 
     private final ServiceRegistry serviceRegistry;
-    private final ProxyRequestPreparer requestPreparer;
     private final RouteAuthenticationService routeAuthService;
+    private final ProxyPlanBuilder proxyPlanBuilder;
 
     @Inject
     public GatewayService(
             ServiceRegistry serviceRegistry,
-            ProxyRequestPreparer requestPreparer,
-            RouteAuthenticationService routeAuthService) {
+            RouteAuthenticationService routeAuthService,
+            ProxyPlanBuilder proxyPlanBuilder) {
         this.serviceRegistry = serviceRegistry;
-        this.requestPreparer = requestPreparer;
         this.routeAuthService = routeAuthService;
+        this.proxyPlanBuilder = proxyPlanBuilder;
     }
 
     @Override
@@ -67,30 +64,7 @@ public class GatewayService implements GatewayUseCase {
             // Check route authentication requirements
             return routeAuthService
                     .authenticate(request, routeMatch)
-                    .map(authResult -> handleAuthResult(authResult, request, routeMatch));
+                    .map(authResult -> proxyPlanBuilder.build(request, routeMatch, authResult));
         });
-    }
-
-    private ProxyPlan handleAuthResult(RouteAuthResult authResult, GatewayRequest request, RouteMatch routeMatch) {
-        return switch (authResult) {
-            case RouteAuthResult.Authenticated auth -> new ProxyPlan.Ready(
-                    request,
-                    requestPreparer.prepare(
-                            request,
-                            routeMatch,
-                            auth.token().hasToken() ? Optional.of(auth.token()) : Optional.empty()),
-                    routeMatch.service());
-            case RouteAuthResult.NotRequired notRequired -> new ProxyPlan.Ready(
-                    request, requestPreparer.prepare(request, routeMatch, Optional.empty()), routeMatch.service());
-            case RouteAuthResult.Unauthorized unauthorized -> new ProxyPlan.Rejected(
-                    new GatewayResult.Unauthorized(unauthorized.reason()),
-                    routeMatch.service().serviceId());
-            case RouteAuthResult.Forbidden forbidden -> new ProxyPlan.Rejected(
-                    new GatewayResult.Forbidden(forbidden.reason()),
-                    routeMatch.service().serviceId());
-            case RouteAuthResult.BadRequest badRequest -> new ProxyPlan.Rejected(
-                    new GatewayResult.BadRequest(badRequest.reason()),
-                    routeMatch.service().serviceId());
-        };
     }
 }

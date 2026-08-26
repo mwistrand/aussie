@@ -42,7 +42,8 @@ class PassThroughServiceTest {
         authentication = mock(RouteAuthenticationService.class);
         visibility = mock(VisibilityResolver.class);
         endpointMatcher = mock(EndpointMatcher.class);
-        service = new PassThroughService(registry, preparer, visibility, endpointMatcher, authentication);
+        service = new PassThroughService(
+                registry, visibility, endpointMatcher, authentication, new ProxyPlanBuilder(preparer));
     }
 
     @Test
@@ -65,7 +66,7 @@ class PassThroughServiceTest {
         when(visibility.resolve(any(), any(), any())).thenReturn(EndpointVisibility.PUBLIC);
         when(authentication.authenticate(any(), any()))
                 .thenReturn(Uni.createFrom().item(new RouteAuthResult.NotRequired()));
-        when(preparer.prepare(any(), any(), any())).thenReturn(prepared);
+        when(preparer.prepare(any(), any())).thenReturn(prepared);
 
         final var plan = assertInstanceOf(
                 ProxyPlan.Ready.class,

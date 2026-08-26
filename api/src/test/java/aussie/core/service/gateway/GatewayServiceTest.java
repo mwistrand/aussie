@@ -44,7 +44,7 @@ class GatewayServiceTest {
         registry = mock(ServiceRegistry.class);
         preparer = mock(ProxyRequestPreparer.class);
         authentication = mock(RouteAuthenticationService.class);
-        service = new GatewayService(registry, preparer, authentication);
+        service = new GatewayService(registry, authentication, new ProxyPlanBuilder(preparer));
     }
 
     @Test
@@ -67,13 +67,13 @@ class GatewayServiceTest {
         when(registry.findRouteAsync(any(), any())).thenReturn(Uni.createFrom().item(Optional.of(route)));
         when(authentication.authenticate(any(), any()))
                 .thenReturn(Uni.createFrom().item(new RouteAuthResult.NotRequired()));
-        when(preparer.prepare(any(), any(), any())).thenReturn(prepared);
+        when(preparer.prepare(any(), any())).thenReturn(prepared);
 
         final var plan = assertInstanceOf(
                 ProxyPlan.Ready.class, service.prepare(request()).await().atMost(Duration.ofSeconds(1)));
 
         assertEquals(prepared, plan.request());
-        verify(preparer).prepare(any(), any(), any());
+        verify(preparer).prepare(any(), any());
     }
 
     @Test
