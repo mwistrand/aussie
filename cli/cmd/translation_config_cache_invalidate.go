@@ -3,12 +3,8 @@ package cmd
 import (
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var translationConfigCacheInvalidateCmd = &cobra.Command{
@@ -31,35 +27,15 @@ func init() {
 }
 
 func runTranslationConfigCacheInvalidate(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
 
-	url := fmt.Sprintf("%s/admin/translation-config/cache/invalidate", cfg.Host)
-
-	req, err := http.NewRequest("POST", url, nil)
+	resp, err := client.DoJSON(http.MethodPost, "/admin/translation-config/cache/invalidate", nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")

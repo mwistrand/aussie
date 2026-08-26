@@ -1,17 +1,12 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var translationConfigValidateCmd = &cobra.Command{
@@ -33,16 +28,7 @@ func init() {
 }
 
 func runTranslationConfigValidate(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -61,25 +47,10 @@ func runTranslationConfigValidate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("validation failed")
 	}
 
-	body, err := json.Marshal(configSchema)
+	resp, err := client.DoJSON(http.MethodPost, "/admin/translation-config/validate", configSchema)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-
-	url := fmt.Sprintf("%s/admin/translation-config/validate", cfg.Host)
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
@@ -95,7 +66,7 @@ func runTranslationConfigValidate(cmd *cobra.Command, args []string) error {
 		Valid  bool     `json:"valid"`
 		Errors []string `json:"errors"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := resp.DecodeJSON(&result); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 

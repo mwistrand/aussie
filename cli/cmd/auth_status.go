@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/aussie/cli/internal/api"
 	"github.com/aussie/cli/internal/auth"
 	"github.com/aussie/cli/internal/config"
 )
@@ -34,9 +34,9 @@ func init() {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
+	cfg, err := loadConfigForServer(cmd)
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return err
 	}
 
 	fmt.Printf("Server: %s\n\n", cfg.Host)
@@ -102,22 +102,16 @@ func showAPIKeyStatus(cfg *config.Config) error {
 
 // validateWithServer validates the token/key against the server and displays details.
 func validateWithServer(cfg *config.Config, token string) error {
-	url := fmt.Sprintf("%s/admin/whoami", cfg.Host)
-	req, err := http.NewRequest("GET", url, nil)
+	client, err := api.New(cfg.Host, token)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := client.DoJSON(http.MethodGet, "/admin/whoami", nil)
 	if err != nil {
 		fmt.Println("Server Status: Unable to connect")
 		fmt.Printf("  Error: %v\n", err)
 		return nil
 	}
-	defer resp.Body.Close()
-
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
 		fmt.Println("Server Status: Invalid or expired credentials")
@@ -136,7 +130,7 @@ func validateWithServer(cfg *config.Config, token string) error {
 }
 
 // displayServerResponse parses and displays the whoami response.
-func displayServerResponse(resp *http.Response) error {
+func displayServerResponse(resp *api.Response) error {
 	var whoami struct {
 		KeyId                string   `json:"keyId,omitempty"`
 		Subject              string   `json:"sub,omitempty"`
@@ -147,7 +141,7 @@ func displayServerResponse(resp *http.Response) error {
 		ExpiresAt            string   `json:"expiresAt,omitempty"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&whoami); err != nil {
+	if err := resp.DecodeJSON(&whoami); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 

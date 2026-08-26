@@ -1,16 +1,10 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var lockoutClearCmd = &cobra.Command{
@@ -51,7 +45,7 @@ func init() {
 func runLockoutClear(cmd *cobra.Command, args []string) error {
 	// Handle --all case
 	if lockoutClearAll {
-		return runLockoutClearAll()
+		return runLockoutClearAll(cmd)
 	}
 
 	// Validate that exactly one identifier is provided
@@ -73,58 +67,37 @@ func runLockoutClear(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("must specify only one of --ip, --user, or --apikey")
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Override with server flag if provided
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	// Get authentication token
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
 
 	// Build URL based on identifier type
-	var url string
+	var path string
 	var identifierType, identifierValue string
 
 	if lockoutClearIP != "" {
-		url = fmt.Sprintf("%s/admin/lockouts/ips/%s", cfg.Host, lockoutClearIP)
+		path = "/admin/lockouts/ips/" + lockoutClearIP
 		identifierType = "IP"
 		identifierValue = lockoutClearIP
 	} else if lockoutClearUser != "" {
-		url = fmt.Sprintf("%s/admin/lockouts/users/%s", cfg.Host, lockoutClearUser)
+		path = "/admin/lockouts/users/" + lockoutClearUser
 		identifierType = "user"
 		identifierValue = lockoutClearUser
 	} else {
-		url = fmt.Sprintf("%s/admin/lockouts/apikeys/%s", cfg.Host, lockoutClearApiKey)
+		path = "/admin/lockouts/apikeys/" + lockoutClearApiKey
 		identifierType = "API key"
 		identifierValue = lockoutClearApiKey
 	}
 
 	// Create request body
-	body, _ := json.Marshal(map[string]string{
+	body := map[string]string{
 		"reason": lockoutClearReason,
-	})
-
-	req, err := http.NewRequest("DELETE", url, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := client.DoJSON(http.MethodDelete, path, body)
 	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
+		return err
 	}
-	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusNoContent:
@@ -141,48 +114,32 @@ func runLockoutClear(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func runLockoutClearAll() error {
+func runLockoutClearAll(cmd *cobra.Command) error {
 	if !lockoutClearForce {
 		return fmt.Errorf("clearing all lockouts requires --force flag")
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Get authentication token
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
 
-	url := fmt.Sprintf("%s/admin/lockouts:reset", cfg.Host)
-
 	// Create request body
-	body, _ := json.Marshal(map[string]interface{}{
+	body := map[string]interface{}{
 		"force":  true,
 		"reason": lockoutClearReason,
-	})
-
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := client.DoJSON(http.MethodPost, "/admin/lockouts:reset", body)
 	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
+		return err
 	}
-	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
 		var result map[string]interface{}
-		json.NewDecoder(resp.Body).Decode(&result)
+		if err := resp.DecodeJSON(&result); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
 		count := int(result["count"].(float64))
 		fmt.Printf("✓ Cleared %d lockouts\n", count)
 		return nil

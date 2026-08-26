@@ -1,15 +1,11 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var authKeysShowIncludePublicKey bool
@@ -49,37 +45,20 @@ type signingKeyDetail struct {
 func runAuthKeysShow(cmd *cobra.Command, args []string) error {
 	keyId := args[0]
 
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
 
-	url := fmt.Sprintf("%s/admin/keys/%s", cfg.Host, keyId)
+	path := "/admin/keys/" + keyId
 	if authKeysShowIncludePublicKey {
-		url += "?includePublicKey=true"
+		path += "?includePublicKey=true"
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	resp, err := client.DoJSON(http.MethodGet, path, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -97,7 +76,7 @@ func runAuthKeysShow(cmd *cobra.Command, args []string) error {
 	}
 
 	var key signingKeyDetail
-	if err := json.NewDecoder(resp.Body).Decode(&key); err != nil {
+	if err := resp.DecodeJSON(&key); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 

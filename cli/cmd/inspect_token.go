@@ -1,16 +1,11 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var inspectTokenCmd = &cobra.Command{
@@ -47,18 +42,7 @@ func runInspectToken(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("token cannot be empty")
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Override with server flag if provided
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	// Get authentication token
-	authToken, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -68,30 +52,15 @@ func runInspectToken(cmd *cobra.Command, args []string) error {
 		"token": token,
 	}
 
-	bodyBytes, err := json.Marshal(reqBody)
+	resp, err := client.DoJSON(http.MethodPost, "/admin/tokens/inspect", reqBody)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return err
 	}
-
-	url := fmt.Sprintf("%s/admin/tokens/inspect", cfg.Host)
-	req, err := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+authToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
 		var result map[string]interface{}
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if err := resp.DecodeJSON(&result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 

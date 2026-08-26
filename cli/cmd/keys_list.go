@@ -1,17 +1,12 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"text/tabwriter"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var keysListCmd = &cobra.Command{
@@ -34,37 +29,18 @@ func init() {
 }
 
 func runKeysList(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Override with server flag if provided
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	// Get authentication token (JWT first, then API key fallback)
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
 
 	limit, _ := cmd.Flags().GetInt("limit")
 	offset, _ := cmd.Flags().GetInt("offset")
-	url := fmt.Sprintf("%s/admin/api-keys?limit=%d&offset=%d", cfg.Host, limit, offset)
-	req, err := http.NewRequest("GET", url, nil)
+	path := fmt.Sprintf("/admin/api-keys?limit=%d&offset=%d", limit, offset)
+	resp, err := client.DoJSON(http.MethodGet, path, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
@@ -86,7 +62,7 @@ func runKeysList(cmd *cobra.Command, args []string) error {
 		ExpiresAt   string   `json:"expiresAt,omitempty"`
 		Revoked     bool     `json:"revoked"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
+	if err := resp.DecodeJSON(&keys); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 

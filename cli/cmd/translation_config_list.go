@@ -1,17 +1,12 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"text/tabwriter"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var translationConfigListCmd = &cobra.Command{
@@ -34,16 +29,7 @@ func init() {
 }
 
 func runTranslationConfigList(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -51,19 +37,10 @@ func runTranslationConfigList(cmd *cobra.Command, args []string) error {
 	limit, _ := cmd.Flags().GetInt("limit")
 	offset, _ := cmd.Flags().GetInt("offset")
 
-	url := fmt.Sprintf("%s/admin/translation-config?limit=%d&offset=%d", cfg.Host, limit, offset)
-	req, err := http.NewRequest("GET", url, nil)
+	resp, err := client.DoJSON(http.MethodGet, fmt.Sprintf("/admin/translation-config?limit=%d&offset=%d", limit, offset), nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
@@ -83,7 +60,7 @@ func runTranslationConfigList(cmd *cobra.Command, args []string) error {
 		CreatedAt string `json:"createdAt"`
 		Comment   string `json:"comment"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&versions); err != nil {
+	if err := resp.DecodeJSON(&versions); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 

@@ -4,7 +4,20 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
+
+func TestClientSetTimeout(t *testing.T) {
+	client, err := New("http://localhost", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client.SetTimeout(time.Minute)
+	if client.httpClient.Timeout != time.Minute {
+		t.Fatalf("Timeout = %s, want %s", client.httpClient.Timeout, time.Minute)
+	}
+}
 
 func TestClientSendsBoundOriginAndBearerToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

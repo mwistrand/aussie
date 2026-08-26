@@ -1,17 +1,11 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var (
@@ -50,18 +44,7 @@ func init() {
 }
 
 func runKeysCreate(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Override with server flag if provided
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	// Get authentication token (JWT first, then API key fallback)
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -78,25 +61,10 @@ func runKeysCreate(cmd *cobra.Command, args []string) error {
 		reqBody["ttlDays"] = createKeyTtlDays
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	resp, err := client.DoJSON(http.MethodPost, "/admin/api-keys", reqBody)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return err
 	}
-
-	url := fmt.Sprintf("%s/admin/api-keys", cfg.Host)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
@@ -108,7 +76,7 @@ func runKeysCreate(cmd *cobra.Command, args []string) error {
 		var errResp struct {
 			Error string `json:"error"`
 		}
-		json.NewDecoder(resp.Body).Decode(&errResp)
+		_ = resp.DecodeJSON(&errResp)
 		return fmt.Errorf("invalid request: %s", errResp.Error)
 	}
 	if resp.StatusCode != http.StatusCreated {
@@ -123,7 +91,7 @@ func runKeysCreate(cmd *cobra.Command, args []string) error {
 		CreatedBy   string   `json:"createdBy"`
 		ExpiresAt   string   `json:"expiresAt,omitempty"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := resp.DecodeJSON(&result); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 

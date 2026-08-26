@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,9 +10,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var revokeUserCmd = &cobra.Command{
@@ -67,18 +63,7 @@ func runRevokeUser(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Override with server flag if provided
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	// Get authentication token
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -89,28 +74,14 @@ func runRevokeUser(cmd *cobra.Command, args []string) error {
 		reqBody["reason"] = revokeUserReason
 	}
 
-	var bodyBytes []byte
+	var body any
 	if len(reqBody) > 0 {
-		bodyBytes, err = json.Marshal(reqBody)
-		if err != nil {
-			return fmt.Errorf("failed to marshal request: %w", err)
-		}
+		body = reqBody
 	}
-
-	url := fmt.Sprintf("%s/admin/tokens/users/%s", cfg.Host, userId)
-	req, err := http.NewRequest("DELETE", url, bytes.NewReader(bodyBytes))
+	resp, err := client.DoJSON(http.MethodDelete, "/admin/tokens/users/"+userId, body)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusNoContent:

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,8 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
+	"github.com/aussie/cli/internal/api"
 )
 
 var revokeTokenCmd = &cobra.Command{
@@ -56,30 +54,19 @@ func runRevokeToken(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("JTI or token cannot be empty")
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Override with server flag if provided
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	// Get authentication token
-	authToken, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
 
 	// Determine if input is a full JWT or just a JTI
 	if isFullJwtToken(input) {
-		return revokeByFullToken(cfg.Host, authToken, input)
+		return revokeByFullToken(client, input)
 	}
-	return revokeByJti(cfg.Host, authToken, input)
+	return revokeByJti(client, input)
 }
 
-func revokeByFullToken(host, authToken, fullToken string) error {
+func revokeByFullToken(client *api.Client, fullToken string) error {
 	// Use POST /admin/tokens/revoke endpoint
 	reqBody := map[string]interface{}{
 		"token": fullToken,
@@ -88,30 +75,15 @@ func revokeByFullToken(host, authToken, fullToken string) error {
 		reqBody["reason"] = revokeTokenReason
 	}
 
-	bodyBytes, err := json.Marshal(reqBody)
+	resp, err := client.DoJSON(http.MethodPost, "/admin/tokens/revoke", reqBody)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return err
 	}
-
-	url := fmt.Sprintf("%s/admin/tokens/revoke", host)
-	req, err := http.NewRequest("POST", url, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+authToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
 		var result map[string]interface{}
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if err := resp.DecodeJSON(&result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
@@ -143,36 +115,21 @@ func revokeByFullToken(host, authToken, fullToken string) error {
 	}
 }
 
-func revokeByJti(host, authToken, jti string) error {
+func revokeByJti(client *api.Client, jti string) error {
 	// Use DELETE /admin/tokens/{jti} endpoint
 	reqBody := map[string]interface{}{}
 	if revokeTokenReason != "" {
 		reqBody["reason"] = revokeTokenReason
 	}
 
-	var bodyBytes []byte
-	var err error
+	var body any
 	if len(reqBody) > 0 {
-		bodyBytes, err = json.Marshal(reqBody)
-		if err != nil {
-			return fmt.Errorf("failed to marshal request: %w", err)
-		}
+		body = reqBody
 	}
-
-	url := fmt.Sprintf("%s/admin/tokens/%s", host, jti)
-	req, err := http.NewRequest("DELETE", url, bytes.NewReader(bodyBytes))
+	resp, err := client.DoJSON(http.MethodDelete, "/admin/tokens/"+jti, body)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+authToken)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusNoContent:

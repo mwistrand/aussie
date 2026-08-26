@@ -9,9 +9,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var authKeysListFormat string
@@ -45,33 +42,15 @@ type signingKey struct {
 }
 
 func runAuthKeysList(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
 
-	url := fmt.Sprintf("%s/admin/keys", cfg.Host)
-	req, err := http.NewRequest("GET", url, nil)
+	resp, err := client.DoJSON(http.MethodGet, "/admin/keys", nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -87,7 +66,7 @@ func runAuthKeysList(cmd *cobra.Command, args []string) error {
 	}
 
 	var keys []signingKey
-	if err := json.NewDecoder(resp.Body).Decode(&keys); err != nil {
+	if err := resp.DecodeJSON(&keys); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 

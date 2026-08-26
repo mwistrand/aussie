@@ -1,16 +1,11 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var authKeysRotateReason string
@@ -53,40 +48,17 @@ type rotateResponse struct {
 }
 
 func runAuthKeysRotate(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
+	client.SetTimeout(time.Minute)
 
 	reqBody := rotateRequest{Reason: authKeysRotateReason}
-	body, err := json.Marshal(reqBody)
+	resp, err := client.DoJSON(http.MethodPost, "/admin/keys/rotate", reqBody)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-
-	url := fmt.Sprintf("%s/admin/keys/rotate", cfg.Host)
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -102,7 +74,7 @@ func runAuthKeysRotate(cmd *cobra.Command, args []string) error {
 	}
 
 	var result rotateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := resp.DecodeJSON(&result); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 

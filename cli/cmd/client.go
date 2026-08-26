@@ -11,6 +11,18 @@ import (
 )
 
 func newAuthenticatedAPIClient(cmd *cobra.Command) (*api.Client, error) {
+	cfg, err := loadConfigForServer(cmd)
+	if err != nil {
+		return nil, err
+	}
+	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	if err != nil {
+		return nil, err
+	}
+	return api.New(cfg.Host, token)
+}
+
+func loadConfigForServer(cmd *cobra.Command) (*config.Config, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
@@ -18,9 +30,5 @@ func newAuthenticatedAPIClient(cmd *cobra.Command) (*api.Client, error) {
 	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
 		cfg.Host = serverFlag
 	}
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
-	if err != nil {
-		return nil, err
-	}
-	return api.New(cfg.Host, token)
+	return cfg, nil
 }

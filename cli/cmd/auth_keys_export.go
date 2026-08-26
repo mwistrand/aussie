@@ -3,14 +3,12 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/aussie/cli/internal/config"
+	"github.com/aussie/cli/internal/api"
 )
 
 var authKeysExportOutput string
@@ -38,28 +36,18 @@ func init() {
 }
 
 func runAuthKeysExport(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
+	cfg, err := loadConfigForServer(cmd)
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return err
 	}
-
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	// JWKS endpoint is public, no auth needed
-	url := fmt.Sprintf("%s/auth/.well-known/jwks.json", cfg.Host)
-	req, err := http.NewRequest("GET", url, nil)
+	client, err := api.New(cfg.Host, "")
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := client.DoJSON(http.MethodGet, "/auth/.well-known/jwks.json", nil)
 	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
+		return err
 	}
-	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -70,14 +58,9 @@ func runAuthKeysExport(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unexpected response: %s", resp.Status)
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
-	}
-
 	// Pretty-print the JSON
 	var jwks map[string]interface{}
-	if err := json.Unmarshal(body, &jwks); err != nil {
+	if err := resp.DecodeJSON(&jwks); err != nil {
 		return fmt.Errorf("failed to parse JWKS: %w", err)
 	}
 

@@ -3,14 +3,9 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var revokeListCmd = &cobra.Command{
@@ -41,59 +36,37 @@ func init() {
 }
 
 func runRevokeList(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Override with server flag if provided
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	// Get authentication token
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
 
-	var url string
+	var path string
 	if revokeListUsers {
-		url = fmt.Sprintf("%s/admin/tokens/users?limit=%d", cfg.Host, revokeListLimit)
+		path = fmt.Sprintf("/admin/tokens/users?limit=%d", revokeListLimit)
 	} else {
-		url = fmt.Sprintf("%s/admin/tokens?limit=%d", cfg.Host, revokeListLimit)
+		path = fmt.Sprintf("/admin/tokens?limit=%d", revokeListLimit)
 	}
 
-	req, err := http.NewRequest("GET", url, nil)
+	resp, err := client.DoJSON(http.MethodGet, path, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read response: %w", err)
-		}
-
 		if revokeListFormat == "json" {
 			// Pretty print JSON
 			var result interface{}
-			json.Unmarshal(body, &result)
+			if err := resp.DecodeJSON(&result); err != nil {
+				return fmt.Errorf("failed to parse response: %w", err)
+			}
 			output, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(output))
 		} else {
 			// Parse and format as table
 			var result map[string]interface{}
-			if err := json.Unmarshal(body, &result); err != nil {
+			if err := resp.DecodeJSON(&result); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 

@@ -12,9 +12,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/aussie/cli/internal/api"
 	"github.com/aussie/cli/internal/auth"
 	"github.com/aussie/cli/internal/benchmark"
-	"github.com/aussie/cli/internal/config"
 )
 
 var (
@@ -80,14 +80,9 @@ func init() {
 
 func runBenchmark(cmd *cobra.Command, args []string) error {
 	// Load configuration
-	cfg, err := config.Load()
+	cfg, err := loadConfigForServer(cmd)
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Override host with --server flag if provided
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
+		return err
 	}
 
 	// Get authentication token
@@ -95,9 +90,14 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("authentication required: %w\nRun 'aussie login' to authenticate", err)
 	}
+	client, err := api.New(cfg.Host, token)
+	if err != nil {
+		return err
+	}
+	client.SetTimeout(10 * time.Second)
 
 	// Check benchmark permission
-	if err := checkBenchmarkPermission(cfg.Host, token); err != nil {
+	if err := checkBenchmarkPermission(client); err != nil {
 		return err
 	}
 
@@ -184,22 +184,11 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 
 // checkBenchmarkPermission verifies the user has permission to run benchmarks.
 // Returns nil if authorized, or an error if not.
-func checkBenchmarkPermission(host, token string) error {
-	authURL := fmt.Sprintf("%s/admin/benchmark/authorize", strings.TrimSuffix(host, "/"))
-
-	req, err := http.NewRequest(http.MethodGet, authURL, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create authorization request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+func checkBenchmarkPermission(client *api.Client) error {
+	resp, err := client.DoJSON(http.MethodGet, "/admin/benchmark/authorize", nil)
 	if err != nil {
 		return fmt.Errorf("failed to check benchmark permission: %w", err)
 	}
-	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusNoContent, http.StatusOK:

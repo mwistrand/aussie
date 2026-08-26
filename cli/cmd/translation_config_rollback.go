@@ -1,16 +1,11 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var translationConfigRollbackCmd = &cobra.Command{
@@ -32,38 +27,19 @@ func init() {
 }
 
 func runTranslationConfigRollback(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
-	if err != nil {
-		return err
-	}
-
 	versionNumber, err := strconv.Atoi(args[0])
 	if err != nil {
 		return fmt.Errorf("invalid version number: %s", args[0])
 	}
 
-	url := fmt.Sprintf("%s/admin/translation-config/rollback/%d", cfg.Host, versionNumber)
-	req, err := http.NewRequest("POST", url, nil)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := client.DoJSON(http.MethodPost, fmt.Sprintf("/admin/translation-config/rollback/%d", versionNumber), nil)
 	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
+		return err
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
@@ -83,7 +59,7 @@ func runTranslationConfigRollback(cmd *cobra.Command, args []string) error {
 		Version int    `json:"version"`
 		Comment string `json:"comment"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&version); err != nil {
+	if err := resp.DecodeJSON(&version); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 

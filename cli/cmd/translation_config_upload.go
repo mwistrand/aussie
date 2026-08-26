@@ -1,18 +1,12 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var translationConfigUploadCmd = &cobra.Command{
@@ -38,16 +32,7 @@ func init() {
 }
 
 func runTranslationConfigUpload(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -75,25 +60,10 @@ func runTranslationConfigUpload(cmd *cobra.Command, args []string) error {
 		"activate": !noActivate,
 	}
 
-	body, err := json.Marshal(requestBody)
+	resp, err := client.DoJSON(http.MethodPost, "/admin/translation-config", requestBody)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-
-	url := fmt.Sprintf("%s/admin/translation-config", cfg.Host)
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
@@ -102,8 +72,7 @@ func runTranslationConfigUpload(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("insufficient permissions (requires translation.config.write or admin)")
 	}
 	if resp.StatusCode == http.StatusBadRequest {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("validation failed: %s", string(respBody))
+		return fmt.Errorf("validation failed: %s", resp.Detail())
 	}
 	if resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("unexpected response: %s", resp.Status)
@@ -114,7 +83,7 @@ func runTranslationConfigUpload(cmd *cobra.Command, args []string) error {
 		Version int    `json:"version"`
 		Active  bool   `json:"active"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&version); err != nil {
+	if err := resp.DecodeJSON(&version); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 

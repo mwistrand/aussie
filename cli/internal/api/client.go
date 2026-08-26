@@ -51,6 +51,11 @@ func New(host, token string) (*Client, error) {
 	}, nil
 }
 
+// SetTimeout changes the maximum duration for subsequent requests.
+func (c *Client) SetTimeout(timeout time.Duration) {
+	c.httpClient.Timeout = timeout
+}
+
 // Response contains a fully consumed server response.
 type Response struct {
 	StatusCode int
