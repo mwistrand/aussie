@@ -15,7 +15,7 @@ public sealed interface TokenValidationResult {
          * Compatibility constructor for validator providers compiled against the original result shape.
          */
         public Valid(String subject, String issuer, java.util.Map<String, Object> claims, java.time.Instant expiresAt) {
-            this(new ValidatedIdentity(
+            this(ValidatedIdentity.fromValidatedClaims(
                     "legacy",
                     subject,
                     issuer,

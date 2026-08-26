@@ -86,7 +86,7 @@ class SessionServiceTest {
     }
 
     private ValidatedIdentity identity(String subject, String issuer, Map<String, Object> claims) {
-        return new ValidatedIdentity(
+        return ValidatedIdentity.fromValidatedClaims(
                 "test-provider",
                 subject,
                 issuer,
@@ -158,7 +158,7 @@ class SessionServiceTest {
         @DisplayName("should not outlive validated identity")
         void shouldNotOutliveValidatedIdentity() {
             final var identityExpiration = Instant.now().plus(Duration.ofMinutes(5));
-            final var identity = new ValidatedIdentity(
+            final var identity = ValidatedIdentity.fromValidatedClaims(
                     "test-provider",
                     "user123",
                     "issuer",
@@ -178,7 +178,7 @@ class SessionServiceTest {
         @Test
         @DisplayName("should reject an expired validated identity")
         void shouldRejectExpiredIdentity() {
-            final var expiredIdentity = new ValidatedIdentity(
+            final var expiredIdentity = ValidatedIdentity.fromValidatedClaims(
                     "test-provider",
                     "user123",
                     "issuer",
@@ -353,7 +353,7 @@ class SessionServiceTest {
         @DisplayName("should not refresh beyond validated identity expiration")
         void shouldNotRefreshBeyondValidatedIdentityExpiration() {
             final var identityExpiration = Instant.now().plus(Duration.ofMinutes(5));
-            final var identity = new ValidatedIdentity(
+            final var identity = ValidatedIdentity.fromValidatedClaims(
                     "test-provider",
                     "user123",
                     "issuer",

@@ -209,7 +209,7 @@ public class OidcTokenValidator implements TokenValidatorProvider {
                     .map(String.class::cast)
                     .filter(value -> !value.isBlank());
 
-            return new TokenValidationResult.Valid(new ValidatedIdentity(
+            return new TokenValidationResult.Valid(ValidatedIdentity.fromValidatedClaims(
                     state.providerId(),
                     subject,
                     issuer,

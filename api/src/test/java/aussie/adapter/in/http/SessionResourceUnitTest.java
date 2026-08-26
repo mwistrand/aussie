@@ -253,7 +253,7 @@ class SessionResourceUnitTest {
 
     private ValidatedIdentity identity() {
         final var expiresAt = Instant.now().plusSeconds(3600);
-        return new ValidatedIdentity(
+        return ValidatedIdentity.fromValidatedClaims(
                 "configured-idp",
                 "user-1",
                 "https://idp.example.com",
