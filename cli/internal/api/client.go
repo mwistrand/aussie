@@ -61,6 +61,11 @@ type Response struct {
 
 // DoJSON sends one API request and closes the response body before returning.
 func (c *Client) DoJSON(method, path string, body any) (*Response, error) {
+	return c.DoJSONWithHeaders(method, path, body, nil)
+}
+
+// DoJSONWithHeaders sends one API request with caller-supplied headers.
+func (c *Client) DoJSONWithHeaders(method, path string, body any, headers http.Header) (*Response, error) {
 	endpoint, err := c.endpoint(path)
 	if err != nil {
 		return nil, err
@@ -78,6 +83,12 @@ func (c *Client) DoJSON(method, path string, body any) (*Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
+	for key, values := range headers {
+		for _, value := range values {
+			request.Header.Add(key, value)
+		}
+	}
+	request.Header.Del("Authorization")
 	if c.token != "" {
 		request.Header.Set("Authorization", "Bearer "+c.token)
 	}

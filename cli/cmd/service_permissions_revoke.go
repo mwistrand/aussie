@@ -4,9 +4,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var servicePermissionsRevokeCmd = &cobra.Command{
@@ -47,24 +44,13 @@ func runServicePermissionsRevoke(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid service ID format: must contain only alphanumeric characters, hyphens, and underscores")
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Override with server flag if provided
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	// Get authentication token (JWT first, then API key fallback)
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
 
 	// Step 1: Get current policy
-	currentPolicy, version, err := getPermissionPolicy(cfg.Host, token, serviceID)
+	currentPolicy, version, err := getPermissionPolicy(client, serviceID)
 	if err != nil {
 		return err
 	}
@@ -101,7 +87,7 @@ func runServicePermissionsRevoke(cmd *cobra.Command, args []string) error {
 	currentPolicy.Permissions[revokeOperation] = opPerm
 
 	// Step 3: Update the policy
-	if err := updatePermissionPolicy(cfg.Host, token, serviceID, currentPolicy, version); err != nil {
+	if err := updatePermissionPolicy(client, serviceID, currentPolicy, version); err != nil {
 		return err
 	}
 

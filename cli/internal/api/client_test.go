@@ -14,6 +14,12 @@ func TestClientSendsBoundOriginAndBearerToken(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer token" {
 			t.Errorf("Authorization = %q, want bearer token", got)
 		}
+		if got := r.Header.Values("Authorization"); len(got) != 1 {
+			t.Errorf("Authorization values = %q, want only the bearer token", got)
+		}
+		if got := r.Header.Get("If-Match"); got != "2" {
+			t.Errorf("If-Match = %q, want 2", got)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"detail":"ok"}`))
 	}))
@@ -23,7 +29,10 @@ func TestClientSendsBoundOriginAndBearerToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := client.DoJSON(http.MethodGet, "/admin/roles?limit=2", nil)
+	response, err := client.DoJSONWithHeaders(http.MethodGet, "/admin/roles?limit=2", nil, http.Header{
+		"authorization": {"Bearer caller-supplied"},
+		"If-Match":      {"2"},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

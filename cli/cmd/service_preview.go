@@ -1,15 +1,11 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strings"
-	"time"
 
-	"github.com/aussie/cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -56,29 +52,14 @@ func runServicePreview(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid service ID format: must contain only alphanumeric characters, hyphens, and underscores")
 	}
 
-	// Load configuration
-	cfg, err := config.Load()
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return err
 	}
 
-	// Check if server flag was provided (overrides config)
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" && serverFlag != "http://localhost:1234" {
-		cfg.Host = serverFlag
-	}
-
-	// Fetch service from API
-	url := fmt.Sprintf("%s/admin/services/%s", cfg.Host, serviceID)
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := client.DoJSON(http.MethodGet, "/admin/services/"+serviceID, nil)
 	if err != nil {
-		return fmt.Errorf("failed to connect to Aussie at %s: %w", cfg.Host, err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
+		return err
 	}
 
 	if resp.StatusCode == http.StatusNotFound {
@@ -86,12 +67,11 @@ func runServicePreview(cmd *cobra.Command, args []string) error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to fetch service (HTTP %d): %s", resp.StatusCode, string(body))
+		return fmt.Errorf("failed to fetch service (HTTP %d): %s", resp.StatusCode, resp.Detail())
 	}
 
-	// Parse response
 	var service ServiceResponse
-	if err := json.Unmarshal(body, &service); err != nil {
+	if err := resp.DecodeJSON(&service); err != nil {
 		return fmt.Errorf("failed to parse service response: %w", err)
 	}
 

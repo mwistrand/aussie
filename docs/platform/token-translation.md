@@ -297,10 +297,6 @@ aussie translation-config get <version-id>
 # Validate config file
 aussie translation-config validate config.json
 
-# Test translation
-aussie translation-config test --claims '{"roles": ["admin"]}'
-aussie translation-config test --claims-file sample-claims.json
-
 # Activate a version
 aussie translation-config activate <version-id>
 
@@ -461,10 +457,7 @@ Example health check response:
 
 2. Check provider health in logs or health endpoint
 
-3. Test translation with sample claims:
-   ```bash
-   aussie translation-config test --claims '{"realm_access": {"roles": ["admin"]}}'
-   ```
+3. Test translation through the Admin API's `/admin/translation-config/test` endpoint with sample claims.
 
 ### Cache Issues
 

@@ -1,17 +1,12 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
+	"github.com/aussie/cli/internal/api"
 )
 
 var servicePermissionsGrantCmd = &cobra.Command{
@@ -61,24 +56,13 @@ func runServicePermissionsGrant(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid service ID format: must contain only alphanumeric characters, hyphens, and underscores")
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Override with server flag if provided
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	// Get authentication token (JWT first, then API key fallback)
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
 
 	// Step 1: Get current policy
-	currentPolicy, version, err := getPermissionPolicy(cfg.Host, token, serviceID)
+	currentPolicy, version, err := getPermissionPolicy(client, serviceID)
 	if err != nil {
 		return err
 	}
@@ -110,7 +94,7 @@ func runServicePermissionsGrant(cmd *cobra.Command, args []string) error {
 	currentPolicy.Permissions[grantOperation] = opPerm
 
 	// Step 3: Update the policy
-	if err := updatePermissionPolicy(cfg.Host, token, serviceID, currentPolicy, version); err != nil {
+	if err := updatePermissionPolicy(client, serviceID, currentPolicy, version); err != nil {
 		return err
 	}
 
@@ -118,25 +102,10 @@ func runServicePermissionsGrant(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func getPermissionPolicy(host, token, serviceID string) (*ServicePermissionPolicy, int64, error) {
-	url := fmt.Sprintf("%s/admin/services/%s/permissions", host, serviceID)
-	req, err := http.NewRequest("GET", url, nil)
+func getPermissionPolicy(client *api.Client, serviceID string) (*ServicePermissionPolicy, int64, error) {
+	resp, err := client.DoJSON(http.MethodGet, "/admin/services/"+serviceID+"/permissions", nil)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to read response: %w", err)
+		return nil, 0, err
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized {
@@ -149,39 +118,24 @@ func getPermissionPolicy(host, token, serviceID string) (*ServicePermissionPolic
 		return nil, 0, fmt.Errorf("service not found: %s", serviceID)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, 0, fmt.Errorf("unexpected response: %s", resp.Status)
+		return nil, 0, fmt.Errorf("unexpected response: %s", resp.Detail())
 	}
 
 	var response PermissionPolicyResponse
-	if err := json.Unmarshal(body, &response); err != nil {
+	if err := resp.DecodeJSON(&response); err != nil {
 		return nil, 0, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	return response.PermissionPolicy, response.Version, nil
 }
 
-func updatePermissionPolicy(host, token, serviceID string, policy *ServicePermissionPolicy, version int64) error {
-	policyData, err := json.Marshal(policy)
+func updatePermissionPolicy(client *api.Client, serviceID string, policy *ServicePermissionPolicy, version int64) error {
+	resp, err := client.DoJSONWithHeaders(http.MethodPut, "/admin/services/"+serviceID+"/permissions", policy, http.Header{
+		"If-Match": {fmt.Sprintf("%d", version)},
+	})
 	if err != nil {
-		return fmt.Errorf("failed to serialize policy: %w", err)
+		return err
 	}
-
-	url := fmt.Sprintf("%s/admin/services/%s/permissions", host, serviceID)
-	req, err := http.NewRequest("PUT", url, bytes.NewReader(policyData))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("If-Match", fmt.Sprintf("%d", version))
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
@@ -192,12 +146,11 @@ func updatePermissionPolicy(host, token, serviceID string, policy *ServicePermis
 	if resp.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("service not found: %s", serviceID)
 	}
-	if resp.StatusCode == http.StatusConflict {
+	if resp.StatusCode == http.StatusPreconditionFailed {
 		return fmt.Errorf("version conflict: the service has been modified. Retry the operation")
 	}
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected response: %s - %s", resp.Status, string(body))
+		return fmt.Errorf("unexpected response: %s", resp.Detail())
 	}
 
 	return nil

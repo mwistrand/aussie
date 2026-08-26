@@ -1,18 +1,12 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var (
@@ -146,17 +140,6 @@ func init() {
 }
 
 func runRegister(cmd *cobra.Command, args []string) error {
-	// Load CLI configuration
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Check if server flag was provided (overrides config)
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" && serverFlag != "http://localhost:1234" {
-		cfg.Host = serverFlag
-	}
-
 	// Build service registration from file and/or flags
 	registration, err := buildServiceRegistration(cmd)
 	if err != nil {
@@ -174,45 +157,24 @@ func runRegister(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("base-url is required (use --base-url or provide in JSON file)")
 	}
 
-	// Serialize to JSON
-	data, err := json.Marshal(registration)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
-		return fmt.Errorf("failed to serialize registration: %w", err)
+		return err
 	}
 
-	// Send registration request to Aussie
-	url := fmt.Sprintf("%s/admin/services", cfg.Host)
-	req, err := http.NewRequest("POST", url, bytes.NewReader(data))
+	resp, err := client.DoJSON(http.MethodPost, "/admin/services", registration)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	// Add authentication (JWT first, then API key fallback)
-	if token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host); err == nil {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to Aussie at %s: %w", cfg.Host, err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
+		return err
 	}
 
 	if resp.StatusCode == http.StatusCreated {
 		// Pretty print the response
 		var result map[string]interface{}
-		if err := json.Unmarshal(body, &result); err == nil {
+		if err := resp.DecodeJSON(&result); err == nil {
 			prettyJSON, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Printf("Service registered successfully!\n\n%s\n", string(prettyJSON))
 		} else {
-			fmt.Printf("Service registered successfully!\n%s\n", string(body))
+			fmt.Println("Service registered successfully!")
 		}
 		return nil
 	}
@@ -220,15 +182,15 @@ func runRegister(cmd *cobra.Command, args []string) error {
 	// Handle errors
 	switch resp.StatusCode {
 	case http.StatusBadRequest:
-		return fmt.Errorf("invalid service configuration: %s", string(body))
+		return fmt.Errorf("invalid service configuration: %s", resp.Detail())
 	case http.StatusUnauthorized:
 		return fmt.Errorf("authentication required. Run 'aussie login' to authenticate")
 	case http.StatusForbidden:
 		return fmt.Errorf("permission denied: insufficient privileges")
 	case http.StatusConflict:
-		return fmt.Errorf("version conflict: %s", string(body))
+		return fmt.Errorf("version conflict: %s", resp.Detail())
 	default:
-		return fmt.Errorf("registration failed (HTTP %d): %s", resp.StatusCode, string(body))
+		return fmt.Errorf("registration failed (HTTP %d): %s", resp.StatusCode, resp.Detail())
 	}
 }
 

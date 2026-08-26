@@ -2,9 +2,14 @@ package cmd
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/aussie/cli/internal/api"
 )
 
 func TestServicePermissionsCmd_Initialized(t *testing.T) {
@@ -91,6 +96,25 @@ func TestServicePermissionsRevokeCmd_Initialized(t *testing.T) {
 	permissionFlag := servicePermissionsRevokeCmd.Flags().Lookup("permission")
 	if permissionFlag == nil {
 		t.Error("servicePermissionsRevokeCmd should have 'permission' flag")
+	}
+}
+
+func TestUpdatePermissionPolicyReportsVersionConflict(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("If-Match"); got != "3" {
+			t.Errorf("If-Match = %q, want 3", got)
+		}
+		w.WriteHeader(http.StatusPreconditionFailed)
+	}))
+	defer server.Close()
+
+	client, err := api.New(server.URL, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = updatePermissionPolicy(client, "test-service", &ServicePermissionPolicy{}, 3)
+	if err == nil || !strings.Contains(err.Error(), "version conflict") {
+		t.Fatalf("updatePermissionPolicy() error = %v, want version conflict", err)
 	}
 }
 

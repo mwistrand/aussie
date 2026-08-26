@@ -221,9 +221,6 @@ To use a different Aussie server:
 
 ### Managing Services
 ```bash
-# List the first page of registered services
-./aussie service list
-
 # Preview a specific service's visibility settings
 ./aussie service preview user-service
 ```
@@ -665,12 +662,6 @@ This checks:
 - Must not point to wildcard addresses (`0.0.0.0`, `::`)
 - Private network addresses (`10.x`, `172.16-31.x`, `192.168.x`) require an explicit platform exception
 
-#### `service list`
-List registered services.
-```bash
-./aussie service list
-```
-
 #### `service preview`
 Preview visibility settings for a registered service.
 ```bash
@@ -683,17 +674,16 @@ Preview visibility settings for a registered service.
 | `login` / `auth login` | Authenticate with IdP |
 | `logout` / `auth logout` | Clear stored credentials |
 | `auth status` | Show current authentication status |
-| `groups create` | Create a new RBAC group |
-| `groups list` | List all groups |
-| `groups get <id>` | Get a specific group |
-| `groups update <id>` | Update a group |
-| `groups delete <id>` | Delete a group |
+| `roles create` | Create a new RBAC role |
+| `roles list` | List all roles |
+| `roles get <id>` | Get a specific role |
+| `roles update <id>` | Update a role |
+| `roles delete <id>` | Delete a role |
 | `keys create` | Create a new API key |
 | `keys list` | List API keys |
 | `keys revoke <id>` | Revoke an API key |
 | `service register -f <file>` | Register a service |
 | `service validate -f <file>` | Validate a service configuration |
-| `service list` | List registered services |
 | `service preview <id>` | Preview service visibility settings |
 | `service delete <id>` | Delete a service registration |
 
@@ -708,9 +698,6 @@ These flags are available for all commands:
 
 ### "Service not found" on pass-through
 ```bash
-# Check registered services
-./aussie service list
-
 # Verify serviceId matches URL
 # URL: /user-service/... requires serviceId: "user-service"
 ```

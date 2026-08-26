@@ -3,12 +3,8 @@ package cmd
 import (
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var serviceDeleteCmd = &cobra.Command{
@@ -38,35 +34,15 @@ func runServiceDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid service ID format: must contain only alphanumeric characters, hyphens, and underscores")
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Override with server flag if provided
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	// Get authentication token (JWT first, then API key fallback)
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
 
-	url := fmt.Sprintf("%s/admin/services/%s", cfg.Host, serviceID)
-	req, err := http.NewRequest("DELETE", url, nil)
+	resp, err := client.DoJSON(http.MethodDelete, "/admin/services/"+serviceID, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")

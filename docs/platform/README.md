@@ -823,9 +823,6 @@ Treat Redis as sensitive storage: an idempotent API-key creation response contai
 
 **CLI equivalents:**
 ```bash
-# List the first page of services
-./aussie service list
-
 # Register a service
 ./aussie service register -f my-service.json
 
@@ -872,7 +869,6 @@ aussie translation-config upload config.json
 aussie translation-config list
 aussie translation-config get
 aussie translation-config validate config.json
-aussie translation-config test --claims '{"roles": ["admin"]}'
 aussie translation-config activate <version-id>
 aussie translation-config rollback <version-number>
 aussie translation-config delete <version-id>
