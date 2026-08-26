@@ -1,17 +1,11 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var (
@@ -79,18 +73,7 @@ func runRolesUpdate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--permissions cannot be combined with --add-permissions or --remove-permissions")
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Override with server flag if provided
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	// Get authentication token (JWT first, then API key fallback)
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -113,25 +96,10 @@ func runRolesUpdate(cmd *cobra.Command, args []string) error {
 		reqBody["removePermissions"] = removeRolePermissions
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	resp, err := client.DoJSON(http.MethodPut, "/admin/roles/"+roleID, reqBody)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return err
 	}
-
-	url := fmt.Sprintf("%s/admin/roles/%s", cfg.Host, roleID)
-	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
@@ -146,7 +114,7 @@ func runRolesUpdate(cmd *cobra.Command, args []string) error {
 		var errResp struct {
 			Detail string `json:"detail"`
 		}
-		json.NewDecoder(resp.Body).Decode(&errResp)
+		_ = resp.DecodeJSON(&errResp)
 		return fmt.Errorf("invalid request: %s", errResp.Detail)
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -160,7 +128,7 @@ func runRolesUpdate(cmd *cobra.Command, args []string) error {
 		Permissions []string `json:"permissions"`
 		UpdatedAt   string   `json:"updatedAt"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := resp.DecodeJSON(&result); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 

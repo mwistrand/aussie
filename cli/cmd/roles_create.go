@@ -1,17 +1,11 @@
 package cmd
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
-
-	"github.com/aussie/cli/internal/auth"
-	"github.com/aussie/cli/internal/config"
 )
 
 var (
@@ -46,18 +40,7 @@ func init() {
 }
 
 func runRolesCreate(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Override with server flag if provided
-	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
-		cfg.Host = serverFlag
-	}
-
-	// Get authentication token (JWT first, then API key fallback)
-	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
 		return err
 	}
@@ -76,25 +59,10 @@ func runRolesCreate(cmd *cobra.Command, args []string) error {
 		reqBody["permissions"] = createRolePermissions
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	resp, err := client.DoJSON(http.MethodPost, "/admin/roles", reqBody)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return err
 	}
-
-	url := fmt.Sprintf("%s/admin/roles", cfg.Host)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to connect to server: %w", err)
-	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("authentication failed. Run 'aussie login' to re-authenticate")
@@ -106,7 +74,7 @@ func runRolesCreate(cmd *cobra.Command, args []string) error {
 		var errResp struct {
 			Detail string `json:"detail"`
 		}
-		json.NewDecoder(resp.Body).Decode(&errResp)
+		_ = resp.DecodeJSON(&errResp)
 		return fmt.Errorf("invalid request: %s", errResp.Detail)
 	}
 	if resp.StatusCode != http.StatusCreated {
@@ -120,7 +88,7 @@ func runRolesCreate(cmd *cobra.Command, args []string) error {
 		Permissions []string `json:"permissions"`
 		CreatedAt   string   `json:"createdAt"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := resp.DecodeJSON(&result); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
 
