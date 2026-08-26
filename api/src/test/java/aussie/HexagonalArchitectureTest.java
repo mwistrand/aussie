@@ -97,6 +97,21 @@ class HexagonalArchitectureTest {
         }
 
         @Test
+        @DisplayName("Top-level core ports should be interfaces")
+        void topLevelCorePortsShouldBeInterfaces() {
+            ArchRule rule = ArchRuleDefinition.classes()
+                    .that()
+                    .resideInAnyPackage("aussie.core.port..")
+                    .and()
+                    .areNotNestedClasses()
+                    .should()
+                    .beInterfaces()
+                    .because("ports define boundaries and must not contain implementations");
+
+            rule.check(importedClasses);
+        }
+
+        @Test
         @DisplayName("JwksCache implementations should live in outbound adapters")
         void jwksCacheImplementationsShouldLiveInOutboundAdapters() {
             ArchRule rule = ArchRuleDefinition.classes()
@@ -132,24 +147,9 @@ class HexagonalArchitectureTest {
     @DisplayName("Common Layer Rules")
     class CommonLayerRules {
 
-        private boolean hasCommonPackage() {
-            try {
-                var commonClasses = importedClasses.getPackage("aussie.common");
-                return commonClasses != null && !commonClasses.getClasses().isEmpty();
-            } catch (IllegalArgumentException e) {
-                // Package doesn't exist
-                return false;
-            }
-        }
-
         @Test
         @DisplayName("Common should not depend on core")
         void commonShouldNotDependOnCore() {
-            // Skip if no classes in common package (package is empty for now)
-            if (!hasCommonPackage()) {
-                return;
-            }
-
             ArchRule rule = noClasses()
                     .that()
                     .resideInAPackage("aussie.common..")
@@ -163,11 +163,6 @@ class HexagonalArchitectureTest {
         @Test
         @DisplayName("Common should not depend on adapter")
         void commonShouldNotDependOnAdapter() {
-            // Skip if no classes in common package (package is empty for now)
-            if (!hasCommonPackage()) {
-                return;
-            }
-
             ArchRule rule = noClasses()
                     .that()
                     .resideInAPackage("aussie.common..")
@@ -181,11 +176,6 @@ class HexagonalArchitectureTest {
         @Test
         @DisplayName("Common should not depend on system")
         void commonShouldNotDependOnSystem() {
-            // Skip if no classes in common package (package is empty for now)
-            if (!hasCommonPackage()) {
-                return;
-            }
-
             ArchRule rule = noClasses()
                     .that()
                     .resideInAPackage("aussie.common..")

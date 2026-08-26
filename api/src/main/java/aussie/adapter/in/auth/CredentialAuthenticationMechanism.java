@@ -23,6 +23,7 @@ import org.jboss.logging.Logger;
 import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.adapter.out.telemetry.SecurityMonitor;
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.config.ApiKeyConfig;
 import aussie.core.config.SessionConfig;
 import aussie.core.model.auth.Permission;
@@ -31,7 +32,6 @@ import aussie.core.port.in.SessionManagement;
 import aussie.core.service.auth.ApiKeyService;
 import aussie.core.service.auth.TokenValidationService;
 import aussie.core.util.SecureHash;
-import aussie.system.filter.RouteResolutionFilter;
 
 /** Parses inbound credentials once and dispatches each unambiguous credential type. */
 @ApplicationScoped
@@ -75,7 +75,7 @@ public class CredentialAuthenticationMechanism implements HttpAuthenticationMech
 
     @Override
     public Uni<SecurityIdentity> authenticate(RoutingContext context, IdentityProviderManager identityProviderManager) {
-        if (Boolean.TRUE.equals(context.get(RouteResolutionFilter.PUBLIC_KEY))) {
+        if (Boolean.TRUE.equals(context.get(RouteContextAttributes.PUBLIC))) {
             return Uni.createFrom().nullItem();
         }
         if (isDangerousNoopEnabled()) {

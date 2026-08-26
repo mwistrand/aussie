@@ -25,6 +25,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteLookupResult;
@@ -91,9 +92,9 @@ class RouteResolutionFilterTest {
             filter.resolveRoute(rc);
 
             ArgumentCaptor<Optional<RouteLookupResult>> captor = lookupCaptor();
-            verify(rc).put(eq(RouteResolutionFilter.LOOKUP_KEY), captor.capture());
+            verify(rc).put(eq(RouteContextAttributes.LOOKUP), captor.capture());
             assertSame(match, captor.getValue().orElseThrow());
-            verify(rc).put(RouteResolutionFilter.PUBLIC_KEY, Boolean.TRUE);
+            verify(rc).put(RouteContextAttributes.PUBLIC, Boolean.TRUE);
             verify(rc).next();
         }
     }
@@ -111,8 +112,8 @@ class RouteResolutionFilterTest {
 
             filter.resolveRoute(rc);
 
-            verify(rc).put(eq(RouteResolutionFilter.LOOKUP_KEY), any());
-            verify(rc, never()).put(RouteResolutionFilter.PUBLIC_KEY, Boolean.TRUE);
+            verify(rc).put(eq(RouteContextAttributes.LOOKUP), any());
+            verify(rc, never()).put(RouteContextAttributes.PUBLIC, Boolean.TRUE);
             verify(rc).next();
         }
     }
@@ -131,7 +132,7 @@ class RouteResolutionFilterTest {
 
             filter.resolveRoute(rc);
 
-            verify(rc).put(RouteResolutionFilter.PUBLIC_KEY, Boolean.TRUE);
+            verify(rc).put(RouteContextAttributes.PUBLIC, Boolean.TRUE);
             verify(rc).next();
         }
 
@@ -145,7 +146,7 @@ class RouteResolutionFilterTest {
 
             filter.resolveRoute(rc);
 
-            verify(rc, never()).put(RouteResolutionFilter.PUBLIC_KEY, Boolean.TRUE);
+            verify(rc, never()).put(RouteContextAttributes.PUBLIC, Boolean.TRUE);
             verify(rc).next();
         }
     }
@@ -163,9 +164,9 @@ class RouteResolutionFilterTest {
             filter.resolveRoute(rc);
 
             ArgumentCaptor<Optional<RouteLookupResult>> captor = lookupCaptor();
-            verify(rc).put(eq(RouteResolutionFilter.LOOKUP_KEY), captor.capture());
+            verify(rc).put(eq(RouteContextAttributes.LOOKUP), captor.capture());
             assertEquals(Optional.empty(), captor.getValue());
-            verify(rc, never()).put(RouteResolutionFilter.PUBLIC_KEY, Boolean.TRUE);
+            verify(rc, never()).put(RouteContextAttributes.PUBLIC, Boolean.TRUE);
             verify(rc).next();
         }
     }
@@ -175,10 +176,10 @@ class RouteResolutionFilterTest {
     class Constants {
 
         @Test
-        @DisplayName("LOOKUP_KEY and PUBLIC_KEY values do not change without coordination")
+        @DisplayName("route context attribute values do not change without coordination")
         void keysAreStable() {
-            assertEquals("aussie.route.lookup", RouteResolutionFilter.LOOKUP_KEY);
-            assertEquals("aussie.route.public", RouteResolutionFilter.PUBLIC_KEY);
+            assertEquals("aussie.route.lookup", RouteContextAttributes.LOOKUP);
+            assertEquals("aussie.route.public", RouteContextAttributes.PUBLIC);
         }
     }
 

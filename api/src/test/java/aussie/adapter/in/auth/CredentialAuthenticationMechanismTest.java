@@ -36,13 +36,13 @@ import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.adapter.out.telemetry.SecurityMonitor;
 import aussie.common.context.ClientContext;
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.config.ApiKeyConfig;
 import aussie.core.config.SessionConfig;
 import aussie.core.model.session.Session;
 import aussie.core.port.in.SessionManagement;
 import aussie.core.service.auth.ApiKeyService;
 import aussie.core.service.auth.TokenValidationService;
-import aussie.system.filter.RouteResolutionFilter;
 
 @DisplayName("Credential authentication dispatcher")
 class CredentialAuthenticationMechanismTest {
@@ -114,7 +114,7 @@ class CredentialAuthenticationMechanismTest {
 
     @Test
     void publicRoutesSkipCredentialParsing() {
-        when(routingContext.get(RouteResolutionFilter.PUBLIC_KEY)).thenReturn(Boolean.TRUE);
+        when(routingContext.get(RouteContextAttributes.PUBLIC)).thenReturn(Boolean.TRUE);
 
         assertNull(mechanism(false)
                 .authenticate(routingContext, identityProviderManager)

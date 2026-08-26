@@ -6,6 +6,7 @@ import jakarta.inject.Inject;
 import io.quarkus.vertx.web.RouteFilter;
 import io.vertx.ext.web.RoutingContext;
 
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.service.routing.ServiceRegistry;
@@ -24,19 +25,6 @@ import aussie.core.service.routing.ServiceRegistry;
 @ApplicationScoped
 public class RouteResolutionFilter {
 
-    /**
-     * {@link RoutingContext} key for the {@code Optional<RouteLookupResult>}
-     * produced by {@link ServiceRegistry#findRoute(String, String)}.
-     */
-    public static final String LOOKUP_KEY = "aussie.route.lookup";
-
-    /**
-     * {@link RoutingContext} key for the {@code Boolean} flag that is set to
-     * {@code Boolean.TRUE} when the resolved route's effective visibility is
-     * {@link EndpointVisibility#PUBLIC}. Absent otherwise.
-     */
-    public static final String PUBLIC_KEY = "aussie.route.public";
-
     private final ServiceRegistry serviceRegistry;
 
     @Inject
@@ -50,10 +38,10 @@ public class RouteResolutionFilter {
         final var method = rc.request().method().name();
 
         final var lookup = serviceRegistry.findRoute(path, method);
-        rc.put(LOOKUP_KEY, lookup);
+        rc.put(RouteContextAttributes.LOOKUP, lookup);
 
         if (lookup.isPresent() && isPublic(lookup.get())) {
-            rc.put(PUBLIC_KEY, Boolean.TRUE);
+            rc.put(RouteContextAttributes.PUBLIC, Boolean.TRUE);
         }
 
         rc.next();

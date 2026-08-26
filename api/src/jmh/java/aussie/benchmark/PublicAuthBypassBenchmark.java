@@ -27,11 +27,11 @@ import aussie.adapter.in.auth.SessionCookieManager;
 import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.adapter.out.telemetry.SecurityMonitor;
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.config.ApiKeyConfig;
 import aussie.core.config.SessionConfig;
 import aussie.core.port.in.SessionManagement;
 import aussie.core.service.auth.TokenValidationService;
-import aussie.system.filter.RouteResolutionFilter;
 
 /**
  * Measures the consolidated authentication dispatcher's PUBLIC short-circuit and credential
@@ -88,7 +88,7 @@ public class PublicAuthBypassBenchmark {
             Mockito.when(req.path()).thenReturn("/svc/api/probe");
             Mockito.when(req.headers()).thenReturn(headers);
             if (isPublic) {
-                Mockito.when(ctx.get(RouteResolutionFilter.PUBLIC_KEY)).thenReturn(Boolean.TRUE);
+                Mockito.when(ctx.get(RouteContextAttributes.PUBLIC)).thenReturn(Boolean.TRUE);
             }
             return ctx;
         }
