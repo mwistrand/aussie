@@ -24,6 +24,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
+import aussie.adapter.out.auth.RevocationBloomFilterService;
+import aussie.adapter.out.auth.RevocationCacheService;
 import aussie.core.config.TokenRevocationConfig;
 import aussie.core.port.out.RevocationEventPublisher;
 import aussie.spi.TokenRevocationRepository;
@@ -32,7 +34,7 @@ import aussie.spi.TokenRevocationRepository;
  * Integration tests for TokenRevocationService using real bloom filter and cache.
  *
  * <p>These tests verify the end-to-end flow of token revocation and checking,
- * using real {@link RevocationBloomFilter} and {@link RevocationCache} instances
+ * using real {@link RevocationBloomFilterService} and {@link RevocationCacheService} instances
  * while mocking only external dependencies (repository, event publisher).
  */
 @DisplayName("TokenRevocationService Integration")
@@ -61,8 +63,8 @@ class TokenRevocationServiceIntegrationTest {
     @Mock
     private Vertx vertx;
 
-    private RevocationBloomFilter bloomFilter;
-    private RevocationCache cache;
+    private RevocationBloomFilterService bloomFilter;
+    private RevocationCacheService cache;
     private TokenRevocationService service;
 
     @BeforeEach
@@ -97,8 +99,8 @@ class TokenRevocationServiceIntegrationTest {
                 .thenReturn(Multi.createFrom().empty());
 
         // Create real bloom filter and cache
-        bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
-        cache = new RevocationCache(config);
+        bloomFilter = new RevocationBloomFilterService(config, repository, eventPublisher, vertx);
+        cache = new RevocationCacheService(config);
 
         // Initialize via reflection (simulating @PostConstruct)
         invokePostConstruct(cache);

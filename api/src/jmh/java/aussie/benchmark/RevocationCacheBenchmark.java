@@ -21,9 +21,9 @@ import org.openjdk.jmh.infra.Blackhole;
 /**
  * Benchmarks for revocation cache lookup performance.
  *
- * <p>RevocationCache is an ApplicationScoped CDI bean. Rather than mocking the
+ * <p>RevocationCacheService is an ApplicationScoped CDI bean. Rather than mocking the
  * entire bean, these benchmarks directly exercise the underlying Caffeine cache
- * operations that RevocationCache delegates to, since the RevocationCache methods
+ * operations that RevocationCacheService delegates to, since its methods
  * are thin wrappers around Caffeine get/put calls with Instant comparison logic.
  */
 @BenchmarkMode(Mode.AverageTime)

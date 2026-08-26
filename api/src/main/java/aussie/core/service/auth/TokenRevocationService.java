@@ -10,6 +10,8 @@ import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
 import aussie.core.config.TokenRevocationConfig;
+import aussie.core.port.out.RevocationBloomFilter;
+import aussie.core.port.out.RevocationCache;
 import aussie.core.port.out.RevocationEventPublisher;
 import aussie.spi.TokenRevocationRepository;
 

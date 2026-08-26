@@ -22,6 +22,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.core.config.TokenRevocationConfig;
+import aussie.core.port.out.RevocationBloomFilter;
+import aussie.core.port.out.RevocationCache;
 import aussie.core.port.out.RevocationEventPublisher;
 import aussie.spi.TokenRevocationRepository;
 

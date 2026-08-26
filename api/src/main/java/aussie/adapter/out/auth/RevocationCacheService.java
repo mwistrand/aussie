@@ -1,4 +1,4 @@
-package aussie.core.service.auth;
+package aussie.adapter.out.auth;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -12,6 +12,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import org.jboss.logging.Logger;
 
 import aussie.core.config.TokenRevocationConfig;
+import aussie.core.port.out.RevocationCache;
 
 /**
  * Local LRU cache for confirmed revocations.
@@ -33,16 +34,16 @@ import aussie.core.config.TokenRevocationConfig;
  * </ul>
  */
 @ApplicationScoped
-public class RevocationCache {
+public class RevocationCacheService implements RevocationCache {
 
-    private static final Logger LOG = Logger.getLogger(RevocationCache.class);
+    private static final Logger LOG = Logger.getLogger(RevocationCacheService.class);
 
     private final TokenRevocationConfig config;
 
     private Cache<String, RevocationEntry> jtiCache;
     private Cache<String, UserRevocationEntry> userCache;
 
-    public RevocationCache(TokenRevocationConfig config) {
+    public RevocationCacheService(TokenRevocationConfig config) {
         this.config = config;
     }
 
@@ -76,6 +77,7 @@ public class RevocationCache {
      * @param jti the JWT ID to check
      * @return Optional containing true if cached as revoked, empty if not cached
      */
+    @Override
     public Optional<Boolean> isJtiRevoked(String jti) {
         if (jtiCache == null) {
             return Optional.empty();
@@ -100,6 +102,7 @@ public class RevocationCache {
      * @param issuedAt when the token was issued
      * @return Optional containing true if token is revoked, empty if not cached
      */
+    @Override
     public Optional<Boolean> isUserRevoked(String userId, Instant issuedAt) {
         if (userCache == null) {
             return Optional.empty();
@@ -121,6 +124,7 @@ public class RevocationCache {
      * @param jti       the revoked JWT ID
      * @param expiresAt when the revocation expires
      */
+    @Override
     public void cacheJtiRevocation(String jti, Instant expiresAt) {
         if (jtiCache != null) {
             jtiCache.put(jti, new RevocationEntry(expiresAt));
@@ -135,6 +139,7 @@ public class RevocationCache {
      * @param issuedBefore tokens issued before this time are revoked
      * @param expiresAt    when the revocation expires
      */
+    @Override
     public void cacheUserRevocation(String userId, Instant issuedBefore, Instant expiresAt) {
         if (userCache != null) {
             userCache.put(userId, new UserRevocationEntry(issuedBefore, expiresAt));
@@ -182,6 +187,7 @@ public class RevocationCache {
     /**
      * Invalidate all cached entries.
      */
+    @Override
     public void invalidateAll() {
         if (jtiCache != null) {
             jtiCache.invalidateAll();
@@ -197,6 +203,7 @@ public class RevocationCache {
      *
      * @return true if cache is enabled and initialized
      */
+    @Override
     public boolean isEnabled() {
         return config.enabled() && config.cache().enabled() && jtiCache != null;
     }

@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.core.port.out.JwksCache;
+import aussie.core.port.out.RevocationBloomFilter;
+import aussie.core.port.out.RevocationCache;
 
 @DisplayName("Hexagonal Architecture Rules")
 class HexagonalArchitectureTest {
@@ -120,6 +122,21 @@ class HexagonalArchitectureTest {
                     .should()
                     .resideInAnyPackage("aussie.adapter.out..")
                     .because("outbound ports must not own framework-backed implementations");
+
+            rule.check(importedClasses);
+        }
+
+        @Test
+        @DisplayName("Revocation acceleration implementations should live in outbound adapters")
+        void revocationAccelerationImplementationsShouldLiveInOutboundAdapters() {
+            ArchRule rule = ArchRuleDefinition.classes()
+                    .that()
+                    .implement(RevocationBloomFilter.class)
+                    .or()
+                    .implement(RevocationCache.class)
+                    .should()
+                    .resideInAnyPackage("aussie.adapter.out..")
+                    .because("framework-backed revocation acceleration belongs at the adapter boundary");
 
             rule.check(importedClasses);
         }

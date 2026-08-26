@@ -1,4 +1,4 @@
-package aussie.core.service.auth;
+package aussie.adapter.out.auth;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,9 +28,9 @@ import aussie.core.model.auth.RevocationEvent;
 import aussie.core.port.out.RevocationEventPublisher;
 import aussie.spi.TokenRevocationRepository;
 
-@DisplayName("RevocationBloomFilter")
+@DisplayName("RevocationBloomFilterService")
 @ExtendWith(MockitoExtension.class)
-class RevocationBloomFilterTest {
+class RevocationBloomFilterServiceTest {
 
     @Mock
     private TokenRevocationConfig config;
@@ -50,7 +50,7 @@ class RevocationBloomFilterTest {
     @Mock
     private Vertx vertx;
 
-    private RevocationBloomFilter bloomFilter;
+    private RevocationBloomFilterService bloomFilter;
 
     @BeforeEach
     void setUp() {
@@ -71,7 +71,7 @@ class RevocationBloomFilterTest {
     }
 
     private void initializeBloomFilter() {
-        bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+        bloomFilter = new RevocationBloomFilterService(config, repository, eventPublisher, vertx);
         bloomFilter.rebuildFilters().await().atMost(Duration.ofSeconds(5));
     }
 
@@ -104,7 +104,7 @@ class RevocationBloomFilterTest {
         @DisplayName("should return false when not initialized")
         void shouldReturnFalseWhenNotInitialized() {
             lenient().when(config.enabled()).thenReturn(false);
-            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter = new RevocationBloomFilterService(config, repository, eventPublisher, vertx);
 
             final var result = bloomFilter.definitelyNotRevoked("any-jti");
 
@@ -205,7 +205,7 @@ class RevocationBloomFilterTest {
         void shouldSkipWhenRevocationDisabled() {
             when(config.enabled()).thenReturn(false);
 
-            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter = new RevocationBloomFilterService(config, repository, eventPublisher, vertx);
             bloomFilter.init();
 
             assertFalse(bloomFilter.isEnabled());
@@ -216,7 +216,7 @@ class RevocationBloomFilterTest {
         void shouldSkipWhenBloomFilterDisabled() {
             when(bloomFilterConfig.enabled()).thenReturn(false);
 
-            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter = new RevocationBloomFilterService(config, repository, eventPublisher, vertx);
             bloomFilter.init();
 
             assertFalse(bloomFilter.isEnabled());
@@ -228,7 +228,7 @@ class RevocationBloomFilterTest {
         void shouldSchedulePeriodicRebuild() {
             when(vertx.setPeriodic(anyLong(), any(Consumer.class))).thenReturn(1L);
 
-            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter = new RevocationBloomFilterService(config, repository, eventPublisher, vertx);
             bloomFilter.init();
 
             verify(vertx).setPeriodic(anyLong(), any(java.util.function.Consumer.class));
@@ -242,7 +242,7 @@ class RevocationBloomFilterTest {
             when(eventPublisher.subscribe()).thenReturn(Multi.createFrom().empty());
             when(vertx.setPeriodic(anyLong(), any(Consumer.class))).thenReturn(1L);
 
-            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter = new RevocationBloomFilterService(config, repository, eventPublisher, vertx);
             bloomFilter.init();
 
             verify(eventPublisher).subscribe();
@@ -254,7 +254,7 @@ class RevocationBloomFilterTest {
         void shouldCancelPeriodicRebuildOnShutdown() {
             when(vertx.setPeriodic(anyLong(), any(Consumer.class))).thenReturn(42L);
 
-            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter = new RevocationBloomFilterService(config, repository, eventPublisher, vertx);
             bloomFilter.init();
             bloomFilter.shutdown();
 
@@ -278,7 +278,7 @@ class RevocationBloomFilterTest {
             when(eventPublisher.subscribe()).thenReturn(pendingEvents);
             when(vertx.setPeriodic(anyLong(), any(Consumer.class))).thenReturn(42L);
 
-            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter = new RevocationBloomFilterService(config, repository, eventPublisher, vertx);
             bloomFilter.init();
             bloomFilter.shutdown();
 
@@ -346,7 +346,7 @@ class RevocationBloomFilterTest {
         @DisplayName("should skip rebuild when disabled")
         void shouldSkipRebuildWhenDisabled() {
             when(config.enabled()).thenReturn(false);
-            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter = new RevocationBloomFilterService(config, repository, eventPublisher, vertx);
 
             bloomFilter.rebuildFilters().await().atMost(Duration.ofSeconds(5));
 
@@ -370,7 +370,7 @@ class RevocationBloomFilterTest {
         @DisplayName("should return false when revocation disabled")
         void shouldReturnFalseWhenRevocationDisabled() {
             when(config.enabled()).thenReturn(false);
-            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter = new RevocationBloomFilterService(config, repository, eventPublisher, vertx);
 
             assertFalse(bloomFilter.isEnabled());
         }
@@ -379,7 +379,7 @@ class RevocationBloomFilterTest {
         @DisplayName("should return false when bloom filter disabled")
         void shouldReturnFalseWhenBloomFilterDisabled() {
             when(bloomFilterConfig.enabled()).thenReturn(false);
-            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter = new RevocationBloomFilterService(config, repository, eventPublisher, vertx);
 
             assertFalse(bloomFilter.isEnabled());
         }
@@ -393,7 +393,7 @@ class RevocationBloomFilterTest {
         @DisplayName("should return false when not initialized")
         void shouldReturnFalseWhenNotInitialized() {
             lenient().when(config.enabled()).thenReturn(false);
-            bloomFilter = new RevocationBloomFilter(config, repository, eventPublisher, vertx);
+            bloomFilter = new RevocationBloomFilterService(config, repository, eventPublisher, vertx);
 
             final var result = bloomFilter.userDefinitelyNotRevoked("any-user");
 

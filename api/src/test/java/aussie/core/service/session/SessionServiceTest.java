@@ -35,8 +35,8 @@ import aussie.core.model.auth.ValidatedIdentity;
 import aussie.core.model.session.Session;
 import aussie.core.port.in.RoleManagement;
 import aussie.core.port.in.SessionManagement.SessionCreationException;
-import aussie.core.service.auth.RevocationBloomFilter;
-import aussie.core.service.auth.RevocationCache;
+import aussie.core.port.out.RevocationBloomFilter;
+import aussie.core.port.out.RevocationCache;
 import aussie.core.service.auth.TokenRevocationService;
 import aussie.core.service.auth.TokenTranslationService;
 

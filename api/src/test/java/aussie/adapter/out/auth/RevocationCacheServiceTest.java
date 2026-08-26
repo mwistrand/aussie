@@ -1,4 +1,4 @@
-package aussie.core.service.auth;
+package aussie.adapter.out.auth;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -17,9 +17,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.core.config.TokenRevocationConfig;
 
-@DisplayName("RevocationCache")
+@DisplayName("RevocationCacheService")
 @ExtendWith(MockitoExtension.class)
-class RevocationCacheTest {
+class RevocationCacheServiceTest {
 
     @Mock
     private TokenRevocationConfig config;
@@ -27,7 +27,7 @@ class RevocationCacheTest {
     @Mock
     private TokenRevocationConfig.CacheConfig cacheConfig;
 
-    private RevocationCache cache;
+    private RevocationCacheService cache;
 
     @BeforeEach
     void setUp() {
@@ -37,7 +37,7 @@ class RevocationCacheTest {
         when(cacheConfig.maxSize()).thenReturn(1000);
         when(cacheConfig.ttl()).thenReturn(Duration.ofMinutes(5));
 
-        cache = new RevocationCache(config);
+        cache = new RevocationCacheService(config);
         cache.init();
     }
 
@@ -177,7 +177,7 @@ class RevocationCacheTest {
         @DisplayName("should return false when disabled")
         void shouldReturnFalseWhenDisabled() {
             when(config.enabled()).thenReturn(false);
-            final var disabledCache = new RevocationCache(config);
+            final var disabledCache = new RevocationCacheService(config);
             disabledCache.init();
 
             assertFalse(disabledCache.isEnabled());
@@ -187,7 +187,7 @@ class RevocationCacheTest {
         @DisplayName("should return false when cache specifically disabled")
         void shouldReturnFalseWhenCacheDisabled() {
             when(cacheConfig.enabled()).thenReturn(false);
-            final var disabledCache = new RevocationCache(config);
+            final var disabledCache = new RevocationCacheService(config);
             disabledCache.init();
 
             assertFalse(disabledCache.isEnabled());
@@ -239,12 +239,12 @@ class RevocationCacheTest {
     @DisplayName("disabled cache operations")
     class DisabledCacheTests {
 
-        private RevocationCache disabledCache;
+        private RevocationCacheService disabledCache;
 
         @BeforeEach
         void setUp() {
             when(config.enabled()).thenReturn(false);
-            disabledCache = new RevocationCache(config);
+            disabledCache = new RevocationCacheService(config);
             disabledCache.init();
         }
 

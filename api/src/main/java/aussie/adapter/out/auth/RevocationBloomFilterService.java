@@ -1,4 +1,4 @@
-package aussie.core.service.auth;
+package aussie.adapter.out.auth;
 
 import java.nio.charset.StandardCharsets;
 
@@ -15,6 +15,7 @@ import org.jboss.logging.Logger;
 
 import aussie.core.config.TokenRevocationConfig;
 import aussie.core.model.auth.RevocationEvent;
+import aussie.core.port.out.RevocationBloomFilter;
 import aussie.core.port.out.RevocationEventPublisher;
 import aussie.spi.TokenRevocationRepository;
 
@@ -33,9 +34,9 @@ import aussie.spi.TokenRevocationRepository;
  * </ul>
  */
 @ApplicationScoped
-public class RevocationBloomFilter {
+public class RevocationBloomFilterService implements RevocationBloomFilter {
 
-    private static final Logger LOG = Logger.getLogger(RevocationBloomFilter.class);
+    private static final Logger LOG = Logger.getLogger(RevocationBloomFilterService.class);
 
     private final TokenRevocationConfig config;
     private final TokenRevocationRepository repository;
@@ -50,7 +51,7 @@ public class RevocationBloomFilter {
     private volatile Cancellable initialRebuild;
     private volatile Cancellable eventSubscription;
 
-    public RevocationBloomFilter(
+    public RevocationBloomFilterService(
             TokenRevocationConfig config,
             TokenRevocationRepository repository,
             RevocationEventPublisher eventPublisher,
@@ -160,6 +161,7 @@ public class RevocationBloomFilter {
      * @param jti the JWT ID to check
      * @return true if definitely not revoked, false if maybe revoked
      */
+    @Override
     public boolean definitelyNotRevoked(String jti) {
         if (!initialized || jtiFilter == null) {
             return false; // Conservative: might be revoked
@@ -173,6 +175,7 @@ public class RevocationBloomFilter {
      * @param userId the user ID to check
      * @return true if definitely not revoked, false if maybe revoked
      */
+    @Override
     public boolean userDefinitelyNotRevoked(String userId) {
         if (!initialized || userFilter == null) {
             return false; // Conservative: might be revoked
@@ -185,6 +188,7 @@ public class RevocationBloomFilter {
      *
      * @param jti the JWT ID to add
      */
+    @Override
     public void addRevokedJti(String jti) {
         synchronized (writeLock) {
             var filter = jtiFilter;
@@ -199,6 +203,7 @@ public class RevocationBloomFilter {
      *
      * @param userId the user ID to add
      */
+    @Override
     public void addRevokedUser(String userId) {
         synchronized (writeLock) {
             var filter = userFilter;
@@ -216,6 +221,7 @@ public class RevocationBloomFilter {
      *
      * @return Uni completing when rebuild is done
      */
+    @Override
     public Uni<Void> rebuildFilters() {
         if (!config.enabled() || !config.bloomFilter().enabled()) {
             return Uni.createFrom().voidItem();
@@ -254,6 +260,7 @@ public class RevocationBloomFilter {
      *
      * @return true if ready for use
      */
+    @Override
     public boolean isEnabled() {
         return config.enabled() && config.bloomFilter().enabled() && initialized;
     }
