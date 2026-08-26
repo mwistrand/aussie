@@ -22,4 +22,9 @@ native artifact build runs in the same reusable workflow. A scheduled
 `Resilience` workflow repeats the packaged lifecycle suite and uploads container
 logs on failure; run it manually with `workflow_dispatch` when validating a
 change under a larger repeat count. Hosted rollback remains a separate,
-deployment-owned gate and is not claimed by this repository-only workflow.
+deployment-owned gate. The `Rollback rehearsal` workflow is protected by the
+`production-rollback` environment and must be run manually with the signed
+candidate and previously verified tags, a production kubeconfig secret named
+`PRODUCTION_KUBECONFIG`, and the deployment's public base URL. It verifies both
+image signatures, rollout, liveness, readiness, and smoke traffic before and
+after restoring the previous tag.

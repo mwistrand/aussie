@@ -31,6 +31,15 @@ evidence and record the previous verified image tag. During rollback, verify
 the image signature and provenance, deploy that tag, and run the packaged E2E
 smoke plus readiness checks before restoring traffic.
 
+The hosted rollback rehearsal is the protected manual
+`.github/workflows/rollback.yml` gate. Configure the `production-rollback`
+environment with the `PRODUCTION_KUBECONFIG` secret, then provide the candidate
+and rollback tags, deployment coordinates, public base URL, and smoke path. The
+workflow verifies both release signatures, deploys the candidate, checks rollout
+and health traffic, restores the rollback tag, and repeats those checks. A
+successful hosted run is required before the plan's rollback checklist item is
+closed.
+
 The uploaded `*.evidence.json` manifest is the release handoff. Verify its
 `digest` against the registry image and its `sbom_sha256` against the uploaded
 CycloneDX file before deployment.

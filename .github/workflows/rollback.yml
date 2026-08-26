@@ -1,0 +1,146 @@
+name: Rollback rehearsal
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Fully qualified signed image, for example ghcr.io/org/aussie
+        required: true
+        type: string
+      candidate_tag:
+        description: Release tag to deploy before rehearsing the rollback
+        required: true
+        type: string
+      rollback_tag:
+        description: Previously verified release tag to restore
+        required: true
+        type: string
+      namespace:
+        description: Kubernetes namespace containing the gateway deployment
+        required: true
+        default: aussie
+        type: string
+      deployment:
+        description: Kubernetes Deployment to update
+        required: true
+        default: aussie
+        type: string
+      container:
+        description: Container name in the Deployment
+        required: true
+        default: api
+        type: string
+      base_url:
+        description: Public base URL used for post-rollout checks
+        required: true
+        type: string
+      smoke_path:
+        description: Routed health path relative to base_url
+        required: true
+        default: /q/health/ready
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: rollback-rehearsal-${{ inputs.namespace }}-${{ inputs.deployment }}
+  cancel-in-progress: false
+
+jobs:
+  rehearse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production-rollback
+    env:
+      IMAGE: ${{ inputs.image }}
+      CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+      ROLLBACK_TAG: ${{ inputs.rollback_tag }}
+      NAMESPACE: ${{ inputs.namespace }}
+      DEPLOYMENT: ${{ inputs.deployment }}
+      CONTAINER: ${{ inputs.container }}
+      BASE_URL: ${{ inputs.base_url }}
+      SMOKE_PATH: ${{ inputs.smoke_path }}
+      KUBECONFIG_DATA: ${{ secrets.PRODUCTION_KUBECONFIG }}
+    steps:
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure cluster access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KUBECONFIG_DATA"
+          printf '%s' "$KUBECONFIG_DATA" > "$RUNNER_TEMP/production-kubeconfig"
+          chmod 600 "$RUNNER_TEMP/production-kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/production-kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Verify release signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tag in "$CANDIDATE_TAG" "$ROLLBACK_TAG"; do
+            cosign verify \
+              --certificate-identity-regexp "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${tag}" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "$IMAGE:$tag" > /dev/null
+          done
+
+      - name: Validate rollback inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$BASE_URL" in http://*|https://*) ;; *) exit 1 ;; esac
+          case "$SMOKE_PATH" in /*) ;; *) exit 1 ;; esac
+          test "$CANDIDATE_TAG" != "$ROLLBACK_TAG"
+
+      - name: Define deployment checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/check-deployment.sh" <<'SCRIPT'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" rollout status "deployment/$DEPLOYMENT" --timeout=10m
+          base="${BASE_URL%/}"
+          curl --fail --silent --show-error --retry 30 --retry-delay 2 --retry-connrefused "$base/q/health/live" > /dev/null
+          curl --fail --silent --show-error --retry 30 --retry-delay 2 --retry-connrefused "$base/q/health/ready" > /dev/null
+          curl --fail --silent --show-error --retry 30 --retry-delay 2 --retry-connrefused "$base$SMOKE_PATH" > /dev/null
+          SCRIPT
+          chmod 700 "$RUNNER_TEMP/check-deployment.sh"
+
+      - name: Switch to candidate release
+        id: deploy_candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" set image "deployment/$DEPLOYMENT" "$CONTAINER=$IMAGE:$CANDIDATE_TAG"
+
+      - name: Verify candidate release
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/check-deployment.sh"
+
+      - name: Restore previous release
+        if: always() && steps.deploy_candidate.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl -n "$NAMESPACE" set image "deployment/$DEPLOYMENT" "$CONTAINER=$IMAGE:$ROLLBACK_TAG"
+          "$RUNNER_TEMP/check-deployment.sh"
+
+      - name: Publish rehearsal summary
+        shell: bash
+        run: |
+          {
+            echo "## Rollback rehearsal"
+            echo "- Candidate: $IMAGE:$CANDIDATE_TAG"
+            echo "- Restored: $IMAGE:$ROLLBACK_TAG"
+            echo "- Deployment: $NAMESPACE/$DEPLOYMENT"
+            echo "- Verification: rollout, liveness, readiness, and smoke path passed"
+          } >> "$GITHUB_STEP_SUMMARY"
