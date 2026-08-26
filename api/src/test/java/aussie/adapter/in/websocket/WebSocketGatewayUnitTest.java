@@ -47,7 +47,6 @@ import aussie.common.context.ClientContext;
 import aussie.core.config.WebSocketConfig;
 import aussie.core.model.auth.RevocationEvent;
 import aussie.core.model.session.SessionInvalidatedEvent;
-import aussie.core.model.websocket.WebSocketProxySession;
 import aussie.core.model.websocket.WebSocketUpgradeRequest;
 import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;

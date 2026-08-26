@@ -1,4 +1,4 @@
-package aussie.core.model.ratelimit;
+package aussie.core.service.ratelimit;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -6,6 +6,10 @@ import java.util.Map;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.jboss.logging.Logger;
+
+import aussie.core.model.ratelimit.BucketAlgorithm;
+import aussie.core.model.ratelimit.RateLimitAlgorithm;
+import aussie.core.model.ratelimit.RateLimitAlgorithmHandler;
 
 /**
  * Registry for rate limiting algorithm handlers.

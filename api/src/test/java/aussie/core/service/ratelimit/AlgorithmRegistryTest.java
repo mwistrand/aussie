@@ -1,4 +1,4 @@
-package aussie.core.model;
+package aussie.core.service.ratelimit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -11,7 +11,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.ratelimit.*;
+import aussie.core.model.ratelimit.BucketAlgorithm;
+import aussie.core.model.ratelimit.RateLimitAlgorithm;
 
 @DisplayName("AlgorithmRegistry")
 class AlgorithmRegistryTest {

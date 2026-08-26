@@ -1,4 +1,4 @@
-package aussie.core.model.websocket;
+package aussie.adapter.in.websocket;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -18,8 +18,8 @@ import org.jboss.logging.Logger;
 
 import aussie.core.config.WebSocketConfig;
 import aussie.core.model.auth.RevocationEvent;
-import aussie.core.model.ratelimit.MessageRateLimitHandler;
 import aussie.core.model.session.SessionInvalidatedEvent;
+import aussie.core.service.ratelimit.MessageRateLimitHandler;
 
 /**
  * Manages the coupled lifecycle of a WebSocket proxy session.

@@ -1,8 +1,8 @@
 package aussie.adapter.out.ratelimit.memory;
 
-import aussie.core.model.ratelimit.AlgorithmRegistry;
 import aussie.core.model.ratelimit.RateLimitAlgorithm;
 import aussie.core.port.out.RateLimiter;
+import aussie.core.service.ratelimit.AlgorithmRegistry;
 import aussie.spi.RateLimiterProvider;
 
 /**

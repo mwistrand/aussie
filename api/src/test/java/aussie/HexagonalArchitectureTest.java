@@ -53,6 +53,44 @@ class HexagonalArchitectureTest {
 
             rule.check(importedClasses);
         }
+
+        @Test
+        @DisplayName("Domain models should not depend on runtime frameworks")
+        void domainModelsShouldNotDependOnRuntimeFrameworks() {
+            ArchRule rule = noClasses()
+                    .that()
+                    .resideInAnyPackage("aussie.core.model..")
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAnyPackage(
+                            "io.quarkus..",
+                            "io.smallrye.mutiny..",
+                            "io.vertx..",
+                            "io.micrometer..",
+                            "org.jose4j..",
+                            "org.apache.cassandra..",
+                            "com.datastax..",
+                            "jakarta.enterprise..",
+                            "jakarta.ws.rs..",
+                            "org.jboss.logging..")
+                    .because("domain models must remain independent of runtime implementations");
+
+            rule.check(importedClasses);
+        }
+
+        @Test
+        @DisplayName("Core ports should not depend on service or adapter implementations")
+        void corePortsShouldNotDependOnImplementations() {
+            ArchRule rule = noClasses()
+                    .that()
+                    .resideInAnyPackage("aussie.core.port..")
+                    .should()
+                    .dependOnClassesThat()
+                    .resideInAnyPackage("aussie.core.service..", "aussie.adapter..", "aussie.system..")
+                    .because("ports define boundaries and must not point back to implementations");
+
+            rule.check(importedClasses);
+        }
     }
 
     @Nested

@@ -1,4 +1,4 @@
-package aussie.core.model;
+package aussie.adapter.in.websocket;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -30,13 +30,11 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import aussie.core.config.*;
 import aussie.core.config.WebSocketConfig;
-import aussie.core.model.session.*;
-import aussie.core.model.websocket.*;
+import aussie.core.model.session.SessionInvalidatedEvent;
 
-@DisplayName("WebSocketProxySession")
-class WebSocketProxySessionTest {
+@DisplayName("WebSocketProxySession lifecycle")
+class WebSocketProxySessionLifecycleTest {
 
     private Vertx vertx;
     private ServerWebSocket clientSocket;

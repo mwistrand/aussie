@@ -553,97 +553,81 @@ WebSocket connections are where reactive programming's advantages are most prono
 The `WebSocketGateway.establishProxy()` method shows purely event-driven connection setup:
 
 ```java
-// api/src/main/java/aussie/adapter/in/websocket/WebSocketGateway.java, lines 148-231
-private void establishProxy(RoutingContext ctx, WebSocketUpgradeResult.Authorized auth) {
+// api/src/main/java/aussie/adapter/in/websocket/WebSocketGateway.java, lines 278-429
+private void establishProxy(
+        RoutingContext ctx, WebSocketUpgradeResult.Authorized auth, String subprotocol) {
     final var sessionId = UUID.randomUUID().toString();
     // ...
 
-    // Connect to backend WebSocket FIRST (non-blocking Future)
-    vertx.createHttpClient()
-            .webSocket(options)
-            .onSuccess(backendWs -> {
-                // Backend connected - now upgrade client connection (non-blocking)
-                ctx.request()
-                        .toWebSocket()
-                        .onSuccess(clientWs -> {
-                            // Both connections established - create proxy session
-                            final var session = new WebSocketProxySession(
-                                    sessionId, clientWs, backendWs, vertx, config,
-                                    authSessionId, userId, messageHandler);
-                            activeSessions.put(sessionId, session);
-                            // ...
-
-                            // Clean up session when closed
-                            clientWs.closeHandler(v -> {
-                                activeSessions.remove(sessionId);
-                                metrics.decrementActiveWebSockets();
-                                // ...
-                            });
-
-                            session.start();
-                        })
-                        .onFailure(err -> {
-                            backendWs.close((short) 1001, "Client upgrade failed");
-                            ctx.response().setStatusCode(500).end("WebSocket upgrade failed");
-                        });
-            })
-            .onFailure(err -> {
-                ctx.response().setStatusCode(502).end("Backend connection failed");
-            });
+    addressResolver.resolve(backendUri).subscribe().with(
+            serverAddress -> {
+                options.setServer(serverAddress);
+                httpClient.webSocket(options)
+                        .onSuccess(backendWs -> ctx.request().toWebSocket()
+                                .onSuccess(clientWs -> {
+                                    final var managedSession = new WebSocketProxySession(
+                                            sessionId, clientWs, backendWs, vertx, config);
+                                    // The production call also supplies identity metadata,
+                                    // message rate limiting, and connection cleanup.
+                                    activeSessions.put(sessionId, managedSession);
+                                    managedSession.start();
+                                })
+                                .onFailure(err -> backendWs.close(
+                                        (short) 1001, "Client upgrade failed")))
+                        .onFailure(err -> releaseConnection.run());
+            },
+            err -> releaseConnection.run());
 }
 ```
 
-This code establishes two WebSocket connections (client-to-gateway and gateway-to-backend) using Vert.x Futures, not Mutiny Unis. The distinction matters: the WebSocket layer operates at the Vert.x level, below the JAX-RS abstraction where Mutiny lives. The Futures here are still non-blocking. They register callbacks that fire when the connection succeeds or fails.
+This code resolves the upstream address with a Mutiny `Uni`, then establishes the gateway-to-backend and client-to-gateway WebSockets with Vert.x Futures. Both APIs are non-blocking: callbacks run when address resolution or connection setup succeeds or fails.
 
 ### Bidirectional Message Forwarding
 
 The `WebSocketProxySession.start()` method sets up non-blocking message forwarding:
 
 ```java
-// api/src/main/java/aussie/core/model/websocket/WebSocketProxySession.java, lines 117-161
+// api/src/main/java/aussie/adapter/in/websocket/WebSocketProxySession.java, lines 196-261
 public void start() {
-    // Set up bidirectional message forwarding with rate limiting (non-blocking)
-    clientSocket.handler(buffer -> {
-        messageRateLimitHandler
-                .checkAndProceed(() -> {
-                    resetIdleTimer();
-                    backendSocket.write(buffer); // Returns Future, non-blocking
-                })
-                .subscribe()
-                .with(
-                        v -> { /* success, message forwarded */ },
-                        err -> {
-                            rateLimitedMessages.incrementAndGet();
-                            closeWithReason((short) 4429, "Message rate limit exceeded");
-                        });
-    });
-
-    backendSocket.handler(buffer -> {
-        resetIdleTimer();
-        clientSocket.write(buffer); // Returns Future, non-blocking
-    });
+    // Preserve frame type and fragmentation; never aggregate unbounded messages.
+    clientSocket.frameHandler(frame ->
+            handleFrame(clientSocket, backendSocket, clientFrames, frame, true));
+    backendSocket.frameHandler(frame ->
+            handleFrame(backendSocket, clientSocket, backendFrames, frame, false));
 
     // Handle close from either side
-    clientSocket.closeHandler(v -> closeWithReason((short) 1000, "Client disconnected"));
-    backendSocket.closeHandler(v -> closeWithReason((short) 1000, "Backend disconnected"));
-
-    // Handle errors
-    clientSocket.exceptionHandler(t -> closeWithReason((short) 1011, "Client error: " + t.getMessage()));
-    backendSocket.exceptionHandler(t -> closeWithReason((short) 1011, "Backend error: " + t.getMessage()));
+    clientSocket.closeHandler(v -> closeFrom(clientSocket, "Client disconnected"));
+    backendSocket.closeHandler(v -> closeFrom(backendSocket, "Backend disconnected"));
     // ...
+}
+
+private void handleFrame(/* ... */ WebSocketFrame frame, boolean rateLimited) {
+    // Validate size and fragmentation before forwarding.
+    source.pause();
+    final Runnable forward = () -> {
+        resetIdleTimer();
+        forward(source, target, frame); // writeFrame() returns a non-blocking Future
+    };
+    if (!rateLimited || !isMessageStart(frame)) {
+        forward.run();
+        return;
+    }
+    messageRateLimitHandler.checkAndProceed(forward).subscribe().with(
+            ignored -> {},
+            error -> closeWithReason((short) 4429, "Message rate limit exceeded"));
 }
 ```
 
 Every interaction is event-driven:
-- **Message from client**: handler fires, forwards to backend via non-blocking `write()`
-- **Message from backend**: handler fires, forwards to client
+- **Frame from client**: frame handler validates and rate-limits message starts, then forwards via non-blocking `writeFrame()`
+- **Frame from backend**: frame handler validates and forwards it to the client
 - **Either side closes**: close handler fires, closes the other side
 - **Error on either side**: exception handler fires, closes both sides with an error code
 
 The `closeWithReason` method uses `AtomicBoolean` for idempotency:
 
 ```java
-// api/src/main/java/aussie/core/model/websocket/WebSocketProxySession.java, lines 214-240
+// api/src/main/java/aussie/adapter/in/websocket/WebSocketProxySession.java, lines 411-448
 public void closeWithReason(short code, String reason) {
     if (!closing.compareAndSet(false, true)) {
         return; // Already closing
@@ -657,10 +641,10 @@ This prevents the cascade where client close triggers backend close, which trigg
 
 ### Timer-Based Lifecycle Management
 
-The session uses three timers, all managed through Vert.x's non-blocking timer API:
+The session uses five timers for idle timeout, maximum lifetime, identity expiry, ping intervals, and pong timeout. All are managed through Vert.x's non-blocking timer API:
 
 ```java
-// api/src/main/java/aussie/core/model/websocket/WebSocketProxySession.java, lines 164-181
+// api/src/main/java/aussie/adapter/in/websocket/WebSocketProxySession.java, lines 340-394
 private void startIdleTimer() {
     var timeoutMs = config.idleTimeout().toMillis();
     idleTimerId = vertx.setTimer(timeoutMs, id -> closeWithReason((short) 1000, "Idle timeout exceeded"));

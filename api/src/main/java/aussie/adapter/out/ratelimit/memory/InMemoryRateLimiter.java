@@ -10,13 +10,13 @@ import java.util.function.LongSupplier;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
-import aussie.core.model.ratelimit.AlgorithmRegistry;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
 import aussie.core.model.ratelimit.RateLimitAlgorithm;
 import aussie.core.model.ratelimit.RateLimitDecision;
 import aussie.core.model.ratelimit.RateLimitKey;
 import aussie.core.model.ratelimit.RateLimitState;
 import aussie.core.port.out.RateLimiter;
+import aussie.core.service.ratelimit.AlgorithmRegistry;
 
 /**
  * In-memory rate limiter implementation.

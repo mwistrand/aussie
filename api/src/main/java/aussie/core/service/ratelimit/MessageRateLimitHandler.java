@@ -1,4 +1,4 @@
-package aussie.core.model.ratelimit;
+package aussie.core.service.ratelimit;
 
 import io.smallrye.mutiny.Uni;
 

@@ -13,8 +13,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import aussie.core.model.ratelimit.AlgorithmRegistry;
 import aussie.core.model.ratelimit.RateLimitAlgorithm;
+import aussie.core.service.ratelimit.AlgorithmRegistry;
 
 @DisplayName("InMemoryRateLimiterProvider")
 @ExtendWith(MockitoExtension.class)

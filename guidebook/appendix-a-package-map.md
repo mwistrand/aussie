@@ -136,12 +136,10 @@ Pure domain objects. Records, sealed interfaces, enums, value types. No framewor
 
 | Class | Description |
 |---|---|
-| `AlgorithmRegistry` | Maps `RateLimitAlgorithm` enum values to their handler implementations. |
 | `BucketAlgorithm` | Token bucket algorithm handler implementing `RateLimitAlgorithmHandler`. |
 | `BucketState` | Record holding current token count and last refill timestamp for a bucket. |
 | `EffectiveRateLimit` | Record combining resolved requests-per-window, window duration, and burst capacity. |
 | `EndpointRateLimitConfig` | Record for per-endpoint rate limit overrides registered by service teams. |
-| `MessageRateLimitHandler` | Functional interface for WebSocket message-level rate limit callbacks. |
 | `RateLimitAlgorithm` | Enum: `BUCKET`, `FIXED_WINDOW`, `SLIDING_WINDOW`. |
 | `RateLimitAlgorithmHandler` | Interface for pluggable algorithm implementations. |
 | `RateLimitDecision` | Record indicating allowed/denied with remaining tokens and reset time. |
@@ -206,15 +204,14 @@ Pure domain objects. Records, sealed interfaces, enums, value types. No framewor
 
 ### `core/model/websocket`
 
-**Role:** WebSocket proxy domain model.
+**Role:** WebSocket upgrade domain model.
 
 | Class | Description |
 |---|---|
-| `WebSocketProxySession` | Record tracking an active WebSocket proxy session (client socket, backend socket, service). |
 | `WebSocketUpgradeRequest` | Record encapsulating a WebSocket upgrade request with auth headers and target path. |
-| `WebSocketUpgradeResult` | Sealed interface with `Accepted` and `Rejected` variants. |
+| `WebSocketUpgradeResult` | Sealed interface describing authorized, rejected, missing-route, and rate-limited outcomes. |
 
-**Allowed dependencies:** `core/model/service`, `core/model/routing`.
+**Allowed dependencies:** `java.*`, `core/model/auth`, `core/model/routing`.
 
 ## Layer 1: Core (Config)
 
@@ -385,6 +382,8 @@ Domain services implementing inbound ports and composing outbound ports. All are
 
 | Class | Description |
 |---|---|
+| `AlgorithmRegistry` | Maps `RateLimitAlgorithm` enum values to their handler implementations. |
+| `MessageRateLimitHandler` | Functional interface for WebSocket message-level rate limit callbacks. |
 | `RateLimitResolver` | Resolves the `EffectiveRateLimit` for a request by merging platform defaults with service and endpoint overrides. Enforces platform ceiling. |
 | `WebSocketRateLimitService` | Rate limiting for WebSocket connection establishment and per-connection message throughput. |
 
@@ -610,6 +609,7 @@ These packages translate HTTP, WebSocket, and lifecycle events into calls on cor
 | Class | Description |
 |---|---|
 | `WebSocketGateway` | Manages WebSocket proxy sessions. Bi-directional frame forwarding between client and upstream. Handles session invalidation events for forced disconnect. |
+| `WebSocketProxySession` | Owns one client/upstream WebSocket pair, frame forwarding, backpressure, and session lifecycle. |
 | `WebSocketRateLimitFilter` | `@RouteFilter(40)`. Applies connection-level rate limiting before WebSocket upgrade. |
 | `WebSocketUpgradeFilter` | `@RouteFilter(50)`. Intercepts WebSocket upgrade requests and routes them to `WebSocketGateway`. |
 
@@ -823,12 +823,12 @@ JAX-RS server filters that intercept requests before they reach resource classes
 | `core/model/auth` | 27 |
 | `core/model/common` | 8 |
 | `core/model/gateway` | 5 |
-| `core/model/ratelimit` | 14 |
+| `core/model/ratelimit` | 12 |
 | `core/model/routing` | 6 |
 | `core/model/sampling` | 3 |
 | `core/model/service` | 3 |
 | `core/model/session` | 3 |
-| `core/model/websocket` | 3 |
+| `core/model/websocket` | 2 |
 | `core/config` | 14 |
 | `core/cache` | 3 |
 | `core/port/in` | 7 |
@@ -836,7 +836,7 @@ JAX-RS server filters that intercept requests before they reach resource classes
 | `core/service/auth` | 22 |
 | `core/service/common` | 5 |
 | `core/service/gateway` | 5 |
-| `core/service/ratelimit` | 2 |
+| `core/service/ratelimit` | 4 |
 | `core/service/routing` | 5 |
 | `core/service/session` | 5 |
 | `core/util` | 1 |

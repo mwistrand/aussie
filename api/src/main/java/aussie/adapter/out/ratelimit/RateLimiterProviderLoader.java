@@ -16,9 +16,9 @@ import aussie.adapter.out.ratelimit.memory.InMemoryRateLimiterProvider;
 import aussie.adapter.out.ratelimit.redis.RedisRateLimiter;
 import aussie.adapter.out.ratelimit.redis.RedisRateLimiterProvider;
 import aussie.core.config.RateLimitingConfig;
-import aussie.core.model.ratelimit.AlgorithmRegistry;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
+import aussie.core.service.ratelimit.AlgorithmRegistry;
 import aussie.spi.RateLimiterProvider;
 
 /**

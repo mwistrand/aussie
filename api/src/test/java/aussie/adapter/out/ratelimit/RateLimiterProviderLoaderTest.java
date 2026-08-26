@@ -23,10 +23,10 @@ import aussie.adapter.out.ratelimit.memory.InMemoryRateLimiter;
 import aussie.adapter.out.ratelimit.redis.RedisRateLimiter;
 import aussie.core.config.RateLimitingConfig;
 import aussie.core.config.RateLimitingConfig.RateLimitFallbackBehavior;
-import aussie.core.model.ratelimit.AlgorithmRegistry;
 import aussie.core.model.ratelimit.RateLimitAlgorithm;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
+import aussie.core.service.ratelimit.AlgorithmRegistry;
 
 @DisplayName("RateLimiterProviderLoader")
 @ExtendWith(MockitoExtension.class)

@@ -1,4 +1,4 @@
-package aussie.core.model.websocket;
+package aussie.adapter.in.websocket;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -38,8 +38,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.core.config.WebSocketConfig;
 import aussie.core.model.auth.RevocationEvent;
-import aussie.core.model.ratelimit.MessageRateLimitHandler;
 import aussie.core.model.session.SessionInvalidatedEvent;
+import aussie.core.service.ratelimit.MessageRateLimitHandler;
 
 @DisplayName("WebSocketProxySession")
 @ExtendWith(MockitoExtension.class)
