@@ -514,66 +514,44 @@ Some teams implement a "degraded" health status: UP but reporting warnings. Kube
 JWT validation requires the identity provider's public keys (JWKS). When the gateway cannot fetch fresh keys, it falls back to stale cached keys:
 
 ```java
-// api/src/main/java/aussie/core/service/auth/JwksCacheService.java, lines 123-153
-
-private Uni<JsonWebKeySet> fetchAndCache(URI jwksUri) {
-    LOG.infov("Fetching JWKS from {0}", jwksUri);
-
-    return webClient
-            .getAbs(jwksUri.toString())
-            .ssl(jwksUri.getScheme().equals("https"))
-            .send()
-            .ifNoItem()
-            .after(jwksConfig.fetchTimeout())
-            .failWith(() -> {
-                LOG.warnv("JWKS fetch timeout for {0} after {1}",
-                        jwksUri, jwksConfig.fetchTimeout());
-                metrics.recordJwksFetchTimeout(jwksUri.getHost());
-                return new JwksFetchException(
-                        "Timeout fetching JWKS from " + jwksUri);
-            })
-            .map(this::parseResponse)
-            .invoke(keySet -> {
-                cache.put(jwksUri, new CachedKeySet(
-                        keySet, Instant.now().plus(jwksConfig.cacheTtl())));
-                LOG.infov("Cached {0} keys from {1}",
-                        keySet.getJsonWebKeys().size(), jwksUri);
-            })
-            .onFailure()
-            .recoverWithUni(error -> {
-                LOG.errorv(error, "Failed to fetch JWKS from {0}", jwksUri);
-                // Try to use stale cached keys if available
-                var stale = cache.getIfPresent(jwksUri);
-                if (stale != null) {
-                    LOG.warnv("Using stale cached JWKS for {0} due to: {1}",
-                            jwksUri, error.getMessage());
-                    return Uni.createFrom().item(stale.keySet());
-                }
-                return Uni.createFrom().failure(error);
-            });
-}
+// api/src/main/java/aussie/adapter/out/auth/JwksCacheService.java
+.onFailure()
+.recoverWithUni(error -> {
+    LOG.errorv(error, "Failed to fetch JWKS from host {0}", jwksUri.getHost());
+    var stale = cache.getIfPresent(jwksUri);
+    if (stale != null && stale.canUseStale()) {
+        LOG.warnv("Using stale cached JWKS for host {0}", jwksUri.getHost());
+        return Uni.createFrom().item(stale.keySet());
+    }
+    return Uni.createFrom().failure(error);
+});
 ```
 
-The recovery logic at lines 143-153 is the key section. When a fetch fails for any reason (timeout, HTTP error, parse failure), the code checks the Caffeine cache. The `CachedKeySet` record tracks an expiration timestamp:
+When a fetch fails for any reason (timeout, HTTP error, or parse failure), the code checks the Caffeine cache. The `CachedKeySet` record tracks both the normal expiration and the bounded stale-fallback deadline:
 
 ```java
-// JwksCacheService.java, lines 184-188
+// api/src/main/java/aussie/adapter/out/auth/JwksCacheService.java
 
-private record CachedKeySet(JsonWebKeySet keySet, Instant expiresAt) {
-    boolean isExpired() {
-        return Instant.now().isAfter(expiresAt);
+private record CachedKeySet(JsonWebKeySet keySet, Instant expiresAt, Instant staleUntil) {
+    boolean isFresh() {
+        return Instant.now().isBefore(expiresAt);
+    }
+
+    boolean canUseStale() {
+        return !Instant.now().isAfter(staleUntil);
     }
 }
 ```
 
-A crucial detail: the normal code path at line 76 checks `isExpired()` before using cached data:
+A crucial detail: the normal code path checks `isFresh()` before using cached data:
 
 ```java
-// JwksCacheService.java, lines 74-80
+// api/src/main/java/aussie/adapter/out/auth/JwksCacheService.java
 
 public Uni<JsonWebKeySet> getKeySet(URI jwksUri) {
+    validateUri(jwksUri);
     var cached = cache.getIfPresent(jwksUri);
-    if (cached != null && !cached.isExpired()) {
+    if (cached != null && cached.isFresh()) {
         LOG.debugv("Using cached JWKS for {0}", jwksUri);
         return Uni.createFrom().item(cached.keySet());
     }
@@ -581,14 +559,14 @@ public Uni<JsonWebKeySet> getKeySet(URI jwksUri) {
 }
 ```
 
-But the fallback code at line 147 uses `cache.getIfPresent()` without the `isExpired()` check. This is deliberate: during a fetch failure, stale keys are better than no keys. The keys were valid recently, and key rotation happens on the order of weeks or months, not minutes.
+The fallback deliberately uses a separate `canUseStale()` check. Stale keys remain available only until `staleUntil`; after that deadline, the fetch failure propagates.
 
 ### Thundering Herd Protection
 
 The `JwksCacheService` also prevents thundering herd on cache expiration using request coalescing:
 
 ```java
-// JwksCacheService.java, lines 87-101
+// api/src/main/java/aussie/adapter/out/auth/JwksCacheService.java
 
 private Uni<JsonWebKeySet> getOrCreateFetch(URI jwksUri) {
     return Uni.createFrom().deferred(() -> {
@@ -610,9 +588,9 @@ When the cache expires and 100 concurrent requests all need the JWKS, only one f
 
 ### When Stale Data Is Not Acceptable
 
-The fallback only works because cryptographic key sets are append-only in practice. When a new key is added, old keys remain valid. The worst case for stale JWKS data is that the gateway cannot validate tokens signed with a brand-new key. Tokens signed with older keys continue to validate correctly.
+The fallback is intended for short outages during normal key rotation, when providers commonly overlap old and new signing keys. Stale data may reject tokens signed by a newly introduced key and may retain trust in a removed key until the stale deadline.
 
-If the identity provider has rotated all keys (removed old ones), stale cached data would cause all token validation to fail. This is an edge case that occurs only during aggressive key rotation coinciding with an IDP outage. The mitigation is the 1-hour cache TTL (`aussie.resiliency.jwks.cache-ttl=PT1H`), which limits how stale the data can be.
+The default cache TTL is one hour (`aussie.resiliency.jwks.cache-ttl=PT1H`), followed by at most 15 minutes of stale fallback (`aussie.resiliency.jwks.maximum-stale=PT15M`). Set `maximum-stale` to `PT0` when removed keys must stop being trusted immediately after normal expiry.
 
 ## 7. No Circuit Breaker by Design
 

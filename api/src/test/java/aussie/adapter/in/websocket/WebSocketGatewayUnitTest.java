@@ -51,7 +51,7 @@ import aussie.core.model.websocket.WebSocketUpgradeRequest;
 import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
 import aussie.core.port.out.OutboundHttpClients;
-import aussie.core.service.auth.JwksCacheService.JwksFetchException;
+import aussie.core.service.auth.JwksFetchException;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
 import aussie.core.service.routing.UpstreamAddressResolver;
 

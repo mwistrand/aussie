@@ -384,9 +384,9 @@ These are not hypothetical decisions. Every one of them is enforced by running c
   - `AtomicReference<Uni<Void>> inFlightRefresh` field (line 68)
   - `ensureCacheFresh()` method: double-check stale, join existing or create new, `compareAndSet` for race safety, `.memoize().indefinitely()`, clear on termination (lines 138-169)
   - Javadoc: "Uses request coalescing to prevent thundering herd" (lines 134-135)
-- `api/src/main/java/aussie/core/service/auth/JwksCacheService.java`: JWKS fetch coalescing:
-  - `Map<URI, Uni<JsonWebKeySet>> inFlightFetches` field (line 51)
-  - `getOrCreateFetch()`: uses `computeIfAbsent` to ensure single fetch per URI (lines 87-93)
-  - `createFetch()`: `.memoize().indefinitely()`, clear `inFlightFetches` on termination (lines 95-101)
-  - Javadoc: "Thundering herd protection via request coalescing" (line 39)
-  - Stale cache fallback: if the refresh fails, returns stale cached keys if available (lines 144-153)
+- `api/src/main/java/aussie/adapter/out/auth/JwksCacheService.java`: JWKS fetch coalescing:
+  - `Map<URI, Uni<JsonWebKeySet>> inFlightFetches` field
+  - `getOrCreateFetch()`: uses `computeIfAbsent` to ensure single fetch per URI
+  - `createFetch()`: `.memoize().indefinitely()`, clear `inFlightFetches` on termination
+  - Javadoc: "Thundering herd protection via request coalescing"
+  - Bounded stale cache fallback: if the refresh fails, returns cached keys only through `staleUntil`

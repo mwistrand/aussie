@@ -267,7 +267,7 @@ The double-check pattern (checking `isCacheStale()` both before and inside the `
 The same `deferred` pattern appears in `JwksCacheService`:
 
 ```java
-// api/src/main/java/aussie/core/service/auth/JwksCacheService.java, lines 87-93
+// api/src/main/java/aussie/adapter/out/auth/JwksCacheService.java
 private Uni<JsonWebKeySet> getOrCreateFetch(URI jwksUri) {
     return Uni.createFrom().deferred(() -> {
         var fetch = inFlightFetches.computeIfAbsent(jwksUri, this::createFetch);
@@ -304,7 +304,7 @@ The `.onTermination().invoke(() -> inFlightRefresh.set(null))` cleanup is essent
 The `JwksCacheService` uses the identical pattern:
 
 ```java
-// api/src/main/java/aussie/core/service/auth/JwksCacheService.java, lines 95-101
+// api/src/main/java/aussie/adapter/out/auth/JwksCacheService.java
 private Uni<JsonWebKeySet> createFetch(URI jwksUri) {
     return fetchAndCache(jwksUri)
             .onTermination()
@@ -410,34 +410,42 @@ public <T> Uni<Optional<T>> withTimeoutGraceful(Uni<T> operation, String operati
 The `JwksCacheService` applies the same deadline pattern to outbound HTTP calls:
 
 ```java
-// api/src/main/java/aussie/core/service/auth/JwksCacheService.java, lines 126-153
-return webClient
-        .getAbs(jwksUri.toString())
-        .ssl(jwksUri.getScheme().equals("https"))
-        .send()
+// api/src/main/java/aussie/adapter/out/auth/JwksCacheService.java
+return addressResolver
+        .resolve(jwksUri)
+        .flatMap(serverAddress -> webClient
+                .requestAbs(
+                        HttpMethod.GET,
+                        SocketAddress.newInstance(serverAddress),
+                        jwksUri.toString())
+                .ssl("https".equalsIgnoreCase(jwksUri.getScheme()))
+                .followRedirects(false)
+                .send())
         .ifNoItem()
         .after(jwksConfig.fetchTimeout())
         .failWith(() -> {
-            LOG.warnv("JWKS fetch timeout for {0} after {1}", jwksUri, jwksConfig.fetchTimeout());
+            LOG.warnv("JWKS fetch timeout for host {0} after {1}",
+                    jwksUri.getHost(), jwksConfig.fetchTimeout());
             metrics.recordJwksFetchTimeout(jwksUri.getHost());
-            return new JwksFetchException("Timeout fetching JWKS from " + jwksUri);
+            return new JwksFetchException("Timeout fetching JWKS");
         })
         .map(this::parseResponse)
         .invoke(keySet -> {
-            cache.put(jwksUri, new CachedKeySet(keySet, Instant.now().plus(jwksConfig.cacheTtl())));
+            var expiresAt = Instant.now().plus(jwksConfig.cacheTtl());
+            cache.put(jwksUri,
+                    new CachedKeySet(keySet, expiresAt, expiresAt.plus(jwksConfig.maximumStale())));
         })
         .onFailure()
         .recoverWithUni(error -> {
             var stale = cache.getIfPresent(jwksUri);
-            if (stale != null) {
-                LOG.warnv("Using stale cached JWKS for {0} due to: {1}", jwksUri, error.getMessage());
+            if (stale != null && stale.canUseStale()) {
                 return Uni.createFrom().item(stale.keySet());
             }
             return Uni.createFrom().failure(error);
         });
 ```
 
-Notice the layered resilience: timeout produces a failure, and the failure recovery attempts to use stale cached keys. This means a temporary identity provider outage does not immediately break authentication for every request. Cached keys continue to work until the cache fully expires.
+Notice the layered resilience: timeout produces a failure, and the failure recovery attempts to use cached keys only until their bounded stale deadline. This means a temporary identity provider outage does not immediately break authentication for every request.
 
 **Why not Thread.sleep?** Beyond the obvious event loop blocking issue, `Thread.sleep` in a reactive context would block the carrier thread, potentially deadlocking the entire application when all event loop threads are sleeping. The `ifNoItem().after()` pattern uses the event loop's built-in timer mechanism, which can track thousands of concurrent deadlines with zero thread overhead.
 

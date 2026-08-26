@@ -12,7 +12,7 @@ import io.quarkiverse.resteasy.problem.HttpProblem;
 import io.quarkiverse.resteasy.problem.postprocessing.ProblemContext;
 import io.quarkiverse.resteasy.problem.postprocessing.ProblemPostProcessor;
 
-import aussie.core.service.auth.JwksCacheService.JwksFetchException;
+import aussie.core.service.auth.JwksFetchException;
 
 /**
  * Global fallback mapper and contract enricher for RFC 9457 Problem Details.

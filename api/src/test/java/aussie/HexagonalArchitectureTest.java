@@ -12,6 +12,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import aussie.core.port.out.JwksCache;
+
 @DisplayName("Hexagonal Architecture Rules")
 class HexagonalArchitectureTest {
 
@@ -90,6 +92,19 @@ class HexagonalArchitectureTest {
                     .dependOnClassesThat()
                     .resideInAnyPackage("aussie.core.service..", "aussie.adapter..", "aussie.system..")
                     .because("ports define boundaries and must not point back to implementations");
+
+            rule.check(importedClasses);
+        }
+
+        @Test
+        @DisplayName("JwksCache implementations should live in outbound adapters")
+        void jwksCacheImplementationsShouldLiveInOutboundAdapters() {
+            ArchRule rule = ArchRuleDefinition.classes()
+                    .that()
+                    .implement(JwksCache.class)
+                    .should()
+                    .resideInAnyPackage("aussie.adapter.out..")
+                    .because("outbound ports must not own framework-backed implementations");
 
             rule.check(importedClasses);
         }

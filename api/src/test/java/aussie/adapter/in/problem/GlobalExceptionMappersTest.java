@@ -6,7 +6,7 @@ import io.quarkiverse.resteasy.problem.HttpProblem;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.service.auth.JwksCacheService.JwksFetchException;
+import aussie.core.service.auth.JwksFetchException;
 
 @DisplayName("GlobalExceptionMappers")
 class GlobalExceptionMappersTest {

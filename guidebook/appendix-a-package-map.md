@@ -329,7 +329,6 @@ Domain services implementing inbound ports and composing outbound ports. All are
 | `ApiKeyService` | Implements `ApiKeyManagement`. Key CRUD with cache integration. |
 | `AuthRateLimitService` | Brute-force protection: tracks failed attempts, applies progressive lockout. |
 | `DefaultPermissionPolicy` | Default permission policy for services without an explicit policy. Config operations accept `aussie:admin` or the corresponding `service.config.*` permission; policy management requires `aussie:admin`. |
-| `JwksCacheService` | Implements `JwksCache`. Fetches and caches JWKS with request coalescing to prevent thundering herd. |
 | `KeyRotationService` | Automated signing key rotation lifecycle (generate, activate, deprecate, retire). |
 | `OidcTokenExchangeProviderRegistry` | Selects the active `OidcTokenExchangeProvider` by configuration or priority. |
 | `PkceService` | PKCE challenge generation and verification. |
@@ -621,7 +620,7 @@ These packages implement outbound ports with concrete infrastructure.
 
 ### `adapter/out/auth`
 
-**Role:** Authentication infrastructure: signing keys, token translation, OIDC validation.
+**Role:** Authentication infrastructure: signing keys, token translation, OIDC validation, and JWKS caching.
 
 | Class | Description |
 |---|---|
@@ -629,6 +628,7 @@ These packages implement outbound ports with concrete infrastructure.
 | `ConfigTokenTranslatorProvider` | Implements `TokenTranslatorProvider`. Config-driven claim translation using `TranslationConfigSchema`. |
 | `DefaultOidcTokenExchangeProvider` | Implements `OidcTokenExchangeProvider`. Standard OAuth2 code-for-token exchange via HTTP. |
 | `DefaultTokenTranslatorProvider` | Implements `TokenTranslatorProvider`. Extracts from standard `roles` and `permissions` claims (priority 100). |
+| `JwksCacheService` | Implements `JwksCache`. Fetches and caches JWKS with request coalescing to prevent thundering herd. |
 | `OidcTokenValidator` | Implements `TokenValidatorProvider`. Validates JWTs against JWKS endpoints with issuer and audience checks. |
 | `RemoteTokenTranslatorProvider` | Implements `TokenTranslatorProvider`. Delegates translation to a remote service endpoint. |
 | `RsaTokenIssuer` | Implements `TokenIssuerProvider`. Signs JWS tokens using RSA-256 with the active signing key. |

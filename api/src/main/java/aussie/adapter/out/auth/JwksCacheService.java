@@ -1,4 +1,4 @@
-package aussie.core.service.auth;
+package aussie.adapter.out.auth;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -36,6 +36,7 @@ import aussie.core.config.ResiliencyConfig;
 import aussie.core.port.out.JwksCache;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.OutboundHttpClients;
+import aussie.core.service.auth.JwksFetchException;
 import aussie.core.service.routing.UpstreamAddressResolver;
 
 /**
@@ -310,22 +311,6 @@ public class JwksCacheService implements JwksCache {
 
         boolean canUseStale() {
             return !Instant.now().isAfter(staleUntil);
-        }
-    }
-
-    /**
-     * Exception thrown when JWKS fetch fails.
-     *
-     * <p>This can occur due to network timeout, HTTP error, or malformed JWKS response.
-     * If cached keys are available, the service falls back to stale data.
-     */
-    public static class JwksFetchException extends RuntimeException {
-        public JwksFetchException(String message) {
-            super(message);
-        }
-
-        public JwksFetchException(String message, Throwable cause) {
-            super(message, cause);
         }
     }
 }

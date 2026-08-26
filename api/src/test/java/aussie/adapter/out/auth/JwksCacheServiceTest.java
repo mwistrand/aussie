@@ -1,4 +1,4 @@
-package aussie.core.service.auth;
+package aussie.adapter.out.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -43,6 +43,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import aussie.core.config.ResiliencyConfig;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.OutboundHttpClients;
+import aussie.core.service.auth.JwksFetchException;
 import aussie.core.service.routing.UpstreamAddressResolver;
 
 @DisplayName("JwksCacheService")
@@ -189,7 +190,7 @@ class JwksCacheServiceTest {
             mockFetchResponse(500, null);
 
             var exception = assertThrows(
-                    JwksCacheService.JwksFetchException.class,
+                    JwksFetchException.class,
                     () -> service.getKeySet(JWKS_URI).await().atMost(Duration.ofSeconds(5)));
 
             assertTrue(exception.getMessage().contains("500"));
@@ -201,7 +202,7 @@ class JwksCacheServiceTest {
             mockFetchResponse(403, null);
 
             var exception = assertThrows(
-                    JwksCacheService.JwksFetchException.class,
+                    JwksFetchException.class,
                     () -> service.getKeySet(JWKS_URI).await().atMost(Duration.ofSeconds(5)));
 
             assertTrue(exception.getMessage().contains("403"));
@@ -213,7 +214,7 @@ class JwksCacheServiceTest {
             mockFetchResponse(200, "not valid json");
 
             var exception = assertThrows(
-                    JwksCacheService.JwksFetchException.class,
+                    JwksFetchException.class,
                     () -> service.getKeySet(JWKS_URI).await().atMost(Duration.ofSeconds(5)));
 
             assertTrue(exception.getMessage().contains("Failed to parse"));
@@ -225,7 +226,7 @@ class JwksCacheServiceTest {
             mockFetchResponse(200, singleKeyJwks, "text/html");
 
             final var exception = assertThrows(
-                    JwksCacheService.JwksFetchException.class,
+                    JwksFetchException.class,
                     () -> service.getKeySet(JWKS_URI).await().atMost(Duration.ofSeconds(5)));
 
             assertTrue(exception.getMessage().contains("content type"));
@@ -240,7 +241,7 @@ class JwksCacheServiceTest {
             mockFetchResponse(200, singleKeyJwks);
 
             final var exception = assertThrows(
-                    JwksCacheService.JwksFetchException.class,
+                    JwksFetchException.class,
                     () -> service.getKeySet(JWKS_URI).await().atMost(Duration.ofSeconds(5)));
 
             assertTrue(exception.getMessage().contains("size limit"));
@@ -303,7 +304,7 @@ class JwksCacheServiceTest {
         @DisplayName("should reject plaintext JWKS outside dev/test")
         void shouldRejectHttpUri() {
             assertThrows(
-                    JwksCacheService.JwksFetchException.class,
+                    JwksFetchException.class,
                     () -> JwksCacheService.validateUri(JWKS_URI_HTTP, LaunchMode.NORMAL, List.of("prod")));
 
             verify(webClient, never()).requestAbs(any(), any(SocketAddress.class), anyString());
@@ -469,7 +470,7 @@ class JwksCacheServiceTest {
         @Test
         @DisplayName("should preserve message")
         void shouldPreserveMessage() {
-            var exception = new JwksCacheService.JwksFetchException("test message");
+            var exception = new JwksFetchException("test message");
 
             assertEquals("test message", exception.getMessage());
             assertInstanceOf(RuntimeException.class, exception);
@@ -479,7 +480,7 @@ class JwksCacheServiceTest {
         @DisplayName("should preserve cause")
         void shouldPreserveCause() {
             var cause = new RuntimeException("root cause");
-            var exception = new JwksCacheService.JwksFetchException("test message", cause);
+            var exception = new JwksFetchException("test message", cause);
 
             assertEquals("test message", exception.getMessage());
             assertEquals(cause, exception.getCause());
@@ -530,7 +531,7 @@ class JwksCacheServiceTest {
             when(request.send()).thenReturn(Uni.createFrom().nothing());
 
             var exception = assertThrows(
-                    JwksCacheService.JwksFetchException.class,
+                    JwksFetchException.class,
                     () -> service.getKeySet(JWKS_URI).await().atMost(Duration.ofSeconds(10)));
 
             assertTrue(exception.getMessage().contains("Timeout"));

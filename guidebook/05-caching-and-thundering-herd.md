@@ -399,16 +399,17 @@ The JWKS cache (`JwksCacheService.java`) solves a similar problem: preventing th
 ### The Pattern: ConcurrentHashMap.computeIfAbsent
 
 ```java
-// api/src/main/java/aussie/core/service/auth/JwksCacheService.java (lines 51)
+// api/src/main/java/aussie/adapter/out/auth/JwksCacheService.java
 private final Map<URI, Uni<JsonWebKeySet>> inFlightFetches = new ConcurrentHashMap<>();
 ```
 
 ```java
-// api/src/main/java/aussie/core/service/auth/JwksCacheService.java (lines 74-81)
+// api/src/main/java/aussie/adapter/out/auth/JwksCacheService.java
 @Override
 public Uni<JsonWebKeySet> getKeySet(URI jwksUri) {
+    validateUri(jwksUri);
     var cached = cache.getIfPresent(jwksUri);
-    if (cached != null && !cached.isExpired()) {
+    if (cached != null && cached.isFresh()) {
         LOG.debugv("Using cached JWKS for {0}", jwksUri);
         return Uni.createFrom().item(cached.keySet());
     }
@@ -417,7 +418,7 @@ public Uni<JsonWebKeySet> getKeySet(URI jwksUri) {
 ```
 
 ```java
-// api/src/main/java/aussie/core/service/auth/JwksCacheService.java (lines 87-101)
+// api/src/main/java/aussie/adapter/out/auth/JwksCacheService.java
 private Uni<JsonWebKeySet> getOrCreateFetch(URI jwksUri) {
     return Uni.createFrom().deferred(() -> {
         // Use computeIfAbsent to ensure only one fetch per URI
@@ -452,32 +453,32 @@ The shared elements of the pattern are:
 The JWKS cache adds a detail the service registry does not: stale fallback on failure.
 
 ```java
-// api/src/main/java/aussie/core/service/auth/JwksCacheService.java (lines 143-153)
+// api/src/main/java/aussie/adapter/out/auth/JwksCacheService.java
 .onFailure()
 .recoverWithUni(error -> {
-    LOG.errorv(error, "Failed to fetch JWKS from {0}", jwksUri);
+    LOG.errorv(error, "Failed to fetch JWKS from host {0}", jwksUri.getHost());
     // Try to use stale cached keys if available
     var stale = cache.getIfPresent(jwksUri);
-    if (stale != null) {
-        LOG.warnv("Using stale cached JWKS for {0} due to: {1}",
-                  jwksUri, error.getMessage());
+    if (stale != null && stale.canUseStale()) {
+        LOG.warnv("Using stale cached JWKS for host {0}", jwksUri.getHost());
         return Uni.createFrom().item(stale.keySet());
     }
     return Uni.createFrom().failure(error);
 });
 ```
 
-If an identity provider's JWKS endpoint is down, the cache returns the last known good key set even after TTL expiry. This is the right trade-off for JWKS: keys rotate slowly (typically days or weeks), so stale data is almost always correct. Failing authentication for all users because an IdP endpoint returned a 500 is far worse than using a key set that is a few minutes old.
+If an identity provider's JWKS endpoint is down, the cache can return the last known good key set for the configured `maximum-stale` interval after TTL expiry. This keeps authentication available during short IdP outages without retaining old keys indefinitely.
 
 The service registry does not do stale fallback because routing data is more volatile (services are registered and unregistered frequently) and the consequences of stale routing (sending traffic to a deregistered service) are different from the consequences of stale keys (authentication works, just with slightly old keys).
 
 ### Force Refresh and Invalidation
 
 ```java
-// api/src/main/java/aussie/core/service/auth/JwksCacheService.java (lines 109-121)
+// api/src/main/java/aussie/adapter/out/auth/JwksCacheService.java
 @Override
 public Uni<JsonWebKeySet> refresh(URI jwksUri) {
-    LOG.infov("Force refreshing JWKS for {0}", jwksUri);
+    validateUri(jwksUri);
+    LOG.infov("Force refreshing JWKS for host {0}", jwksUri.getHost());
     cache.invalidate(jwksUri);
     inFlightFetches.remove(jwksUri); // Clear any stale in-flight fetch
     return getOrCreateFetch(jwksUri);
@@ -485,7 +486,7 @@ public Uni<JsonWebKeySet> refresh(URI jwksUri) {
 
 @Override
 public void invalidate(URI jwksUri) {
-    LOG.infov("Invalidating cached JWKS for {0}", jwksUri);
+    LOG.infov("Invalidating cached JWKS for host {0}", jwksUri.getHost());
     cache.invalidate(jwksUri);
     inFlightFetches.remove(jwksUri);
 }
@@ -499,7 +500,7 @@ The `refresh` method clears both the Caffeine cache and any in-flight fetch befo
 |----------|---------|------|
 | `ConcurrentHashMap` over `AtomicReference` | Per-URI coalescing; independent fetches per IdP | More memory (one map entry per active fetch) |
 | `computeIfAbsent` over manual CAS | Simpler, fewer race condition edge cases | Holds CHM segment lock during `createFetch` (but `createFetch` is cheap; it just assembles the Uni pipeline, it does not block on I/O) |
-| Stale fallback on failure | Authentication continues working during IdP outages | Could serve revoked keys if rotation coincides with outage |
+| Bounded stale fallback on failure | Authentication continues working during short IdP outages | Could serve revoked keys until `maximum-stale` elapses |
 | Caffeine with `recordStats()` + Micrometer integration | Observable cache hit rates in production | Minor overhead from stats recording |
 
 ## 5.5 Multi-Tier Cache Hierarchy
