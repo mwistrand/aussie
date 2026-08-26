@@ -14,6 +14,9 @@ The order is intentional: formatting and tests pass before any image is built.
 The JVM Dockerfile uses `spotlessCheck`, never rewrites source files, and its
 image build remains separate from the CI test gate.
 
-E2E remains a separate gate until the suite covers all trust boundaries listed
-in the production-readiness roadmap. A failed or skipped E2E job is not release
-evidence.
+The packaged-artifact E2E gate runs on pull requests, pushes to `main`, and
+protected release workflow calls. It covers authentication-boundary rejection,
+protected routing, migrations, administrative concurrency, restart behavior,
+and observability. A failed or skipped E2E job is not release evidence; the
+remaining native, chaos, and hosted rollback scenarios stay explicit follow-up
+gates in the roadmap.
