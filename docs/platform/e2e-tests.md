@@ -17,6 +17,16 @@ from `:check` because container boot is slow and requires Docker.
 make e2e
 ```
 
+For repeated packaged-artifact lifecycle checks, use:
+
+```shell
+make e2e-soak SOAK_RUNS=3
+```
+
+The scheduled CI resilience lane uses this target. Each run creates a fresh
+gateway/dependency stack, exercises the restart and replica lifecycle tests,
+and tears the stack down before the next run.
+
 The `e2e` target depends on `demo-deps`, which installs the demo's Node
 dependencies via `npm ci` (or `npm install` on a fresh clone without a
 lockfile). Subsequent runs skip the install step.

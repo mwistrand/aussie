@@ -18,5 +18,8 @@ The packaged-artifact E2E gate runs on pull requests, pushes to `main`, and
 protected release workflow calls. It covers authentication-boundary rejection,
 protected routing, migrations, administrative concurrency, restart behavior,
 and observability. A failed or skipped E2E job is not release evidence; the
-remaining native, chaos, and hosted rollback scenarios stay explicit follow-up
-gates in the roadmap.
+native artifact build runs in the same reusable workflow. A scheduled
+`Resilience` workflow repeats the packaged lifecycle suite and uploads container
+logs on failure; run it manually with `workflow_dispatch` when validating a
+change under a larger repeat count. Hosted rollback remains a separate,
+deployment-owned gate and is not claimed by this repository-only workflow.

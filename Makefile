@@ -1,6 +1,8 @@
 COMPOSE=docker compose
 
-.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage reset demo-deps e2e e2e-logs
+.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage reset demo-deps e2e e2e-soak e2e-logs
+
+SOAK_RUNS ?= 3
 
 up:
 	# The API owns Cassandra migrations and runs them before serving traffic.
@@ -93,6 +95,15 @@ demo-deps:
 # container boot is slow. See docs/platform/e2e-tests.md.
 e2e: demo-deps
 	cd api && ./gradlew e2eTest
+
+# Repeat the packaged-artifact resilience suite so restart and dependency
+# lifecycle regressions are visible in the scheduled gate.
+e2e-soak: demo-deps
+	@i=1; while [ "$$i" -le "$(SOAK_RUNS)" ]; do \
+		echo "Packaged resilience run $$i/$(SOAK_RUNS)"; \
+		(cd api && ./gradlew e2eTest --rerun-tasks); \
+		i=$$((i + 1)); \
+	done
 
 # Print the most recent e2e run's container logs.
 e2e-logs:

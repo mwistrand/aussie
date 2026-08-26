@@ -97,3 +97,24 @@ jobs:
           cache-dependency-path: demo/package-lock.json
       - name: Packaged artifact E2E
         run: make e2e
+
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          distribution: graalvm-community
+          java-version: '21'
+          cache: gradle
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build native artifact
+        working-directory: api
+        run: ./gradlew --dependency-verification=strict quarkusBuild -Dquarkus.native.enabled=true
+      - name: Verify native executable
+        working-directory: api
+        run: |
+          runner=$(find build -maxdepth 1 -type f -name '*-runner' -print -quit)
+          test -n "$runner"
+          test -x "$runner"
