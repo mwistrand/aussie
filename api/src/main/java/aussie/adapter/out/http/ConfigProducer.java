@@ -4,10 +4,10 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
 
+import aussie.core.config.LimitsConfig;
+import aussie.core.config.TrustedProxyConfig;
 import aussie.core.model.auth.AccessControlConfig;
 import aussie.core.model.auth.GatewaySecurityConfig;
-import aussie.core.model.common.LimitsConfig;
-import aussie.core.model.common.TrustedProxyConfig;
 
 /**
  * Produces configuration beans for injection into core services.

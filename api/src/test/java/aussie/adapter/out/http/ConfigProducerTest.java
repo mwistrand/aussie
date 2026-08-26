@@ -11,9 +11,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.core.config.LimitsConfig;
+import aussie.core.config.TrustedProxyConfig;
 import aussie.core.model.auth.AccessControlConfig;
-import aussie.core.model.common.LimitsConfig;
-import aussie.core.model.common.TrustedProxyConfig;
 
 @DisplayName("ConfigProducer")
 @ExtendWith(MockitoExtension.class)

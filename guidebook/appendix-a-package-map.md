@@ -109,10 +109,8 @@ Pure domain objects. Records, sealed interfaces, enums, value types. No framewor
 | `BootstrapResult` | Record returned after bootstrap key creation with key ID and expiration. |
 | `CorsConfig` | Interface defining CORS settings (origins, methods, headers, credentials). |
 | `JwsConfig` | Interface for JWS token issuance settings (issuer, audience, TTL). |
-| `LimitsConfig` | Interface for request size limits (max body, max header size, max headers). |
 | `SourceIdentifier` | Record pairing a client IP with an optional API key prefix for rate limit keying. |
 | `StorageHealth` | Record for storage backend health status reporting. |
-| `TrustedProxyConfig` | Interface defining trusted proxy CIDR ranges for `X-Forwarded-For` parsing. |
 | `ValidationResult` | Sealed interface with `Valid` and `Invalid` variants for input validation. |
 
 **Allowed dependencies:** `java.*`. No other aussie packages.
@@ -225,6 +223,7 @@ Framework-agnostic configuration interfaces. Use `@ConfigMapping` from SmallRye 
 | `AuthRateLimitConfig` | Brute-force protection settings (max attempts, lockout duration, progressive lockout). |
 | `BootstrapConfig` | Bootstrap key settings (enabled, recovery mode, key value, TTL). |
 | `KeyRotationConfig` | Signing key rotation schedule (rotation interval, overlap period, max keys). |
+| `LimitsConfig` | Request and response size limits (body and header sizes). |
 | `OidcConfig` | OIDC/OAuth2 settings (client ID, secret, endpoints, scopes, PKCE). |
 | `PkceConfig` | PKCE-specific settings (challenge method, challenge TTL). |
 | `RateLimitingConfig` | Rate limiting settings (algorithm, defaults, platform max, WebSocket sub-config). |
@@ -234,6 +233,7 @@ Framework-agnostic configuration interfaces. Use `@ConfigMapping` from SmallRye 
 | `SessionConfig` | Session management settings (TTL, idle timeout, sliding expiration, max sessions). |
 | `TokenRevocationConfig` | Token revocation settings (bloom filter size, rebuild interval, hash functions). |
 | `TokenTranslationConfig` | Token translation settings (enabled, provider name, cache TTL). |
+| `TrustedProxyConfig` | Trusted proxy CIDR ranges for forwarding-header validation. |
 | `WebSocketConfig` | WebSocket proxy settings (max connections, idle timeout, ping interval). |
 
 **Allowed dependencies:** `core/model` (for enum and config interface types referenced in config hierarchies).

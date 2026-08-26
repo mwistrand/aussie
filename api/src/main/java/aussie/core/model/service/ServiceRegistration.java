@@ -4,9 +4,6 @@ import java.net.URI;
 import java.util.List;
 import java.util.Optional;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-
 import aussie.core.model.auth.ServiceAccessConfig;
 import aussie.core.model.auth.ServicePermissionPolicy;
 import aussie.core.model.auth.VisibilityRule;
@@ -282,15 +279,8 @@ public record ServiceRegistration(
     }
 
     private RouteIndex routeIndex() {
-        return ROUTE_INDEX_CACHE.get(endpoints, RouteIndex::build);
+        return RouteIndex.build(endpoints);
     }
-
-    // Weak-keyed cache: identity comparison plus weak references mean an entry is
-    // eligible for eviction once the keying endpoints list is no longer reachable
-    // from any live registration, so the cache cannot grow unbounded across
-    // service re-registrations.
-    private static final Cache<List<EndpointConfig>, RouteIndex> ROUTE_INDEX_CACHE =
-            Caffeine.newBuilder().weakKeys().build();
 
     public static Builder builder(String serviceId) {
         return new Builder(serviceId);

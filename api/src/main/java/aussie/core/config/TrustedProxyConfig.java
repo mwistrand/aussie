@@ -1,4 +1,4 @@
-package aussie.core.model.common;
+package aussie.core.config;
 
 import java.util.List;
 import java.util.Optional;

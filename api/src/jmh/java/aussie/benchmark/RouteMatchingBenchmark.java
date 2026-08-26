@@ -23,13 +23,13 @@ import org.openjdk.jmh.infra.Blackhole;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.GatewaySnapshot;
+import aussie.core.model.routing.ServiceRoutes;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.service.routing.GlobPatternMatcher;
 
 /**
- * Benchmarks for {@link ServiceRegistration#findRoute} covering exact, parameterized, wildcard,
- * no-match, path-rewrite, and glob routes, plus a scaling benchmark that measures worst-case
- * linear scanning as the endpoint count grows.
+ * Benchmarks for {@link ServiceRoutes#matchEndpoint} covering exact, parameterized, wildcard,
+ * no-match, path-rewrite, and glob routes, plus a scaling benchmark as the endpoint count grows.
  */
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
@@ -53,48 +53,51 @@ public class RouteMatchingBenchmark {
 
     @State(Scope.Benchmark)
     public static class ExactMatchState {
-        ServiceRegistration service;
+        ServiceRoutes routes;
 
         @Setup
         public void setup() {
-            service = ServiceRegistration.builder("test-service")
+            final var service = ServiceRegistration.builder("test-service")
                     .baseUrl(URI.create("http://backend.example.com"))
                     .endpoints(List.of(EndpointConfig.publicEndpoint("/users", Set.of("GET", "POST"))))
                     .build();
+            routes = ServiceRoutes.of(service);
         }
     }
 
     @State(Scope.Benchmark)
     public static class ParameterizedMatchState {
-        ServiceRegistration service;
+        ServiceRoutes routes;
 
         @Setup
         public void setup() {
-            service = ServiceRegistration.builder("test-service")
+            final var service = ServiceRegistration.builder("test-service")
                     .baseUrl(URI.create("http://backend.example.com"))
                     .endpoints(List.of(EndpointConfig.publicEndpoint("/users/{id}/posts/{postId}", Set.of("GET"))))
                     .build();
+            routes = ServiceRoutes.of(service);
         }
     }
 
     @State(Scope.Benchmark)
     public static class WildcardMatchState {
-        ServiceRegistration service;
+        ServiceRoutes routes;
 
         @Setup
         public void setup() {
-            service = ServiceRegistration.builder("test-service")
+            final var service = ServiceRegistration.builder("test-service")
                     .baseUrl(URI.create("http://backend.example.com"))
                     .endpoints(List.of(
                             EndpointConfig.publicEndpoint("/assets/**", Set.of("GET")),
                             EndpointConfig.publicEndpoint("/api/*", Set.of("GET"))))
                     .build();
+            routes = ServiceRoutes.of(service);
         }
     }
 
     @State(Scope.Benchmark)
     public static class NoMatchState {
-        ServiceRegistration service;
+        ServiceRoutes routes;
 
         @Setup
         public void setup() {
@@ -102,10 +105,11 @@ public class RouteMatchingBenchmark {
             for (var i = 0; i < 10; i++) {
                 endpoints.add(EndpointConfig.publicEndpoint("/endpoint-" + i + "/{id}", Set.of("GET")));
             }
-            service = ServiceRegistration.builder("test-service")
+            final var service = ServiceRegistration.builder("test-service")
                     .baseUrl(URI.create("http://backend.example.com"))
                     .endpoints(endpoints)
                     .build();
+            routes = ServiceRoutes.of(service);
         }
     }
 
@@ -114,7 +118,7 @@ public class RouteMatchingBenchmark {
         @Param({"1", "10", "50", "100"})
         int endpointCount;
 
-        ServiceRegistration service;
+        ServiceRoutes routes;
         String matchingPath;
 
         @Setup
@@ -123,22 +127,22 @@ public class RouteMatchingBenchmark {
             for (var i = 0; i < endpointCount; i++) {
                 endpoints.add(EndpointConfig.publicEndpoint("/path-" + i + "/{id}", Set.of("GET")));
             }
-            service = ServiceRegistration.builder("test-service")
+            final var service = ServiceRegistration.builder("test-service")
                     .baseUrl(URI.create("http://backend.example.com"))
                     .endpoints(endpoints)
                     .build();
-            // Match the last endpoint to measure worst-case scanning
+            routes = ServiceRoutes.of(service);
             matchingPath = "/path-" + (endpointCount - 1) + "/42";
         }
     }
 
     @State(Scope.Benchmark)
     public static class PathRewriteState {
-        ServiceRegistration service;
+        ServiceRoutes routes;
 
         @Setup
         public void setup() {
-            service = ServiceRegistration.builder("test-service")
+            final var service = ServiceRegistration.builder("test-service")
                     .baseUrl(URI.create("http://backend.example.com"))
                     .endpoints(List.of(new EndpointConfig(
                             "/v2/users/{id}/profile",
@@ -146,37 +150,38 @@ public class RouteMatchingBenchmark {
                             EndpointVisibility.PUBLIC,
                             Optional.of("/internal/profiles/{id}"))))
                     .build();
+            routes = ServiceRoutes.of(service);
         }
     }
 
     @Benchmark
-    public void findRoute_exactMatch(ExactMatchState state, Blackhole bh) {
-        bh.consume(state.service.findRoute("/users", "GET"));
+    public void matchEndpoint_exactMatch(ExactMatchState state, Blackhole bh) {
+        bh.consume(state.routes.matchEndpoint("/users", "GET"));
     }
 
     @Benchmark
-    public void findRoute_parameterizedMatch(ParameterizedMatchState state, Blackhole bh) {
-        bh.consume(state.service.findRoute("/users/123/posts/456", "GET"));
+    public void matchEndpoint_parameterizedMatch(ParameterizedMatchState state, Blackhole bh) {
+        bh.consume(state.routes.matchEndpoint("/users/123/posts/456", "GET"));
     }
 
     @Benchmark
-    public void findRoute_wildcardMatch(WildcardMatchState state, Blackhole bh) {
-        bh.consume(state.service.findRoute("/assets/images/logo.png", "GET"));
+    public void matchEndpoint_wildcardMatch(WildcardMatchState state, Blackhole bh) {
+        bh.consume(state.routes.matchEndpoint("/assets/images/logo.png", "GET"));
     }
 
     @Benchmark
-    public void findRoute_noMatch(NoMatchState state, Blackhole bh) {
-        bh.consume(state.service.findRoute("/nonexistent/path", "GET"));
+    public void matchEndpoint_noMatch(NoMatchState state, Blackhole bh) {
+        bh.consume(state.routes.matchEndpoint("/nonexistent/path", "GET"));
     }
 
     @Benchmark
-    public void findRoute_scalingWithEndpoints(ScalingState state, Blackhole bh) {
-        bh.consume(state.service.findRoute(state.matchingPath, "GET"));
+    public void matchEndpoint_scalingWithEndpoints(ScalingState state, Blackhole bh) {
+        bh.consume(state.routes.matchEndpoint(state.matchingPath, "GET"));
     }
 
     @Benchmark
-    public void findRoute_withPathRewrite(PathRewriteState state, Blackhole bh) {
-        bh.consume(state.service.findRoute("/v2/users/42/profile", "GET"));
+    public void matchEndpoint_withPathRewrite(PathRewriteState state, Blackhole bh) {
+        bh.consume(state.routes.matchEndpoint("/v2/users/42/profile", "GET"));
     }
 
     @Benchmark

@@ -23,8 +23,8 @@ All durations use ISO-8601 format (e.g., `PT30S` for 30 seconds, `PT1H` for 1 ho
 ### 1.2 Request Size Limits
 
 **Prefix:** `aussie.gateway.limits`
-**Interface:** `aussie.core.model.common.LimitsConfig` (nested in `GatewayConfig`)
-**Source:** `api/src/main/java/aussie/core/model/common/LimitsConfig.java`
+**Interface:** `aussie.core.config.LimitsConfig` (nested in `GatewayConfig`)
+**Source:** `api/src/main/java/aussie/core/config/LimitsConfig.java`
 
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
@@ -52,8 +52,8 @@ All durations use ISO-8601 format (e.g., `PT30S` for 30 seconds, `PT1H` for 1 ho
 ### 1.4 Trusted Proxy
 
 **Prefix:** `aussie.gateway.trusted-proxy`
-**Interface:** `aussie.core.model.common.TrustedProxyConfig` (nested in `GatewayConfig`)
-**Source:** `api/src/main/java/aussie/core/model/common/TrustedProxyConfig.java`
+**Interface:** `aussie.core.config.TrustedProxyConfig` (nested in `GatewayConfig`)
+**Source:** `api/src/main/java/aussie/core/config/TrustedProxyConfig.java`
 
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|

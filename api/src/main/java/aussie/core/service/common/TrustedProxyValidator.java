@@ -7,7 +7,7 @@ import jakarta.inject.Inject;
 
 import org.jboss.logging.Logger;
 
-import aussie.core.model.common.TrustedProxyConfig;
+import aussie.core.config.TrustedProxyConfig;
 
 /**
  * Validates whether a socket IP belongs to a trusted proxy.

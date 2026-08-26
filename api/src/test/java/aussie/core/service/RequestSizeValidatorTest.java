@@ -14,7 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.common.LimitsConfig;
+import aussie.core.config.LimitsConfig;
 import aussie.core.model.common.ValidationResult;
 import aussie.core.service.common.*;
 

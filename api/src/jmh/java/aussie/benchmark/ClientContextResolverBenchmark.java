@@ -19,7 +19,7 @@ import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
 
 import aussie.adapter.in.context.ClientContextResolver;
-import aussie.core.model.common.TrustedProxyConfig;
+import aussie.core.config.TrustedProxyConfig;
 import aussie.core.service.common.TrustedProxyValidator;
 
 /** Benchmarks canonical client identity and scheme resolution at the inbound trust boundary. */

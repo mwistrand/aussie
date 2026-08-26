@@ -67,9 +67,11 @@ class HexagonalArchitectureTest {
                             "io.smallrye.mutiny..",
                             "io.vertx..",
                             "io.micrometer..",
+                            "io.smallrye.config..",
                             "org.jose4j..",
                             "org.apache.cassandra..",
                             "com.datastax..",
+                            "com.github.benmanes.caffeine..",
                             "jakarta.enterprise..",
                             "jakarta.ws.rs..",
                             "org.jboss.logging..")

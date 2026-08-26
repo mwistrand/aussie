@@ -230,14 +230,14 @@ public interface GatewayConfig {
 }
 ```
 
-`GatewayConfig` is the Quarkus entry point. The `@ConfigMapping(prefix = "aussie.gateway")` annotation tells Quarkus to bind properties like `aussie.gateway.limits.max-body-size` to the nested `LimitsConfig.maxBodySize()` method. Notice that `GatewayConfig` itself lives in the adapter layer: `aussie.adapter.out.http`. But several of the interfaces it returns (`LimitsConfig`, `AccessControlConfig`, `TrustedProxyConfig`) are defined in `aussie.core.model.common` or `aussie.core.model.auth`.
+`GatewayConfig` is the Quarkus entry point. The `@ConfigMapping(prefix = "aussie.gateway")` annotation tells Quarkus to bind properties like `aussie.gateway.limits.max-body-size` to the nested `LimitsConfig.maxBodySize()` method. Notice that `GatewayConfig` itself lives in the adapter layer: `aussie.adapter.out.http`. But the interfaces it returns are core contracts defined in `aussie.core.config` or `aussie.core.model.auth`.
 
 ### The Core Side: Config Interfaces as Domain Contracts
 
-**File:** `/Users/mwistrand/projects/java/aussie/api/src/main/java/aussie/core/model/common/LimitsConfig.java`
+**File:** `/Users/mwistrand/projects/java/aussie/api/src/main/java/aussie/core/config/LimitsConfig.java`
 
 ```java
-package aussie.core.model.common;
+package aussie.core.config;
 
 import io.smallrye.config.WithDefault;
 

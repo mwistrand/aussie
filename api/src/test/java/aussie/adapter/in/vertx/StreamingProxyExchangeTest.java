@@ -29,8 +29,8 @@ import io.vertx.mutiny.core.http.HttpServerRequest;
 import org.junit.jupiter.api.Test;
 
 import aussie.adapter.out.telemetry.TelemetryHelper;
+import aussie.core.config.LimitsConfig;
 import aussie.core.config.ResiliencyConfig;
-import aussie.core.model.common.LimitsConfig;
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.GatewayResult;
 import aussie.core.model.gateway.PreparedProxyRequest;

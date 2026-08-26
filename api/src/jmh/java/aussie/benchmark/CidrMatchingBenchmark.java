@@ -20,10 +20,10 @@ import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
 
+import aussie.core.config.TrustedProxyConfig;
 import aussie.core.model.auth.AccessControlConfig;
 import aussie.core.model.auth.ServiceAccessConfig;
 import aussie.core.model.common.SourceIdentifier;
-import aussie.core.model.common.TrustedProxyConfig;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteLookupResult;

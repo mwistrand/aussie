@@ -36,7 +36,7 @@ There are no fields, no constructors, no mutation methods. This is an interface,
 The nested structure is intentional. Each sub-interface groups a coherent set of concerns. `LimitsConfig` handles request size limits:
 
 ```java
-// api/src/main/java/aussie/core/model/common/LimitsConfig.java (lines 1-24)
+// api/src/main/java/aussie/core/config/LimitsConfig.java (lines 1-24)
 public interface LimitsConfig {
 
     @WithDefault("10485760")
