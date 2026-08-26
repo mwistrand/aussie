@@ -68,10 +68,15 @@ public record ClientContext(
      * {@code "unknown"} so callers never need a null check.
      */
     public String resolvedIp() {
-        if (forwardedClientIp != null) {
+        if (trustForwardingHeaders && forwardedClientIp != null) {
             return forwardedClientIp;
         }
         return socketIp != null ? socketIp : "unknown";
+    }
+
+    /** Return the pre-authentication rate-limit identity for this network context. */
+    public String rateLimitClientId() {
+        return "ip:" + resolvedIp();
     }
 
     /** Return an authenticated copy while preserving the pre-authentication network boundary. */

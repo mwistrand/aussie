@@ -294,7 +294,7 @@ public class WebSocketGateway {
                                             Objects.toString(token.claims().get("jti"), token.subject())));
                     return "principal:" + SecureHash.truncatedSha256(token.subject(), 16);
                 })
-                .orElseGet(() -> "ip:" + clientContextResolver.getOrCompute(ctx).resolvedIp());
+                .orElseGet(() -> clientContextResolver.getOrCompute(ctx).rateLimitClientId());
 
         // Extract auth session ID and user ID for logout tracking
         final var authSessionId = auth.authSessionId();

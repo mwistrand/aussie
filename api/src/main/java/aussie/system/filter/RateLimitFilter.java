@@ -194,8 +194,7 @@ public class RateLimitFilter {
     }
 
     private String extractClientId(ContainerRequestContext requestContext, HttpServerRequest request) {
-        return "ip:"
-                + clientContextResolver.getOrCompute(requestContext, request).resolvedIp();
+        return clientContextResolver.getOrCompute(requestContext, request).rateLimitClientId();
     }
 
     private EffectiveRateLimit resolveEffectiveLimit(RouteLookupResult routeResult) {

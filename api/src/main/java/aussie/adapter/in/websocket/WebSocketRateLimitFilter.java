@@ -224,7 +224,7 @@ public class WebSocketRateLimitFilter {
     }
 
     private String extractClientId(RoutingContext ctx) {
-        return "ip:" + clientContextResolver.getOrCompute(ctx).resolvedIp();
+        return clientContextResolver.getOrCompute(ctx).rateLimitClientId();
     }
 
     private String hashClientId(String clientId) {
