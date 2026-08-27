@@ -11,10 +11,9 @@ import io.vertx.core.http.HttpServerResponse;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.model.common.ServiceSecurityHeadersConfig;
-import aussie.core.model.service.ServicePath;
-import aussie.core.model.service.ServiceRegistration;
-import aussie.core.service.routing.ServiceRegistry;
+import aussie.core.model.routing.RouteLookupResult;
 
 /**
  * Security headers filter for all gateway responses using Vert.x RouteFilter.
@@ -25,9 +24,9 @@ import aussie.core.service.routing.ServiceRegistry;
  * error pages, include security headers.
  *
  * <p>Per-service overrides are supported via {@link ServiceSecurityHeadersConfig}
- * on the service registration. When a service declares header overrides, those
- * values replace the global defaults. An empty string override suppresses the
- * header entirely for that service.
+ * on the service registration resolved by {@code RouteResolutionFilter}. When a
+ * service declares header overrides, those values replace the global defaults.
+ * An empty string override suppresses the header entirely for that service.
  *
  * <p>Priority 90 ensures this runs after CORS (100) but before other filters.
  */
@@ -37,12 +36,10 @@ public class SecurityHeadersFilter {
     private static final Logger LOG = Logger.getLogger(SecurityHeadersFilter.class);
 
     private final Instance<SecurityHeadersConfig> configInstance;
-    private final ServiceRegistry serviceRegistry;
 
     @Inject
-    public SecurityHeadersFilter(Instance<SecurityHeadersConfig> configInstance, ServiceRegistry serviceRegistry) {
+    public SecurityHeadersFilter(Instance<SecurityHeadersConfig> configInstance) {
         this.configInstance = configInstance;
-        this.serviceRegistry = serviceRegistry;
     }
 
     /**
@@ -65,7 +62,7 @@ public class SecurityHeadersFilter {
         }
 
         final var response = rc.response();
-        final var serviceOverride = resolveServiceOverride(rc.request().path());
+        final var serviceOverride = resolveServiceOverride(rc);
 
         applyHeader(
                 response,
@@ -109,11 +106,14 @@ public class SecurityHeadersFilter {
         rc.next();
     }
 
-    private Optional<ServiceSecurityHeadersConfig> resolveServiceOverride(String path) {
-        final var servicePath = ServicePath.parse(path);
-        return serviceRegistry
-                .getServiceFromLocalCache(servicePath.serviceId())
-                .flatMap(ServiceRegistration::securityHeadersConfig);
+    private Optional<ServiceSecurityHeadersConfig> resolveServiceOverride(RoutingContext context) {
+        final var lookup = context.get(RouteContextAttributes.LOOKUP);
+        if (lookup instanceof Optional<?> optional
+                && optional.isPresent()
+                && optional.get() instanceof RouteLookupResult route) {
+            return route.service().securityHeadersConfig();
+        }
+        return Optional.empty();
     }
 
     private void applyHeader(HttpServerResponse response, String name, Optional<String> override, String defaultValue) {

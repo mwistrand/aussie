@@ -10,7 +10,6 @@ import java.util.Optional;
 
 import jakarta.enterprise.inject.Instance;
 
-import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.ext.web.RoutingContext;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,9 +17,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.model.common.ServiceSecurityHeadersConfig;
+import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.ServiceRegistration;
-import aussie.core.service.routing.ServiceRegistry;
 
 @DisplayName("SecurityHeadersFilter")
 class SecurityHeadersFilterTest {
@@ -28,9 +28,7 @@ class SecurityHeadersFilterTest {
     private SecurityHeadersFilter filter;
     private Instance<SecurityHeadersConfig> configInstance;
     private SecurityHeadersConfig config;
-    private ServiceRegistry serviceRegistry;
     private RoutingContext ctx;
-    private HttpServerRequest request;
     private HttpServerResponse response;
 
     @SuppressWarnings("unchecked")
@@ -38,22 +36,15 @@ class SecurityHeadersFilterTest {
     void setUp() {
         configInstance = mock(Instance.class);
         config = mock(SecurityHeadersConfig.class);
-        serviceRegistry = mock(ServiceRegistry.class);
         ctx = mock(RoutingContext.class);
-        request = mock(HttpServerRequest.class);
         response = mock(HttpServerResponse.class);
 
         when(ctx.response()).thenReturn(response);
-        when(ctx.request()).thenReturn(request);
-        when(request.path()).thenReturn("/");
         when(configInstance.isResolvable()).thenReturn(true);
         when(configInstance.get()).thenReturn(config);
         when(response.putHeader(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
                 .thenReturn(response);
-        when(serviceRegistry.getServiceFromLocalCache(org.mockito.ArgumentMatchers.anyString()))
-                .thenReturn(Optional.empty());
-
-        filter = new SecurityHeadersFilter(configInstance, serviceRegistry);
+        filter = new SecurityHeadersFilter(configInstance);
     }
 
     private void enableDefaults() {
@@ -243,7 +234,6 @@ class SecurityHeadersFilterTest {
         @BeforeEach
         void setUp() {
             enableDefaults();
-            when(request.path()).thenReturn("/dashboard-service/api/page");
         }
 
         private void mockServiceWithHeaders(ServiceSecurityHeadersConfig headersConfig) {
@@ -251,7 +241,7 @@ class SecurityHeadersFilterTest {
                     .baseUrl("http://localhost:9090")
                     .securityHeadersConfig(headersConfig)
                     .build();
-            when(serviceRegistry.getServiceFromLocalCache("dashboard-service")).thenReturn(Optional.of(service));
+            when(ctx.get(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of(new ServiceOnlyMatch(service)));
         }
 
         @Test
@@ -393,8 +383,6 @@ class SecurityHeadersFilterTest {
         @Test
         @DisplayName("should use global defaults when path has no service ID")
         void shouldUseGlobalDefaultsForRootPath() {
-            when(request.path()).thenReturn("/");
-
             filter.addSecurityHeaders(ctx);
 
             verify(response).putHeader("X-Content-Type-Options", "nosniff");
@@ -404,11 +392,10 @@ class SecurityHeadersFilterTest {
         @Test
         @DisplayName("should use global defaults when service has no security headers config")
         void shouldUseGlobalDefaultsWhenNoServiceConfig() {
-            when(request.path()).thenReturn("/my-service/api/data");
             final var service = ServiceRegistration.builder("my-service")
                     .baseUrl("http://localhost:9090")
                     .build();
-            when(serviceRegistry.getServiceFromLocalCache("my-service")).thenReturn(Optional.of(service));
+            when(ctx.get(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of(new ServiceOnlyMatch(service)));
 
             filter.addSecurityHeaders(ctx);
 
@@ -420,9 +407,6 @@ class SecurityHeadersFilterTest {
         @Test
         @DisplayName("should use global defaults when service is not in local cache")
         void shouldUseGlobalDefaultsWhenServiceNotInCache() {
-            when(request.path()).thenReturn("/unknown-service/api/data");
-            when(serviceRegistry.getServiceFromLocalCache("unknown-service")).thenReturn(Optional.empty());
-
             filter.addSecurityHeaders(ctx);
 
             verify(response).putHeader("X-Content-Type-Options", "nosniff");
@@ -430,10 +414,8 @@ class SecurityHeadersFilterTest {
         }
 
         @Test
-        @DisplayName("should use global defaults when path is null")
-        void shouldUseGlobalDefaultsForNullPath() {
-            when(request.path()).thenReturn(null);
-
+        @DisplayName("should use global defaults when route lookup is unavailable")
+        void shouldUseGlobalDefaultsWhenRouteLookupIsUnavailable() {
             filter.addSecurityHeaders(ctx);
 
             verify(response).putHeader("X-Content-Type-Options", "nosniff");
