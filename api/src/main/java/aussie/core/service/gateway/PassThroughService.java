@@ -68,20 +68,29 @@ public class PassThroughService implements PassThroughUseCase {
             return Uni.createFrom().item(new ProxyPlan.Rejected(result, null));
         }
 
+        final var resolvedRoute = request.resolvedRoute()
+                .filter(route -> serviceId.equals(route.service().serviceId()));
+        if (resolvedRoute.isPresent()) {
+            return prepareRoute(request, resolvedRoute.get());
+        }
+        if (request.hasRouteSnapshot() && request.resolvedRoute().isEmpty()) {
+            return serviceNotFound(serviceId);
+        }
         return serviceRegistry
                 .findServiceRouteAsync(serviceId, request.path(), request.method())
-                .flatMap(routeOpt -> {
-                    if (routeOpt.isEmpty()) {
-                        var result = new GatewayResult.ServiceNotFound(serviceId);
-                        return Uni.createFrom().item(new ProxyPlan.Rejected(result, null));
-                    }
+                .flatMap(routeOpt -> routeOpt.map(route -> prepareRoute(request, route))
+                        .orElseGet(() -> serviceNotFound(serviceId)));
+    }
 
-                    var routeMatch = toRouteMatch(routeOpt.get(), request.path(), request.method());
+    private Uni<ProxyPlan> serviceNotFound(String serviceId) {
+        return Uni.createFrom().item(new ProxyPlan.Rejected(new GatewayResult.ServiceNotFound(serviceId), null));
+    }
 
-                    return routeAuthService
-                            .authenticate(request, routeMatch)
-                            .map(authResult -> proxyPlanBuilder.build(request, routeMatch, authResult));
-                });
+    private Uni<ProxyPlan> prepareRoute(GatewayRequest request, RouteLookupResult route) {
+        var routeMatch = toRouteMatch(route, request.path(), request.method());
+        return routeAuthService
+                .authenticate(request, routeMatch)
+                .map(authResult -> proxyPlanBuilder.build(request, routeMatch, authResult));
     }
 
     private RouteMatch toRouteMatch(RouteLookupResult route, String targetPath, String method) {

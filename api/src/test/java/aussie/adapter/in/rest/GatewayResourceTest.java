@@ -1,6 +1,7 @@
 package aussie.adapter.in.rest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -8,6 +9,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.MultivaluedHashMap;
@@ -27,9 +31,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.in.vertx.StreamingProxyExchange;
 import aussie.common.context.ClientContext;
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.GatewayResult;
 import aussie.core.model.gateway.ProxyPlan;
+import aussie.core.model.routing.EndpointConfig;
+import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.routing.RouteMatch;
+import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.in.GatewayUseCase;
 
 @ExtendWith(MockitoExtension.class)
@@ -65,6 +74,9 @@ class GatewayResourceTest {
         lenient().when(requestContext.getMethod()).thenReturn("POST");
         lenient().when(requestContext.getHeaders()).thenReturn(new MultivaluedHashMap<>());
         lenient().when(requestContext.getUriInfo()).thenReturn(uriInfo);
+        lenient()
+                .when(requestContext.getProperty(RouteContextAttributes.LOOKUP))
+                .thenReturn(Optional.empty());
         lenient().when(uriInfo.getRequestUri()).thenReturn(URI.create("http://localhost/gateway/api/users?q=1"));
         lenient()
                 .when(clientContextResolver.getOrCompute(routingContext))
@@ -76,6 +88,12 @@ class GatewayResourceTest {
 
     @Test
     void preparesMetadataWithoutBufferingTheBody() {
+        final var route = new RouteMatch(
+                ServiceRegistration.builder("backend").baseUrl("http://backend").build(),
+                new EndpointConfig("/api/users", Set.of("POST"), EndpointVisibility.PUBLIC, Optional.empty(), false),
+                "/api/users",
+                Map.of());
+        when(requestContext.getProperty(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of(route));
         when(gatewayUseCase.prepare(any()))
                 .thenReturn(Uni.createFrom().item(new ProxyPlan.Rejected(new GatewayResult.RouteNotFound("/"), null)));
 
@@ -85,6 +103,8 @@ class GatewayResourceTest {
         verify(gatewayUseCase).prepare(request.capture());
         assertEquals("/api/users", request.getValue().path());
         assertEquals(0, request.getValue().body().length);
+        assertEquals(Optional.of(route), request.getValue().resolvedRoute());
+        assertTrue(request.getValue().hasRouteSnapshot());
         verify(proxyExchange).forward(any(), any(), eq(false));
     }
 

@@ -3,6 +3,9 @@ package aussie.core.model.gateway;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+
+import aussie.core.model.routing.RouteLookupResult;
 
 public record GatewayRequest(
         String method,
@@ -13,7 +16,9 @@ public record GatewayRequest(
         String clientIp,
         String externalScheme,
         String externalHost,
-        Integer externalPort) {
+        Integer externalPort,
+        Optional<RouteLookupResult> resolvedRoute,
+        boolean hasRouteSnapshot) {
 
     public GatewayRequest(
             String method,
@@ -22,7 +27,7 @@ public record GatewayRequest(
             URI requestUri,
             byte[] body,
             String clientIp) {
-        this(method, path, headers, requestUri, body, clientIp, null, null, null);
+        this(method, path, headers, requestUri, body, clientIp, null, null, null, Optional.empty(), false);
     }
 
     public GatewayRequest(
@@ -33,7 +38,31 @@ public record GatewayRequest(
             byte[] body,
             String clientIp,
             String externalScheme) {
-        this(method, path, headers, requestUri, body, clientIp, externalScheme, null, null);
+        this(method, path, headers, requestUri, body, clientIp, externalScheme, null, null, Optional.empty(), false);
+    }
+
+    public GatewayRequest(
+            String method,
+            String path,
+            Map<String, List<String>> headers,
+            URI requestUri,
+            byte[] body,
+            String clientIp,
+            String externalScheme,
+            String externalHost,
+            Integer externalPort) {
+        this(
+                method,
+                path,
+                headers,
+                requestUri,
+                body,
+                clientIp,
+                externalScheme,
+                externalHost,
+                externalPort,
+                Optional.empty(),
+                false);
     }
 
     public GatewayRequest {
@@ -48,6 +77,12 @@ public record GatewayRequest(
         }
         if (body == null) {
             body = new byte[0];
+        }
+        if (resolvedRoute == null) {
+            resolvedRoute = Optional.empty();
+        }
+        if (resolvedRoute.isPresent()) {
+            hasRouteSnapshot = true;
         }
     }
 

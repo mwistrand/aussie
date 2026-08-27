@@ -4,8 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
@@ -27,6 +29,7 @@ import aussie.core.model.gateway.ProxyPlan;
 import aussie.core.model.gateway.RouteAuthResult;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.ServiceRegistration;
@@ -77,6 +80,32 @@ class GatewayServiceTest {
     }
 
     @Test
+    void usesTheResolvedRouteWithoutQueryingTheRegistryAgain() {
+        final var route = route();
+        final var prepared = new PreparedProxyRequest("GET", URI.create("http://backend/items"), Map.of(), null);
+        when(authentication.authenticate(any(), same(route)))
+                .thenReturn(Uni.createFrom().item(new RouteAuthResult.NotRequired()));
+        when(preparer.prepare(any(), same(route))).thenReturn(prepared);
+
+        final var plan = assertInstanceOf(
+                ProxyPlan.Ready.class,
+                service.prepare(request(Optional.of(route))).await().atMost(Duration.ofSeconds(1)));
+
+        assertEquals(prepared, plan.request());
+        verifyNoInteractions(registry);
+    }
+
+    @Test
+    void usesAnEmptyRouteSnapshotWithoutQueryingTheRegistryAgain() {
+        final var plan = assertInstanceOf(
+                ProxyPlan.Rejected.class,
+                service.prepare(request(Optional.empty())).await().atMost(Duration.ofSeconds(1)));
+
+        assertInstanceOf(GatewayResult.RouteNotFound.class, plan.result());
+        verifyNoInteractions(registry, authentication, preparer);
+    }
+
+    @Test
     void forwardsTheIssuedTokenIntoRequestPreparation() {
         final var route = route();
         final var token = new AussieToken("signed", "subject", Instant.now().plusSeconds(60), Map.of());
@@ -118,6 +147,21 @@ class GatewayServiceTest {
 
     private GatewayRequest request() {
         return new GatewayRequest("GET", "/items", Map.of(), URI.create("http://gateway/items"), null, "127.0.0.1");
+    }
+
+    private GatewayRequest request(Optional<RouteMatch> route) {
+        return new GatewayRequest(
+                "GET",
+                "/items",
+                Map.of(),
+                URI.create("http://gateway/items"),
+                null,
+                "127.0.0.1",
+                null,
+                null,
+                null,
+                route.map(value -> (RouteLookupResult) value),
+                true);
     }
 
     private RouteMatch route() {

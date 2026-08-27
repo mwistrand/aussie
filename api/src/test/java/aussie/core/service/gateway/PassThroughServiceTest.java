@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
@@ -25,6 +26,7 @@ import aussie.core.model.gateway.ProxyPlan;
 import aussie.core.model.gateway.RouteAuthResult;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.ServiceRegistration;
@@ -102,6 +104,65 @@ class PassThroughServiceTest {
     }
 
     @Test
+    void usesTheResolvedRouteWithoutQueryingTheRegistryAgain() {
+        final var registration =
+                ServiceRegistration.builder("backend").baseUrl("http://backend").build();
+        final var endpoint =
+                new EndpointConfig("/items", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty(), false);
+        final var route = new RouteMatch(registration, endpoint, "/items", Map.of());
+        final var prepared = new PreparedProxyRequest("GET", URI.create("http://backend/items"), Map.of(), null);
+        when(authentication.authenticate(any(), same(route)))
+                .thenReturn(Uni.createFrom().item(new RouteAuthResult.NotRequired()));
+        when(preparer.prepare(any(), same(route))).thenReturn(prepared);
+
+        final var plan = assertInstanceOf(
+                ProxyPlan.Ready.class,
+                service.prepare("backend", request(Optional.of(route))).await().atMost(Duration.ofSeconds(1)));
+
+        assertEquals(prepared, plan.request());
+        verifyNoInteractions(registry);
+    }
+
+    @Test
+    void usesAnEmptyRouteSnapshotWithoutQueryingTheRegistryAgain() {
+        final var plan = assertInstanceOf(
+                ProxyPlan.Rejected.class,
+                service.prepare("backend", request(Optional.empty())).await().atMost(Duration.ofSeconds(1)));
+
+        assertInstanceOf(GatewayResult.ServiceNotFound.class, plan.result());
+        verifyNoInteractions(registry, authentication, preparer);
+    }
+
+    @Test
+    void ignoresAResolvedRouteForAnotherService() {
+        final var wrongRoute = new RouteMatch(
+                ServiceRegistration.builder("other").baseUrl("http://other").build(),
+                new EndpointConfig("/items", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty(), false),
+                "/items",
+                Map.of());
+        final var route = new RouteMatch(
+                ServiceRegistration.builder("backend").baseUrl("http://backend").build(),
+                new EndpointConfig("/items", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty(), false),
+                "/items",
+                Map.of());
+        final var prepared = new PreparedProxyRequest("GET", URI.create("http://backend/items"), Map.of(), null);
+        when(registry.findServiceRouteAsync("backend", "/items", "GET"))
+                .thenReturn(Uni.createFrom().item(Optional.of(route)));
+        when(authentication.authenticate(any(), same(route)))
+                .thenReturn(Uni.createFrom().item(new RouteAuthResult.NotRequired()));
+        when(preparer.prepare(any(), same(route))).thenReturn(prepared);
+
+        final var plan = assertInstanceOf(
+                ProxyPlan.Ready.class,
+                service.prepare("backend", request(Optional.of(wrongRoute)))
+                        .await()
+                        .atMost(Duration.ofSeconds(1)));
+
+        assertEquals(prepared, plan.request());
+        verify(registry).findServiceRouteAsync("backend", "/items", "GET");
+    }
+
+    @Test
     void preservesAuthenticationRejectionsInTheProxyPlan() {
         final var registration =
                 ServiceRegistration.builder("backend").baseUrl("http://backend").build();
@@ -130,5 +191,20 @@ class PassThroughServiceTest {
 
     private GatewayRequest request() {
         return new GatewayRequest("GET", "/items", Map.of(), URI.create("http://gateway/items"), null, "127.0.0.1");
+    }
+
+    private GatewayRequest request(Optional<RouteMatch> route) {
+        return new GatewayRequest(
+                "GET",
+                "/items",
+                Map.of(),
+                URI.create("http://gateway/items"),
+                null,
+                "127.0.0.1",
+                null,
+                null,
+                null,
+                route.map(value -> (RouteLookupResult) value),
+                true);
     }
 }

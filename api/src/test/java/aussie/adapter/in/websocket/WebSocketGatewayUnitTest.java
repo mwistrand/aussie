@@ -19,6 +19,9 @@ import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.Handler;
@@ -45,8 +48,14 @@ import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
 import aussie.adapter.out.http.UpstreamAddressResolver;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.common.context.ClientContext;
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.config.WebSocketConfig;
 import aussie.core.model.auth.RevocationEvent;
+import aussie.core.model.routing.EndpointConfig;
+import aussie.core.model.routing.EndpointType;
+import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.routing.RouteMatch;
+import aussie.core.model.service.ServiceRegistration;
 import aussie.core.model.session.SessionInvalidatedEvent;
 import aussie.core.model.websocket.WebSocketUpgradeRequest;
 import aussie.core.model.websocket.WebSocketUpgradeResult;
@@ -120,6 +129,7 @@ class WebSocketGatewayUnitTest {
         lenient().when(response.putHeader(anyString(), anyString())).thenReturn(response);
         lenient().when(clientContextResolver.getOrCompute(ctx)).thenReturn(new ClientContext(null, false, null));
         lenient().when(config.drainTimeout()).thenReturn(Duration.ofSeconds(30));
+        lenient().when(ctx.get(RouteContextAttributes.LOOKUP)).thenReturn(Optional.empty());
         lenient()
                 .when(addressResolver.resolve(any(URI.class)))
                 .thenReturn(Uni.createFrom().item(SocketAddress.inetSocketAddress(443, "203.0.113.1")));
@@ -172,6 +182,36 @@ class WebSocketGatewayUnitTest {
 
             final var capturedRequest = captor.getValue();
             assertEquals("127.0.0.1", capturedRequest.clientIp());
+        }
+
+        @Test
+        @DisplayName("shouldCarryResolvedRouteFromRoutingContext")
+        void shouldCarryResolvedRouteFromRoutingContext() {
+            mockRequestPath("/gateway/ws");
+            when(config.maxConnections()).thenReturn(10000);
+            final var route = new RouteMatch(
+                    ServiceRegistration.builder("backend")
+                            .baseUrl("http://backend")
+                            .build(),
+                    new EndpointConfig(
+                            "/ws",
+                            Set.of("GET"),
+                            EndpointVisibility.PUBLIC,
+                            Optional.empty(),
+                            false,
+                            EndpointType.WEBSOCKET),
+                    "/ws",
+                    Map.of());
+            when(ctx.get(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of(route));
+
+            final var captor = ArgumentCaptor.forClass(WebSocketUpgradeRequest.class);
+            when(gatewayUseCase.upgradeGateway(captor.capture()))
+                    .thenReturn(Uni.createFrom().item(new WebSocketUpgradeResult.RouteNotFound("/ws")));
+
+            gateway.handleGatewayUpgrade(ctx);
+
+            assertEquals(Optional.of(route), captor.getValue().resolvedRoute());
+            assertTrue(captor.getValue().hasRouteSnapshot());
         }
 
         @Test

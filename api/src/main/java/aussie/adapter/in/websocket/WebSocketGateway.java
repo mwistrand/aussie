@@ -41,9 +41,11 @@ import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.auth.OidcTokenValidator.TokenParseException;
 import aussie.adapter.out.http.UpstreamAddressResolver;
 import aussie.adapter.out.telemetry.GatewayMetrics;
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.config.WebSocketConfig;
 import aussie.core.model.auth.AussieToken;
 import aussie.core.model.auth.RevocationEvent;
+import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.session.SessionInvalidatedEvent;
 import aussie.core.model.websocket.WebSocketUpgradeRequest;
 import aussie.core.model.websocket.WebSocketUpgradeResult;
@@ -664,9 +666,29 @@ public class WebSocketGateway {
                 .add(entry.getValue()));
 
         var clientIp = clientContextResolver.getOrCompute(ctx).resolvedIp();
+        final var lookup = ctx.get(RouteContextAttributes.LOOKUP);
+        final Optional<RouteLookupResult> resolvedRoute;
+        if (lookup == null) {
+            resolvedRoute = Optional.empty();
+        } else if (lookup instanceof Optional<?> optional) {
+            if (optional.isEmpty()) {
+                resolvedRoute = Optional.empty();
+            } else if (optional.get() instanceof RouteLookupResult route) {
+                resolvedRoute = Optional.of(route);
+            } else {
+                throw new IllegalStateException("Route lookup contains an invalid value");
+            }
+        } else {
+            throw new IllegalStateException("Route lookup contains an invalid value");
+        }
 
         return new WebSocketUpgradeRequest(
-                path, headers, URI.create(ctx.request().absoluteURI()), clientIp);
+                path,
+                headers,
+                URI.create(ctx.request().absoluteURI()),
+                clientIp,
+                resolvedRoute,
+                lookup instanceof Optional<?>);
     }
 
     /**

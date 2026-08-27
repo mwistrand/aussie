@@ -8,6 +8,7 @@ import io.smallrye.mutiny.Uni;
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.GatewayResult;
 import aussie.core.model.gateway.ProxyPlan;
+import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.port.in.GatewayUseCase;
 import aussie.core.service.routing.ServiceRegistry;
@@ -47,24 +48,32 @@ public class GatewayService implements GatewayUseCase {
 
     @Override
     public Uni<ProxyPlan> prepare(GatewayRequest request) {
+        if (request.hasRouteSnapshot()) {
+            return request.resolvedRoute()
+                    .map(route -> prepareRoute(request, route))
+                    .orElseGet(() -> routeNotFound(request));
+        }
 
         // Use async route lookup to ensure cache freshness in multi-instance deployments
-        return serviceRegistry.findRouteAsync(request.path(), request.method()).flatMap(routeResult -> {
-            if (routeResult.isEmpty()) {
-                var result = new GatewayResult.RouteNotFound(request.path());
-                return Uni.createFrom().item(new ProxyPlan.Rejected(result, null));
-            }
+        return serviceRegistry.findRouteAsync(request.path(), request.method()).flatMap(routeResult -> routeResult
+                .map(route -> prepareRoute(request, route))
+                .orElseGet(() -> routeNotFound(request)));
+    }
 
-            // Gateway requires a RouteMatch (with endpoint) to forward requests
-            if (!(routeResult.get() instanceof RouteMatch routeMatch)) {
-                var result = new GatewayResult.RouteNotFound(request.path());
-                return Uni.createFrom().item(new ProxyPlan.Rejected(result, null));
-            }
+    private Uni<ProxyPlan> routeNotFound(GatewayRequest request) {
+        return Uni.createFrom().item(new ProxyPlan.Rejected(new GatewayResult.RouteNotFound(request.path()), null));
+    }
 
-            // Check route authentication requirements
-            return routeAuthService
-                    .authenticate(request, routeMatch)
-                    .map(authResult -> proxyPlanBuilder.build(request, routeMatch, authResult));
-        });
+    private Uni<ProxyPlan> prepareRoute(GatewayRequest request, RouteLookupResult routeResult) {
+        // Gateway requires a RouteMatch (with endpoint) to forward requests
+        if (!(routeResult instanceof RouteMatch routeMatch)) {
+            var result = new GatewayResult.RouteNotFound(request.path());
+            return Uni.createFrom().item(new ProxyPlan.Rejected(result, null));
+        }
+
+        // Check route authentication requirements
+        return routeAuthService
+                .authenticate(request, routeMatch)
+                .map(authResult -> proxyPlanBuilder.build(request, routeMatch, authResult));
     }
 }

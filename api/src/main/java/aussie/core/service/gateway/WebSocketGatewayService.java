@@ -11,6 +11,7 @@ import io.smallrye.mutiny.Uni;
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.RouteAuthResult;
 import aussie.core.model.routing.EndpointType;
+import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.websocket.WebSocketUpgradeRequest;
 import aussie.core.model.websocket.WebSocketUpgradeResult;
@@ -40,45 +41,75 @@ public class WebSocketGatewayService implements WebSocketGatewayUseCase {
 
     @Override
     public Uni<WebSocketUpgradeResult> upgradeGateway(WebSocketUpgradeRequest request) {
+        if (request.hasRouteSnapshot()) {
+            return request.resolvedRoute()
+                    .map(route -> prepareGatewayRoute(request, route))
+                    .orElseGet(() -> routeNotFound(request));
+        }
         // Use async route lookup to ensure cache freshness in multi-instance deployments
         return serviceRegistry.findRouteAsync(request.path(), "GET").flatMap(routeResultOpt -> {
             if (routeResultOpt.isEmpty()) {
-                return Uni.createFrom().item(new WebSocketUpgradeResult.RouteNotFound(request.path()));
+                return routeNotFound(request);
             }
 
-            // WebSocket gateway requires a RouteMatch (with endpoint) to proceed
-            if (!(routeResultOpt.get() instanceof RouteMatch route)) {
-                return Uni.createFrom().item(new WebSocketUpgradeResult.RouteNotFound(request.path()));
-            }
-
-            // Verify this is a WebSocket endpoint
-            if (route.endpointConfig().type() != EndpointType.WEBSOCKET) {
-                return Uni.createFrom().item(new WebSocketUpgradeResult.NotWebSocket(request.path()));
-            }
-
-            // Connection rate limiting is handled by WebSocketRateLimitFilter
-            // Proceed directly to authentication
-            return authenticateAndPrepare(request, route);
+            return prepareGatewayRoute(request, routeResultOpt.get());
         });
+    }
+
+    private Uni<WebSocketUpgradeResult> routeNotFound(WebSocketUpgradeRequest request) {
+        return Uni.createFrom().item(new WebSocketUpgradeResult.RouteNotFound(request.path()));
+    }
+
+    private Uni<WebSocketUpgradeResult> prepareGatewayRoute(
+            WebSocketUpgradeRequest request, RouteLookupResult routeResult) {
+        // WebSocket gateway requires a RouteMatch (with endpoint) to proceed
+        if (!(routeResult instanceof RouteMatch route)) {
+            return Uni.createFrom().item(new WebSocketUpgradeResult.RouteNotFound(request.path()));
+        }
+
+        // Verify this is a WebSocket endpoint
+        if (route.endpointConfig().type() != EndpointType.WEBSOCKET) {
+            return Uni.createFrom().item(new WebSocketUpgradeResult.NotWebSocket(request.path()));
+        }
+
+        // Connection rate limiting is handled by WebSocketRateLimitFilter
+        // Proceed directly to authentication
+        return authenticateAndPrepare(request, route);
     }
 
     @Override
     public Uni<WebSocketUpgradeResult> upgradePassThrough(String serviceId, WebSocketUpgradeRequest request) {
+        final var resolvedRoute = request.resolvedRoute()
+                .filter(route -> serviceId.equals(route.service().serviceId()));
+        if (resolvedRoute.isPresent()) {
+            return preparePassThroughRoute(request, resolvedRoute.get());
+        }
+        if (request.hasRouteSnapshot() && request.resolvedRoute().isEmpty()) {
+            return serviceNotFound(serviceId);
+        }
         return serviceRegistry
                 .findServiceRouteAsync(serviceId, request.path(), "GET")
                 .flatMap(routeResultOpt -> {
                     if (routeResultOpt.isEmpty()) {
-                        return Uni.createFrom().item(new WebSocketUpgradeResult.ServiceNotFound(serviceId));
+                        return serviceNotFound(serviceId);
                     }
 
-                    if (!(routeResultOpt.get() instanceof RouteMatch route)
-                            || route.endpointConfig().type() != EndpointType.WEBSOCKET) {
-                        return Uni.createFrom().item(new WebSocketUpgradeResult.NotWebSocket(request.path()));
-                    }
-
-                    // Connection rate limiting is handled by WebSocketRateLimitFilter
-                    return authenticateAndPrepare(request, route);
+                    return preparePassThroughRoute(request, routeResultOpt.get());
                 });
+    }
+
+    private Uni<WebSocketUpgradeResult> serviceNotFound(String serviceId) {
+        return Uni.createFrom().item(new WebSocketUpgradeResult.ServiceNotFound(serviceId));
+    }
+
+    private Uni<WebSocketUpgradeResult> preparePassThroughRoute(
+            WebSocketUpgradeRequest request, RouteLookupResult routeResult) {
+        if (!(routeResult instanceof RouteMatch route) || route.endpointConfig().type() != EndpointType.WEBSOCKET) {
+            return Uni.createFrom().item(new WebSocketUpgradeResult.NotWebSocket(request.path()));
+        }
+
+        // Connection rate limiting is handled by WebSocketRateLimitFilter
+        return authenticateAndPrepare(request, route);
     }
 
     // -------------------------------------------------------------------------
@@ -89,7 +120,17 @@ public class WebSocketGatewayService implements WebSocketGatewayUseCase {
 
         // Convert to GatewayRequest for auth service compatibility
         var gatewayRequest = new GatewayRequest(
-                "GET", request.path(), request.headers(), request.requestUri(), null, request.clientIp());
+                "GET",
+                request.path(),
+                request.headers(),
+                request.requestUri(),
+                null,
+                request.clientIp(),
+                null,
+                null,
+                null,
+                request.resolvedRoute(),
+                request.hasRouteSnapshot());
 
         return routeAuthService.authenticate(gatewayRequest, route).map(authResult -> switch (authResult) {
             case RouteAuthResult.Authenticated auth -> new WebSocketUpgradeResult.Authorized(

@@ -173,6 +173,56 @@ class WebSocketGatewayServiceTest {
         }
 
         @Test
+        @DisplayName("Should use the resolved route without querying the registry again")
+        void shouldUseResolvedRouteWithoutQueryingRegistryAgain() {
+            final var endpoint = new EndpointConfig(
+                    "/ws/echo",
+                    Set.of("GET"),
+                    EndpointVisibility.PUBLIC,
+                    Optional.empty(),
+                    false,
+                    EndpointType.WEBSOCKET);
+            final var route = new RouteMatch(
+                    ServiceRegistration.builder("test-service")
+                            .baseUrl("http://backend:9090")
+                            .build(),
+                    endpoint,
+                    "/ws/echo",
+                    Map.of());
+            final var request = new WebSocketUpgradeRequest(
+                    "/ws/echo",
+                    Map.of("Upgrade", List.of("websocket"), "Connection", List.of("Upgrade")),
+                    URI.create("http://gateway:8080/ws/echo"),
+                    "192.168.1.100",
+                    Optional.of(route),
+                    true);
+
+            final var result =
+                    webSocketGatewayService.upgradeGateway(request).await().atMost(TIMEOUT);
+
+            final var authorized = assertInstanceOf(WebSocketUpgradeResult.Authorized.class, result);
+            assertEquals(URI.create("ws://backend:9090/ws/echo"), authorized.backendUri());
+        }
+
+        @Test
+        @DisplayName("Should not query the registry after an empty route snapshot")
+        void shouldNotQueryRegistryAfterEmptyRouteSnapshot() {
+            registerWebSocketService("test-service", "http://backend:9090", "/ws/echo", false);
+            final var request = new WebSocketUpgradeRequest(
+                    "/ws/echo",
+                    Map.of("Upgrade", List.of("websocket"), "Connection", List.of("Upgrade")),
+                    URI.create("http://gateway:8080/ws/echo"),
+                    "192.168.1.100",
+                    Optional.empty(),
+                    true);
+
+            final var result =
+                    webSocketGatewayService.upgradeGateway(request).await().atMost(TIMEOUT);
+
+            assertInstanceOf(WebSocketUpgradeResult.RouteNotFound.class, result);
+        }
+
+        @Test
         @DisplayName("Should preserve the request query in the backend URI")
         void shouldPreserveRequestQueryInBackendUri() {
             registerWebSocketService("test-service", "http://backend:9090", "/ws/echo", false);
@@ -315,6 +365,26 @@ class WebSocketGatewayServiceTest {
             assertInstanceOf(WebSocketUpgradeResult.Authorized.class, result);
             var authorized = (WebSocketUpgradeResult.Authorized) result;
             assertEquals(URI.create("ws://backend:9090/ws/echo"), authorized.backendUri());
+        }
+
+        @Test
+        @DisplayName("Should not query the registry after an empty route snapshot")
+        void shouldNotQueryRegistryAfterEmptyRouteSnapshot() {
+            registerWebSocketService("test-service", "http://backend:9090", "/ws/echo", false);
+            final var request = new WebSocketUpgradeRequest(
+                    "/ws/echo",
+                    Map.of("Upgrade", List.of("websocket"), "Connection", List.of("Upgrade")),
+                    URI.create("http://gateway:8080/ws/echo"),
+                    "192.168.1.100",
+                    Optional.empty(),
+                    true);
+
+            final var result = webSocketGatewayService
+                    .upgradePassThrough("test-service", request)
+                    .await()
+                    .atMost(TIMEOUT);
+
+            assertInstanceOf(WebSocketUpgradeResult.ServiceNotFound.class, result);
         }
 
         @Test
