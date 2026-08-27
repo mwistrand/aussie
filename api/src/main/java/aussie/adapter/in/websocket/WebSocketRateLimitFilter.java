@@ -22,9 +22,11 @@ import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.SpanAttributes;
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.config.RateLimitingConfig;
 import aussie.core.model.ratelimit.RateLimitDecision;
 import aussie.core.model.ratelimit.RateLimitKey;
+import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.RateLimiter;
 import aussie.core.service.ratelimit.RateLimitResolver;
@@ -101,15 +103,16 @@ public class WebSocketRateLimitFilter {
             return;
         }
 
-        final var route = serviceRegistry.findRoute(path, "GET");
-        final var serviceId = route.map(match -> match.service().serviceId()).orElseGet(() -> extractServiceId(path));
+        final var route = routeResult(ctx);
+        final var serviceId =
+                route == null ? extractServiceId(path) : route.service().serviceId();
         final var clientId = extractClientId(ctx);
 
         LOG.debugv("Checking WebSocket connection rate limit for service={0}, client={1}", serviceId, clientId);
 
         // Look up service and check rate limit
-        final Uni<Optional<ServiceRegistration>> service = route.map(
-                        match -> Uni.createFrom().item(Optional.of(match.service())))
+        final Uni<Optional<ServiceRegistration>> service = Optional.ofNullable(route)
+                .map(match -> Uni.createFrom().item(Optional.of(match.service())))
                 .orElseGet(() -> serviceRegistry.getServiceForRateLimiting(serviceId));
         service.flatMap(serviceOpt -> {
                     final var limit = rateLimitResolver.resolveWebSocketConnectionLimit(serviceOpt);
@@ -221,6 +224,20 @@ public class WebSocketRateLimitFilter {
         final var normalized = path.startsWith("/") ? path.substring(1) : path;
         final var slashIndex = normalized.indexOf('/');
         return slashIndex > 0 ? normalized.substring(0, slashIndex) : normalized;
+    }
+
+    private RouteLookupResult routeResult(RoutingContext ctx) {
+        final var lookup = ctx.get(RouteContextAttributes.LOOKUP);
+        if (!(lookup instanceof Optional<?> routeLookup)) {
+            throw new IllegalStateException("Route lookup is missing from the request context");
+        }
+        if (routeLookup.isEmpty()) {
+            return null;
+        }
+        if (routeLookup.get() instanceof RouteLookupResult route) {
+            return route;
+        }
+        throw new IllegalStateException("Route lookup contains an invalid value");
     }
 
     private String extractClientId(RoutingContext ctx) {

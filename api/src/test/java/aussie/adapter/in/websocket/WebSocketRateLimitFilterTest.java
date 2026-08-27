@@ -37,6 +37,7 @@ import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.common.context.ClientContext;
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.config.RateLimitingConfig;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
 import aussie.core.model.ratelimit.RateLimitDecision;
@@ -106,6 +107,7 @@ class WebSocketRateLimitFilterTest {
 
         lenient().when(ctx.request()).thenReturn(request);
         lenient().when(ctx.response()).thenReturn(response);
+        lenient().when(ctx.get(RouteContextAttributes.LOOKUP)).thenReturn(Optional.empty());
         lenient().when(response.setStatusCode(anyInt())).thenReturn(response);
         lenient().when(response.putHeader(anyString(), anyString())).thenReturn(response);
         lenient().when(clientContextResolver.getOrCompute(ctx)).thenReturn(new ClientContext("unknown", false, null));
@@ -347,7 +349,7 @@ class WebSocketRateLimitFilterTest {
             final var registration = mock(ServiceRegistration.class);
             when(registration.serviceId()).thenReturn("chat-service");
             when(route.service()).thenReturn(registration);
-            when(serviceRegistry.findRoute("/gateway/ws/echo", "GET")).thenReturn(Optional.of(route));
+            when(ctx.get(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of(route));
             when(rateLimitResolver.resolveWebSocketConnectionLimit(Optional.of(registration)))
                     .thenReturn(EffectiveRateLimit.of(10, 60));
             when(rateLimiter.checkAndConsume(any(), any()))
@@ -358,6 +360,7 @@ class WebSocketRateLimitFilterTest {
             final var keyCaptor = ArgumentCaptor.forClass(RateLimitKey.class);
             verify(rateLimiter).checkAndConsume(keyCaptor.capture(), any());
             assertEquals("chat-service", keyCaptor.getValue().serviceId());
+            verify(serviceRegistry, never()).findRoute(anyString(), anyString());
             verify(serviceRegistry, never()).getServiceForRateLimiting(anyString());
         }
 
