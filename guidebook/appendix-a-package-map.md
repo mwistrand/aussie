@@ -57,6 +57,8 @@ Framework-free values shared across architectural layers.
 | Class | Description |
 |---|---|
 | `ClientContext` | Immutable per-request value holding direct peer metadata, bounded forwarding hops and trust decisions, canonical external authority/correlation metadata, and post-verification principal identifiers. |
+| `PlatformPaths` | Identifies platform-owned HTTP namespaces that service routing must not claim. |
+| `RouteContextAttributes` | Shared Vert.x and JAX-RS request-context keys for the resolved route and public-route flag. |
 
 **Allowed dependencies:** `java.*` only.
 
@@ -807,6 +809,7 @@ JAX-RS server filters that intercept requests before they reach resource classes
 
 | Class | Priority | Description |
 |---|---|---|
+| `RouteResolutionFilter` | `@RouteFilter(95)` | Resolves one TTL-aware route snapshot for downstream authentication, rate limiting, and access control. |
 | `RequestValidationFilter` | `AUTHENTICATION - 100` | Validates request body size and header sizes. Blocks oversized requests with 413/431. |
 | `AuthRateLimitFilter` | `AUTHENTICATION - 100` | Checks if the client IP is locked out due to brute-force attempts. Build-time conditional on `aussie.auth.rate-limit.enabled`. |
 | `RateLimitFilter` | `@ServerRequestFilter` | Enforces per-service and per-endpoint rate limits. Adds `X-RateLimit-*` response headers. Runs before authentication to reject floods cheaply. |
@@ -819,7 +822,7 @@ JAX-RS server filters that intercept requests before they reach resource classes
 
 | Package | Files |
 |---|---|
-| `common/context` | 1 |
+| `common/context` | 3 |
 | `core/model/auth` | 27 |
 | `core/model/common` | 8 |
 | `core/model/gateway` | 5 |

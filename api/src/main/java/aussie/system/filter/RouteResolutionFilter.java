@@ -1,11 +1,14 @@
 package aussie.system.filter;
 
+import java.util.Optional;
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.quarkus.vertx.web.RouteFilter;
 import io.vertx.ext.web.RoutingContext;
 
+import aussie.common.context.PlatformPaths;
 import aussie.common.context.RouteContextAttributes;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteLookupResult;
@@ -34,16 +37,24 @@ public class RouteResolutionFilter {
     @RouteFilter(95)
     void resolveRoute(RoutingContext rc) {
         final var path = rc.request().path();
-        final var method = rc.request().method().name();
-
-        final var lookup = serviceRegistry.findRoute(path, method);
-        rc.put(RouteContextAttributes.LOOKUP, lookup);
-
-        if (lookup.isPresent() && isPublic(lookup.get())) {
-            rc.put(RouteContextAttributes.PUBLIC, Boolean.TRUE);
+        if (PlatformPaths.owns(path)) {
+            rc.put(RouteContextAttributes.LOOKUP, Optional.empty());
+            rc.next();
+            return;
         }
 
-        rc.next();
+        serviceRegistry
+                .findRouteAsync(path, rc.request().method().name())
+                .subscribe()
+                .with(
+                        lookup -> {
+                            rc.put(RouteContextAttributes.LOOKUP, lookup);
+                            if (lookup.isPresent() && isPublic(lookup.get())) {
+                                rc.put(RouteContextAttributes.PUBLIC, Boolean.TRUE);
+                            }
+                            rc.next();
+                        },
+                        rc::fail);
     }
 
     private static boolean isPublic(RouteLookupResult route) {

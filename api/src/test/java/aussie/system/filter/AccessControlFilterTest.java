@@ -15,15 +15,11 @@ import java.util.Optional;
 import java.util.Set;
 
 import jakarta.ws.rs.container.ContainerRequestContext;
-import jakarta.ws.rs.core.UriInfo;
 
 import io.quarkiverse.resteasy.problem.HttpProblem;
-import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpServerRequest;
-import io.vertx.core.net.SocketAddress;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -31,24 +27,22 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.adapter.in.context.ClientContextResolver;
 import aussie.common.context.ClientContext;
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.model.common.SourceIdentifier;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.SecurityMonitoring;
 import aussie.core.service.auth.AccessControlEvaluator;
-import aussie.core.service.routing.ServiceRegistry;
 
 @DisplayName("AccessControlFilter")
 @ExtendWith(MockitoExtension.class)
 class AccessControlFilterTest {
 
     private static final Duration TIMEOUT = Duration.ofSeconds(5);
-
-    @Mock
-    private ServiceRegistry serviceRegistry;
 
     @Mock
     private ClientContextResolver clientContextResolver;
@@ -65,17 +59,11 @@ class AccessControlFilterTest {
     @Mock
     private HttpServerRequest vertxRequest;
 
-    @Mock
-    private UriInfo uriInfo;
-
-    @Mock
-    private SocketAddress socketAddress;
-
     private AccessControlFilter filter;
 
     @BeforeEach
     void setUp() {
-        filter = new AccessControlFilter(serviceRegistry, clientContextResolver, accessEvaluator, securityMonitoring);
+        filter = new AccessControlFilter(clientContextResolver, accessEvaluator, securityMonitoring);
     }
 
     private ServiceRegistration createService(String serviceId) {
@@ -95,267 +83,91 @@ class AccessControlFilterTest {
         return new RouteMatch(service, endpoint, "/api/users", Map.of());
     }
 
-    private void setupPath(String path, String method) {
-        when(requestContext.getUriInfo()).thenReturn(uriInfo);
-        when(uriInfo.getPath()).thenReturn(path);
-        when(requestContext.getMethod()).thenReturn(method);
+    private void setupLookup(Optional<? extends RouteLookupResult> lookup) {
+        when(requestContext.getProperty(RouteContextAttributes.LOOKUP)).thenReturn(lookup);
     }
 
-    private void setupSocketAddress(String host) {
-        org.mockito.Mockito.lenient().when(vertxRequest.remoteAddress()).thenReturn(socketAddress);
-        org.mockito.Mockito.lenient().when(socketAddress.host()).thenReturn(host);
+    @Test
+    @DisplayName("should allow request when route found and access allowed")
+    void routeFoundAndAllowed() {
+        var service = createService("test-service");
+        var routeResult = createRouteMatch(service);
+
+        setupLookup(Optional.of(routeResult));
+
+        var source = SourceIdentifier.of("192.168.1.1");
+        when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
+                .thenReturn(new ClientContext("192.168.1.1", false, null));
+        when(accessEvaluator.isAllowed(source, routeResult, service.accessConfig()))
+                .thenReturn(true);
+
+        var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
+
+        assertNull(result);
     }
 
-    @Nested
-    @DisplayName("Gateway requests")
-    class GatewayRequests {
+    @Test
+    @DisplayName("should throw HttpProblem when route found but access denied")
+    void routeFoundAndDenied() {
+        var service = createService("test-service");
+        var routeResult = createRouteMatch(service);
 
-        @Test
-        @DisplayName("should allow request when route found and access allowed")
-        void routeFoundAndAllowed() {
-            setupPath("/gateway/api/users", "GET");
-            setupSocketAddress("192.168.1.1");
+        setupLookup(Optional.of(routeResult));
 
-            var service = createService("test-service");
-            var routeResult = createRouteMatch(service);
+        var source = SourceIdentifier.of("192.168.1.1");
+        final var clientContext = new ClientContext("192.168.1.1", false, null);
+        when(clientContextResolver.getOrCompute(requestContext, vertxRequest)).thenReturn(clientContext);
+        when(accessEvaluator.isAllowed(source, routeResult, service.accessConfig()))
+                .thenReturn(false);
 
-            when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.of(routeResult));
-
-            var source = SourceIdentifier.of("192.168.1.1");
-            when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
-                    .thenReturn(new ClientContext("192.168.1.1", false, null));
-            when(accessEvaluator.isAllowed(source, routeResult, service.accessConfig()))
-                    .thenReturn(true);
-
-            var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
-
-            assertNull(result);
-        }
-
-        @Test
-        @DisplayName("should throw HttpProblem when route found but access denied")
-        void routeFoundAndDenied() {
-            setupPath("/gateway/api/users", "GET");
-            setupSocketAddress("192.168.1.1");
-
-            var service = createService("test-service");
-            var routeResult = createRouteMatch(service);
-
-            when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.of(routeResult));
-
-            var source = SourceIdentifier.of("192.168.1.1");
-            final var clientContext = new ClientContext("192.168.1.1", false, null);
-            when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
-                    .thenReturn(clientContext);
-            when(accessEvaluator.isAllowed(source, routeResult, service.accessConfig()))
-                    .thenReturn(false);
-
-            assertThrows(
-                    HttpProblem.class,
-                    () -> filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT));
-            verify(securityMonitoring)
-                    .recordAccessDenied(clientContext, "test-service", "/api/users", "network_policy_denied", 1);
-        }
-
-        @Test
-        @DisplayName("should return null when no route found")
-        void noRouteFound() {
-            setupPath("/gateway/api/unknown", "GET");
-            setupSocketAddress("192.168.1.1");
-
-            when(serviceRegistry.findRoute("/api/unknown", "GET")).thenReturn(Optional.empty());
-
-            var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
-
-            assertNull(result);
-            verify(accessEvaluator, never()).isAllowed(any(), any(), any());
-        }
+        assertThrows(
+                HttpProblem.class,
+                () -> filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT));
+        verify(securityMonitoring)
+                .recordAccessDenied(clientContext, "test-service", "/api/users", "network_policy_denied", 1);
     }
 
-    @Nested
-    @DisplayName("Pass-through requests")
-    class PassThroughRequests {
+    @Test
+    @DisplayName("should skip access checks when no route was resolved")
+    void noRouteFound() {
+        setupLookup(Optional.empty());
 
-        @Test
-        @DisplayName("should return null for reserved path 'admin'")
-        void reservedPathAdmin() {
-            setupPath("/admin/something", "GET");
-            setupSocketAddress("10.0.0.1");
+        var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
 
-            var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
-
-            assertNull(result);
-            verify(serviceRegistry, never()).getService(any());
-        }
-
-        @Test
-        @DisplayName("should return null for reserved path 'q'")
-        void reservedPathQ() {
-            setupPath("/q/dev", "GET");
-            setupSocketAddress("10.0.0.1");
-
-            var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
-
-            assertNull(result);
-            verify(serviceRegistry, never()).getService(any());
-        }
-
-        @Test
-        @DisplayName("should check access when service found with specific route")
-        void serviceFoundWithRoute() {
-            setupPath("/my-service/api/users", "GET");
-            setupSocketAddress("10.0.0.1");
-
-            var service = createService("my-service");
-            var routeResult = createRouteMatch(service);
-
-            when(serviceRegistry.getService("my-service"))
-                    .thenReturn(Uni.createFrom().item(Optional.of(service)));
-            when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.of(routeResult));
-
-            var source = SourceIdentifier.of("10.0.0.1");
-            when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
-                    .thenReturn(new ClientContext("10.0.0.1", false, null));
-            when(accessEvaluator.isAllowed(source, routeResult, service.accessConfig()))
-                    .thenReturn(true);
-
-            var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
-
-            assertNull(result);
-        }
-
-        @Test
-        @DisplayName("should use ServiceOnlyMatch when service found but no route match")
-        void serviceFoundNoRouteMatch() {
-            setupPath("/my-service/api/unknown", "GET");
-            setupSocketAddress("10.0.0.1");
-
-            var service = createService("my-service");
-
-            when(serviceRegistry.getService("my-service"))
-                    .thenReturn(Uni.createFrom().item(Optional.of(service)));
-            when(serviceRegistry.findRoute("/api/unknown", "GET")).thenReturn(Optional.empty());
-
-            var source = SourceIdentifier.of("10.0.0.1");
-            when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
-                    .thenReturn(new ClientContext("10.0.0.1", false, null));
-            when(accessEvaluator.isAllowed(eq(source), any(ServiceOnlyMatch.class), eq(service.accessConfig())))
-                    .thenReturn(true);
-
-            var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
-
-            assertNull(result);
-        }
-
-        @Test
-        @DisplayName("should audit service-wide denials without the requested path")
-        void serviceFoundNoRouteMatchAndDenied() {
-            setupPath("/my-service/private/customer-123", "GET");
-
-            var service = createService("my-service");
-            var clientContext = new ClientContext("10.0.0.1", false, null);
-
-            when(serviceRegistry.getService("my-service"))
-                    .thenReturn(Uni.createFrom().item(Optional.of(service)));
-            when(serviceRegistry.findRoute("/private/customer-123", "GET")).thenReturn(Optional.empty());
-            when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
-                    .thenReturn(clientContext);
-            when(accessEvaluator.isAllowed(any(), any(ServiceOnlyMatch.class), eq(service.accessConfig())))
-                    .thenReturn(false);
-
-            assertThrows(
-                    HttpProblem.class,
-                    () -> filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT));
-            verify(securityMonitoring)
-                    .recordAccessDenied(clientContext, "my-service", "/**", "network_policy_denied", 1);
-        }
-
-        @Test
-        @DisplayName("should use ServiceOnlyMatch when route found but serviceId does not match")
-        void serviceFoundButRouteServiceIdMismatch() {
-            setupPath("/my-service/api/users", "GET");
-            setupSocketAddress("10.0.0.1");
-
-            var myService = createService("my-service");
-            // Route belongs to a different service
-            var otherService = createService("other-service");
-            var otherRouteMatch = new RouteMatch(
-                    otherService, EndpointConfig.publicEndpoint("/api/users", Set.of("GET")), "/api/users", Map.of());
-
-            when(serviceRegistry.getService("my-service"))
-                    .thenReturn(Uni.createFrom().item(Optional.of(myService)));
-            when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.of(otherRouteMatch));
-
-            var source = SourceIdentifier.of("10.0.0.1");
-            when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
-                    .thenReturn(new ClientContext("10.0.0.1", false, null));
-            when(accessEvaluator.isAllowed(eq(source), any(ServiceOnlyMatch.class), eq(myService.accessConfig())))
-                    .thenReturn(true);
-
-            var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
-
-            assertNull(result);
-        }
-
-        @Test
-        @DisplayName("should return null when service not found")
-        void serviceNotFound() {
-            setupPath("/unknown-service/api/users", "GET");
-            setupSocketAddress("10.0.0.1");
-
-            when(serviceRegistry.getService("unknown-service"))
-                    .thenReturn(Uni.createFrom().item(Optional.empty()));
-
-            var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
-
-            assertNull(result);
-            verify(accessEvaluator, never()).isAllowed(any(), any(), any());
-        }
+        assertNull(result);
+        verify(accessEvaluator, never()).isAllowed(any(), any(), any());
     }
 
-    @Nested
-    @DisplayName("Path normalization")
-    class PathNormalization {
-
-        @Test
-        @DisplayName("should handle path without leading slash")
-        void pathWithoutLeadingSlash() {
-            setupPath("my-service/api/users", "GET");
-            setupSocketAddress("10.0.0.1");
-
-            var service = createService("my-service");
-
-            when(serviceRegistry.getService("my-service"))
-                    .thenReturn(Uni.createFrom().item(Optional.of(service)));
-            when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.empty());
-
-            var source = SourceIdentifier.of("10.0.0.1");
-            when(clientContextResolver.getOrCompute(requestContext, vertxRequest))
-                    .thenReturn(new ClientContext("10.0.0.1", false, null));
-            when(accessEvaluator.isAllowed(eq(source), any(ServiceOnlyMatch.class), eq(service.accessConfig())))
-                    .thenReturn(true);
-
-            var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
-
-            assertNull(result);
-        }
+    @Test
+    @DisplayName("should reject a missing route snapshot")
+    void missingRouteSnapshot() {
+        assertThrows(IllegalStateException.class, () -> filter.filter(requestContext, vertxRequest));
+        verify(accessEvaluator, never()).isAllowed(any(), any(), any());
     }
 
-    @Nested
-    @DisplayName("Socket address handling")
-    class SocketAddressHandling {
+    @Test
+    @DisplayName("should reject an invalid route snapshot")
+    void invalidRouteSnapshot() {
+        when(requestContext.getProperty(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of("invalid"));
 
-        @Test
-        @DisplayName("should set socketIp to null when remoteAddress is null")
-        void nullRemoteAddress() {
-            setupPath("/gateway/api/users", "GET");
-            org.mockito.Mockito.lenient().when(vertxRequest.remoteAddress()).thenReturn(null);
+        assertThrows(IllegalStateException.class, () -> filter.filter(requestContext, vertxRequest));
+        verify(accessEvaluator, never()).isAllowed(any(), any(), any());
+    }
 
-            when(serviceRegistry.findRoute("/api/users", "GET")).thenReturn(Optional.empty());
+    @Test
+    @DisplayName("should audit service-wide denials without the requested path")
+    void serviceOnlyMatchDenied() {
+        var service = createService("my-service");
+        var clientContext = new ClientContext("10.0.0.1", false, null);
 
-            var result = filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT);
+        setupLookup(Optional.of(createServiceOnlyMatch(service)));
+        when(clientContextResolver.getOrCompute(requestContext, vertxRequest)).thenReturn(clientContext);
+        when(accessEvaluator.isAllowed(any(), any(ServiceOnlyMatch.class), eq(service.accessConfig())))
+                .thenReturn(false);
 
-            assertNull(result);
-        }
+        assertThrows(
+                HttpProblem.class,
+                () -> filter.filter(requestContext, vertxRequest).await().atMost(TIMEOUT));
+        verify(securityMonitoring).recordAccessDenied(clientContext, "my-service", "/**", "network_policy_denied", 1);
     }
 }

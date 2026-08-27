@@ -1,6 +1,7 @@
 package aussie.system.filter;
 
 import java.time.Instant;
+import java.util.Optional;
 
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -21,17 +22,16 @@ import aussie.adapter.in.problem.GatewayProblem;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.SpanAttributes;
 import aussie.adapter.out.telemetry.TelemetryHelper;
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.config.RateLimitingConfig;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
 import aussie.core.model.ratelimit.RateLimitDecision;
 import aussie.core.model.ratelimit.RateLimitKey;
 import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.service.ServicePath;
-import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
 import aussie.core.service.ratelimit.RateLimitResolver;
-import aussie.core.service.routing.ServiceRegistry;
 import aussie.core.util.SecureHash;
 import aussie.spi.SecurityEvent;
 
@@ -42,11 +42,9 @@ import aussie.spi.SecurityEvent;
  * This filter runs early in the request chain (before authentication) to
  * reject excessive traffic before incurring authentication overhead.
  *
- * <p>
- * Rate limits are resolved by looking up the {@link ServiceRegistration} via
- * {@link ServiceRegistry#getService(String)} and finding the matching route.
- * When a route match exists, service and endpoint-specific limits apply.
- * Otherwise, platform defaults are used.
+ * <p>Rate limits use the route lookup computed once by {@code RouteResolutionFilter}.
+ * When a route match exists, service and endpoint-specific limits apply. Otherwise,
+ * platform defaults are used.
  *
  * <p>Because this filter runs before authentication, its bucket identity is always the
  * canonical network identity. Caller-supplied cookies, bearer strings, and API-key
@@ -62,7 +60,6 @@ public class RateLimitFilter {
     private final Metrics metrics;
     private final SecurityEventDispatcher securityEventDispatcher;
     private final RateLimitResolver rateLimitResolver;
-    private final ServiceRegistry serviceRegistry;
     private final TelemetryHelper telemetryHelper;
     private final ClientContextResolver clientContextResolver;
 
@@ -73,7 +70,6 @@ public class RateLimitFilter {
             Metrics metrics,
             SecurityEventDispatcher securityEventDispatcher,
             RateLimitResolver rateLimitResolver,
-            ServiceRegistry serviceRegistry,
             TelemetryHelper telemetryHelper,
             ClientContextResolver clientContextResolver) {
         this.rateLimiter = rateLimiter;
@@ -81,7 +77,6 @@ public class RateLimitFilter {
         this.metrics = metrics;
         this.securityEventDispatcher = securityEventDispatcher;
         this.rateLimitResolver = rateLimitResolver;
-        this.serviceRegistry = serviceRegistry;
         this.telemetryHelper = telemetryHelper;
         this.clientContextResolver = clientContextResolver;
     }
@@ -101,17 +96,16 @@ public class RateLimitFilter {
             return Uni.createFrom().nullItem();
         }
 
-        final var path = request.path();
-        final var method = request.method().name();
-        final var servicePath = ServicePath.parse(path);
         final var clientId = extractClientId(requestContext, request);
 
-        final RouteLookupResult routeResult =
-                serviceRegistry.findRoute(path, method).orElse(null);
-        final var serviceId = routeResult != null ? routeResult.service().serviceId() : servicePath.serviceId();
+        final RouteLookupResult routeResult = routeResult(requestContext);
+        final var serviceId = routeResult != null
+                ? routeResult.service().serviceId()
+                : ServicePath.parse(request.path()).serviceId();
 
-        final EffectiveRateLimit effectiveLimit =
-                routeResult != null ? resolveEffectiveLimit(routeResult) : rateLimitResolver.resolvePlatformDefaults();
+        final EffectiveRateLimit effectiveLimit = routeResult != null
+                ? rateLimitResolver.resolveLimit(routeResult)
+                : rateLimitResolver.resolvePlatformDefaults();
 
         final var endpointId =
                 routeResult != null ? routeResult.endpoint().map(e -> e.path()).orElse(null) : null;
@@ -197,11 +191,18 @@ public class RateLimitFilter {
         return clientContextResolver.getOrCompute(requestContext, request).rateLimitClientId();
     }
 
-    private EffectiveRateLimit resolveEffectiveLimit(RouteLookupResult routeResult) {
-        if (routeResult != null) {
-            return rateLimitResolver.resolveLimit(routeResult);
+    private RouteLookupResult routeResult(ContainerRequestContext requestContext) {
+        final var lookup = requestContext.getProperty(RouteContextAttributes.LOOKUP);
+        if (!(lookup instanceof Optional<?> routeLookup)) {
+            throw new IllegalStateException("Route lookup is missing from the request context");
         }
-        return rateLimitResolver.resolvePlatformDefaults();
+        if (routeLookup.isEmpty()) {
+            return null;
+        }
+        if (routeLookup.get() instanceof RouteLookupResult route) {
+            return route;
+        }
+        throw new IllegalStateException("Route lookup contains an invalid value");
     }
 
     private String hashClientId(String clientId) {

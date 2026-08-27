@@ -10,6 +10,7 @@ import io.quarkus.vertx.web.RouteFilter;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
+import aussie.common.context.PlatformPaths;
 import aussie.core.model.common.CorsConfig;
 import aussie.core.service.routing.ServiceRegistry;
 
@@ -190,7 +191,7 @@ public class CorsFilter {
                 "OPTIONS".equalsIgnoreCase(rc.request().method().name())
                         ? rc.request().getHeader(ACCESS_CONTROL_REQUEST_METHOD)
                         : rc.request().method().name();
-        if (requestedMethod != null) {
+        if (requestedMethod != null && !PlatformPaths.owns(rc.request().path())) {
             final var route = serviceRegistry.findRoute(rc.request().path(), requestedMethod);
             if (route.isPresent()) {
                 return route.get().service().corsConfig().orElse(globalConfig);

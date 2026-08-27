@@ -1,6 +1,6 @@
 package aussie.system.filter;
 
-import java.util.Set;
+import java.util.Optional;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.container.ContainerRequestContext;
@@ -12,36 +12,29 @@ import org.jboss.resteasy.reactive.server.ServerRequestFilter;
 
 import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.in.problem.GatewayProblem;
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.model.common.SourceIdentifier;
 import aussie.core.model.routing.RouteLookupResult;
-import aussie.core.model.routing.ServiceOnlyMatch;
-import aussie.core.model.service.ServicePath;
 import aussie.core.port.out.SecurityMonitoring;
 import aussie.core.service.auth.AccessControlEvaluator;
-import aussie.core.service.routing.ServiceRegistry;
 
 /**
  * Reactive access control filter for gateway requests.
  *
- * <p>Uses @ServerRequestFilter with Uni return type to avoid blocking
- * the Vert.x event loop when performing async service lookups.
+ * <p>Uses the route lookup computed by {@code RouteResolutionFilter}, so
+ * authorization and rate limiting consume the same route snapshot.
  */
 public class AccessControlFilter {
 
-    private static final Set<String> RESERVED_PATHS = Set.of("admin", "gateway", "q");
-
-    private final ServiceRegistry serviceRegistry;
     private final ClientContextResolver clientContextResolver;
     private final AccessControlEvaluator accessEvaluator;
     private final SecurityMonitoring securityMonitoring;
 
     @Inject
     public AccessControlFilter(
-            ServiceRegistry serviceRegistry,
             ClientContextResolver clientContextResolver,
             AccessControlEvaluator accessEvaluator,
             SecurityMonitoring securityMonitoring) {
-        this.serviceRegistry = serviceRegistry;
         this.clientContextResolver = clientContextResolver;
         this.accessEvaluator = accessEvaluator;
         this.securityMonitoring = securityMonitoring;
@@ -49,62 +42,17 @@ public class AccessControlFilter {
 
     @ServerRequestFilter
     public Uni<Response> filter(ContainerRequestContext requestContext, HttpServerRequest vertxRequest) {
-        var path = requestContext.getUriInfo().getPath();
-        var method = requestContext.getMethod();
-
-        // Normalize path - remove leading slash if present
-        if (path.startsWith("/")) {
-            path = path.substring(1);
+        final var lookup = requestContext.getProperty(RouteContextAttributes.LOOKUP);
+        if (!(lookup instanceof Optional<?> routeLookup)) {
+            throw new IllegalStateException("Route lookup is missing from the request context");
         }
-
-        // Handle gateway requests
-        if (path.startsWith("gateway/")) {
-            return handleGatewayRequest(requestContext, vertxRequest, path, method);
-        }
-
-        // Handle pass-through requests (/{serviceId}/{path})
-        return handlePassThroughRequest(requestContext, vertxRequest, path, method);
-    }
-
-    private Uni<Response> handleGatewayRequest(
-            ContainerRequestContext requestContext, HttpServerRequest vertxRequest, String path, String method) {
-        var gatewayPath = "/" + path.substring("gateway/".length());
-
-        var routeResult = serviceRegistry.findRoute(gatewayPath, method);
-        if (routeResult.isEmpty()) {
+        if (routeLookup.isEmpty()) {
             return Uni.createFrom().nullItem();
         }
-
-        return checkAccessControl(requestContext, vertxRequest, routeResult.get());
-    }
-
-    private Uni<Response> handlePassThroughRequest(
-            ContainerRequestContext requestContext, HttpServerRequest vertxRequest, String path, String method) {
-        final var servicePath = ServicePath.parse(path);
-
-        if (RESERVED_PATHS.contains(servicePath.serviceId().toLowerCase())) {
-            return Uni.createFrom().nullItem();
+        if (!(routeLookup.get() instanceof RouteLookupResult route)) {
+            throw new IllegalStateException("Route lookup contains an invalid value");
         }
-
-        // Use reactive chain - no blocking!
-        return serviceRegistry.getService(servicePath.serviceId()).flatMap(serviceOpt -> {
-            if (serviceOpt.isEmpty()) {
-                return Uni.createFrom().nullItem();
-            }
-
-            var service = serviceOpt.get();
-
-            // First, try to find a specific route match for this path
-            var routeResult = serviceRegistry.findRoute(servicePath.path(), method);
-            if (routeResult.isPresent()
-                    && routeResult.get().service().serviceId().equals(servicePath.serviceId())) {
-                return checkAccessControl(requestContext, vertxRequest, routeResult.get());
-            }
-
-            // For pass-through without a specific route, use ServiceOnlyMatch
-            // which uses service defaults for visibility/authRequired/rateLimitConfig
-            return checkAccessControl(requestContext, vertxRequest, new ServiceOnlyMatch(service));
-        });
+        return checkAccessControl(requestContext, vertxRequest, route);
     }
 
     private Uni<Response> checkAccessControl(

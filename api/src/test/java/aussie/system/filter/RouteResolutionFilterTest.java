@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import io.smallrye.mutiny.Uni;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.ext.web.RoutingContext;
@@ -87,7 +88,8 @@ class RouteResolutionFilterTest {
         void publicRouteSetsBothKeys() {
             stubRequest("/svc/api/public", HttpMethod.GET);
             var match = publicRouteMatch();
-            when(serviceRegistry.findRoute("/svc/api/public", "GET")).thenReturn(Optional.of(match));
+            when(serviceRegistry.findRouteAsync("/svc/api/public", "GET"))
+                    .thenReturn(Uni.createFrom().item(Optional.of(match)));
 
             filter.resolveRoute(rc);
 
@@ -108,7 +110,8 @@ class RouteResolutionFilterTest {
         void privateRouteOmitsPublicFlag() {
             stubRequest("/svc/api/private", HttpMethod.GET);
             var match = privateRouteMatch();
-            when(serviceRegistry.findRoute("/svc/api/private", "GET")).thenReturn(Optional.of(match));
+            when(serviceRegistry.findRouteAsync("/svc/api/private", "GET"))
+                    .thenReturn(Uni.createFrom().item(Optional.of(match)));
 
             filter.resolveRoute(rc);
 
@@ -128,7 +131,8 @@ class RouteResolutionFilterTest {
             stubRequest("/svc/unmatched", HttpMethod.GET);
             var svc = service("svc", EndpointVisibility.PUBLIC);
             var match = new ServiceOnlyMatch(svc);
-            when(serviceRegistry.findRoute("/svc/unmatched", "GET")).thenReturn(Optional.of(match));
+            when(serviceRegistry.findRouteAsync("/svc/unmatched", "GET"))
+                    .thenReturn(Uni.createFrom().item(Optional.of(match)));
 
             filter.resolveRoute(rc);
 
@@ -142,7 +146,8 @@ class RouteResolutionFilterTest {
             stubRequest("/svc/unmatched", HttpMethod.GET);
             var svc = service("svc", EndpointVisibility.PRIVATE);
             var match = new ServiceOnlyMatch(svc);
-            when(serviceRegistry.findRoute("/svc/unmatched", "GET")).thenReturn(Optional.of(match));
+            when(serviceRegistry.findRouteAsync("/svc/unmatched", "GET"))
+                    .thenReturn(Uni.createFrom().item(Optional.of(match)));
 
             filter.resolveRoute(rc);
 
@@ -158,17 +163,32 @@ class RouteResolutionFilterTest {
         @Test
         @DisplayName("stashes empty lookup, does not set PUBLIC flag, still calls next()")
         void emptyLookupDoesNotSetPublic() {
-            stubRequest("/admin/health", HttpMethod.GET);
-            when(serviceRegistry.findRoute("/admin/health", "GET")).thenReturn(Optional.empty());
-
+            when(rc.request()).thenReturn(request);
+            when(request.path()).thenReturn("/admin/health");
             filter.resolveRoute(rc);
 
             ArgumentCaptor<Optional<RouteLookupResult>> captor = lookupCaptor();
             verify(rc).put(eq(RouteContextAttributes.LOOKUP), captor.capture());
             assertEquals(Optional.empty(), captor.getValue());
+            verify(serviceRegistry, never()).findRouteAsync(any(), any());
             verify(rc, never()).put(RouteContextAttributes.PUBLIC, Boolean.TRUE);
             verify(rc).next();
         }
+    }
+
+    @Test
+    @DisplayName("fails the routing context when route refresh fails")
+    void routeRefreshFailureFailsRequest() {
+        stubRequest("/svc/api/public", HttpMethod.GET);
+        final var failure = new IllegalStateException("refresh failed");
+        when(serviceRegistry.findRouteAsync("/svc/api/public", "GET"))
+                .thenReturn(Uni.createFrom().failure(failure));
+
+        filter.resolveRoute(rc);
+
+        verify(rc).fail(failure);
+        verify(rc, never()).next();
+        verify(rc, never()).put(eq(RouteContextAttributes.LOOKUP), any());
     }
 
     @Nested

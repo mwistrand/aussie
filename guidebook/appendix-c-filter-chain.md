@@ -146,9 +146,9 @@ For non-preflight requests, the filter always calls `next()`, even if the origin
 
 **File:** `api/src/main/java/aussie/system/filter/RouteResolutionFilter.java`
 
-This filter resolves the registered route for the inbound request once and caches the result on the `RoutingContext`, so downstream consumers (auth mechanisms, rate limit, access control) read the cached lookup instead of re-querying `ServiceRegistry`. It runs between CORS (100) and SecurityHeaders (90). CORS preflights resolve their requested route while selecting a policy, then short-circuit without invoking this filter.
+This filter resolves the registered route for the inbound request once and caches the result on the `RoutingContext`, so downstream consumers (auth mechanisms, rate limit, access control) read the cached lookup instead of re-querying `ServiceRegistry`. It runs between CORS (100) and SecurityHeaders (90). CORS preflights resolve their requested route while selecting a policy, then short-circuit without invoking this filter. Platform-owned `/admin`, `/auth`, and `/q` paths are excluded from service routing.
 
-The filter calls `ServiceRegistry.findRoute(path, method)` and stashes the `Optional<RouteLookupResult>` under the `aussie.route.lookup` key. When the resolved route's effective visibility is `PUBLIC`, the filter also sets `aussie.route.public = Boolean.TRUE`. `CredentialAuthenticationMechanism` consults this flag and short-circuits immediately for PUBLIC routes, skipping all credential extraction and validation. `AccessControlFilter` separately enforces source-based access for PRIVATE routes; PUBLIC routes pass through.
+The filter calls the non-blocking, TTL-aware `ServiceRegistry.findRouteAsync(path, method)` and stashes the `Optional<RouteLookupResult>` under the `aussie.route.lookup` key. When the resolved route's effective visibility is `PUBLIC`, the filter also sets `aussie.route.public = Boolean.TRUE`. `CredentialAuthenticationMechanism` consults this flag and short-circuits immediately for PUBLIC routes, skipping all credential extraction and validation. `AccessControlFilter` separately enforces source-based access for PRIVATE routes; PUBLIC routes pass through.
 
 **What it modifies:** Sets `aussie.route.lookup` and (when the route is PUBLIC) `aussie.route.public` on the `RoutingContext`.
 
@@ -262,7 +262,7 @@ The filter delegates to `RequestSizeValidator` for the actual validation logic a
 
 **File:** `api/src/main/java/aussie/system/filter/RateLimitFilter.java`
 
-This is the general-purpose HTTP rate limiter. It runs after auth rate limiting (900) but before authentication (1000), so that excessive traffic is rejected before incurring the cost of JWT validation, token introspection, or session lookup. The filter identifies the client using a four-layer priority chain (session ID > bearer token hash > API key ID > client IP), resolves the effective rate limit by consulting the service registry and rate limit resolver (endpoint config > service config > platform defaults, capped at the platform maximum), and checks the limit against the configured backend (Redis or in-memory).
+This is the general-purpose HTTP rate limiter. It runs after auth rate limiting (900) but before authentication (1000), so that excessive traffic is rejected before incurring the cost of JWT validation, token introspection, or session lookup. Because credentials are not yet verified, the filter buckets requests by the canonical network identity from `ClientContext`. It reads the route snapshot cached by `RouteResolutionFilter`, resolves the effective limit through `RateLimitResolver` (endpoint config > service config > platform defaults, capped at the platform maximum), and checks the configured backend (Redis or in-memory).
 
 The filter stores the `RateLimitDecision` as a request context property (`aussie.ratelimit.decision`) so that the companion `@ServerResponseFilter` can add `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers to the response without recomputing the rate limit status.
 
@@ -287,14 +287,13 @@ The dispatcher reads the transport once. Duplicate `Authorization` headers or an
 
 This filter enforces the gateway's visibility model. Every registered service and endpoint has a visibility setting: `PUBLIC` or `PRIVATE`. Public endpoints pass through. Private endpoints require the request source (IP, forwarded-for address) to be in the service's allowed source list. The filter runs at the default priority (5000), which is after authentication, rate limiting, and all other explicit-priority filters. This ordering is intentional: rate-limited clients receive 429 rather than 404, which prevents leaking information about which paths exist to clients that should be getting rate-limited.
 
-The filter resolves the target service by parsing the request path. Gateway-mode requests (`/gateway/...`) are resolved via the route table. Pass-through requests (`/{serviceId}/...`) are resolved by looking up the service registration. Reserved paths (`admin`, `gateway`, `q`) are skipped. When a route or service is found, the filter uses the request-scoped `ClientContext` effective IP and evaluates access via `AccessControlEvaluator`; request Host values are not treated as caller identity.
+The filter reads the same route snapshot cached by `RouteResolutionFilter` for authentication and rate limiting. Platform-owned paths and unmatched requests carry an empty lookup and pass through. When a route or service-only match is present, the filter uses the request-scoped `ClientContext` effective IP and evaluates access via `AccessControlEvaluator`; request Host values are not treated as caller identity.
 
 When access is denied, the filter throws `GatewayProblem.notFound("Not found")`, returning 404 rather than 403. This is a deliberate security choice: a 403 response confirms the resource exists; a 404 reveals nothing.
 
 **What it returns:** `Uni<Response>`. Returns `null` to continue processing, or throws a `GatewayProblem` exception.
 
 **Short-circuit conditions:**
-- Reserved path: returns null, continues.
 - No matching service or route: returns null, continues (lets the request 404 via normal JAX-RS routing).
 - Public endpoint: returns null, continues.
 - Source not allowed on private endpoint: throws `GatewayProblem.notFound()`, which maps to HTTP 404.

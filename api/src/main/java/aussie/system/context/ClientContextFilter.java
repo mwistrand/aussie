@@ -11,10 +11,11 @@ import org.jboss.resteasy.reactive.server.ServerRequestFilter;
 
 import aussie.adapter.in.context.ClientContextResolver;
 import aussie.common.context.ClientContext;
+import aussie.common.context.RouteContextAttributes;
 
 /**
- * Filter that resolves and stashes the per-request {@link ClientContext}
- * before any other filter that needs the resolved client IP runs.
+ * Filter that resolves and stashes the per-request {@link ClientContext} and
+ * route lookup before downstream request filters run.
  *
  * <p>Priority is {@code AUTHENTICATION - 150}, ahead of
  * {@link aussie.system.filter.AuthRateLimitFilter} ({@code AUTHENTICATION - 100})
@@ -35,5 +36,6 @@ public class ClientContextFilter {
     @ServerRequestFilter(priority = Priorities.AUTHENTICATION - 150)
     public void filter(ContainerRequestContext requestContext, HttpServerRequest vertxRequest) {
         requestContext.setProperty(ClientContextResolver.CONTEXT_PROPERTY, resolver.getOrCompute(routingContext));
+        requestContext.setProperty(RouteContextAttributes.LOOKUP, routingContext.get(RouteContextAttributes.LOOKUP));
     }
 }

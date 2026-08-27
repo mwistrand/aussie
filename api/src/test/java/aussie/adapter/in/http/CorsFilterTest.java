@@ -5,7 +5,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -21,6 +23,10 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.core.model.common.CorsConfig;
+import aussie.core.model.routing.EndpointConfig;
+import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.routing.RouteMatch;
+import aussie.core.model.service.ServiceRegistration;
 import aussie.core.service.routing.ServiceRegistry;
 
 @DisplayName("CorsFilter")
@@ -224,6 +230,7 @@ class CorsFilterTest {
             verify(response).putHeader("Access-Control-Allow-Origin", "http://localhost:3000");
             verify(response).putHeader("Access-Control-Allow-Credentials", "true");
             verify(response).setStatusCode(200);
+            verify(serviceRegistry, never()).findRoute("/auth/session", "POST");
         }
     }
 
@@ -290,6 +297,32 @@ class CorsFilterTest {
             filter.corsHandler(rc);
 
             verify(response).putHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+            verify(response).putHeader("Access-Control-Allow-Credentials", "true");
+            verify(serviceRegistry, never()).findRoute("/auth/session", "GET");
+        }
+
+        @Test
+        @DisplayName("should use a service policy for a matched route")
+        void shouldUseServicePolicyForMatchedRoute() {
+            var serviceCors = CorsConfig.builder()
+                    .allowedOrigins("https://service.example")
+                    .allowCredentials(true)
+                    .build();
+            var service = ServiceRegistration.builder("service")
+                    .baseUrl(URI.create("http://service.example"))
+                    .corsConfig(serviceCors)
+                    .build();
+            var route = new RouteMatch(
+                    service,
+                    new EndpointConfig("/api/test", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty()),
+                    "/api/test",
+                    Map.of());
+            when(serviceRegistry.findRoute("/api/test", "GET")).thenReturn(Optional.of(route));
+            when(request.getHeader("Origin")).thenReturn("https://service.example");
+
+            filter.corsHandler(rc);
+
+            verify(response).putHeader("Access-Control-Allow-Origin", "https://service.example");
             verify(response).putHeader("Access-Control-Allow-Credentials", "true");
         }
     }

@@ -3,6 +3,7 @@ package aussie.system.filter;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -44,6 +45,7 @@ import org.mockito.ArgumentCaptor;
 import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.TelemetryHelper;
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.config.RateLimitingConfig;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
 import aussie.core.model.ratelimit.RateLimitDecision;
@@ -57,7 +59,6 @@ import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
 import aussie.core.service.common.TrustedProxyValidator;
 import aussie.core.service.ratelimit.RateLimitResolver;
-import aussie.core.service.routing.ServiceRegistry;
 
 @DisplayName("RateLimitFilter")
 class RateLimitFilterTest {
@@ -71,7 +72,6 @@ class RateLimitFilterTest {
     private Metrics metrics;
     private SecurityEventDispatcher securityEventDispatcher;
     private RateLimitResolver rateLimitResolver;
-    private ServiceRegistry serviceRegistry;
     private TelemetryHelper telemetryHelper;
     private TrustedProxyValidator trustedProxyValidator;
     private HttpServerRequest request;
@@ -89,7 +89,6 @@ class RateLimitFilterTest {
         metrics = mock(Metrics.class);
         securityEventDispatcher = mock(SecurityEventDispatcher.class);
         rateLimitResolver = mock(RateLimitResolver.class);
-        serviceRegistry = mock(ServiceRegistry.class);
         telemetryHelper = mock(TelemetryHelper.class);
         trustedProxyValidator = mock(TrustedProxyValidator.class);
         request = mock(HttpServerRequest.class);
@@ -112,7 +111,7 @@ class RateLimitFilterTest {
         when(rateLimitResolver.resolveLimit(any(RouteLookupResult.class))).thenReturn(defaultLimit);
 
         // Default: no route found
-        when(serviceRegistry.findRoute(anyString(), anyString())).thenReturn(Optional.empty());
+        when(requestContext.getProperty(RouteContextAttributes.LOOKUP)).thenReturn(Optional.empty());
 
         // Default: requests arrive from a trusted proxy at 127.0.0.1
         when(socketAddress.host()).thenReturn("127.0.0.1");
@@ -128,7 +127,6 @@ class RateLimitFilterTest {
                 metrics,
                 securityEventDispatcher,
                 rateLimitResolver,
-                serviceRegistry,
                 telemetryHelper,
                 new ClientContextResolver(trustedProxyValidator));
     }
@@ -182,6 +180,26 @@ class RateLimitFilterTest {
     class RateLimitResolutionTests {
 
         @Test
+        @DisplayName("should reject a missing route snapshot")
+        void shouldRejectMissingRouteSnapshot() {
+            setupRequest("/service-1/api/users", "192.168.1.1");
+            when(requestContext.getProperty(RouteContextAttributes.LOOKUP)).thenReturn(null);
+
+            assertThrows(IllegalStateException.class, () -> filter.filterRequest(requestContext, request));
+            verify(rateLimiter, never()).checkAndConsume(any(), any());
+        }
+
+        @Test
+        @DisplayName("should reject an invalid route snapshot")
+        void shouldRejectInvalidRouteSnapshot() {
+            setupRequest("/service-1/api/users", "192.168.1.1");
+            when(requestContext.getProperty(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of("invalid"));
+
+            assertThrows(IllegalStateException.class, () -> filter.filterRequest(requestContext, request));
+            verify(rateLimiter, never()).checkAndConsume(any(), any());
+        }
+
+        @Test
         @DisplayName("should use resolveLimit when route is found")
         void shouldUseResolveHttpLimitWhenRouteMatchPresent() {
             var service = ServiceRegistration.builder("service-1")
@@ -194,7 +212,7 @@ class RateLimitFilterTest {
             var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
 
             setupRequest("/service-1/api/users", "192.168.1.1");
-            when(serviceRegistry.findRoute("/service-1/api/users", "GET")).thenReturn(Optional.of(routeMatch));
+            when(requestContext.getProperty(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of(routeMatch));
 
             var decision = RateLimitDecision.allow();
             when(rateLimiter.checkAndConsume(any(), any()))
@@ -238,7 +256,7 @@ class RateLimitFilterTest {
             var routeMatch = new RouteMatch(service, endpoint, "/api/users", Map.of());
 
             setupRequest("/service-1/api/users", "192.168.1.1");
-            when(serviceRegistry.findRoute("/service-1/api/users", "GET")).thenReturn(Optional.of(routeMatch));
+            when(requestContext.getProperty(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of(routeMatch));
 
             var decision = RateLimitDecision.allow();
             when(rateLimiter.checkAndConsume(any(), any()))
@@ -841,7 +859,7 @@ class RateLimitFilterTest {
         @DisplayName("should use the resolved service ID for gateway routes")
         void shouldUseResolvedServiceIdForGatewayRoutes() {
             setupRequest("/gateway/orders", "10.0.0.1");
-            when(serviceRegistry.findRoute("/gateway/orders", "GET"))
+            when(requestContext.getProperty(RouteContextAttributes.LOOKUP))
                     .thenReturn(Optional.of(createRouteMatch("orders-service", "/orders")));
             when(rateLimiter.checkAndConsume(any(), any()))
                     .thenReturn(Uni.createFrom().item(RateLimitDecision.allow()));

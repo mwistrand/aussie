@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import aussie.adapter.in.context.ClientContextResolver;
 import aussie.common.context.ClientContext;
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.service.common.TrustedProxyValidator;
 
 @DisplayName("ClientContextFilter")
@@ -42,5 +43,25 @@ class ClientContextFilterTest {
         verify(requestContext)
                 .setProperty(org.mockito.ArgumentMatchers.eq(ClientContextResolver.CONTEXT_PROPERTY), captor.capture());
         assertEquals("10.0.0.1", captor.getValue().resolvedIp());
+    }
+
+    @Test
+    @DisplayName("filter() forwards the route lookup cached by the Vert.x route filter")
+    void forwardsCachedRouteLookup() {
+        final var trustedProxyValidator = mock(TrustedProxyValidator.class);
+        final var requestContext = mock(ContainerRequestContext.class);
+        final var vertxRequest = mock(HttpServerRequest.class);
+        final var routingContext = mock(RoutingContext.class);
+        final var lookup = java.util.Optional.empty();
+
+        when(routingContext.request()).thenReturn(vertxRequest);
+        when(trustedProxyValidator.shouldTrustForwardingHeaders(null)).thenReturn(false);
+        when(routingContext.get(RouteContextAttributes.LOOKUP)).thenReturn(lookup);
+
+        final var filter = new ClientContextFilter(new ClientContextResolver(trustedProxyValidator), routingContext);
+
+        filter.filter(requestContext, vertxRequest);
+
+        verify(requestContext).setProperty(RouteContextAttributes.LOOKUP, lookup);
     }
 }
