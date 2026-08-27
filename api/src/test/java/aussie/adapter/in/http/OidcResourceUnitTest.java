@@ -16,6 +16,11 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
@@ -126,6 +131,88 @@ class OidcResourceUnitTest {
 
         assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), problem.getStatusCode());
         verify(sessionManagement, never()).createSession(any(), any(), any());
+    }
+
+    @Test
+    void rejectsIdTokenFromDifferentProviderWithoutCreatingSession() {
+        setupExchange();
+        when(tokenExchangeProvider.exchange(any())).thenReturn(Uni.createFrom().item(tokenResponse()));
+        when(tokenValidationService.validate("id-token"))
+                .thenReturn(Uni.createFrom().item(new TokenValidationResult.Valid(identity("other-idp"))));
+
+        final var problem = assertThrows(HttpProblem.class, () -> resource.exchangeToken(
+                        "code", "verifier", "state", "https://app.example.com/callback", "state")
+                .await()
+                .atMost(Duration.ofSeconds(5)));
+
+        assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), problem.getStatusCode());
+        verify(sessionManagement, never()).createSession(any(), any(), any());
+    }
+
+    @Test
+    void rejectsCryptographicallySubstitutedIdTokenWithoutCreatingSession() {
+        setupExchange();
+        final var forgedIdToken = "eyJhbGciOiJub25lIn0.eyJzdWIiOiJhdHRhY2tlciJ9.";
+        when(tokenExchangeProvider.exchange(any())).thenReturn(Uni.createFrom().item(tokenResponse(forgedIdToken)));
+        when(tokenValidationService.validate(forgedIdToken))
+                .thenReturn(Uni.createFrom().item(new TokenValidationResult.Invalid("bad signature")));
+
+        final var problem = assertThrows(HttpProblem.class, () -> resource.exchangeToken(
+                        "code", "verifier", "state", "https://app.example.com/callback", "state")
+                .await()
+                .atMost(Duration.ofSeconds(5)));
+
+        assertEquals(Response.Status.UNAUTHORIZED.getStatusCode(), problem.getStatusCode());
+        verify(sessionManagement, never()).createSession(any(), any(), any());
+    }
+
+    @Test
+    void allowsExactlyOneConcurrentExchangeOfOneState() throws Exception {
+        final var stored = transaction();
+        setupExchange(stored);
+        final var consumed = new AtomicBoolean();
+        when(pkceService.consumeTransaction("state")).thenAnswer(invocation -> Uni.createFrom()
+                .item(() -> consumed.compareAndSet(false, true) ? Optional.of(stored) : Optional.empty()));
+        when(tokenExchangeProvider.exchange(any())).thenReturn(Uni.createFrom().item(tokenResponse()));
+        when(tokenValidationService.validate("id-token"))
+                .thenReturn(Uni.createFrom().item(new TokenValidationResult.Valid(identity())));
+        when(sessionConfig.enabled()).thenReturn(true);
+        when(sessionManagement.createSession(any(), eq(null), eq(null)))
+                .thenReturn(Uni.createFrom().item(session()));
+        when(tokenExchangeConfig.refreshToken()).thenReturn(refreshTokenConfig);
+        when(refreshTokenConfig.store()).thenReturn(false);
+        when(cookieManager.createResponseCookie(any()))
+                .thenReturn(new NewCookie.Builder("aussie_session")
+                        .value("session-1")
+                        .build());
+
+        final var start = new CountDownLatch(1);
+        final var executor = Executors.newFixedThreadPool(2);
+        try {
+            final var attempts = new AtomicInteger();
+            final Callable<Void> exchange = () -> {
+                start.await();
+                try {
+                    resource.exchangeToken("code", "verifier", "state", "https://app.example.com/callback", "state")
+                            .await()
+                            .atMost(Duration.ofSeconds(5));
+                    attempts.incrementAndGet();
+                } catch (HttpProblem ignored) {
+                    // The second consumer must receive the normal invalid/replayed-state problem.
+                }
+                return null;
+            };
+            final var first = executor.submit(exchange);
+            final var second = executor.submit(exchange);
+            start.countDown();
+            first.get();
+            second.get();
+
+            assertEquals(1, attempts.get());
+            verify(sessionManagement).createSession(any(), eq(null), eq(null));
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test
@@ -395,14 +482,22 @@ class OidcResourceUnitTest {
     }
 
     private OidcTokenExchangeResponse tokenResponse() {
+        return tokenResponse("id-token");
+    }
+
+    private OidcTokenExchangeResponse tokenResponse(String idToken) {
         return new OidcTokenExchangeResponse(
-                "access-token", Optional.of("id-token"), Optional.empty(), "Bearer", 3600, Optional.empty(), Map.of());
+                "access-token", Optional.of(idToken), Optional.empty(), "Bearer", 3600, Optional.empty(), Map.of());
     }
 
     private ValidatedIdentity identity() {
+        return identity("configured-idp");
+    }
+
+    private ValidatedIdentity identity(String providerId) {
         final var expiresAt = Instant.now().plusSeconds(3600);
         return ValidatedIdentity.fromValidatedClaims(
-                "configured-idp",
+                providerId,
                 "user-1",
                 "https://idp.example.com",
                 Set.of("client"),
