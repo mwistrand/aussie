@@ -26,12 +26,15 @@ final class AuthenticationBoundaryE2ETest {
         var token = unsignedToken("{\"sub\":\"attacker\",\"permissions\":[\"admin\"]}");
 
         Response response = given().baseUri(SuiteContext.get().gatewayBaseUri().toString())
+                .header("Origin", "http://localhost:3000")
                 .contentType(ContentType.JSON)
                 .body("{\"token\":\"" + token + "\"}")
                 .when()
                 .post("/auth/session");
 
         assertEquals(401, response.statusCode(), response.asString());
+        assertEquals("http://localhost:3000", response.getHeader("Access-Control-Allow-Origin"));
+        assertEquals("true", response.getHeader("Access-Control-Allow-Credentials"));
         assertNull(response.getHeader("Set-Cookie"), "invalid identity must not create a session");
     }
 

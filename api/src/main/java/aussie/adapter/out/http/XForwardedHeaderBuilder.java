@@ -36,24 +36,11 @@ public class XForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         }
 
         // X-Forwarded-Proto - original protocol
-        var proto = extractProtocol(originalRequest);
+        var proto = ForwardedHeaderSupport.protocol(originalRequest);
         if (proto != null) {
             headers.put("X-Forwarded-Proto", proto);
         }
 
         return headers;
-    }
-
-    private String extractProtocol(GatewayRequest request) {
-        if (request.externalScheme() != null) {
-            return request.externalScheme();
-        }
-
-        var requestUri = request.requestUri();
-        if (requestUri != null) {
-            return requestUri.getScheme();
-        }
-
-        return "http";
     }
 }

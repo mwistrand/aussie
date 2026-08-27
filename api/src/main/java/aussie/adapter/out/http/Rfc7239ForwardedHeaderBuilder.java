@@ -27,7 +27,7 @@ public class Rfc7239ForwardedHeaderBuilder implements ForwardedHeaderBuilder {
         }
 
         // proto - original protocol
-        var proto = extractProtocol(originalRequest);
+        var proto = ForwardedHeaderSupport.protocol(originalRequest);
         if (proto != null) {
             parts.add("proto=" + proto);
         }
@@ -43,19 +43,6 @@ public class Rfc7239ForwardedHeaderBuilder implements ForwardedHeaderBuilder {
 
         var newForwarded = String.join(";", parts);
         return Map.of("Forwarded", newForwarded);
-    }
-
-    private String extractProtocol(GatewayRequest request) {
-        if (request.externalScheme() != null) {
-            return request.externalScheme();
-        }
-
-        var requestUri = request.requestUri();
-        if (requestUri != null) {
-            return requestUri.getScheme();
-        }
-
-        return "http";
     }
 
     private String quoteIfNeeded(String value) {
