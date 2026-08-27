@@ -103,7 +103,7 @@ All durations use ISO-8601 format (e.g., `PT30S` for 30 seconds, `PT1H` for 1 ho
 | `%dev` | `aussie.gateway.cors.allowed-origins` | `http://localhost:3000,http://127.0.0.1:3000` |
 | `%prod` | `aussie.gateway.cors.enabled` | `true` |
 
-**Security considerations:** CORS is disabled and denies all origins by default. Production enables the filter but requires an explicit list of exact HTTPS origins; wildcard origins are rejected. The dev profile supplies local origins but still requires CORS to be enabled explicitly.
+**Security considerations:** CORS is disabled and denies all origins by default. Production enables the filter, then matched routes use their service registration's `cors` policy and gateway-owned endpoints resolve registered service origins before falling back to this global policy. Exact origins are required in production; wildcard origins are rejected. The dev profile supplies local fallback origins but still requires CORS to be enabled explicitly.
 
 ## 3. Security Headers
 
@@ -493,7 +493,7 @@ The test profile disables auth rate limiting because test suites exercising auth
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
 | `aussie.session.enabled` | `boolean` | `true` | `AUSSIE_SESSION_ENABLED` | Enable session management. When disabled, uses Authorization header flow. |
-| `aussie.session.public-creation-enabled` | `boolean` | `false` | `AUSSIE_SESSION_PUBLIC_CREATION_ENABLED` | Enable legacy validated-token `POST /auth/session` and `GET /auth/callback` endpoints. Development only. |
+| `aussie.session.public-creation-enabled` | `boolean` | `false` | `AUSSIE_SESSION_PUBLIC_CREATION_ENABLED` | Enable the legacy validated-token `POST /auth/session` endpoint. Development only. |
 | `aussie.session.ttl` | `Duration` | `PT8H` | `AUSSIE_SESSION_TTL` | Session time-to-live. |
 | `aussie.session.idle-timeout` | `Duration` | `PT30M` | `AUSSIE_SESSION_IDLE_TIMEOUT` | Invalidate session after inactivity. |
 | `aussie.session.sliding-expiration` | `boolean` | `true` | `AUSSIE_SESSION_SLIDING_EXPIRATION` | Refresh session TTL on each request. |

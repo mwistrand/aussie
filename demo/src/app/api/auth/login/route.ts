@@ -31,7 +31,7 @@ export interface LoginRequest {
  *
  * This endpoint supports multiple authentication flows:
  *
- * 1. POST (browser flow): Form-based login that generates a token and callback URL
+ * 1. POST (browser flow): Form-based login that generates a token for session creation
  * 2. POST with flow=device_code: Initiate device code flow for CLI
  * 3. POST with the device authorization grant: Poll for device code authorization
  *
@@ -172,7 +172,6 @@ export async function POST(request: NextRequest) {
       .map((g) => g.split('.')[0])
       .find((prefix) => prefix !== 'platform-team') || undefined;
 
-    // Generate signed JWT token
     const claims = {
       sub: body.username.trim(),
       name: body.username.trim(),
@@ -180,8 +179,6 @@ export async function POST(request: NextRequest) {
       permissions,
       teamId,
     };
-    const token = await generateToken(claims);
-
     // Parse and validate redirect URL
     const redirectUrl = parseRedirectUrl(body.redirect || null);
 
@@ -215,28 +212,17 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ success: true, redirectTo: redirect.toString() });
         }
 
-        // Legacy browser callback flow.
-        callbackUrl.searchParams.set('token', token);
-        return NextResponse.json({
-          success: true,
-          redirectTo: callbackUrl.toString(),
-        });
+        return NextResponse.json({ error: 'Invalid OAuth request' }, { status: 400 });
       } catch {
         return NextResponse.json({ error: 'Invalid callback URL' }, { status: 400 });
       }
     }
 
-    // Build the Aussie callback URL
-    // The aussie gateway will validate this token and create a session
-    const aussieCallback = `/auth/callback?token=${encodeURIComponent(token)}&redirect=${encodeURIComponent(redirectUrl)}`;
-
-    const response = NextResponse.json({
+    return NextResponse.json({
       success: true,
-      callbackUrl: aussieCallback,
-      token, // Include token for debugging/testing
+      token: await generateToken(claims),
+      redirectUrl,
     });
-    response.cookies.delete('aussie_session');
-    return response;
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json({ error: 'Login failed' }, { status: 500 });

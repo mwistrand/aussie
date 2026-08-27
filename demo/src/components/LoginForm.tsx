@@ -2,6 +2,8 @@
 
 import { useState, FormEvent } from 'react';
 
+const AUSSIE_URL = process.env.NEXT_PUBLIC_AUSSIE_URL || 'http://localhost:1234';
+
 interface OidcParams {
   clientId?: string;
   redirectUri?: string;
@@ -152,15 +154,20 @@ export default function LoginForm({
         return;
       }
 
-      // Redirect to Aussie callback to create session
-      // The callbackUrl points to Aussie's /auth/callback endpoint
-      if (data.callbackUrl) {
-        // For demo, we'll redirect through Aussie to create the session
-        // In production, this would go to the actual Aussie gateway
-        window.location.href = data.callbackUrl;
-      } else {
-        throw new Error('No callback URL returned');
+      if (!data.token) {
+        throw new Error('No session token returned');
       }
+
+      const sessionResponse = await fetch(`${AUSSIE_URL}/auth/session`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: data.token }),
+      });
+      if (!sessionResponse.ok) {
+        throw new Error(`Session creation failed: ${sessionResponse.status}`);
+      }
+      window.location.href = data.redirectUrl || '/';
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
       setIsLoading(false);

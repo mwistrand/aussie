@@ -11,13 +11,14 @@ import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
 import aussie.core.model.common.CorsConfig;
+import aussie.core.service.routing.ServiceRegistry;
 
 /**
  * CORS filter for gateway requests using Vert.x RouteFilter.
  *
  * <p>
  * Handle CORS preflight (OPTIONS) requests and adds CORS headers to
- * responses. Uses global CORS configuration from application properties.
+ * responses. Registered service policies override the global defaults.
  *
  * <p>
  * This filter runs at the Vert.x routing level (before JAX-RS) to ensure
@@ -41,10 +42,12 @@ public class CorsFilter {
     private static final int MAX_CORS_HEADER_LENGTH = 4096;
 
     private final Instance<GatewayCorsConfig> corsConfigInstance;
+    private final ServiceRegistry serviceRegistry;
 
     @Inject
-    public CorsFilter(Instance<GatewayCorsConfig> corsConfigInstance) {
+    public CorsFilter(Instance<GatewayCorsConfig> corsConfigInstance, ServiceRegistry serviceRegistry) {
         this.corsConfigInstance = corsConfigInstance;
+        this.serviceRegistry = serviceRegistry;
     }
 
     /**
@@ -77,8 +80,7 @@ public class CorsFilter {
                 "CORS request: %s %s from origin %s",
                 rc.request().method(), rc.request().path(), origin);
 
-        // Build global CORS config
-        CorsConfig corsConfig = buildGlobalCorsConfig(globalConfig);
+        final var corsConfig = resolveCorsConfig(rc, origin, buildGlobalCorsConfig(globalConfig));
 
         // Handle preflight (OPTIONS) requests
         if ("OPTIONS".equalsIgnoreCase(rc.request().method().name())) {
@@ -181,5 +183,19 @@ public class CorsFilter {
                 globalConfig.exposedHeaders().orElse(Set.of()),
                 globalConfig.allowCredentials(),
                 globalConfig.maxAge());
+    }
+
+    private CorsConfig resolveCorsConfig(RoutingContext rc, String origin, CorsConfig globalConfig) {
+        final var requestedMethod =
+                "OPTIONS".equalsIgnoreCase(rc.request().method().name())
+                        ? rc.request().getHeader(ACCESS_CONTROL_REQUEST_METHOD)
+                        : rc.request().method().name();
+        if (requestedMethod != null) {
+            final var route = serviceRegistry.findRoute(rc.request().path(), requestedMethod);
+            if (route.isPresent()) {
+                return route.get().service().corsConfig().orElse(globalConfig);
+            }
+        }
+        return serviceRegistry.getCorsConfigForOriginFromLocalCache(origin).orElse(globalConfig);
     }
 }

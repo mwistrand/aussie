@@ -11,7 +11,6 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
@@ -69,8 +68,8 @@ public class SessionResource {
     /**
      * Create a new session after successful authentication.
      *
-     * <p>This endpoint is called by the auth callback after validating
-     * the user's token from their identity provider.
+     * <p>This development-only endpoint validates the supplied identity-provider token
+     * before creating a session.
      */
     @POST
     @Path("/session")
@@ -96,7 +95,6 @@ public class SessionResource {
             }
 
             return Response.ok(Map.of(
-                            "sessionId", session.id(),
                             "userId", session.userId(),
                             "expiresAt", session.expiresAt().toString()))
                     .cookie(cookieManager.createResponseCookie(session))
@@ -131,7 +129,6 @@ public class SessionResource {
 
             Session session = sessionOpt.get();
             return Response.ok(Map.of(
-                            "sessionId", session.id(),
                             "userId", session.userId(),
                             "issuer", session.issuer() != null ? session.issuer() : "",
                             "permissions", session.permissions(),
@@ -223,38 +220,8 @@ public class SessionResource {
             Session session = sessionOpt.get();
 
             return Response.ok(Map.of(
-                            "sessionId", session.id(),
                             "expiresAt", session.expiresAt().toString(),
                             "lastAccessedAt", session.lastAccessedAt().toString()))
-                    .cookie(cookieManager.createResponseCookie(session))
-                    .cookie(cookieManager.createCsrfResponseCookie(session))
-                    .build();
-        });
-    }
-
-    /**
-     * Auth callback endpoint - validates token and creates session.
-     *
-     * <p>This endpoint receives a JWT token from an identity provider callback,
-     * validates it, creates a session, and redirects the user to their original page.
-     */
-    @GET
-    @Path("/callback")
-    public Uni<Response> authCallback(@QueryParam("token") String token, @QueryParam("redirect") String redirectUrl) {
-        requirePublicCreationEnabled();
-
-        if (token == null || token.isBlank()) {
-            throw GatewayProblem.badRequest("Token is required");
-        }
-
-        // Sanitize redirect URL to prevent open redirect attacks
-        String safeRedirectUrl = sanitizeRedirectUrl(redirectUrl);
-
-        return createValidatedSession(token).map(session -> {
-            LOG.infof("Session created via callback for user: %s", session.userId());
-
-            // Redirect to the original page
-            return Response.seeOther(URI.create(safeRedirectUrl))
                     .cookie(cookieManager.createResponseCookie(session))
                     .cookie(cookieManager.createCsrfResponseCookie(session))
                     .build();

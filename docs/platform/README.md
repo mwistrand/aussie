@@ -726,7 +726,7 @@ aussie.session.jws.include-claims=sub,email,name,roles
 
 When `sliding-expiration` is enabled, the idle timeout resets on each request. Sessions are hard-capped by the earlier of `ttl` and the validated token's expiration regardless of activity.
 
-`POST /auth/session` and `GET /auth/callback` create sessions only after the supplied token passes a configured route-auth validator. They remain enabled only by the `%dev` profile until the production OIDC transaction flow binds state, nonce, provider, and redirect URI atomically.
+`POST /auth/session` creates sessions only after the supplied token passes a configured route-auth validator. It remains enabled only by the `%dev` profile; the token-bearing `GET /auth/callback` endpoint has been retired. Production browser sessions use the OIDC transaction flow, which binds state, nonce, provider, and redirect URI atomically.
 
 The session endpoint now accepts the validated token instead of caller-supplied identity data:
 
@@ -736,8 +736,6 @@ Content-Type: application/json
 
 {"token":"<signed-jwt>","redirectUrl":"/dashboard"}
 ```
-
-The callback equivalent is `GET /auth/callback?token=<signed-jwt>&redirect=/dashboard`.
 
 ### Cookie Security
 

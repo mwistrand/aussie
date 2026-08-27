@@ -2,11 +2,13 @@ package aussie.e2e;
 
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Base64;
+import java.util.Map;
 
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
@@ -34,8 +36,8 @@ final class AuthenticationBoundaryE2ETest {
     }
 
     @Test
-    @DisplayName("rejects unsigned callback tokens without issuing a cookie")
-    void rejectsUnsignedCallbackToken() {
+    @DisplayName("does not expose the retired token-bearing callback")
+    void rejectsRetiredCallback() {
         var token = unsignedToken("{\"sub\":\"attacker\",\"iss\":\"caller-controlled\"}");
 
         Response response = given().baseUri(SuiteContext.get().gatewayBaseUri().toString())
@@ -44,8 +46,24 @@ final class AuthenticationBoundaryE2ETest {
                 .when()
                 .get("/auth/callback");
 
-        assertEquals(401, response.statusCode(), response.asString());
+        assertEquals(404, response.statusCode(), response.asString());
         assertNull(response.getHeader("Set-Cookie"), "invalid identity must not create a session");
+    }
+
+    @Test
+    @DisplayName("returns demo session tokens without embedding them in callback URLs")
+    void returnsDemoSessionTokenInResponseBody() {
+        var context = SuiteContext.get();
+        var login = given().baseUri(context.demoBaseUri().toString())
+                .contentType(ContentType.JSON)
+                .body(Map.of("username", "demo-user", "group", "demo-service.dev", "redirect", "/dashboard"))
+                .when()
+                .post("/api/auth/login");
+
+        assertEquals(200, login.statusCode(), login.asString());
+        assertNull(login.jsonPath().get("callbackUrl"), "login must not put tokens in callback URLs");
+        assertNotNull(login.jsonPath().getString("token"));
+        assertEquals("http://localhost:3000/dashboard", login.jsonPath().getString("redirectUrl"));
     }
 
     @Test

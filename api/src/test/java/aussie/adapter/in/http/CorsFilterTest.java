@@ -20,6 +20,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import aussie.core.model.common.CorsConfig;
+import aussie.core.service.routing.ServiceRegistry;
+
 @DisplayName("CorsFilter")
 @SuppressWarnings("unchecked")
 class CorsFilterTest {
@@ -29,6 +32,7 @@ class CorsFilterTest {
     private RoutingContext rc;
     private HttpServerRequest request;
     private HttpServerResponse response;
+    private ServiceRegistry serviceRegistry;
     private CorsFilter filter;
 
     @BeforeEach
@@ -38,6 +42,7 @@ class CorsFilterTest {
         rc = mock(RoutingContext.class);
         request = mock(HttpServerRequest.class);
         response = mock(HttpServerResponse.class);
+        serviceRegistry = mock(ServiceRegistry.class);
 
         when(rc.request()).thenReturn(request);
         when(rc.response()).thenReturn(response);
@@ -58,7 +63,7 @@ class CorsFilterTest {
                 .thenReturn(response);
         when(response.setStatusCode(org.mockito.ArgumentMatchers.anyInt())).thenReturn(response);
 
-        filter = new CorsFilter(corsConfigInstance);
+        filter = new CorsFilter(corsConfigInstance, serviceRegistry);
     }
 
     @Nested
@@ -203,6 +208,23 @@ class CorsFilterTest {
 
             verify(response).putHeader("Access-Control-Max-Age", "3600");
         }
+
+        @Test
+        @DisplayName("should use a registered service policy for gateway auth preflight")
+        void shouldUseRegisteredServicePolicyForGatewayAuthPreflight() {
+            when(request.path()).thenReturn("/auth/session");
+            when(request.getHeader("Origin")).thenReturn("http://localhost:3000");
+            when(request.getHeader("Access-Control-Request-Method")).thenReturn("POST");
+            when(request.getHeader("Access-Control-Request-Headers")).thenReturn("Content-Type");
+            when(serviceRegistry.getCorsConfigForOriginFromLocalCache("http://localhost:3000"))
+                    .thenReturn(Optional.of(demoCorsConfig()));
+
+            filter.corsHandler(rc);
+
+            verify(response).putHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+            verify(response).putHeader("Access-Control-Allow-Credentials", "true");
+            verify(response).setStatusCode(200);
+        }
     }
 
     @Nested
@@ -256,5 +278,28 @@ class CorsFilterTest {
 
             verify(response).putHeader("Access-Control-Allow-Origin", "*");
         }
+
+        @Test
+        @DisplayName("should use a registered service policy for gateway auth endpoints")
+        void shouldUseRegisteredServicePolicyForGatewayAuth() {
+            when(request.path()).thenReturn("/auth/session");
+            when(request.getHeader("Origin")).thenReturn("http://localhost:3000");
+            when(serviceRegistry.getCorsConfigForOriginFromLocalCache("http://localhost:3000"))
+                    .thenReturn(Optional.of(demoCorsConfig()));
+
+            filter.corsHandler(rc);
+
+            verify(response).putHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+            verify(response).putHeader("Access-Control-Allow-Credentials", "true");
+        }
+    }
+
+    private static CorsConfig demoCorsConfig() {
+        return CorsConfig.builder()
+                .allowedOrigins("http://localhost:3000")
+                .allowedMethods("POST")
+                .allowedHeaders("Content-Type")
+                .allowCredentials(true)
+                .build();
     }
 }

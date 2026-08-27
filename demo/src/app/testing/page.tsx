@@ -30,7 +30,7 @@ interface WebSocketMessage {
   id: string;
   type: "sent" | "received" | "system" | "error";
   content: string;
-  timestamp: Date;
+  timestamp: Date | null;
 }
 
 function parseJwt(token: string): Record<string, unknown> | null {
@@ -209,10 +209,10 @@ export default function TestingDashboardPage() {
   const [echoStatus, setEchoStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
   const [chatStatus, setChatStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
   const [echoMessages, setEchoMessages] = useState<WebSocketMessage[]>([
-    { id: "init", type: "system", content: "Not connected", timestamp: new Date() },
+    { id: "init", type: "system", content: "Not connected", timestamp: null },
   ]);
   const [chatMessages, setChatMessages] = useState<WebSocketMessage[]>([
-    { id: "init", type: "system", content: "Not connected", timestamp: new Date() },
+    { id: "init", type: "system", content: "Not connected", timestamp: null },
   ]);
   const [echoInput, setEchoInput] = useState("");
   const [chatInput, setChatInput] = useState("");
@@ -414,26 +414,22 @@ export default function TestingDashboardPage() {
         throw new Error(data.error || `Login failed: ${response.status}`);
       }
 
-      if (data.callbackUrl) {
-        const fullCallbackUrl = data.callbackUrl.startsWith("http")
-          ? data.callbackUrl
-          : `${config.aussieUrl}${data.callbackUrl}`;
-        setAuthResult({
-          show: true,
-          success: true,
-          message: `Login successful! Redirecting to create session...\n\nCallback URL: ${fullCallbackUrl}`,
-        });
-        setTimeout(() => {
-          window.location.href = fullCallbackUrl;
-        }, 1000);
-      } else {
-        setAuthResult({
-          show: true,
-          success: true,
-          message: `Login response:\n${JSON.stringify(data, null, 2)}`,
-        });
-        setTimeout(checkSession, 500);
+      if (!data.token) {
+        throw new Error("No session token returned");
       }
+
+      const sessionResponse = await fetch(`${config.aussieUrl}/auth/session`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: data.token }),
+      });
+      if (!sessionResponse.ok) {
+        throw new Error(`Session creation failed: ${sessionResponse.status}`);
+      }
+
+      setAuthResult({ show: true, success: true, message: "Session created successfully." });
+      setTimeout(checkSession, 500);
     } catch (error) {
       setAuthResult({
         show: true,
@@ -1244,7 +1240,8 @@ export default function TestingDashboardPage() {
         key={msg.id}
         className={`text-sm py-1 border-b border-zinc-100 dark:border-zinc-800 last:border-0 ${colors[msg.type]}`}
       >
-        [{msg.timestamp.toLocaleTimeString()}] {msg.content}
+        {msg.timestamp && `[${msg.timestamp.toLocaleTimeString()}] `}
+        {msg.content}
       </div>
     );
   };

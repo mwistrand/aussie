@@ -19,8 +19,7 @@ import aussie.core.service.routing.ServiceRegistry;
  *
  * <p>Priority 95 places this filter between the existing CORS filter (100)
  * and the security-headers filter (90). CORS preflights short-circuit at
- * priority 100 without calling {@code next()}, so route resolution is not
- * paid for OPTIONS preflights.
+ * priority 100 without invoking this filter.
  */
 @ApplicationScoped
 public class RouteResolutionFilter {

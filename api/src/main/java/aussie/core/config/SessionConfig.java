@@ -27,14 +27,13 @@ public interface SessionConfig {
     boolean enabled();
 
     /**
-     * Enable the legacy public session-creation and demo callback endpoints.
+     * Enable the legacy public session-creation endpoint.
      *
-     * <p>These endpoints require a token accepted by a configured validator but remain
-     * disabled outside an isolated development environment until the complete OIDC
-     * transaction is bound. Session authentication, inspection, refresh, and logout remain
-     * controlled by {@link #enabled()}.
+     * <p>The endpoint requires a token accepted by a configured validator but remains
+     * disabled outside an isolated development environment. Session authentication,
+     * inspection, refresh, and logout remain controlled by {@link #enabled()}.
      *
-     * @return true if the development-only endpoints are enabled (default: false)
+     * @return true if the development-only endpoint is enabled (default: false)
      */
     @WithDefault("false")
     boolean publicCreationEnabled();

@@ -25,6 +25,7 @@ import org.jboss.logging.Logger;
 import aussie.core.cache.LocalCacheConfig;
 import aussie.core.model.auth.Permission;
 import aussie.core.model.auth.ServicePermissionPolicy;
+import aussie.core.model.common.CorsConfig;
 import aussie.core.model.common.ValidationResult;
 import aussie.core.model.routing.GatewaySnapshot;
 import aussie.core.model.routing.RouteLookupResult;
@@ -788,6 +789,11 @@ public class ServiceRegistry {
             return Optional.empty();
         }
         return routingState.get().snapshot().service(serviceId);
+    }
+
+    /** Resolve a registered service CORS policy from the compiled local snapshot. */
+    public Optional<CorsConfig> getCorsConfigForOriginFromLocalCache(String origin) {
+        return routingState.get().snapshot().corsConfigForOrigin(origin);
     }
 
     /**

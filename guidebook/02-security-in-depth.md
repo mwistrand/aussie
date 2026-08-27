@@ -588,7 +588,7 @@ A senior would use the framework's built-in CORS support and discover the gap wh
 
 ### Trade-offs
 
-The CORS configuration is global. Per-service CORS overrides (which the `ServiceRegistration` model supports via its `cors` field) are not evaluated in this filter. The global filter provides a baseline, and per-service CORS would need a separate mechanism that runs after route resolution. This means the global CORS policy must be permissive enough for all services, which may be wider than any individual service needs.
+The global CORS configuration is the fallback. A matched route uses its registered service's `cors` policy, while gateway-owned endpoints such as `/auth/session` resolve the request origin through an index compiled from the same service registrations. Platform teams can therefore enable CORS once without maintaining a global list as service domains are onboarded.
 
 ## 2.9 Security Headers
 

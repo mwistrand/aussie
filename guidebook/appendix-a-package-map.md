@@ -530,7 +530,7 @@ These packages translate HTTP, WebSocket, and lifecycle events into calls on cor
 | `CorsFilter` | `@RouteFilter(100)`. Handles CORS preflight and adds CORS response headers at the Vert.x level. |
 | `GatewayCorsConfig` | `@ConfigMapping` for global CORS settings. |
 | `JwksResource` | Serves the `/.well-known/jwks.json` endpoint with the gateway's public signing keys. |
-| `OidcResource` | Handles OIDC callback (`/auth/callback`), login redirect, and token exchange. |
+| `OidcResource` | Handles OIDC login redirect and token exchange. |
 | `SecurityHeadersConfig` | `@ConfigMapping` for security response headers (CSP, HSTS, X-Frame-Options, etc.). |
 | `SecurityHeadersFilter` | `@RouteFilter(90)`. Adds OWASP-recommended security headers to all responses. |
 | `SessionResource` | Session management endpoints (login, logout, refresh, introspect). |

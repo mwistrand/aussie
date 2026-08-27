@@ -46,12 +46,6 @@
       "authRequired": false
     },
     {
-      "path": "/api/auth/callback",
-      "methods": ["GET"],
-      "visibility": "PUBLIC",
-      "authRequired": false
-    },
-    {
       "path": "/.well-known/jwks.json",
       "methods": ["GET"],
       "visibility": "PUBLIC",

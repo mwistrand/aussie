@@ -1,6 +1,7 @@
 package aussie.adapter.in.http;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -134,6 +135,8 @@ class SessionResourceUnitTest {
                 .atMost(Duration.ofSeconds(5));
 
         assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
+        assertFalse(((Map<?, ?>) response.getEntity()).containsKey("sessionId"));
+        assertTrue(response.getCookies().containsKey("aussie_session"));
         verify(sessionManagement).createSession(identity, "test-agent", "unknown");
     }
 
@@ -171,6 +174,7 @@ class SessionResourceUnitTest {
         final var response = resource.getSession().await().atMost(Duration.ofSeconds(5));
 
         assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
+        assertFalse(((Map<?, ?>) response.getEntity()).containsKey("sessionId"));
     }
 
     @Test
@@ -227,28 +231,8 @@ class SessionResourceUnitTest {
         final var response = resource.refreshSession().await().atMost(Duration.ofSeconds(5));
 
         assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
+        assertFalse(((Map<?, ?>) response.getEntity()).containsKey("sessionId"));
         assertTrue(response.getCookies().containsKey("aussie_session_csrf"));
-    }
-
-    @Test
-    void createsSessionFromValidatedCallbackToken() {
-        when(config.enabled()).thenReturn(true);
-        when(config.publicCreationEnabled()).thenReturn(true);
-        final var identity = identity();
-        when(tokenValidationService.validate("signed-token"))
-                .thenReturn(Uni.createFrom().item(new TokenValidationResult.Valid(identity)));
-        final var session = session();
-        when(sessionManagement.createSession(identity, null, "unknown"))
-                .thenReturn(Uni.createFrom().item(session));
-        when(cookieManager.createResponseCookie(session))
-                .thenReturn(new NewCookie.Builder("aussie_session")
-                        .value(session.id())
-                        .build());
-
-        final var response =
-                resource.authCallback("signed-token", "/dashboard").await().atMost(Duration.ofSeconds(5));
-
-        assertEquals("/dashboard", response.getLocation().toString());
     }
 
     private ValidatedIdentity identity() {
