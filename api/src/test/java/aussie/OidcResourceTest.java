@@ -3,6 +3,7 @@ package aussie;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -46,7 +47,7 @@ public class OidcResourceTest {
         var verifier = "valid-verifier-123456789012345678901234567890123";
         var challenge = generateChallenge(verifier);
 
-        var redirectLocation = given().redirects()
+        final var authorizeResponse = given().redirects()
                 .follow(false)
                 .queryParam("redirect_uri", REDIRECT_URI)
                 .queryParam("idp_url", CALLER_SELECTED_IDP_URL)
@@ -58,14 +59,28 @@ public class OidcResourceTest {
                 .statusCode(303)
                 .header("Location", containsString(CONFIGURED_IDP_URL))
                 .extract()
-                .header("Location");
+                .response();
 
-        var state = extractState(redirectLocation);
+        final var redirectLocation = authorizeResponse.getHeader("Location");
+        final var state = extractState(redirectLocation);
+        final var initiationCookie = authorizeResponse.getCookie("aussie_oidc_state");
+        assertEquals(state, initiationCookie);
+
+        // A callback started in the attacker's browser must not create a session in the victim's browser.
+        given().contentType("application/x-www-form-urlencoded")
+                .formParam("code", "test-code")
+                .formParam("state", state)
+                .formParam("code_verifier", verifier)
+                .when()
+                .post("/auth/oidc/token")
+                .then()
+                .statusCode(400);
 
         given().contentType("application/x-www-form-urlencoded")
                 .formParam("code", "test-code")
                 .formParam("state", state)
                 .formParam("code_verifier", verifier)
+                .cookie("aussie_oidc_state", initiationCookie)
                 .when()
                 .post("/auth/oidc/token")
                 .then()
@@ -77,6 +92,7 @@ public class OidcResourceTest {
                 .formParam("code", "test-code-2")
                 .formParam("state", state)
                 .formParam("code_verifier", verifier)
+                .cookie("aussie_oidc_state", initiationCookie)
                 .when()
                 .post("/auth/oidc/token")
                 .then()

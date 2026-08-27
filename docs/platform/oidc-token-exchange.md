@@ -2,7 +2,7 @@
 
 The OIDC Token Exchange feature enables Aussie to complete the OAuth 2.0 authorization code flow by exchanging authorization codes for tokens with identity providers.
 
-> **Containment status:** The browser-facing helpers remain disabled by default. Their authorization transactions bind a server-configured provider, exact redirect URI, PKCE challenge, nonce, client type, and expiry in one atomically consumed record. Session mode completes with an HttpOnly cookie; the remaining authentication-surface work is still pending.
+> **Containment status:** The browser-facing helpers remain disabled by default. Their authorization transactions bind a server-configured provider, exact redirect URI, PKCE challenge, nonce, client type, expiry, and initiating browser in one atomically consumed record. Session mode completes with an HttpOnly cookie.
 
 ## Overview
 
@@ -16,13 +16,13 @@ This feature works in conjunction with [PKCE](pkce.md) for secure authorization 
 
 ## Client Flow
 
-Clients start the transaction with their own 43-character base64url state and S256 challenge:
+Browser clients start the transaction with an S256 challenge. Aussie rejects caller-supplied state, generates its own state, and sets an HttpOnly initiation cookie before redirecting to the IdP:
 
 ```http
-GET /auth/oidc/authorize?redirect_uri=http%3A%2F%2F127.0.0.1%3A49152%2Fcallback&code_challenge=<challenge>&code_challenge_method=S256&state=<state>
+GET /auth/oidc/authorize?redirect_uri=http%3A%2F%2F127.0.0.1%3A49152%2Fcallback&code_challenge=<challenge>&code_challenge_method=S256
 ```
 
-After the identity provider redirects to the registered URI with `code` and the same `state`, exchange the complete transaction:
+After the identity provider redirects to the registered URI with `code` and Aussie's `state`, exchange the complete transaction from the same browser. The request must include credentials so the initiation cookie is sent:
 
 ```http
 POST /auth/oidc/token
@@ -231,6 +231,7 @@ With `create-session=true`, it returns `204 No Content` and sets the configured 
 2. **PKCE**: Token exchange requires PKCE when enabled
 3. **TLS**: Use HTTPS for IdP endpoints outside local development
 4. **Refresh Tokens**: Stored server-side, never exposed to clients
+5. **Browser binding**: Preserve the HttpOnly initiation cookie through token exchange. Cross-site clients must use HTTPS, set `aussie.session.cookie.same-site=None`, enable credentialed CORS for the exact client origin, and send a credentialed request.
 
 ## Troubleshooting
 
@@ -253,7 +254,8 @@ aussie.auth.oidc.token-exchange.token-endpoint=https://...
 Ensure:
 1. PKCE is enabled and the challenge was stored
 2. The `code_verifier` matches the original `code_challenge`
-3. The state parameter is valid and not expired
+3. The server-generated state is valid and not expired
+4. The browser sends the initiation cookie issued by `/auth/oidc/authorize`
 
 ### Session not created
 

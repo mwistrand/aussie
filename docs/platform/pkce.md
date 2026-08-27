@@ -4,15 +4,14 @@ This document describes Aussie's PKCE (Proof Key for Code Exchange) support for 
 
 ## Overview
 
-PKCE (RFC 7636) is a security extension to the OAuth 2.0 authorization code flow that protects against authorization code interception attacks. It's particularly important for:
+PKCE (RFC 7636) is a security extension to the OAuth 2.0 authorization code flow that protects against authorization code interception attacks. The browser-facing Aussie helpers use it for:
 
 - Single Page Applications (SPAs)
-- Mobile applications
-- Any client that cannot securely store a client secret
+- Browser applications that cannot securely store a client secret
 
 Aussie requires PKCE with the S256 challenge method for all OIDC authorization flows by default.
 
-The public OIDC helpers remain disabled by default through `aussie.auth.oidc.public-endpoints-enabled=false`. When enabled, the PKCE challenge is stored with the provider, exact redirect URI, nonce, client type, and expiry in one atomically consumed authorization transaction.
+The public OIDC helpers remain disabled by default through `aussie.auth.oidc.public-endpoints-enabled=false`. When enabled, the PKCE challenge is stored with the provider, exact redirect URI, nonce, client type, expiry, and initiating browser in one atomically consumed authorization transaction.
 
 ## Configuration
 
@@ -65,7 +64,7 @@ GET /auth/oidc/authorize
 
 ### 3. Aussie Stores the Transaction
 
-Aussie stores the complete one-time authorization transaction in Redis (keyed by a generated state parameter) and redirects to the server-configured IdP with a generated nonce.
+Aussie stores the complete one-time authorization transaction in Redis (keyed by a generated state parameter), sets an HttpOnly initiation cookie, and redirects to the server-configured IdP with a generated nonce. Caller-supplied state is rejected.
 
 ### 4. User Authenticates
 
@@ -84,6 +83,8 @@ code=authorization-code-from-idp
 &state=state-from-authorize
 &redirect_uri=https://app.example.com/callback
 ```
+
+The exchange must come from the same browser and include the initiation cookie. Cross-site browser clients must use HTTPS, set `aussie.session.cookie.same-site=None`, enable credentialed CORS for the exact client origin, and send a credentialed request.
 
 ### 6. Aussie Verifies PKCE
 
@@ -135,7 +136,7 @@ console.log('Code Challenge:', codeChallenge);
 
 ```bash
 # Redirect to Aussie's OIDC authorize endpoint
-curl -v "http://localhost:1234/auth/oidc/authorize?\
+curl -c oidc-cookies.txt -v "http://localhost:1234/auth/oidc/authorize?\
 redirect_uri=http://localhost:3000/callback\
 &code_challenge=${CODE_CHALLENGE}\
 &code_challenge_method=S256"
@@ -146,7 +147,7 @@ redirect_uri=http://localhost:3000/callback\
 4. **Exchange code for tokens**:
 
 ```bash
-curl -X POST "http://localhost:1234/auth/oidc/token" \
+curl -b oidc-cookies.txt -X POST "http://localhost:1234/auth/oidc/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "code=${AUTHORIZATION_CODE}" \
   -d "code_verifier=${CODE_VERIFIER}" \
@@ -203,6 +204,8 @@ The demo app implements a complete OAuth 2.0 / OIDC provider for testing:
 3. **Short TTL** - Challenges expire after 10 minutes (configurable).
 
 4. **Atomic operations** - Redis GETDEL ensures atomic retrieve-and-delete.
+
+5. **Browser binding** - A short-lived HttpOnly cookie binds token exchange to the browser that initiated authorization.
 
 ## SPI: Custom Storage Provider
 

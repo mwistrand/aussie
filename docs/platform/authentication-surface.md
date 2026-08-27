@@ -9,7 +9,7 @@ Aussie parses `Authorization` and the configured session cookie in one credentia
 | `/admin/*` | Required authentication plus endpoint permission | API key, configured JWT, or session |
 | `/gateway/*`, `/{serviceId}/*` | Route policy | Public registered routes ignore credentials; protected routes authenticate and fail closed |
 | `/q/*`, `/auth/.well-known/jwks.json` | Anonymous | Operational health and public verification keys |
-| `/auth/oidc/*` | Browser-only, disabled by default | Requires `aussie.auth.oidc.public-endpoints-enabled=true` |
+| `/auth/oidc/*` | Browser-only, disabled by default | Requires `aussie.auth.oidc.public-endpoints-enabled=true` and binds exchange to the initiating browser |
 | `/auth/session*` | Browser session | Creation is disabled by default; inspection, refresh, and logout require a valid session where applicable |
 | Internal-only HTTP endpoints | None | No internal-only HTTP surface is currently exposed |
 

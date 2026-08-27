@@ -3,6 +3,7 @@ package aussie.adapter.in.http;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
@@ -15,6 +16,7 @@ import java.util.stream.Collectors;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.CookieParam;
 import jakarta.ws.rs.FormParam;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -22,6 +24,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
 
 import io.smallrye.mutiny.Uni;
@@ -59,6 +62,7 @@ public class OidcResource {
 
     private static final Logger LOG = Logger.getLogger(OidcResource.class);
     private static final Pattern AUTHORIZATION_CODE_PATTERN = Pattern.compile("[\\x20-\\x7E]{1,4096}");
+    private static final String INITIATION_COOKIE_NAME = "aussie_oidc_state";
 
     private final PkceService pkceService;
     private final PkceConfig pkceConfig;
@@ -102,7 +106,7 @@ public class OidcResource {
      * @param redirectUri The URI to redirect to after authentication
      * @param codeChallenge The PKCE code_challenge (required when PKCE is enabled)
      * @param codeChallengeMethod The challenge method (must be "S256")
-     * @param clientState Optional client-generated OAuth state
+     * @param clientState Rejected client-supplied state (server owns OAuth state)
      * @return Redirect to identity provider or error response
      */
     @GET
@@ -118,6 +122,10 @@ public class OidcResource {
 
         if (!pkceConfig.enabled()) {
             throw GatewayProblem.featureDisabled("PKCE");
+        }
+
+        if (clientState != null) {
+            throw GatewayProblem.badRequest("state is server-owned");
         }
 
         // Validate redirect URI
@@ -142,7 +150,7 @@ public class OidcResource {
             throw GatewayProblem.badRequest("code_challenge is not a valid S256 challenge");
         }
 
-        final var state = clientState == null ? pkceService.generateState() : clientState;
+        final var state = pkceService.generateState();
         if (!pkceService.isValidState(state)) {
             throw GatewayProblem.badRequest("state is invalid");
         }
@@ -163,6 +171,7 @@ public class OidcResource {
         return pkceService
                 .storeTransaction(state, transaction)
                 .replaceWith(Response.seeOther(URI.create(buildIdpUrl(authorizationEndpoint, state, transaction)))
+                        .cookie(createInitiationCookie(state, transactionTtl))
                         .build());
     }
 
@@ -176,6 +185,7 @@ public class OidcResource {
      * @param codeVerifier The PKCE code_verifier (required when PKCE was used)
      * @param state The state parameter from the authorization request
      * @param redirectUri The redirect URI (must match the authorization request)
+     * @param initiationState The state cookie issued to the initiating browser
      * @return Token response or error
      */
     @POST
@@ -185,7 +195,8 @@ public class OidcResource {
             @FormParam("code") String code,
             @FormParam("code_verifier") String codeVerifier,
             @FormParam("state") String state,
-            @FormParam("redirect_uri") String redirectUri) {
+            @FormParam("redirect_uri") String redirectUri,
+            @CookieParam(INITIATION_COOKIE_NAME) String initiationState) {
 
         requirePublicEndpointsEnabled();
         requireTokenExchangeEnabled();
@@ -205,6 +216,13 @@ public class OidcResource {
 
         if (!pkceService.isValidCodeVerifier(codeVerifier)) {
             throw GatewayProblem.badRequest("code_verifier is invalid");
+        }
+
+        if (!pkceService.isValidState(initiationState)
+                || !MessageDigest.isEqual(
+                        state.getBytes(StandardCharsets.US_ASCII),
+                        initiationState.getBytes(StandardCharsets.US_ASCII))) {
+            throw GatewayProblem.badRequest("OIDC transaction is not bound to this browser");
         }
 
         return pkceService.consumeTransaction(state).flatMap(transaction -> {
@@ -331,6 +349,7 @@ public class OidcResource {
                 .map(session -> Response.noContent()
                         .cookie(cookieManager.createResponseCookie(session))
                         .cookie(cookieManager.createCsrfResponseCookie(session))
+                        .cookie(clearInitiationCookie())
                         .build());
     }
 
@@ -385,7 +404,30 @@ public class OidcResource {
 
         LOG.debugf("Token exchange successful, expires_in: %d", tokenResponse.expiresIn());
 
-        return Uni.createFrom().item(Response.ok(responseBody).build());
+        return Uni.createFrom()
+                .item(Response.ok(responseBody).cookie(clearInitiationCookie()).build());
+    }
+
+    private NewCookie createInitiationCookie(String state, Duration ttl) {
+        return new NewCookie.Builder(INITIATION_COOKIE_NAME)
+                .value(state)
+                .path("/")
+                .httpOnly(true)
+                .secure(sessionConfig.cookie().secure())
+                .sameSite(cookieManager.responseCookieSameSite())
+                .maxAge((int) Math.min(ttl.toSeconds(), Integer.MAX_VALUE))
+                .build();
+    }
+
+    private NewCookie clearInitiationCookie() {
+        return new NewCookie.Builder(INITIATION_COOKIE_NAME)
+                .value("")
+                .path("/")
+                .httpOnly(true)
+                .secure(sessionConfig.cookie().secure())
+                .sameSite(cookieManager.responseCookieSameSite())
+                .maxAge(0)
+                .build();
     }
 
     /**

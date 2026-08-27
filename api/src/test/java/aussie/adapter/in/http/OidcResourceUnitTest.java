@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
 
 import io.quarkiverse.resteasy.problem.HttpProblem;
@@ -60,6 +61,9 @@ class OidcResourceUnitTest {
     private SessionConfig sessionConfig;
 
     @Mock
+    private SessionConfig.CookieConfig sessionCookieConfig;
+
+    @Mock
     private OidcTokenExchangeProviderRegistry tokenExchangeRegistry;
 
     @Mock
@@ -88,6 +92,9 @@ class OidcResourceUnitTest {
     @BeforeEach
     void setUp() {
         when(oidcConfig.publicEndpointsEnabled()).thenReturn(true);
+        Mockito.lenient().when(sessionConfig.cookie()).thenReturn(sessionCookieConfig);
+        Mockito.lenient().when(sessionCookieConfig.secure()).thenReturn(false);
+        Mockito.lenient().when(cookieManager.responseCookieSameSite()).thenReturn(NewCookie.SameSite.LAX);
         Mockito.lenient()
                 .when(cookieManager.createCsrfResponseCookie(any()))
                 .thenReturn(new jakarta.ws.rs.core.NewCookie.Builder("aussie_session_csrf")
@@ -113,7 +120,7 @@ class OidcResourceUnitTest {
                 .thenReturn(Uni.createFrom().item(new TokenValidationResult.Invalid("bad signature")));
 
         final var problem = assertThrows(HttpProblem.class, () -> resource.exchangeToken(
-                        "code", "verifier", "state", "https://app.example.com/callback")
+                        "code", "verifier", "state", "https://app.example.com/callback", "state")
                 .await()
                 .atMost(Duration.ofSeconds(5)));
 
@@ -140,13 +147,15 @@ class OidcResourceUnitTest {
                         .httpOnly(true)
                         .build());
 
-        final var result = resource.exchangeToken("code", "verifier", "state", "https://app.example.com/callback")
+        final var result = resource.exchangeToken(
+                        "code", "verifier", "state", "https://app.example.com/callback", "state")
                 .await()
                 .atMost(Duration.ofSeconds(5));
 
         assertEquals(Response.Status.NO_CONTENT.getStatusCode(), result.getStatus());
         assertNull(result.getEntity());
         assertEquals("session-1", result.getCookies().get("aussie_session").getValue());
+        assertEquals(0, result.getCookies().get("aussie_oidc_state").getMaxAge());
         verify(sessionManagement).createSession(identity, null, null);
     }
 
@@ -161,7 +170,7 @@ class OidcResourceUnitTest {
                 .thenReturn(Uni.createFrom().item(Optional.of(transaction())));
 
         final var problem = assertThrows(HttpProblem.class, () -> resource.exchangeToken(
-                        "code", "verifier", "state", "https://attacker.example/callback")
+                        "code", "verifier", "state", "https://attacker.example/callback", "state")
                 .await()
                 .atMost(Duration.ofSeconds(5)));
 
@@ -187,7 +196,7 @@ class OidcResourceUnitTest {
                 .thenReturn(Uni.createFrom().item(new TokenValidationResult.Valid(identity)));
 
         final var problem = assertThrows(HttpProblem.class, () -> resource.exchangeToken(
-                        "code", "verifier", "state", "https://app.example.com/callback")
+                        "code", "verifier", "state", "https://app.example.com/callback", "state")
                 .await()
                 .atMost(Duration.ofSeconds(5)));
 
@@ -215,7 +224,7 @@ class OidcResourceUnitTest {
                 .thenReturn(Uni.createFrom().item(new TokenValidationResult.Valid(identity)));
 
         final var problem = assertThrows(HttpProblem.class, () -> resource.exchangeToken(
-                        "code", "verifier", "state", "https://app.example.com/callback")
+                        "code", "verifier", "state", "https://app.example.com/callback", "state")
                 .await()
                 .atMost(Duration.ofSeconds(5)));
 
@@ -235,12 +244,14 @@ class OidcResourceUnitTest {
     }
 
     @Test
-    void storesClientPkceStateAndRedirectsToProvider() {
+    void storesServerPkceStateAndBindsInitiatingBrowser() {
+        when(sessionCookieConfig.secure()).thenReturn(true);
+        when(cookieManager.responseCookieSameSite()).thenReturn(NewCookie.SameSite.NONE);
         when(pkceConfig.enabled()).thenReturn(true);
         when(tokenExchangeConfig.enabled()).thenReturn(true);
         when(pkceService.isValidChallengeMethod("S256")).thenReturn(true);
         when(pkceService.isValidCodeChallenge("challenge")).thenReturn(true);
-        when(pkceService.isValidState("client-state")).thenReturn(true);
+        when(pkceService.isValidState("server-state")).thenReturn(true);
         when(pkceService.generateNonce()).thenReturn("generated-nonce");
         when(pkceConfig.challengeTtl()).thenReturn(Duration.ofMinutes(10));
         when(oidcConfig.tokenExchange()).thenReturn(tokenExchangeConfig);
@@ -249,17 +260,55 @@ class OidcResourceUnitTest {
         when(tokenExchangeConfig.providerId()).thenReturn(Optional.of("configured-idp"));
         when(tokenExchangeConfig.clientId()).thenReturn(Optional.of("client"));
         when(tokenExchangeConfig.scopes()).thenReturn(Set.of("openid"));
-        when(pkceService.storeTransaction(eq("client-state"), any()))
+        when(pkceService.generateState()).thenReturn("server-state");
+        when(pkceService.storeTransaction(eq("server-state"), any()))
                 .thenReturn(Uni.createFrom().voidItem());
 
-        final var response = resource.authorize("https://app.example.com/callback", "challenge", "S256", "client-state")
+        final var response = resource.authorize("https://app.example.com/callback", "challenge", "S256", null)
                 .await()
                 .atMost(Duration.ofSeconds(5));
 
         assertEquals(Response.Status.SEE_OTHER.getStatusCode(), response.getStatus());
-        assertTrue(response.getLocation().toString().contains("state=client-state"));
+        assertTrue(response.getLocation().toString().contains("state=server-state"));
         assertTrue(response.getLocation().toString().contains("nonce=generated-nonce"));
-        verify(pkceService).storeTransaction(eq("client-state"), any());
+        verify(pkceService).storeTransaction(eq("server-state"), any());
+        final var cookie = response.getCookies().get("aussie_oidc_state");
+        assertEquals("server-state", cookie.getValue());
+        assertTrue(cookie.isHttpOnly());
+        assertTrue(cookie.isSecure());
+        assertEquals(NewCookie.SameSite.NONE, cookie.getSameSite());
+        assertEquals(600, cookie.getMaxAge());
+    }
+
+    @Test
+    void rejectsCallerSuppliedState() {
+        when(pkceConfig.enabled()).thenReturn(true);
+        when(oidcConfig.tokenExchange()).thenReturn(tokenExchangeConfig);
+        when(tokenExchangeConfig.enabled()).thenReturn(true);
+
+        final var problem = assertThrows(
+                HttpProblem.class,
+                () -> resource.authorize("https://app.example.com/callback", "challenge", "S256", "attacker-state"));
+
+        assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), problem.getStatusCode());
+        verify(pkceService, never()).storeTransaction(any(), any());
+    }
+
+    @Test
+    void rejectsExchangeFromDifferentBrowserBeforeConsumingState() {
+        when(oidcConfig.tokenExchange()).thenReturn(tokenExchangeConfig);
+        when(tokenExchangeConfig.enabled()).thenReturn(true);
+        when(pkceConfig.enabled()).thenReturn(true);
+        when(pkceService.isValidState("state")).thenReturn(true);
+        when(pkceService.isValidState("other-state")).thenReturn(true);
+        when(pkceService.isValidCodeVerifier("verifier")).thenReturn(true);
+
+        final var problem = assertThrows(
+                HttpProblem.class, () -> resource.exchangeToken("code", "verifier", "state", null, "other-state"));
+
+        assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), problem.getStatusCode());
+        verify(pkceService, never()).consumeTransaction(any());
+        verify(tokenExchangeProvider, never()).exchange(any());
     }
 
     @Test
@@ -270,7 +319,7 @@ class OidcResourceUnitTest {
         when(tokenExchangeProvider.exchange(any())).thenReturn(Uni.createFrom().item(response));
 
         final var problem = assertThrows(HttpProblem.class, () -> resource.exchangeToken(
-                        "code", "verifier", "state", "https://app.example.com/callback")
+                        "code", "verifier", "state", "https://app.example.com/callback", "state")
                 .await()
                 .atMost(Duration.ofSeconds(5)));
 
@@ -285,7 +334,7 @@ class OidcResourceUnitTest {
         when(tokenValidationService.validate("id-token"))
                 .thenReturn(Uni.createFrom().item(new TokenValidationResult.Valid(identity())));
 
-        final var result = resource.exchangeToken("code", "verifier", "state", null)
+        final var result = resource.exchangeToken("code", "verifier", "state", null, "state")
                 .await()
                 .atMost(Duration.ofSeconds(5));
 
@@ -293,6 +342,7 @@ class OidcResourceUnitTest {
         final var body = assertInstanceOf(Map.class, result.getEntity());
         assertEquals("access-token", body.get("access_token"));
         assertEquals("id-token", body.get("id_token"));
+        assertEquals(0, result.getCookies().get("aussie_oidc_state").getMaxAge());
         verify(sessionManagement, never()).createSession(any(), any(), any());
     }
 
@@ -305,7 +355,7 @@ class OidcResourceUnitTest {
         when(pkceService.isValidCodeVerifier("short")).thenReturn(false);
 
         final var problem =
-                assertThrows(HttpProblem.class, () -> resource.exchangeToken("code", "short", "state", null));
+                assertThrows(HttpProblem.class, () -> resource.exchangeToken("code", "short", "state", null, "state"));
 
         assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), problem.getStatusCode());
         verify(pkceService, never()).consumeTransaction(any());
@@ -316,8 +366,8 @@ class OidcResourceUnitTest {
         when(oidcConfig.tokenExchange()).thenReturn(tokenExchangeConfig);
         when(tokenExchangeConfig.enabled()).thenReturn(false);
 
-        final var problem =
-                assertThrows(HttpProblem.class, () -> resource.exchangeToken("code", "verifier", "state", null));
+        final var problem = assertThrows(
+                HttpProblem.class, () -> resource.exchangeToken("code", "verifier", "state", null, "state"));
 
         assertEquals(Response.Status.NOT_FOUND.getStatusCode(), problem.getStatusCode());
         verify(pkceService, never()).consumeTransaction(any());

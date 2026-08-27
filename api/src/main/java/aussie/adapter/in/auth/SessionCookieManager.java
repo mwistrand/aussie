@@ -171,13 +171,19 @@ public class SessionCookieManager {
         return config.cookie().name() + CSRF_SUFFIX;
     }
 
+    /** Return the configured SameSite policy in JAX-RS response-cookie form. */
+    public NewCookie.SameSite responseCookieSameSite() {
+        return NewCookie.SameSite.valueOf(
+                parseSameSite(config.cookie().sameSite()).name());
+    }
+
     private NewCookie.Builder responseCookieBuilder(Cookie cookie) {
         final var builder = new NewCookie.Builder(cookie.getName())
                 .value(cookie.getValue())
                 .path(cookie.getPath())
                 .httpOnly(cookie.isHttpOnly())
                 .secure(cookie.isSecure())
-                .sameSite(NewCookie.SameSite.valueOf(cookie.getSameSite().name()));
+                .sameSite(responseCookieSameSite());
         if (cookie.getDomain() != null) {
             builder.domain(cookie.getDomain());
         }
