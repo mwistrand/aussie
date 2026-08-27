@@ -29,6 +29,7 @@ import aussie.core.model.auth.Permission;
 import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.service.auth.TokenRevocationService;
 import aussie.core.service.auth.TokenValidationService;
+import aussie.core.util.SafeLogging;
 
 /**
  * REST resource for token revocation administration.
@@ -85,10 +86,10 @@ public class TokenRevocationResource {
         var expiresAt = request != null && request.expiresAt() != null ? request.expiresAt() : null;
 
         var reason = request != null ? request.reason() : null;
-        LOG.infof("Revoking token: jti=%s, reason=%s", jti, reason);
+        LOG.infof("Revoking token: jti_hash=%s, reason=%s", SafeLogging.identifier(jti), reason);
 
         return revocationService.revokeToken(jti, expiresAt).map(v -> {
-            LOG.infof("Token revoked: jti=%s", jti);
+            LOG.infof("Token revoked: jti_hash=%s", SafeLogging.identifier(jti));
             return Response.noContent().build();
         });
     }
@@ -126,10 +127,10 @@ public class TokenRevocationResource {
                     .filter(tokenId -> !tokenId.isBlank())
                     .orElseThrow(() -> GatewayProblem.badRequest("Token does not contain a JTI claim"));
             final var expiresAt = identity.expiresAt();
-            LOG.infof("Revoking token by JWT: jti=%s, reason=%s", jti, request.reason());
+            LOG.infof("Revoking token by JWT: jti_hash=%s, reason=%s", SafeLogging.identifier(jti), request.reason());
 
             return revocationService.revokeToken(jti, expiresAt).map(v -> {
-                LOG.infof("Token revoked: jti=%s", jti);
+                LOG.infof("Token revoked: jti_hash=%s", SafeLogging.identifier(jti));
                 return Response.ok(Map.of(
                                 "jti",
                                 jti,
@@ -167,10 +168,10 @@ public class TokenRevocationResource {
         }
 
         var reason = request != null ? request.reason() : null;
-        LOG.infof("Revoking all tokens for user: userId=%s, reason=%s", userId, reason);
+        LOG.infof("Revoking all tokens for user: user_id_hash=%s, reason=%s", SafeLogging.identifier(userId), reason);
 
         return revocationService.revokeAllUserTokens(userId).map(v -> {
-            LOG.infof("All tokens revoked for user: userId=%s", userId);
+            LOG.infof("All tokens revoked for user: user_id_hash=%s", SafeLogging.identifier(userId));
             return Response.noContent().build();
         });
     }

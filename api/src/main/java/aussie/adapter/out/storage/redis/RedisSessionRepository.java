@@ -18,6 +18,7 @@ import org.jboss.logging.Logger;
 import aussie.core.config.SessionConfig;
 import aussie.core.model.session.Session;
 import aussie.core.port.out.SessionRepository;
+import aussie.core.util.SafeLogging;
 import aussie.core.util.SecureHash;
 
 /**
@@ -183,9 +184,11 @@ public class RedisSessionRepository implements SessionRepository {
                                     .subscribe()
                                     .with(
                                             success -> {},
-                                            error -> LOG.warnf("Failed to update user index: %s", error.getMessage()));
+                                            error -> LOG.warnf(
+                                                    "Failed to update user index: error_type=%s",
+                                                    SafeLogging.errorType(error)));
                         },
-                        error -> LOG.warnf("Failed to read user index: %s", error.getMessage()));
+                        error -> LOG.warnf("Failed to read user index: error_type=%s", SafeLogging.errorType(error)));
     }
 
     private void removeFromUserIndex(String userId, String sessionId) {
@@ -218,7 +221,7 @@ public class RedisSessionRepository implements SessionRepository {
                                 keyCommands.del(userIndexKey).subscribe().with(success -> {}, error -> {});
                             }
                         },
-                        error -> LOG.warnf("Failed to update user index: %s", error.getMessage()));
+                        error -> LOG.warnf("Failed to update user index: error_type=%s", SafeLogging.errorType(error)));
     }
 
     private String serialize(Session session) {

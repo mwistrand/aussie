@@ -13,6 +13,7 @@ import org.jboss.logging.Logger;
 
 import aussie.core.config.TokenRevocationConfig;
 import aussie.core.port.out.RevocationCache;
+import aussie.core.util.SafeLogging;
 
 /**
  * Local LRU cache for confirmed revocations.
@@ -128,7 +129,7 @@ public class RevocationCacheService implements RevocationCache {
     public void cacheJtiRevocation(String jti, Instant expiresAt) {
         if (jtiCache != null) {
             jtiCache.put(jti, new RevocationEntry(expiresAt));
-            LOG.debugf("Cached JTI revocation: %s (expires: %s)", jti, expiresAt);
+            LOG.debugf("Cached JTI revocation: jti_hash=%s (expires: %s)", SafeLogging.identifier(jti), expiresAt);
         }
     }
 
@@ -143,7 +144,9 @@ public class RevocationCacheService implements RevocationCache {
     public void cacheUserRevocation(String userId, Instant issuedBefore, Instant expiresAt) {
         if (userCache != null) {
             userCache.put(userId, new UserRevocationEntry(issuedBefore, expiresAt));
-            LOG.debugf("Cached user revocation: %s (issuedBefore: %s, expires: %s)", userId, issuedBefore, expiresAt);
+            LOG.debugf(
+                    "Cached user revocation: user_hash=%s (issuedBefore: %s, expires: %s)",
+                    SafeLogging.identifier(userId), issuedBefore, expiresAt);
         }
     }
 

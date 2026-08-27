@@ -9,6 +9,7 @@ import org.jboss.logging.Logger;
 
 import aussie.core.model.auth.RevocationEvent;
 import aussie.core.port.out.RevocationEventPublisher;
+import aussie.core.util.SafeLogging;
 
 /**
  * In-memory implementation of RevocationEventPublisher.
@@ -31,7 +32,7 @@ public class InMemoryRevocationEventPublisher implements RevocationEventPublishe
         return Uni.createFrom().item(() -> {
             var event = new RevocationEvent.JtiRevoked(jti, expiresAt);
             processor.onNext(event);
-            LOG.debugf("Published JTI revocation event (in-memory): %s", jti);
+            LOG.debugf("Published JTI revocation event (in-memory): jti_hash=%s", SafeLogging.identifier(jti));
             return null;
         });
     }
@@ -41,7 +42,7 @@ public class InMemoryRevocationEventPublisher implements RevocationEventPublishe
         return Uni.createFrom().item(() -> {
             var event = new RevocationEvent.UserRevoked(userId, issuedBefore, expiresAt);
             processor.onNext(event);
-            LOG.debugf("Published user revocation event (in-memory): %s", userId);
+            LOG.debugf("Published user revocation event (in-memory): user_hash=%s", SafeLogging.identifier(userId));
             return null;
         });
     }

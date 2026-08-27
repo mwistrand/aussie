@@ -20,6 +20,7 @@ import aussie.core.config.WebSocketConfig;
 import aussie.core.model.auth.RevocationEvent;
 import aussie.core.model.session.SessionInvalidatedEvent;
 import aussie.core.service.ratelimit.MessageRateLimitHandler;
+import aussie.core.util.SafeLogging;
 
 /**
  * Manages the coupled lifecycle of a WebSocket proxy session.
@@ -443,7 +444,9 @@ public class WebSocketProxySession {
 
         // Log session end (for metrics)
         var duration = Duration.between(connectedAt, Instant.now()).toSeconds();
-        LOG.infov("WebSocket session {0} closed: {1} (duration: {2}s)", sessionId, safeReason, duration);
+        LOG.infov(
+                "WebSocket session hash {0} closed: {1} (duration: {2}s)",
+                SafeLogging.identifier(sessionId), safeReason, duration);
         closeListener.run();
     }
 

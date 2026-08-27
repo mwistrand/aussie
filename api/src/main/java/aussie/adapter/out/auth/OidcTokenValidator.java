@@ -31,6 +31,7 @@ import aussie.core.model.auth.TokenProviderConfig;
 import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.model.auth.ValidatedIdentity;
 import aussie.core.port.out.JwksCache;
+import aussie.core.util.SafeLogging;
 import aussie.spi.TokenValidatorProvider;
 
 /**
@@ -103,8 +104,8 @@ public class OidcTokenValidator implements TokenValidatorProvider {
                         }))
                 .onFailure()
                 .recoverWithItem(error -> {
-                    LOG.warnv("Token validation failed: {0}", error.getMessage());
-                    return new TokenValidationResult.Invalid(error.getMessage());
+                    LOG.warnv("Token validation failed: error_type={0}", SafeLogging.errorType(error));
+                    return new TokenValidationResult.Invalid("Token validation failed");
                 });
     }
 
@@ -130,7 +131,7 @@ public class OidcTokenValidator implements TokenValidatorProvider {
     }
 
     private Uni<TokenValidationResult> retryWithRefresh(ParsedToken parsed, TokenProviderConfig config) {
-        LOG.infov("Key not found, refreshing JWKS for {0}", config.issuer());
+        LOG.infov("Key not found, refreshing JWKS for provider {0}", config.id());
         final var kid = parsed.kid();
         return jwksCache
                 .refresh(config.jwksUri())
@@ -154,7 +155,7 @@ public class OidcTokenValidator implements TokenValidatorProvider {
                 final var claims = consumer.processToClaims(parsed.token());
                 return buildValidResult(claims, state);
             } catch (InvalidJwtException e) {
-                LOG.debugv("JWT validation failed: {0}", e.getMessage());
+                LOG.debugv("JWT validation failed: error_type={0}", SafeLogging.errorType(e));
                 return new TokenValidationResult.Invalid(summarizeJwtError(e));
             }
         });
@@ -220,7 +221,7 @@ public class OidcTokenValidator implements TokenValidatorProvider {
                     assuranceLevel,
                     Instant.ofEpochSecond(expiration.getValue())));
         } catch (MalformedClaimException e) {
-            return new TokenValidationResult.Invalid("Malformed claims: " + e.getMessage());
+            return new TokenValidationResult.Invalid("Malformed claims");
         }
     }
 

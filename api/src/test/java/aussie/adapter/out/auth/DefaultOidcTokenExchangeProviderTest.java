@@ -456,7 +456,6 @@ class DefaultOidcTokenExchangeProviderTest {
         void shouldReturnFailureForNon200Status() throws Exception {
             HttpResponse<Buffer> response = mock(HttpResponse.class);
             when(response.statusCode()).thenReturn(400);
-            when(response.bodyAsString()).thenReturn("{\"error\":\"invalid_grant\"}");
 
             try {
                 invokeParseTokenResponse(response).await().atMost(Duration.ofSeconds(5));

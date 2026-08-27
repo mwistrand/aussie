@@ -19,6 +19,7 @@ import org.jboss.logging.Logger;
 import aussie.core.config.TokenRevocationConfig;
 import aussie.core.model.auth.RevocationEvent;
 import aussie.core.port.out.RevocationEventPublisher;
+import aussie.core.util.SafeLogging;
 
 /**
  * Redis pub/sub implementation of RevocationEventPublisher.
@@ -87,7 +88,7 @@ public class RedisRevocationEventPublisher implements RevocationEventPublisher {
                 subscriber.unsubscribe();
                 LOG.info("Unsubscribed from revocation events");
             } catch (Exception e) {
-                LOG.warnf(e, "Error unsubscribing from revocation events");
+                LOG.warnf("Error unsubscribing from revocation events: error_type=%s", SafeLogging.errorType(e));
             }
         }
     }
@@ -103,7 +104,7 @@ public class RedisRevocationEventPublisher implements RevocationEventPublisher {
         return Uni.createFrom()
                 .item(() -> {
                     pubsub.publish(channel, message);
-                    LOG.debugf("Published JTI revocation event: %s", jti);
+                    LOG.debugf("Published JTI revocation event: jti_hash=%s", SafeLogging.identifier(jti));
                     return null;
                 })
                 .runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
@@ -122,7 +123,7 @@ public class RedisRevocationEventPublisher implements RevocationEventPublisher {
         return Uni.createFrom()
                 .item(() -> {
                     pubsub.publish(channel, message);
-                    LOG.debugf("Published user revocation event: %s", userId);
+                    LOG.debugf("Published user revocation event: user_hash=%s", SafeLogging.identifier(userId));
                     return null;
                 })
                 .runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
@@ -154,7 +155,7 @@ public class RedisRevocationEventPublisher implements RevocationEventPublisher {
                     processor.onNext(event);
                 }
             } catch (Exception e) {
-                LOG.warnf(e, "Failed to parse revocation event: %s", message);
+                LOG.warnf("Failed to parse revocation event: error_type=%s", SafeLogging.errorType(e));
             }
         }
 
@@ -170,7 +171,7 @@ public class RedisRevocationEventPublisher implements RevocationEventPublisher {
             // Type is everything before the first separator
             final var firstSep = message.indexOf(MESSAGE_SEPARATOR);
             if (firstSep < 0) {
-                LOG.warnf("Invalid revocation event format: %s", message);
+                LOG.warn("Invalid revocation event format");
                 return null;
             }
 
@@ -184,7 +185,7 @@ public class RedisRevocationEventPublisher implements RevocationEventPublisher {
                     // Format: jti:<jti>:<expiresAtMillis>
                     final var lastSep = message.lastIndexOf(MESSAGE_SEPARATOR);
                     if (lastSep <= firstSep) {
-                        LOG.warnf("Invalid JTI revocation event format: %s", message);
+                        LOG.warn("Invalid JTI revocation event format");
                         yield null;
                     }
                     final var jti = message.substring(firstSep + 1, lastSep);
@@ -196,7 +197,7 @@ public class RedisRevocationEventPublisher implements RevocationEventPublisher {
                     final var lastSep = message.lastIndexOf(MESSAGE_SEPARATOR);
                     final var secondLastSep = message.lastIndexOf(MESSAGE_SEPARATOR, lastSep - 1);
                     if (secondLastSep <= firstSep) {
-                        LOG.warnf("Invalid user revocation event format: %s", message);
+                        LOG.warn("Invalid user revocation event format");
                         yield null;
                     }
                     final var userId = message.substring(firstSep + 1, secondLastSep);
@@ -206,7 +207,7 @@ public class RedisRevocationEventPublisher implements RevocationEventPublisher {
                     yield new RevocationEvent.UserRevoked(userId, issuedBefore, expiresAt);
                 }
                 default -> {
-                    LOG.warnf("Unknown revocation event type: %s", type);
+                    LOG.warn("Unknown revocation event type");
                     yield null;
                 }
             };

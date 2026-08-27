@@ -16,6 +16,7 @@ import org.jboss.logging.Logger;
 import aussie.core.config.RouteAuthConfig;
 import aussie.core.model.auth.TokenProviderConfig;
 import aussie.core.model.auth.TokenValidationResult;
+import aussie.core.util.SafeLogging;
 import aussie.spi.TokenValidatorProvider;
 
 /**
@@ -88,7 +89,7 @@ public class TokenValidationService {
                     .build();
 
             providerConfigs.put(providerId, providerConfig);
-            LOG.infov("Loaded token provider config: {0} (issuer: {1})", providerId, props.issuer());
+            LOG.infov("Loaded token provider config: {0}", providerId);
         }
     }
 
@@ -147,7 +148,7 @@ public class TokenValidationService {
         var validator = validators.get(index);
         return validator.validate(token, config).flatMap(result -> {
             if (result instanceof TokenValidationResult.Valid valid) {
-                LOG.debugv("Token validated by {0} for issuer {1}", validator.name(), config.issuer());
+                LOG.debugv("Token validated by {0}", validator.name());
                 // Check revocation after successful signature validation
                 return checkRevocation(valid);
             }
@@ -186,7 +187,9 @@ public class TokenValidationService {
         final var expiresAt = valid.expiresAt();
         return revocationService.isRevoked(jti, userId, issuedAt, expiresAt).map(revoked -> {
             if (revoked) {
-                LOG.infov("Token revoked: jti={0}, subject={1}", jti, userId);
+                LOG.infov(
+                        "Token revoked: jti_hash={0}, subject_hash={1}",
+                        SafeLogging.identifier(jti), SafeLogging.identifier(userId));
                 return new TokenValidationResult.Invalid("Token has been revoked");
             }
             return valid;
@@ -212,7 +215,7 @@ public class TokenValidationService {
             }
             return Instant.ofEpochSecond(Long.parseLong(value.toString()));
         } catch (DateTimeException | NumberFormatException e) {
-            LOG.warnv("Failed to parse {0} claim as Instant: {1}", name, value);
+            LOG.warnv("Failed to parse {0} claim as Instant: error_type={1}", name, SafeLogging.errorType(e));
             return null;
         }
     }

@@ -489,7 +489,7 @@ class OidcTokenValidatorTest {
 
             assertInstanceOf(TokenValidationResult.Invalid.class, result);
             final var invalid = (TokenValidationResult.Invalid) result;
-            assertTrue(invalid.reason().contains("Cache unavailable"));
+            assertEquals("Token validation failed", invalid.reason());
         }
 
         @Test
@@ -505,7 +505,7 @@ class OidcTokenValidatorTest {
 
             assertInstanceOf(TokenValidationResult.Invalid.class, result);
             final var invalid = (TokenValidationResult.Invalid) result;
-            assertTrue(invalid.reason().contains("Network error"));
+            assertEquals("Token validation failed", invalid.reason());
         }
     }
 

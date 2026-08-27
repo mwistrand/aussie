@@ -21,6 +21,7 @@ import aussie.core.port.in.SessionManagement;
 import aussie.core.service.auth.TokenIssuanceService;
 import aussie.core.service.auth.TokenValidationService;
 import aussie.core.service.session.SessionTokenService;
+import aussie.core.util.SafeLogging;
 
 /**
  * Service that handles per-route authentication decisions.
@@ -115,9 +116,12 @@ public class RouteAuthenticationService {
     private Uni<RouteAuthResult> authenticateWithSession(String sessionId, RouteMatch route) {
         return sessionManagement.getSession(sessionId).map(sessionOpt -> {
             if (sessionOpt.isEmpty()) {
-                LOG.debugv(
-                        "Session {0} not found or expired for route {1}",
-                        sessionId, route.endpointConfig().path());
+                if (LOG.isDebugEnabled()) {
+                    LOG.debugv(
+                            "Session hash {0} not found or expired for route {1}",
+                            SafeLogging.identifier(sessionId),
+                            route.endpointConfig().path());
+                }
                 return new RouteAuthResult.Unauthorized("Session invalid or expired");
             }
 
@@ -136,17 +140,20 @@ public class RouteAuthenticationService {
                 AussieToken aussieToken = new AussieToken(
                         sessionToken.token(), session.userId(), sessionToken.expiresAt(), session.claims());
 
-                LOG.debugv(
-                        "Authenticated session {0} for route {1}, subject: {2}",
-                        sessionId, route.endpointConfig().path(), session.userId());
+                if (LOG.isDebugEnabled()) {
+                    LOG.debugv(
+                            "Authenticated session hash {0} for route {1}, subject_hash: {2}",
+                            SafeLogging.identifier(sessionId),
+                            route.endpointConfig().path(),
+                            SafeLogging.identifier(session.userId()));
+                }
 
                 // Include session ID for logout tracking (e.g., WebSocket disconnect on logout)
                 return new RouteAuthResult.Authenticated(aussieToken, Optional.of(sessionId));
             } catch (SessionTokenService.SessionTokenException e) {
                 LOG.errorv(
-                        e,
-                        "Failed to generate session token for route {0}",
-                        route.endpointConfig().path());
+                        "Failed to generate session token for route {0}, error_type: {1}",
+                        route.endpointConfig().path(), SafeLogging.errorType(e));
                 return new RouteAuthResult.Unauthorized("Session token generation failed");
             }
         });
@@ -162,9 +169,11 @@ public class RouteAuthenticationService {
                         .map(aussieTokenOpt -> {
                             if (aussieTokenOpt.isPresent()
                                     && aussieTokenOpt.get().hasToken()) {
-                                LOG.debugv(
-                                        "Authenticated request for {0}, subject: {1}",
-                                        route.endpointConfig().path(), valid.subject());
+                                if (LOG.isDebugEnabled()) {
+                                    LOG.debugv(
+                                            "Authenticated request for {0}, subject_hash: {1}",
+                                            route.endpointConfig().path(), SafeLogging.identifier(valid.subject()));
+                                }
                                 return (RouteAuthResult) new RouteAuthResult.Authenticated(aussieTokenOpt.get());
                             } else {
                                 LOG.warnv(
@@ -177,8 +186,8 @@ public class RouteAuthenticationService {
             }
             case TokenValidationResult.Invalid invalid -> {
                 LOG.debugv(
-                        "Token validation failed for {0}: {1}",
-                        route.endpointConfig().path(), invalid.reason());
+                        "Token validation failed for {0}",
+                        route.endpointConfig().path());
                 yield Uni.createFrom().item(new RouteAuthResult.Unauthorized(invalid.reason()));
             }
             case TokenValidationResult.NoToken noToken -> {

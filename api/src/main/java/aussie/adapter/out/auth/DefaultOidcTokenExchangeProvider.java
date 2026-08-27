@@ -27,6 +27,7 @@ import aussie.core.model.auth.OidcTokenExchangeRequest;
 import aussie.core.model.auth.OidcTokenExchangeRequest.ClientAuthMethod;
 import aussie.core.model.auth.OidcTokenExchangeResponse;
 import aussie.core.port.out.OutboundHttpClients;
+import aussie.core.util.SafeLogging;
 import aussie.spi.OidcTokenExchangeProvider;
 
 /**
@@ -96,7 +97,7 @@ public class DefaultOidcTokenExchangeProvider implements OidcTokenExchangeProvid
 
     @Override
     public Uni<OidcTokenExchangeResponse> exchange(OidcTokenExchangeRequest request) {
-        LOG.debugf("Exchanging authorization code with IdP: %s", request.tokenEndpoint());
+        LOG.debug("Exchanging authorization code with IdP");
 
         final var timeout = config.tokenExchange().timeout();
         final var formBody = buildFormBody(request);
@@ -131,7 +132,7 @@ public class DefaultOidcTokenExchangeProvider implements OidcTokenExchangeProvid
                 .flatMap(this::parseTokenResponse)
                 .onFailure()
                 .transform(error -> {
-                    LOG.errorf(error, "Token exchange failed");
+                    LOG.errorf("Token exchange failed: error_type=%s", SafeLogging.errorType(error));
                     return GatewayProblem.badGateway("Token exchange with IdP failed");
                 });
     }
@@ -170,8 +171,7 @@ public class DefaultOidcTokenExchangeProvider implements OidcTokenExchangeProvid
 
     private Uni<OidcTokenExchangeResponse> parseTokenResponse(HttpResponse<Buffer> response) {
         if (response.statusCode() != 200) {
-            final var body = response.bodyAsString();
-            LOG.warnf("Token exchange failed with status %d: %s", response.statusCode(), body);
+            LOG.warnf("Token exchange failed with status %d", response.statusCode());
             return Uni.createFrom().failure(GatewayProblem.badGateway("IdP returned error: " + response.statusCode()));
         }
 
@@ -205,7 +205,7 @@ public class DefaultOidcTokenExchangeProvider implements OidcTokenExchangeProvid
             return Uni.createFrom().item(tokenResponse);
 
         } catch (Exception e) {
-            LOG.errorf(e, "Failed to parse token response");
+            LOG.errorf("Failed to parse token response: error_type=%s", SafeLogging.errorType(e));
             return Uni.createFrom().failure(GatewayProblem.badGateway("Failed to parse IdP token response"));
         }
     }

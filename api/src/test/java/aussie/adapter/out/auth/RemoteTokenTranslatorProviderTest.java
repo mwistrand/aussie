@@ -275,9 +275,10 @@ class RemoteTokenTranslatorProviderTest {
                     .willReturn(aResponse().withStatus(500).withBody("Internal Server Error")));
 
             var claims = Map.<String, Object>of();
-            assertThrows(
+            var exception = assertThrows(
                     RuntimeException.class,
                     () -> provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5)));
+            assertTrue(exception.getCause() != null, "expected the original failure to remain available as the cause");
         }
 
         @Test

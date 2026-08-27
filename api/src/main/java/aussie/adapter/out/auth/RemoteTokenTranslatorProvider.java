@@ -24,6 +24,7 @@ import aussie.core.config.TokenTranslationConfig;
 import aussie.core.config.TokenTranslationConfig.Remote.FailMode;
 import aussie.core.model.auth.TranslatedClaims;
 import aussie.core.port.out.OutboundHttpClients;
+import aussie.core.util.SafeLogging;
 import aussie.spi.TokenTranslatorProvider;
 
 /**
@@ -121,9 +122,11 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
         final var uri = URI.create(url);
         final var startTime = System.currentTimeMillis();
 
-        LOG.debugf(
-                "Calling remote translation service: url=%s, issuer=%s, subject=%s, claimsCount=%d",
-                url, issuer, subject, claims.size());
+        if (LOG.isDebugEnabled()) {
+            LOG.debugf(
+                    "Calling remote translation service: provider=%s, issuer_hash=%s, subject_hash=%s, claims_count=%d",
+                    NAME, SafeLogging.identifier(issuer), SafeLogging.identifier(subject), claims.size());
+        }
 
         // Use ObjectMapper to safely convert claims to JSON-compatible types
         // This handles non-JSON-native types like Instant, custom objects, etc.
@@ -155,21 +158,23 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
 
                     if (response.statusCode() != 200) {
                         LOG.warnf(
-                                "Remote translation failed: url=%s, status=%d, duration=%dms",
-                                url, response.statusCode(), duration);
+                                "Remote translation failed: provider=%s, status=%d, duration=%dms",
+                                NAME, response.statusCode(), duration);
                         throw new RemoteTranslationException(
                                 "Remote translation service returned status " + response.statusCode());
                     }
 
                     final var result = parseResponse(response.bodyAsJsonObject());
-                    LOG.debugf(
-                            "Remote translation success: url=%s, issuer=%s, subject=%s, roles=%d, permissions=%d, duration=%dms",
-                            url,
-                            issuer,
-                            subject,
-                            result.roles().size(),
-                            result.permissions().size(),
-                            duration);
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debugf(
+                                "Remote translation success: provider=%s, issuer_hash=%s, subject_hash=%s, roles=%d, permissions=%d, duration=%dms",
+                                NAME,
+                                SafeLogging.identifier(issuer),
+                                SafeLogging.identifier(subject),
+                                result.roles().size(),
+                                result.permissions().size(),
+                                duration);
+                    }
                     return result;
                 })
                 .onFailure()
@@ -177,7 +182,9 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
                     final var duration = System.currentTimeMillis() - startTime;
                     metrics.recordRemoteCall(0, duration);
                     metrics.recordError(NAME, error.getClass().getSimpleName());
-                    LOG.warnf(error, "Remote translation error: url=%s, duration=%dms", url, duration);
+                    LOG.warnf(
+                            "Remote translation error: provider=%s, error_type=%s, duration=%dms",
+                            NAME, SafeLogging.errorType(error), duration);
                 })
                 .onFailure()
                 .recoverWithItem(this::handleFailure);
@@ -207,14 +214,14 @@ public class RemoteTokenTranslatorProvider implements TokenTranslatorProvider {
     }
 
     private TranslatedClaims handleFailure(Throwable error) {
-        LOG.warnf(error, "Remote token translation failed");
+        LOG.warnf("Remote token translation failed: error_type=%s", SafeLogging.errorType(error));
 
         if (config.remote().failMode() == FailMode.allow_empty) {
             LOG.debugf("Returning empty claims due to fail mode: allow_empty");
             return TranslatedClaims.empty();
         }
 
-        throw new RemoteTranslationException("Remote token translation failed: " + error.getMessage(), error);
+        throw new RemoteTranslationException("Remote token translation failed", error);
     }
 
     /**

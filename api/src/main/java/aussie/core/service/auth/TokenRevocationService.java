@@ -13,6 +13,7 @@ import aussie.core.config.TokenRevocationConfig;
 import aussie.core.port.out.RevocationBloomFilter;
 import aussie.core.port.out.RevocationCache;
 import aussie.core.port.out.RevocationEventPublisher;
+import aussie.core.util.SafeLogging;
 import aussie.spi.TokenRevocationRepository;
 
 /**
@@ -81,7 +82,10 @@ public class TokenRevocationService {
             boolean userNotRevoked = !config.checkUserRevocation() || bloomFilter.userDefinitelyNotRevoked(userId);
 
             if (jtiNotRevoked && userNotRevoked) {
-                LOG.debugf("Bloom filter: token definitely not revoked (jti: %s)", jti);
+                if (LOG.isDebugEnabled()) {
+                    LOG.debugf(
+                            "Bloom filter: token definitely not revoked (jti_hash: %s)", SafeLogging.identifier(jti));
+                }
                 return Uni.createFrom().item(false);
             }
         }
@@ -91,7 +95,9 @@ public class TokenRevocationService {
             if (hasJti) {
                 var jtiCached = cache.isJtiRevoked(jti);
                 if (jtiCached.isPresent()) {
-                    LOG.debugf("Cache hit: JTI revoked (jti: %s)", jti);
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debugf("Cache hit: JTI revoked (jti_hash: %s)", SafeLogging.identifier(jti));
+                    }
                     return Uni.createFrom().item(jtiCached.get());
                 }
             }
@@ -99,7 +105,9 @@ public class TokenRevocationService {
             if (config.checkUserRevocation()) {
                 var userCached = cache.isUserRevoked(userId, issuedAt);
                 if (userCached.isPresent()) {
-                    LOG.debugf("Cache hit: user revoked (userId: %s)", userId);
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debugf("Cache hit: user revoked (user_hash: %s)", SafeLogging.identifier(userId));
+                    }
                     return Uni.createFrom().item(userCached.get());
                 }
             }
@@ -110,7 +118,11 @@ public class TokenRevocationService {
     }
 
     private Uni<Boolean> checkRemoteStore(String jti, String userId, Instant issuedAt) {
-        LOG.debugf("Remote lookup for revocation (jti: %s, userId: %s)", jti, userId);
+        if (LOG.isDebugEnabled()) {
+            LOG.debugf(
+                    "Remote lookup for revocation (jti_hash: %s, user_hash: %s)",
+                    SafeLogging.identifier(jti), SafeLogging.identifier(userId));
+        }
 
         final var hasJti = jti != null && !jti.isBlank();
 
@@ -159,7 +171,7 @@ public class TokenRevocationService {
             return Uni.createFrom().voidItem();
         }
 
-        LOG.infof("Revoking token: %s (expires: %s)", jti, effectiveExpiresAt);
+        LOG.infof("Revoking token: jti_hash=%s (expires: %s)", SafeLogging.identifier(jti), effectiveExpiresAt);
 
         return repository
                 .revoke(jti, effectiveExpiresAt)
@@ -173,7 +185,7 @@ public class TokenRevocationService {
                     }
                     return Uni.createFrom().voidItem();
                 })
-                .invoke(() -> LOG.debugf("Token revocation completed: %s", jti));
+                .invoke(() -> LOG.debugf("Token revocation completed: jti_hash=%s", SafeLogging.identifier(jti)));
     }
 
     /**
@@ -206,7 +218,9 @@ public class TokenRevocationService {
             return Uni.createFrom().voidItem();
         }
 
-        LOG.infof("Revoking all tokens for user: %s (issuedBefore: %s)", userId, issuedBefore);
+        LOG.infof(
+                "Revoking all tokens for user_hash=%s (issuedBefore: %s)",
+                SafeLogging.identifier(userId), issuedBefore);
 
         // Calculate expiry for user revocation entry
         // Should be longer than max token TTL to cover all affected tokens
@@ -227,7 +241,8 @@ public class TokenRevocationService {
                     }
                     return Uni.createFrom().voidItem();
                 })
-                .invoke(() -> LOG.debugf("User token revocation completed: %s", userId));
+                .invoke(() ->
+                        LOG.debugf("User token revocation completed: user_hash=%s", SafeLogging.identifier(userId)));
     }
 
     /**

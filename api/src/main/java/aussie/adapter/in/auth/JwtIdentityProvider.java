@@ -20,6 +20,7 @@ import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.port.in.RoleManagement;
 import aussie.core.service.auth.TokenTranslationService;
 import aussie.core.service.auth.TokenValidationService;
+import aussie.core.util.SafeLogging;
 
 /**
  * Quarkus identity provider that validates JWT tokens from configured OIDC providers.
@@ -70,7 +71,7 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
             if (result instanceof TokenValidationResult.Valid valid) {
                 return buildIdentity(valid);
             } else if (result instanceof TokenValidationResult.Invalid invalid) {
-                LOG.debugv("JWT validation failed: {0}", invalid.reason());
+                LOG.debug("JWT validation failed");
                 return Uni.createFrom()
                         .failure(new io.quarkus.security.AuthenticationFailedException(invalid.reason()));
             } else {
@@ -96,9 +97,11 @@ public class JwtIdentityProvider implements IdentityProvider<JwtAuthenticationRe
                 final var allPermissions = new HashSet<String>(directPermissions);
                 allPermissions.addAll(rolePermissions);
 
-                LOG.debugv(
-                        "JWT authenticated: subject={0}, roles={1}, permissions={2}",
-                        subject, tokenRoles, allPermissions);
+                if (LOG.isDebugEnabled()) {
+                    LOG.debugv(
+                            "JWT authenticated: subject_hash={0}, roles_count={1}, permissions_count={2}",
+                            SafeLogging.identifier(subject), tokenRoles.size(), allPermissions.size());
+                }
 
                 return SecurityIdentityFactory.create(
                         new JwtPrincipal(subject, claims),

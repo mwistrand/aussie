@@ -13,6 +13,7 @@ import org.jboss.logging.Logger;
 
 import aussie.core.model.session.Session;
 import aussie.core.port.out.SessionRepository;
+import aussie.core.util.SafeLogging;
 import aussie.core.util.SecureHash;
 
 /**
@@ -52,8 +53,8 @@ public class InMemorySessionRepository implements SessionRepository {
                 userSessionIndex.put(session.userId() + ":" + session.id(), session.id());
                 if (LOG.isDebugEnabled()) {
                     LOG.debugf(
-                            "Session created: hash=%s for user %s",
-                            SecureHash.truncatedSha256(session.id(), 8), session.userId());
+                            "Session created: hash=%s user_hash=%s",
+                            SecureHash.truncatedSha256(session.id(), 8), SafeLogging.identifier(session.userId()));
                 }
                 return true;
             }

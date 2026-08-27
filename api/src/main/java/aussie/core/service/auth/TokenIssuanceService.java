@@ -20,6 +20,7 @@ import aussie.core.model.auth.AussieToken;
 import aussie.core.model.auth.TokenValidationResult;
 import aussie.core.model.common.JwsConfig;
 import aussie.core.port.in.RoleManagement;
+import aussie.core.util.SafeLogging;
 import aussie.spi.TokenIssuerProvider;
 
 /**
@@ -109,12 +110,16 @@ public class TokenIssuanceService {
         try {
             final var selected = issuer.orElseThrow();
             final AussieToken token = selected.issue(validated, jwsConfig, audience);
-            LOG.debugv(
-                    "Issued token for subject {0} using {1}, audience: {2}",
-                    validated.subject(), selected.name(), audience.orElse("(none)"));
+            if (LOG.isDebugEnabled()) {
+                LOG.debugv(
+                        "Issued token for subject_hash {0} using {1}, audience_present: {2}",
+                        SafeLogging.identifier(validated.subject()), selected.name(), audience.isPresent());
+            }
             return Optional.of(token);
         } catch (Exception e) {
-            LOG.errorv(e, "Failed to issue token for subject {0}", validated.subject());
+            LOG.errorv(
+                    "Failed to issue token for subject_hash {0}, error_type: {1}",
+                    SafeLogging.identifier(validated.subject()), SafeLogging.errorType(e));
             return Optional.empty();
         }
     }
@@ -170,15 +175,19 @@ public class TokenIssuanceService {
                 final var issuer =
                         availableIssuer().orElseThrow(() -> new IllegalStateException("No issuer available"));
                 final AussieToken token = issuer.issue(enrichedValidated, jwsConfig, effectiveAudience);
-                LOG.debugv(
-                        "Issued token for subject {0} with {1} roles expanded to {2} permissions, audience: {3}",
-                        validated.subject(),
-                        roles.size(),
-                        expandedPermissions.size(),
-                        effectiveAudience.orElse("(none)"));
+                if (LOG.isDebugEnabled()) {
+                    LOG.debugv(
+                            "Issued token for subject_hash {0} with {1} roles expanded to {2} permissions, audience_present: {3}",
+                            SafeLogging.identifier(validated.subject()),
+                            roles.size(),
+                            expandedPermissions.size(),
+                            effectiveAudience.isPresent());
+                }
                 return Optional.of(token);
             } catch (Exception e) {
-                LOG.errorv(e, "Failed to issue token for subject {0}", validated.subject());
+                LOG.errorv(
+                        "Failed to issue token for subject_hash {0}, error_type: {1}",
+                        SafeLogging.identifier(validated.subject()), SafeLogging.errorType(e));
                 return Optional.<AussieToken>empty();
             }
         });

@@ -18,6 +18,7 @@ import aussie.core.model.auth.TranslatedClaims;
 import aussie.core.model.auth.TranslationConfigSchema;
 import aussie.core.model.auth.TranslationOutcome;
 import aussie.core.port.out.TranslationMetrics;
+import aussie.core.util.SafeLogging;
 
 /**
  * Service for translating external IdP token claims to Aussie's authorization model.
@@ -75,17 +76,23 @@ public class TokenTranslationService {
 
         return cache.get(cacheKey)
                 .map(cached -> {
-                    LOG.debugf(
-                            "Translation cache hit: subject=%s, provider=%s, roles=%d, permissions=%d",
-                            subject,
-                            providerName,
-                            cached.roles().size(),
-                            cached.permissions().size());
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debugf(
+                                "Translation cache hit: subject_hash=%s, provider=%s, roles=%d, permissions=%d",
+                                SafeLogging.identifier(subject),
+                                providerName,
+                                cached.roles().size(),
+                                cached.permissions().size());
+                    }
                     metrics.recordCacheHit();
                     return Uni.createFrom().item(cached);
                 })
                 .orElseGet(() -> {
-                    LOG.debugf("Translation cache miss: subject=%s, provider=%s", subject, providerName);
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debugf(
+                                "Translation cache miss: subject_hash=%s, provider=%s",
+                                SafeLogging.identifier(subject), providerName);
+                    }
                     metrics.recordCacheMiss();
 
                     return provider.translate(issuer, subject, claims)
@@ -98,9 +105,16 @@ public class TokenTranslationService {
 
                                 metrics.recordTranslation(providerName, outcome, duration);
 
-                                LOG.debugf(
-                                        "Translation complete: issuer=%s, subject=%s, provider=%s, roles=%s, permissions=%s, duration=%dms",
-                                        issuer, subject, providerName, result.roles(), result.permissions(), duration);
+                                if (LOG.isDebugEnabled()) {
+                                    LOG.debugf(
+                                            "Translation complete: issuer_hash=%s, subject_hash=%s, provider=%s, roles=%d, permissions=%d, duration=%dms",
+                                            SafeLogging.identifier(issuer),
+                                            SafeLogging.identifier(subject),
+                                            providerName,
+                                            result.roles().size(),
+                                            result.permissions().size(),
+                                            duration);
+                                }
                             })
                             .onFailure()
                             .invoke(error -> {
@@ -110,11 +124,11 @@ public class TokenTranslationService {
                                         providerName, error.getClass().getSimpleName());
 
                                 LOG.warnf(
-                                        error,
-                                        "Translation failed: issuer=%s, subject=%s, provider=%s, duration=%dms",
-                                        issuer,
-                                        subject,
+                                        "Translation failed: issuer_hash=%s, subject_hash=%s, provider=%s, error_type=%s, duration=%dms",
+                                        SafeLogging.identifier(issuer),
+                                        SafeLogging.identifier(subject),
                                         providerName,
+                                        SafeLogging.errorType(error),
                                         duration);
                             });
                 });
@@ -150,7 +164,11 @@ public class TokenTranslationService {
     public Uni<TranslatedClaims> translateWithConfig(
             TranslationConfigSchema schema, String issuer, String subject, Map<String, Object> claims) {
 
-        LOG.debugf("Testing translation with config: issuer=%s, subject=%s", issuer, subject);
+        if (LOG.isDebugEnabled()) {
+            LOG.debugf(
+                    "Testing translation with config: issuer_hash=%s, subject_hash=%s",
+                    SafeLogging.identifier(issuer), SafeLogging.identifier(subject));
+        }
         return Uni.createFrom().item(ClaimTranslator.translate(schema, claims));
     }
 

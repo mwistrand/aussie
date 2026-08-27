@@ -20,6 +20,7 @@ import aussie.core.config.TokenTranslationConfig;
 import aussie.core.model.auth.ClaimTranslator;
 import aussie.core.model.auth.TranslatedClaims;
 import aussie.core.model.auth.TranslationConfigSchema;
+import aussie.core.util.SafeLogging;
 import aussie.spi.TokenTranslatorProvider;
 
 /**
@@ -94,15 +95,22 @@ public class ConfigTokenTranslatorProvider implements TokenTranslatorProvider {
     @Override
     public Uni<TranslatedClaims> translate(String issuer, String subject, Map<String, Object> claims) {
         if (schema == null) {
-            LOG.warnf("Config translation requested but no schema loaded: issuer=%s, subject=%s", issuer, subject);
+            LOG.warnf(
+                    "Config translation requested but no schema loaded: issuer_hash=%s, subject_hash=%s",
+                    SafeLogging.identifier(issuer), SafeLogging.identifier(subject));
             return Uni.createFrom().item(TranslatedClaims.empty());
         }
 
         final var result = ClaimTranslator.translate(schema, claims);
 
-        LOG.debugf(
-                "Config translation: issuer=%s, subject=%s, roles=%s, permissions=%s",
-                issuer, subject, result.roles(), result.permissions());
+        if (LOG.isDebugEnabled()) {
+            LOG.debugf(
+                    "Config translation: issuer_hash=%s, subject_hash=%s, roles_count=%d, permissions_count=%d",
+                    SafeLogging.identifier(issuer),
+                    SafeLogging.identifier(subject),
+                    result.roles().size(),
+                    result.permissions().size());
+        }
 
         return Uni.createFrom().item(result);
     }
@@ -136,7 +144,9 @@ public class ConfigTokenTranslatorProvider implements TokenTranslatorProvider {
         } catch (IOException e) {
             final var duration = System.currentTimeMillis() - startTime;
             metrics.recordConfigReload(false);
-            LOG.errorf(e, "Failed to load token translation config: path=%s, duration=%dms", path, duration);
+            LOG.errorf(
+                    "Failed to load token translation config: path=%s, error_type=%s, duration=%dms",
+                    path, SafeLogging.errorType(e), duration);
             available = false;
         }
     }

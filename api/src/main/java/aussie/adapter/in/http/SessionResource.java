@@ -83,7 +83,7 @@ public class SessionResource {
         }
 
         return createValidatedSession(createRequest.token()).map(session -> {
-            LOG.infof("Session created for user: %s", session.userId());
+            LOG.info("Session created");
 
             // Check for redirect
             String redirectUrl = createRequest.redirectUrl();
@@ -188,7 +188,7 @@ public class SessionResource {
         return sessionManagement
                 .invalidateAllUserSessions(sessionPrincipal.getUserId())
                 .map(v -> {
-                    LOG.infof("All sessions invalidated for user: %s", sessionPrincipal.getUserId());
+                    LOG.info("All sessions invalidated");
 
                     return Response.ok(Map.of("message", "Logged out from all devices"))
                             .cookie(cookieManager.createLogoutResponseCookie())
@@ -261,7 +261,7 @@ public class SessionResource {
         // Reject URLs with protocol-relative patterns or backslashes (which can be
         // normalized to forward slashes by browsers)
         if (normalized.startsWith("//") || normalized.contains("\\") || normalized.contains("%")) {
-            LOG.debugf("Rejecting redirect URL with suspicious pattern: %s", redirectUrl);
+            LOG.debug("Rejecting redirect URL with suspicious pattern");
             return "/";
         }
 
@@ -272,7 +272,7 @@ public class SessionResource {
             if (!normalized.contains("://") && !normalized.contains("@")) {
                 return normalized;
             }
-            LOG.debugf("Rejecting redirect URL with embedded protocol/credentials: %s", redirectUrl);
+            LOG.debug("Rejecting redirect URL with embedded protocol/credentials");
             return "/";
         }
 
@@ -284,7 +284,7 @@ public class SessionResource {
             URI uri = URI.create(normalized);
             // Ensure scheme is present (not a protocol-relative URL)
             if (uri.getScheme() == null) {
-                LOG.debugf("Rejecting redirect URL without scheme: %s", redirectUrl);
+                LOG.debug("Rejecting redirect URL without scheme");
                 return "/";
             }
             String origin = uri.getScheme() + "://" + uri.getHost() + (uri.getPort() != -1 ? ":" + uri.getPort() : "");
@@ -292,10 +292,10 @@ public class SessionResource {
                 return normalized;
             }
         } catch (Exception e) {
-            LOG.debugf("Failed to parse redirect URL: %s", redirectUrl);
+            LOG.debug("Failed to parse redirect URL");
         }
 
-        LOG.debugf("Rejecting potentially unsafe redirect URL: %s", redirectUrl);
+        LOG.debug("Rejecting potentially unsafe redirect URL");
         return "/";
     }
 

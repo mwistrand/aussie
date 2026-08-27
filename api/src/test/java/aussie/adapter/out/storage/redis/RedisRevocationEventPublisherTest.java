@@ -1,12 +1,17 @@
 package aussie.adapter.out.storage.redis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -155,6 +160,27 @@ class RedisRevocationEventPublisherTest {
 
             assertEquals(0, received.size());
         }
+
+        @Test
+        @DisplayName("does not log malformed revocation messages")
+        void redactsMalformedMessage() {
+            final var secret = "sensitive-jti";
+            final var logger = Logger.getLogger(RedisRevocationEventPublisher.MessageHandler.class.getName());
+            final var previousLevel = logger.getLevel();
+            final var logHandler = new CapturingHandler();
+            logger.setLevel(Level.ALL);
+            logHandler.setLevel(Level.ALL);
+            logger.addHandler(logHandler);
+            try {
+                handler.accept("jti:" + secret + ":not-a-timestamp");
+
+                assertFalse(logHandler.text().isBlank(), "expected the parse failure to be logged");
+                assertFalse(logHandler.text().contains(secret), "log output leaked the malformed message");
+            } finally {
+                logger.removeHandler(logHandler);
+                logger.setLevel(previousLevel);
+            }
+        }
     }
 
     @Nested
@@ -195,5 +221,33 @@ class RedisRevocationEventPublisherTest {
             assertEquals(issuedBefore, event.issuedBefore());
             assertEquals(expiresAt, event.expiresAt());
         }
+    }
+
+    private static final class CapturingHandler extends Handler {
+        private final java.util.List<String> records = new ArrayList<>();
+
+        @Override
+        public synchronized void publish(LogRecord record) {
+            var text = new StringBuilder(record.getMessage());
+            if (record.getParameters() != null) {
+                for (var parameter : record.getParameters()) {
+                    text.append('|').append(parameter);
+                }
+            }
+            if (record.getThrown() != null) {
+                text.append('|').append(record.getThrown().getMessage());
+            }
+            records.add(text.toString());
+        }
+
+        synchronized String text() {
+            return String.join("\n", records);
+        }
+
+        @Override
+        public void flush() {}
+
+        @Override
+        public void close() throws SecurityException {}
     }
 }

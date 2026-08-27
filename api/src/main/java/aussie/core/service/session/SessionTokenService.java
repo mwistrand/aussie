@@ -22,6 +22,7 @@ import aussie.core.model.session.Session;
 import aussie.core.model.session.SessionToken;
 import aussie.core.service.auth.IssuedClaimPolicy;
 import aussie.core.service.auth.SigningKeyRegistry;
+import aussie.core.util.SafeLogging;
 
 /**
  * Service for generating JWS tokens from sessions.
@@ -89,7 +90,11 @@ public class SessionTokenService {
             final var token = signToken(claimsMap, signingKey);
             final var includedClaims = new HashSet<>(claimsMap.keySet());
 
-            LOG.debugf("Generated session token for session %s, expires at %s", session.id(), expiresAt);
+            if (LOG.isDebugEnabled()) {
+                LOG.debugf(
+                        "Generated session token for session_hash=%s, expires at %s",
+                        SafeLogging.identifier(session.id()), expiresAt);
+            }
 
             return new SessionToken(token, expiresAt, session.id(), includedClaims);
         } catch (JoseException e) {

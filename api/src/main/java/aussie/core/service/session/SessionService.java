@@ -22,6 +22,7 @@ import aussie.core.port.in.SessionManagement;
 import aussie.core.port.out.SessionRepository;
 import aussie.core.service.auth.TokenRevocationService;
 import aussie.core.service.auth.TokenTranslationService;
+import aussie.core.util.SafeLogging;
 import aussie.core.util.SecureHash;
 
 /**
@@ -133,7 +134,9 @@ public class SessionService implements SessionManagement {
 
         return getRepository().saveIfAbsent(session).flatMap(saved -> {
             if (saved) {
-                LOG.infof("Session created: hash=%s for user %s", SecureHash.truncatedSha256(sessionId, 8), userId);
+                LOG.infof(
+                        "Session created: hash=%s user_hash=%s",
+                        SecureHash.truncatedSha256(sessionId, 8), SafeLogging.identifier(userId));
                 return Uni.createFrom().item(session);
             }
 
@@ -171,7 +174,7 @@ public class SessionService implements SessionManagement {
                                                 SecureHash.truncatedSha256(sessionId, 8));
                                     }
                                 },
-                                e -> LOG.warnf("Failed to clean up session: %s", e.getMessage()));
+                                e -> LOG.warnf("Failed to clean up session: error_type=%s", SafeLogging.errorType(e)));
                 return Optional.empty();
             }
 
@@ -217,7 +220,7 @@ public class SessionService implements SessionManagement {
 
     @Override
     public Uni<Void> invalidateAllUserSessions(String userId) {
-        LOG.infof("Invalidating all sessions for user: %s", userId);
+        LOG.infof("Invalidating all sessions for user_hash=%s", SafeLogging.identifier(userId));
         return getRepository()
                 .deleteByUserId(userId)
                 .flatMap(v -> {

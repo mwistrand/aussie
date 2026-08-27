@@ -13,6 +13,7 @@ import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.jboss.logging.Logger;
 
 import aussie.core.model.auth.TranslatedClaims;
+import aussie.core.util.SafeLogging;
 import aussie.spi.TokenTranslatorProvider;
 
 /**
@@ -63,9 +64,11 @@ public class DefaultTokenTranslatorProvider implements TokenTranslatorProvider {
         final var roles = extractStringSet(claims, "roles");
         final var permissions = extractStringSet(claims, "permissions");
 
-        LOG.debugf(
-                "Token translation: issuer=%s, subject=%s, roles=%s, permissions=%s",
-                issuer, subject, roles, permissions);
+        if (LOG.isDebugEnabled()) {
+            LOG.debugf(
+                    "Token translation: issuer_hash=%s, subject_hash=%s, roles_count=%d, permissions_count=%d",
+                    SafeLogging.identifier(issuer), SafeLogging.identifier(subject), roles.size(), permissions.size());
+        }
 
         return Uni.createFrom().item(new TranslatedClaims(roles, permissions, Map.of()));
     }

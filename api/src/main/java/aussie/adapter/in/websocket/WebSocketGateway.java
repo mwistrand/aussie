@@ -53,6 +53,7 @@ import aussie.core.port.out.RevocationEventPublisher;
 import aussie.core.service.auth.JwksFetchException;
 import aussie.core.service.ratelimit.MessageRateLimitHandler;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
+import aussie.core.util.SafeLogging;
 import aussie.core.util.SecureHash;
 
 /**
@@ -147,7 +148,11 @@ public class WebSocketGateway {
             revocationSubscription = revocationEventPublisher
                     .subscribe()
                     .subscribe()
-                    .with(this::onRevocation, error -> LOG.warnv(error, "WebSocket revocation subscription stopped"));
+                    .with(
+                            this::onRevocation,
+                            error -> LOG.warnv(
+                                    "WebSocket revocation subscription stopped: error_type={0}",
+                                    SafeLogging.errorType(error)));
         }
     }
 
@@ -250,7 +255,9 @@ public class WebSocketGateway {
                             releaseConnection();
                             int statusCode = mapErrorToStatusCode(error);
                             String message = mapErrorToMessage(statusCode);
-                            LOG.warnv(error, "WebSocket upgrade failed with status {0}: {1}", statusCode, message);
+                            LOG.warnv(
+                                    "WebSocket upgrade failed with status {0}: {1}, error_type={2}",
+                                    statusCode, message, SafeLogging.errorType(error));
                             errorWriter.write(ctx, problemFor(statusCode, message));
                         });
     }
@@ -365,9 +372,9 @@ public class WebSocketGateway {
                                                                     .with(
                                                                             ignored -> {},
                                                                             err -> LOG.warnv(
-                                                                                    err,
-                                                                                    "Failed to cleanup rate limit state for session {0}",
-                                                                                    sessionId));
+                                                                                    "Failed to cleanup rate limit state for session hash {0}: error_type={1}",
+                                                                                    SafeLogging.identifier(sessionId),
+                                                                                    SafeLogging.errorType(err)));
                                                             cancelDrainTimerIfDrained();
                                                         }
                                                         releaseConnection.run();
@@ -401,14 +408,14 @@ public class WebSocketGateway {
                                                     }
 
                                                     LOG.infov(
-                                                            "WebSocket session {0} established to {1}",
-                                                            sessionId, backendUri);
+                                                            "WebSocket session hash {0} established",
+                                                            SafeLogging.identifier(sessionId));
                                                 })
                                                 .onFailure(err -> {
                                                     LOG.warnv(
-                                                            err,
-                                                            "Client WebSocket upgrade failed for session {0}",
-                                                            sessionId);
+                                                            "Client WebSocket upgrade failed for session hash {0}: error_type={1}",
+                                                            SafeLogging.identifier(sessionId),
+                                                            SafeLogging.errorType(err));
                                                     backendWs.close((short) 1001, "Client upgrade failed");
                                                     releaseConnection.run();
                                                     errorWriter.write(
@@ -418,14 +425,18 @@ public class WebSocketGateway {
                                                 });
                                     })
                                     .onFailure(err -> {
-                                        LOG.warnv(err, "Backend WebSocket connection failed to {0}", backendUri);
+                                        LOG.warnv(
+                                                "Backend WebSocket connection failed for service {0}: error_type={1}",
+                                                serviceId, SafeLogging.errorType(err));
                                         errorWriter.write(
                                                 ctx, ProblemDetail.badGateway("Backend connection failed"), serviceId);
                                         releaseConnection.run();
                                     });
                         },
                         err -> {
-                            LOG.warnv(err, "Backend WebSocket address denied for service {0}", serviceId);
+                            LOG.warnv(
+                                    "Backend WebSocket address denied for service {0}: error_type={1}",
+                                    serviceId, SafeLogging.errorType(err));
                             errorWriter.write(ctx, ProblemDetail.badGateway("Backend connection failed"), serviceId);
                             releaseConnection.run();
                         });

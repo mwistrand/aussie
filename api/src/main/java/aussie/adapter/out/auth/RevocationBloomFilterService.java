@@ -17,6 +17,7 @@ import aussie.core.config.TokenRevocationConfig;
 import aussie.core.model.auth.RevocationEvent;
 import aussie.core.port.out.RevocationBloomFilter;
 import aussie.core.port.out.RevocationEventPublisher;
+import aussie.core.util.SafeLogging;
 import aussie.spi.TokenRevocationRepository;
 
 /**
@@ -77,7 +78,9 @@ public class RevocationBloomFilterService implements RevocationBloomFilter {
                 .subscribe()
                 .with(
                         v -> LOG.info("Initial bloom filter rebuild completed"),
-                        e -> LOG.warnf(e, "Initial bloom filter rebuild failed, using empty filters"));
+                        e -> LOG.warnf(
+                                "Initial bloom filter rebuild failed, using empty filters: error_type=%s",
+                                SafeLogging.errorType(e)));
 
         // Schedule periodic rebuilds
         schedulePeriodicRebuild();
@@ -106,7 +109,8 @@ public class RevocationBloomFilterService implements RevocationBloomFilter {
                 .subscribe()
                 .with(
                         v -> LOG.debug("Scheduled bloom filter rebuild completed"),
-                        e -> LOG.warnf(e, "Scheduled bloom filter rebuild failed")));
+                        e -> LOG.warnf(
+                                "Scheduled bloom filter rebuild failed: error_type=%s", SafeLogging.errorType(e))));
         LOG.infof("Scheduled bloom filter rebuild every %s", interval);
     }
 
@@ -119,7 +123,10 @@ public class RevocationBloomFilterService implements RevocationBloomFilter {
         eventSubscription = eventPublisher
                 .subscribe()
                 .subscribe()
-                .with(this::handleRevocationEvent, e -> LOG.warnf(e, "Revocation event subscription failed"));
+                .with(
+                        this::handleRevocationEvent,
+                        e -> LOG.warnf(
+                                "Revocation event subscription failed: error_type=%s", SafeLogging.errorType(e)));
         LOG.info("Subscribed to revocation events for bloom filter updates");
     }
 
@@ -143,11 +150,14 @@ public class RevocationBloomFilterService implements RevocationBloomFilter {
         switch (event) {
             case RevocationEvent.JtiRevoked jtiRevoked -> {
                 addRevokedJti(jtiRevoked.jti());
-                LOG.debugf("Added JTI to bloom filter from event: %s", jtiRevoked.jti());
+                LOG.debugf(
+                        "Added JTI to bloom filter from event: jti_hash=%s", SafeLogging.identifier(jtiRevoked.jti()));
             }
             case RevocationEvent.UserRevoked userRevoked -> {
                 addRevokedUser(userRevoked.userId());
-                LOG.debugf("Added user to bloom filter from event: %s", userRevoked.userId());
+                LOG.debugf(
+                        "Added user to bloom filter from event: user_hash=%s",
+                        SafeLogging.identifier(userRevoked.userId()));
             }
         }
     }

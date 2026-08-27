@@ -13,6 +13,7 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
+import aussie.core.util.SafeLogging;
 import aussie.spi.TokenRevocationRepository;
 
 /**
@@ -47,7 +48,7 @@ public class InMemoryTokenRevocationRepository implements TokenRevocationReposit
     public Uni<Void> revoke(String jti, Instant expiresAt) {
         return Uni.createFrom().item(() -> {
             revokedJtis.put(jti, new RevocationEntry(expiresAt));
-            LOG.debugf("Revoked token in memory: %s (expires: %s)", jti, expiresAt);
+            LOG.debugf("Revoked token in memory: jti_hash=%s (expires: %s)", SafeLogging.identifier(jti), expiresAt);
             return null;
         });
     }
@@ -73,8 +74,8 @@ public class InMemoryTokenRevocationRepository implements TokenRevocationReposit
         return Uni.createFrom().item(() -> {
             revokedUsers.put(userId, new UserRevocationEntry(issuedBefore, expiresAt));
             LOG.debugf(
-                    "Revoked all tokens for user in memory: %s (issuedBefore: %s, expires: %s)",
-                    userId, issuedBefore, expiresAt);
+                    "Revoked all tokens for user in memory: user_hash=%s (issuedBefore: %s, expires: %s)",
+                    SafeLogging.identifier(userId), issuedBefore, expiresAt);
             return null;
         });
     }

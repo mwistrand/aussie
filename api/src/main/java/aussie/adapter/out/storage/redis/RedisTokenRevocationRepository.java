@@ -17,6 +17,7 @@ import org.jboss.logging.Logger;
 
 import aussie.core.config.ResiliencyConfig;
 import aussie.core.port.out.Metrics;
+import aussie.core.util.SafeLogging;
 import aussie.spi.TokenRevocationRepository;
 
 /**
@@ -71,14 +72,15 @@ public class RedisTokenRevocationRepository implements TokenRevocationRepository
         var ttlSeconds = calculateTtl(expiresAt);
 
         if (ttlSeconds <= 0) {
-            LOG.debugf("Skipping revocation for already-expired token: %s", jti);
+            LOG.debugf("Skipping revocation for already-expired token: jti_hash=%s", SafeLogging.identifier(jti));
             return Uni.createFrom().voidItem();
         }
 
         var operation = valueCommands
                 .setex(key, ttlSeconds, REVOKED_VALUE)
                 .replaceWithVoid()
-                .invoke(() -> LOG.debugf("Revoked token in Redis: %s (TTL: %ds)", jti, ttlSeconds));
+                .invoke(() -> LOG.debugf(
+                        "Revoked token in Redis: jti_hash=%s (TTL: %ds)", SafeLogging.identifier(jti), ttlSeconds));
         return timeoutHelper.withTimeoutSilent(operation, "revoke");
     }
 
@@ -88,7 +90,9 @@ public class RedisTokenRevocationRepository implements TokenRevocationRepository
         var operation = keyCommands.exists(key);
         // Fail-closed: return true on timeout (treat as revoked for security)
         return timeoutHelper.withTimeoutFallback(operation, "isRevoked", () -> {
-            LOG.warnf("Revocation check timed out for jti %s, treating as revoked (fail-closed)", jti);
+            LOG.warnf(
+                    "Revocation check timed out for jti_hash=%s, treating as revoked (fail-closed)",
+                    SafeLogging.identifier(jti));
             return true;
         });
     }
@@ -99,7 +103,7 @@ public class RedisTokenRevocationRepository implements TokenRevocationRepository
         var ttlSeconds = calculateTtl(expiresAt);
 
         if (ttlSeconds <= 0) {
-            LOG.debugf("Skipping user revocation with expired TTL: %s", userId);
+            LOG.debugf("Skipping user revocation with expired TTL: user_hash=%s", SafeLogging.identifier(userId));
             return Uni.createFrom().voidItem();
         }
 
@@ -110,8 +114,8 @@ public class RedisTokenRevocationRepository implements TokenRevocationRepository
                 .setex(key, ttlSeconds, value)
                 .replaceWithVoid()
                 .invoke(() -> LOG.debugf(
-                        "Revoked all tokens for user in Redis: %s (issuedBefore: %s, TTL: %ds)",
-                        userId, issuedBefore, ttlSeconds));
+                        "Revoked all tokens for user in Redis: user_hash=%s (issuedBefore: %s, TTL: %ds)",
+                        SafeLogging.identifier(userId), issuedBefore, ttlSeconds));
         return timeoutHelper.withTimeoutSilent(operation, "revokeAllForUser");
     }
 
@@ -128,13 +132,15 @@ public class RedisTokenRevocationRepository implements TokenRevocationRepository
                 var issuedBefore = Instant.ofEpochMilli(Long.parseLong(value));
                 return issuedAt.isBefore(issuedBefore);
             } catch (NumberFormatException e) {
-                LOG.warnf("Invalid user revocation value for %s: %s", userId, value);
+                LOG.warnf("Invalid user revocation value for user_hash=%s", SafeLogging.identifier(userId));
                 return false;
             }
         });
         // Fail-closed: return true on timeout (treat as revoked for security)
         return timeoutHelper.withTimeoutFallback(operation, "isUserRevoked", () -> {
-            LOG.warnf("User revocation check timed out for %s, treating as revoked (fail-closed)", userId);
+            LOG.warnf(
+                    "User revocation check timed out for user_hash=%s, treating as revoked (fail-closed)",
+                    SafeLogging.identifier(userId));
             return true;
         });
     }
