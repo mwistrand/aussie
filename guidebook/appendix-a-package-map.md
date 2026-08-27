@@ -396,7 +396,6 @@ Domain services implementing inbound ports and composing outbound ports. All are
 
 | Class | Description |
 |---|---|
-| `EndpointMatcher` | Compiles endpoint path patterns into regex matchers, resolves the best match for a request path. |
 | `GlobPatternMatcher` | Converts glob patterns (`/users/*/orders`) into Java regex patterns. |
 | `ServiceRegistrationValidator` | Validates registration requests: service ID format, base URL (SSRF protection), endpoint uniqueness, permission policy coherence. |
 | `ServiceRegistry` | Central coordinator. Manages in-memory route cache (Caffeine-backed), delegates to `ServiceRegistrationRepository` for persistence and `ConfigurationCache` for optional distributed caching. Handles authorization for service operations. |

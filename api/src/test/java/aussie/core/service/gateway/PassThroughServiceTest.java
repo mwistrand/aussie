@@ -3,13 +3,16 @@ package aussie.core.service.gateway;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,9 +23,11 @@ import aussie.core.model.gateway.GatewayResult;
 import aussie.core.model.gateway.PreparedProxyRequest;
 import aussie.core.model.gateway.ProxyPlan;
 import aussie.core.model.gateway.RouteAuthResult;
+import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
+import aussie.core.model.routing.RouteMatch;
+import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.ServiceRegistration;
-import aussie.core.service.routing.EndpointMatcher;
 import aussie.core.service.routing.ServiceRegistry;
 import aussie.core.service.routing.VisibilityResolver;
 
@@ -32,7 +37,6 @@ class PassThroughServiceTest {
     private ProxyRequestPreparer preparer;
     private RouteAuthenticationService authentication;
     private VisibilityResolver visibility;
-    private EndpointMatcher endpointMatcher;
     private PassThroughService service;
 
     @BeforeEach
@@ -41,15 +45,14 @@ class PassThroughServiceTest {
         preparer = mock(ProxyRequestPreparer.class);
         authentication = mock(RouteAuthenticationService.class);
         visibility = mock(VisibilityResolver.class);
-        endpointMatcher = mock(EndpointMatcher.class);
-        service = new PassThroughService(
-                registry, visibility, endpointMatcher, authentication, new ProxyPlanBuilder(preparer));
+        service = new PassThroughService(registry, visibility, authentication, new ProxyPlanBuilder(preparer));
     }
 
     @Test
     void rejectsReservedAndMissingServices() {
         final var reserved = service.prepare("ADMIN", request()).await().atMost(Duration.ofSeconds(1));
-        when(registry.getService("missing")).thenReturn(Uni.createFrom().item(Optional.empty()));
+        when(registry.findServiceRouteAsync("missing", "/items", "GET"))
+                .thenReturn(Uni.createFrom().item(Optional.empty()));
         final var missing = service.prepare("missing", request()).await().atMost(Duration.ofSeconds(1));
 
         assertInstanceOf(GatewayResult.ReservedPath.class, ((ProxyPlan.Rejected) reserved).result());
@@ -61,8 +64,8 @@ class PassThroughServiceTest {
         final var registration =
                 ServiceRegistration.builder("backend").baseUrl("http://backend").build();
         final var prepared = new PreparedProxyRequest("GET", URI.create("http://backend/items"), Map.of(), null);
-        when(registry.getService("backend")).thenReturn(Uni.createFrom().item(Optional.of(registration)));
-        when(endpointMatcher.match(any(), any(), any())).thenReturn(Optional.empty());
+        when(registry.findServiceRouteAsync("backend", "/items", "GET"))
+                .thenReturn(Uni.createFrom().item(Optional.of(new ServiceOnlyMatch(registration))));
         when(visibility.resolve(any(), any(), any())).thenReturn(EndpointVisibility.PUBLIC);
         when(authentication.authenticate(any(), any()))
                 .thenReturn(Uni.createFrom().item(new RouteAuthResult.NotRequired()));
@@ -76,11 +79,34 @@ class PassThroughServiceTest {
     }
 
     @Test
+    void usesTheSnapshotRouteAndPreservesItsRewrite() {
+        final var registration =
+                ServiceRegistration.builder("backend").baseUrl("http://backend").build();
+        final var endpoint =
+                new EndpointConfig("/items", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.of("/v2/items"), false);
+        final var route = new RouteMatch(registration, endpoint, "/v2/items", Map.of());
+        final var prepared = new PreparedProxyRequest("GET", URI.create("http://backend/v2/items"), Map.of(), null);
+        when(registry.findServiceRouteAsync("backend", "/items", "GET"))
+                .thenReturn(Uni.createFrom().item(Optional.of(route)));
+        when(authentication.authenticate(any(), any()))
+                .thenReturn(Uni.createFrom().item(new RouteAuthResult.NotRequired()));
+        when(preparer.prepare(any(), any())).thenReturn(prepared);
+
+        final var plan = assertInstanceOf(
+                ProxyPlan.Ready.class,
+                service.prepare("backend", request()).await().atMost(Duration.ofSeconds(1)));
+
+        assertEquals(prepared, plan.request());
+        verify(authentication).authenticate(any(), same(route));
+        verify(preparer).prepare(any(), same(route));
+    }
+
+    @Test
     void preservesAuthenticationRejectionsInTheProxyPlan() {
         final var registration =
                 ServiceRegistration.builder("backend").baseUrl("http://backend").build();
-        when(registry.getService("backend")).thenReturn(Uni.createFrom().item(Optional.of(registration)));
-        when(endpointMatcher.match(any(), any(), any())).thenReturn(Optional.empty());
+        when(registry.findServiceRouteAsync("backend", "/items", "GET"))
+                .thenReturn(Uni.createFrom().item(Optional.of(new ServiceOnlyMatch(registration))));
         when(visibility.resolve(any(), any(), any())).thenReturn(EndpointVisibility.PUBLIC);
         when(authentication.authenticate(any(), any()))
                 .thenReturn(Uni.createFrom().item(new RouteAuthResult.Unauthorized("expired")))

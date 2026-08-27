@@ -785,7 +785,7 @@ public class ServiceRegistry {
         if (path == null || path.isEmpty()) {
             return "/";
         }
-        return path.startsWith("/") ? path : "/" + path;
+        return GlobPatternMatcher.normalizePath(path.startsWith("/") ? path : "/" + path);
     }
 
     private boolean isValidForRouting(ServiceRegistration service) {

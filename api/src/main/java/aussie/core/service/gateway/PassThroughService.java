@@ -13,10 +13,10 @@ import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.gateway.GatewayResult;
 import aussie.core.model.gateway.ProxyPlan;
 import aussie.core.model.routing.EndpointConfig;
+import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.RouteMatch;
-import aussie.core.model.service.ServiceRegistration;
+import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.port.in.PassThroughUseCase;
-import aussie.core.service.routing.EndpointMatcher;
 import aussie.core.service.routing.ServiceRegistry;
 import aussie.core.service.routing.VisibilityResolver;
 
@@ -45,7 +45,6 @@ public class PassThroughService implements PassThroughUseCase {
 
     private final ServiceRegistry serviceRegistry;
     private final VisibilityResolver visibilityResolver;
-    private final EndpointMatcher endpointMatcher;
     private final RouteAuthenticationService routeAuthService;
     private final ProxyPlanBuilder proxyPlanBuilder;
 
@@ -53,12 +52,10 @@ public class PassThroughService implements PassThroughUseCase {
     public PassThroughService(
             ServiceRegistry serviceRegistry,
             VisibilityResolver visibilityResolver,
-            EndpointMatcher endpointMatcher,
             RouteAuthenticationService routeAuthService,
             ProxyPlanBuilder proxyPlanBuilder) {
         this.serviceRegistry = serviceRegistry;
         this.visibilityResolver = visibilityResolver;
-        this.endpointMatcher = endpointMatcher;
         this.routeAuthService = routeAuthService;
         this.proxyPlanBuilder = proxyPlanBuilder;
     }
@@ -71,30 +68,28 @@ public class PassThroughService implements PassThroughUseCase {
             return Uni.createFrom().item(new ProxyPlan.Rejected(result, null));
         }
 
-        return serviceRegistry.getService(serviceId).flatMap(serviceOpt -> {
-            if (serviceOpt.isEmpty()) {
-                var result = new GatewayResult.ServiceNotFound(serviceId);
-                return Uni.createFrom().item(new ProxyPlan.Rejected(result, null));
-            }
+        return serviceRegistry
+                .findServiceRouteAsync(serviceId, request.path(), request.method())
+                .flatMap(routeOpt -> {
+                    if (routeOpt.isEmpty()) {
+                        var result = new GatewayResult.ServiceNotFound(serviceId);
+                        return Uni.createFrom().item(new ProxyPlan.Rejected(result, null));
+                    }
 
-            var service = serviceOpt.get();
-            var routeMatch = createRouteMatch(service, request.path(), request.method());
+                    var routeMatch = toRouteMatch(routeOpt.get(), request.path(), request.method());
 
-            return routeAuthService
-                    .authenticate(request, routeMatch)
-                    .map(authResult -> proxyPlanBuilder.build(request, routeMatch, authResult));
-        });
+                    return routeAuthService
+                            .authenticate(request, routeMatch)
+                            .map(authResult -> proxyPlanBuilder.build(request, routeMatch, authResult));
+                });
     }
 
-    private RouteMatch createRouteMatch(ServiceRegistration service, String targetPath, String method) {
-        // First, check if there's a matching endpoint config
-        var matchedEndpoint = endpointMatcher.match(targetPath, method, service);
-
-        if (matchedEndpoint.isPresent()) {
-            return new RouteMatch(service, matchedEndpoint.get(), targetPath, Map.of());
+    private RouteMatch toRouteMatch(RouteLookupResult route, String targetPath, String method) {
+        if (route instanceof RouteMatch routeMatch) {
+            return routeMatch;
         }
 
-        // No matching endpoint - create a catch-all with visibility rules and default auth
+        var service = ((ServiceOnlyMatch) route).service();
         var visibility = visibilityResolver.resolve(targetPath, method, service);
         var catchAllEndpoint =
                 new EndpointConfig("/**", Set.of("*"), visibility, Optional.empty(), service.defaultAuthRequired());

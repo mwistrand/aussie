@@ -578,6 +578,34 @@ class ServiceRegistryTest {
         }
 
         @Test
+        @DisplayName("Should preserve pass-through endpoint policy for equivalent paths")
+        void shouldPreservePassThroughEndpointPolicyForEquivalentPaths() {
+            var endpoint =
+                    new EndpointConfig("/api/users", Set.of("GET"), EndpointVisibility.PRIVATE, Optional.empty(), true);
+            var service = ServiceRegistration.builder("user-service")
+                    .baseUrl("http://192.0.2.10:8080")
+                    .defaultVisibility(EndpointVisibility.PUBLIC)
+                    .defaultAuthRequired(false)
+                    .endpoints(List.of(endpoint))
+                    .build();
+            registry.register(service).await().atMost(TIMEOUT);
+
+            var filteredRoute = registry.findRoute("/user-service/api//users/", "GET");
+            var directRoute = registry.findServiceRouteAsync("user-service", "/api//users/", "GET")
+                    .await()
+                    .atMost(TIMEOUT);
+
+            assertEquals(
+                    endpoint,
+                    assertInstanceOf(RouteMatch.class, filteredRoute.orElseThrow())
+                            .endpointConfig());
+            assertEquals(
+                    endpoint,
+                    assertInstanceOf(RouteMatch.class, directRoute.orElseThrow())
+                            .endpointConfig());
+        }
+
+        @Test
         @DisplayName("Should handle null path")
         void shouldHandleNullPath() {
             var endpoint = new EndpointConfig("/", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty());

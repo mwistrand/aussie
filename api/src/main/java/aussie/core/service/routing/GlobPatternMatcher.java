@@ -42,7 +42,7 @@ public class GlobPatternMatcher {
     /**
      * Normalizes a path by removing trailing slashes and collapsing multiple slashes.
      */
-    private String normalizePath(String path) {
+    static String normalizePath(String path) {
         if (path.isEmpty()) {
             return "/";
         }
