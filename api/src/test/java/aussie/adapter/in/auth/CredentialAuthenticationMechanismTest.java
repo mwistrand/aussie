@@ -24,6 +24,7 @@ import io.quarkus.security.identity.IdentityProviderManager;
 import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.MultiMap;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.ext.web.RoutingContext;
 import org.junit.jupiter.api.AfterEach;
@@ -121,6 +122,22 @@ class CredentialAuthenticationMechanismTest {
                 .await()
                 .atMost(Duration.ofSeconds(1)));
         verify(routingContext, never()).request();
+    }
+
+    @Test
+    void publicSessionCreationIgnoresAStaleSessionCookie() {
+        when(sessionConfig.publicCreationEnabled()).thenReturn(true);
+        when(request.method()).thenReturn(HttpMethod.POST);
+        when(request.path()).thenReturn("/auth/session");
+        when(cookieManager.hasSessionCookie(request)).thenReturn(true);
+
+        assertNull(mechanism(false)
+                .authenticate(routingContext, identityProviderManager)
+                .await()
+                .atMost(Duration.ofSeconds(1)));
+
+        verify(cookieManager, never()).extractSessionId(request);
+        verify(sessionManagement, never()).getSession(any());
     }
 
     @Test

@@ -16,6 +16,7 @@ import aussie.adapter.in.auth.SessionCookieManager;
 import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.in.http.GatewayCorsConfig;
 import aussie.adapter.in.problem.GatewayProblem;
+import aussie.common.context.PlatformPaths;
 import aussie.core.config.SessionConfig;
 
 /** Rejects untrusted cross-origin mutations made with a browser session cookie. */
@@ -48,6 +49,9 @@ public class CsrfProtectionFilter {
     public void filter(ContainerRequestContext context, HttpServerRequest request) {
         if (!sessionConfig.enabled()
                 || isSafeMethod(request.method().name())
+                || (sessionConfig.publicCreationEnabled()
+                        && PlatformPaths.isPublicSessionCreation(
+                                request.path(), request.method().name()))
                 || !cookieManager.hasSessionCookie(request)) {
             return;
         }

@@ -55,6 +55,9 @@ class CsrfProtectionFilterTest {
     void setUp() {
         filter = new CsrfProtectionFilter(
                 sessionConfig, cookieManager, corsConfig, clientContextResolver, routingContext);
+    }
+
+    private void stubSessionMutation() {
         when(sessionConfig.enabled()).thenReturn(true);
         when(request.method()).thenReturn(HttpMethod.POST);
         when(cookieManager.hasSessionCookie(request)).thenReturn(true);
@@ -79,21 +82,36 @@ class CsrfProtectionFilterTest {
 
     @Test
     void acceptsSameOriginMutationWithMatchingToken() {
+        stubSessionMutation();
+
         assertDoesNotThrow(() -> filter.filter(context, request));
     }
 
     @Test
     void rejectsMutationWithoutMatchingTokenOrOrigin() {
+        stubSessionMutation();
         when(context.getHeaderString("Origin")).thenReturn("https://evil.example");
+
         assertThrows(HttpProblem.class, () -> filter.filter(context, request));
     }
 
     @Test
     void acceptsCredentialedCorsOrigin() {
+        stubSessionMutation();
         when(context.getHeaderString("Origin")).thenReturn("https://app.example");
         when(corsConfig.enabled()).thenReturn(true);
         when(corsConfig.allowCredentials()).thenReturn(true);
         when(corsConfig.allowedOrigins()).thenReturn(List.of("https://app.example"));
+
+        assertDoesNotThrow(() -> filter.filter(context, request));
+    }
+
+    @Test
+    void publicSessionCreationIgnoresAStaleSessionCookie() {
+        when(sessionConfig.enabled()).thenReturn(true);
+        when(sessionConfig.publicCreationEnabled()).thenReturn(true);
+        when(request.method()).thenReturn(HttpMethod.POST);
+        when(request.path()).thenReturn("/auth/session");
 
         assertDoesNotThrow(() -> filter.filter(context, request));
     }

@@ -19,4 +19,8 @@ public final class PlatformPaths {
         final var root = slash < 0 ? path.substring(start) : path.substring(start, slash);
         return ROOTS.contains(root.toLowerCase(Locale.ROOT));
     }
+
+    public static boolean isPublicSessionCreation(String path, String method) {
+        return "/auth/session".equals(path) && "POST".equalsIgnoreCase(method);
+    }
 }

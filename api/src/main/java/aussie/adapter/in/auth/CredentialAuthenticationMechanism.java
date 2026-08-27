@@ -24,6 +24,7 @@ import org.jboss.logging.Logger;
 import aussie.adapter.in.context.ClientContextResolver;
 import aussie.adapter.out.telemetry.GatewayMetrics;
 import aussie.adapter.out.telemetry.SecurityMonitor;
+import aussie.common.context.PlatformPaths;
 import aussie.common.context.RouteContextAttributes;
 import aussie.core.config.ApiKeyConfig;
 import aussie.core.config.SessionConfig;
@@ -84,6 +85,12 @@ public class CredentialAuthenticationMechanism implements HttpAuthenticationMech
         }
 
         final var request = context.request();
+        if (sessionConfig.enabled()
+                && sessionConfig.publicCreationEnabled()
+                && PlatformPaths.isPublicSessionCreation(
+                        request.path(), request.method().name())) {
+            return Uni.createFrom().nullItem();
+        }
         final var authorizationHeaders = request.headers().getAll(AUTHORIZATION);
         final var hasSessionCookie = sessionConfig.enabled() && cookieManager.hasSessionCookie(request);
         final var credentials = new InboundCredentials(authorizationHeaders, Optional.empty());
