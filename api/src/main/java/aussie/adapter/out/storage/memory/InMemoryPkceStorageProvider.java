@@ -15,8 +15,8 @@ import aussie.spi.PkceStorageProvider;
 /**
  * In-memory PKCE storage provider.
  *
- * <p>This provider is always available and serves as a fallback when
- * Redis or other storage backends are unavailable.
+ * <p>This provider is always available and is intended for explicit
+ * development/test configuration only.
  *
  * <p><strong>Warning:</strong> In-memory storage requires sticky sessions
  * when running multiple Aussie instances. Not recommended for production.
@@ -25,7 +25,7 @@ import aussie.spi.PkceStorageProvider;
 public class InMemoryPkceStorageProvider implements PkceStorageProvider, AutoCloseable {
 
     private static final Logger LOG = Logger.getLogger(InMemoryPkceStorageProvider.class);
-    private static final int PRIORITY = 0; // Lowest priority - fallback only
+    private static final int PRIORITY = 0; // Lowest automatic-selection priority
 
     private final AtomicBoolean warningLogged = new AtomicBoolean(false);
     private volatile InMemoryPkceChallengeRepository repository;
@@ -51,7 +51,7 @@ public class InMemoryPkceStorageProvider implements PkceStorageProvider, AutoClo
             LOG.warn("========================================================================");
             LOG.warn("  WARNING: PKCE challenge storage is in-memory only!");
             LOG.warn("  Sticky sessions are REQUIRED when running multiple Aussie instances.");
-            LOG.warn("  Consider configuring Redis or a custom PkceStorageProvider for production.");
+            LOG.warn("  Configure Redis or a custom PkceStorageProvider for production.");
             LOG.warn("========================================================================");
         }
 

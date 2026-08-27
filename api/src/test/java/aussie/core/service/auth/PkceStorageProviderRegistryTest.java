@@ -78,8 +78,8 @@ class PkceStorageProviderRegistryTest {
         }
 
         @Test
-        @DisplayName("should fall back to highest priority when configured provider unavailable")
-        void shouldFallBackToHighestPriority() {
+        @DisplayName("should retain configured provider when unavailable")
+        void shouldRetainConfiguredProviderWhenUnavailable() {
             var redis = createProvider("redis", 100, false);
             var memory = createProvider("memory", 0, true);
             when(storageConfig.provider()).thenReturn("redis");
@@ -88,7 +88,7 @@ class PkceStorageProviderRegistryTest {
             var registry = new PkceStorageProviderRegistry(providerInstance, config);
             var selected = registry.getSelectedProvider();
 
-            assertEquals("memory", selected.name());
+            assertEquals("redis", selected.name());
         }
 
         @Test
@@ -97,7 +97,7 @@ class PkceStorageProviderRegistryTest {
             var custom = createProvider("custom", 200, true);
             var redis = createProvider("redis", 100, true);
             var memory = createProvider("memory", 0, true);
-            when(storageConfig.provider()).thenReturn("cassandra");
+            when(storageConfig.provider()).thenReturn("");
             when(providerInstance.stream()).thenReturn(Stream.of(custom, redis, memory));
 
             var registry = new PkceStorageProviderRegistry(providerInstance, config);
@@ -107,8 +107,8 @@ class PkceStorageProviderRegistryTest {
         }
 
         @Test
-        @DisplayName("should not log warning when memory fallback expected")
-        void shouldNotLogWarningForMemoryFallback() {
+        @DisplayName("should select explicitly configured memory provider")
+        void shouldSelectExplicitlyConfiguredMemoryProvider() {
             var memory = createProvider("memory", 0, true);
             when(storageConfig.provider()).thenReturn("memory");
             when(providerInstance.stream()).thenReturn(Stream.of(memory));
@@ -123,8 +123,19 @@ class PkceStorageProviderRegistryTest {
         @DisplayName("should throw when no providers available")
         void shouldThrowWhenNoProvidersAvailable() {
             var redis = createProvider("redis", 100, false);
-            when(storageConfig.provider()).thenReturn("memory");
+            when(storageConfig.provider()).thenReturn("");
             when(providerInstance.stream()).thenReturn(Stream.of(redis));
+
+            final var registry = new PkceStorageProviderRegistry(providerInstance, config);
+
+            assertThrows(IllegalStateException.class, registry::getSelectedProvider);
+        }
+
+        @Test
+        @DisplayName("should reject an explicitly configured provider that is not installed")
+        void shouldRejectMissingConfiguredProvider() {
+            when(storageConfig.provider()).thenReturn("redis");
+            when(providerInstance.stream()).thenReturn(Stream.of(createProvider("memory", 0, true)));
 
             var registry = new PkceStorageProviderRegistry(providerInstance, config);
 

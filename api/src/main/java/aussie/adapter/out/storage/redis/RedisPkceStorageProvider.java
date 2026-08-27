@@ -91,8 +91,8 @@ public class RedisPkceStorageProvider implements PkceStorageProvider {
 
     @Override
     public boolean isAvailable() {
-        // Non-blocking check - if still checking, consider unavailable
-        // to allow fallback to memory provider
+        // Non-blocking check; providers still being checked are ineligible for automatic selection.
+        // Explicit configuration retains this provider so repository operations fail closed.
         return availabilityState.get() == AvailabilityState.AVAILABLE;
     }
 

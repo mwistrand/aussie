@@ -23,9 +23,12 @@ import aussie.spi.PkceStorageProvider;
  * <p>Selection order:
  * <ol>
  *   <li>Configured provider (aussie.auth.pkce.storage.provider)</li>
- *   <li>Highest priority available provider</li>
- *   <li>Memory fallback (always available)</li>
+ *   <li>Highest priority available provider when no provider is configured</li>
  * </ol>
+ *
+ * <p>An explicitly configured provider is retained even while its health check
+ * reports unavailable. Its operations then fail closed instead of silently
+ * moving OIDC transactions to process-local memory.
  */
 @ApplicationScoped
 public class PkceStorageProviderRegistry {
@@ -70,38 +73,28 @@ public class PkceStorageProviderRegistry {
 
     private PkceStorageProvider selectProvider() {
         final var configuredProvider = config.storage().provider();
+        if (configuredProvider != null && !configuredProvider.isBlank()) {
+            final Optional<PkceStorageProvider> configured = providers.stream()
+                    .filter(p -> p.name().equals(configuredProvider))
+                    .findFirst();
+            if (configured.isEmpty()) {
+                throw new IllegalStateException("Configured PKCE storage provider not found: " + configuredProvider);
+            }
+            LOG.infof("Using configured PKCE storage provider: %s", configuredProvider);
+            return configured.get();
+        }
+
         final var availableProviders = providers.stream()
                 .filter(PkceStorageProvider::isAvailable)
                 .sorted(Comparator.comparingInt(PkceStorageProvider::priority).reversed())
                 .toList();
 
-        LOG.debugf(
-                "Available PKCE storage providers: %s",
-                availableProviders.stream().map(PkceStorageProvider::name).toList());
-
-        // First, try to find the configured provider
-        Optional<PkceStorageProvider> configured = availableProviders.stream()
-                .filter(p -> p.name().equals(configuredProvider))
-                .findFirst();
-
-        if (configured.isPresent()) {
-            LOG.infof("Using configured PKCE storage provider: %s", configuredProvider);
-            return configured.get();
-        }
-
-        // If configured provider not available, log warning and use highest priority
-        if (!configuredProvider.equals("memory")) {
-            LOG.warnf("Configured PKCE storage provider '%s' is not available, falling back", configuredProvider);
-        }
-
-        // Use highest priority available provider
         if (!availableProviders.isEmpty()) {
             final var provider = availableProviders.get(0);
             LOG.infof("Using PKCE storage provider: %s (priority: %d)", provider.name(), provider.priority());
             return provider;
         }
 
-        // This shouldn't happen as memory provider is always available
         throw new IllegalStateException("No PKCE storage providers available");
     }
 

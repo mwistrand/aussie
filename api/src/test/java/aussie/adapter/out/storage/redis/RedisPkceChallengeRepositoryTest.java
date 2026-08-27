@@ -1,6 +1,7 @@
 package aussie.adapter.out.storage.redis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -90,6 +91,16 @@ class RedisPkceChallengeRepositoryTest {
 
         assertEquals(transaction, result.orElseThrow());
         verify(commands).getdel("test:oidc:state");
+    }
+
+    @Test
+    void propagatesRedisFailureInsteadOfReturningAnEmptyTransaction() {
+        when(commands.getdel("test:oidc:state"))
+                .thenReturn(Uni.createFrom().failure(new IllegalStateException("Redis unavailable")));
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> repository.consume("state").await().indefinitely());
     }
 
     private OidcAuthorizationTransaction transaction() {

@@ -18,12 +18,9 @@ import aussie.core.port.out.PkceChallengeRepository;
  *   <li>memory (priority: 0) - In-memory storage (development only)</li>
  * </ul>
  *
- * <p>Provider selection order:
- * <ol>
- *   <li>Configured provider (aussie.auth.pkce.storage.provider)</li>
- *   <li>Highest priority available provider</li>
- *   <li>Memory fallback (always available)</li>
- * </ol>
+ * <p>Provider selection uses the explicitly configured provider when present;
+ * automatic priority selection is used only when no provider is configured.
+ * An unavailable explicitly configured provider is not replaced with memory.
  *
  * <h2>Custom Implementation Example</h2>
  * <pre>{@code
@@ -76,30 +73,32 @@ public interface PkceStorageProvider {
     /**
      * Return the provider priority for automatic selection.
      *
-     * <p>Higher priority providers are preferred when multiple providers
-     * are available. Built-in priorities:
+     * <p>Higher priority providers are preferred during automatic selection.
+     * Built-in priorities:
      * <ul>
      *   <li>redis: 100</li>
-     *   <li>memory: 0 (fallback only)</li>
+     *   <li>memory: 0 (development/test only)</li>
      * </ul>
      *
      * <p>Custom implementations should use priorities above 100 to be
-     * preferred over Redis, or between 0 and 100 for fallback behavior.
+     * preferred over Redis, or between 0 and 100 for lower-priority selection.
      *
      * @return Priority value (higher = more preferred)
      */
     int priority();
 
     /**
-     * Check if this provider is available and ready to use.
+     * Check whether this provider currently reports healthy.
      *
      * <p>For Redis, this checks if the connection is active.
      * For memory, this always returns true.
      *
-     * <p>This method may be called multiple times and should return
-     * quickly. Consider caching the availability state.
+     * <p>This signal is used for health reporting and automatic selection.
+     * Explicitly configured providers remain selected while unavailable so
+     * repository operations fail closed. This method may be called multiple
+     * times and should return quickly. Consider caching the availability state.
      *
-     * @return true if the provider can be used
+     * @return true if the provider is healthy and eligible for automatic selection
      */
     boolean isAvailable();
 

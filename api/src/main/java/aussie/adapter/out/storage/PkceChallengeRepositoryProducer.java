@@ -11,7 +11,8 @@ import aussie.core.service.auth.PkceStorageProviderRegistry;
  * CDI producer for PKCE challenge repository.
  *
  * <p>Delegates to the {@link PkceStorageProviderRegistry} which discovers and
- * selects the appropriate storage provider based on configuration and availability.
+ * selects the appropriate storage provider based on configuration, using availability
+ * only when no provider is configured.
  *
  * <p>Platform teams can provide custom implementations by implementing
  * {@link aussie.spi.PkceStorageProvider} and registering it via CDI.
