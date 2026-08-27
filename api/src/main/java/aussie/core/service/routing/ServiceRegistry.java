@@ -676,6 +676,32 @@ public class ServiceRegistry {
     }
 
     /**
+     * Find a route within one named service without falling back to gateway-mode matching.
+     *
+     * @param serviceId the service identifier
+     * @param path the endpoint path within the service
+     * @param method the HTTP method
+     * @return the route, a service-only match, or empty when the service is unknown
+     */
+    public Uni<Optional<RouteLookupResult>> findServiceRouteAsync(String serviceId, String path, String method) {
+        return ensureCacheFresh().map(v -> {
+            if (serviceId == null || ServicePath.UNKNOWN_SERVICE.equals(serviceId)) {
+                return Optional.empty();
+            }
+
+            final var snapshot = routingState.get().snapshot();
+            final var serviceRoutes = snapshot.service(serviceId);
+            if (serviceRoutes.isEmpty()) {
+                return Optional.empty();
+            }
+
+            final var route = snapshot.match(serviceId, normalizePath(path), method.toUpperCase());
+            return Optional.<RouteLookupResult>ofNullable(route)
+                    .or(() -> Optional.of(new ServiceOnlyMatch(serviceRoutes.get())));
+        });
+    }
+
+    /**
      * Find a route matching the given path and method across all registered
      * services.
      *

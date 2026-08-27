@@ -1,7 +1,6 @@
 package aussie.core.service.gateway;
 
 import java.net.URI;
-import java.util.Map;
 import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -16,7 +15,6 @@ import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.websocket.WebSocketUpgradeRequest;
 import aussie.core.model.websocket.WebSocketUpgradeResult;
 import aussie.core.port.in.WebSocketGatewayUseCase;
-import aussie.core.service.routing.EndpointMatcher;
 import aussie.core.service.routing.ServiceRegistry;
 
 /**
@@ -33,16 +31,11 @@ public class WebSocketGatewayService implements WebSocketGatewayUseCase {
 
     private final ServiceRegistry serviceRegistry;
     private final RouteAuthenticationService routeAuthService;
-    private final EndpointMatcher endpointMatcher;
 
     @Inject
-    public WebSocketGatewayService(
-            ServiceRegistry serviceRegistry,
-            RouteAuthenticationService routeAuthService,
-            EndpointMatcher endpointMatcher) {
+    public WebSocketGatewayService(ServiceRegistry serviceRegistry, RouteAuthenticationService routeAuthService) {
         this.serviceRegistry = serviceRegistry;
         this.routeAuthService = routeAuthService;
-        this.endpointMatcher = endpointMatcher;
     }
 
     @Override
@@ -71,41 +64,21 @@ public class WebSocketGatewayService implements WebSocketGatewayUseCase {
 
     @Override
     public Uni<WebSocketUpgradeResult> upgradePassThrough(String serviceId, WebSocketUpgradeRequest request) {
-        // Look up service directly (like PassThroughService) - reactive lookup
-        return serviceRegistry.getService(serviceId).flatMap(serviceOpt -> {
-            if (serviceOpt.isEmpty()) {
-                return Uni.createFrom().item(new WebSocketUpgradeResult.ServiceNotFound(serviceId));
-            }
+        return serviceRegistry
+                .findServiceRouteAsync(serviceId, request.path(), "GET")
+                .flatMap(routeResultOpt -> {
+                    if (routeResultOpt.isEmpty()) {
+                        return Uni.createFrom().item(new WebSocketUpgradeResult.ServiceNotFound(serviceId));
+                    }
 
-            final var service = serviceOpt.get();
-            final var routeMatch = findWebSocketEndpoint(service, request.path());
+                    if (!(routeResultOpt.get() instanceof RouteMatch route)
+                            || route.endpointConfig().type() != EndpointType.WEBSOCKET) {
+                        return Uni.createFrom().item(new WebSocketUpgradeResult.NotWebSocket(request.path()));
+                    }
 
-            if (routeMatch.isEmpty()) {
-                return Uni.createFrom().item(new WebSocketUpgradeResult.NotWebSocket(request.path()));
-            }
-
-            // Connection rate limiting is handled by WebSocketRateLimitFilter
-            return authenticateAndPrepare(request, routeMatch.get());
-        });
-    }
-
-    private Optional<RouteMatch> findWebSocketEndpoint(
-            aussie.core.model.service.ServiceRegistration service, String path) {
-        // Find matching endpoint that is a WebSocket type
-        final var endpointOpt = endpointMatcher.match(path, "GET", service);
-
-        if (endpointOpt.isEmpty()) {
-            return Optional.empty();
-        }
-
-        final var endpoint = endpointOpt.get();
-
-        // Verify it's a WebSocket endpoint
-        if (endpoint.type() != EndpointType.WEBSOCKET) {
-            return Optional.empty();
-        }
-
-        return Optional.of(new RouteMatch(service, endpoint, path, Map.of()));
+                    // Connection rate limiting is handled by WebSocketRateLimitFilter
+                    return authenticateAndPrepare(request, route);
+                });
     }
 
     // -------------------------------------------------------------------------

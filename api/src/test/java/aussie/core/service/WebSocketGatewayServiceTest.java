@@ -42,7 +42,6 @@ class WebSocketGatewayServiceTest {
     private static final Duration TIMEOUT = Duration.ofSeconds(5);
     private ServiceRegistry serviceRegistry;
     private RouteAuthenticationService routeAuthService;
-    private EndpointMatcher endpointMatcher;
     private WebSocketGatewayService webSocketGatewayService;
 
     // Permissive security config for testing
@@ -93,9 +92,8 @@ class WebSocketGatewayServiceTest {
                 new InMemoryServiceConfigEventPublisher(),
                 TEST_CACHE_CONFIG);
         routeAuthService = new NoOpRouteAuthService();
-        endpointMatcher = new EndpointMatcher(new GlobPatternMatcher());
         // Connection rate limiting is handled by WebSocketRateLimitFilter, not the service
-        webSocketGatewayService = new WebSocketGatewayService(serviceRegistry, routeAuthService, endpointMatcher);
+        webSocketGatewayService = new WebSocketGatewayService(serviceRegistry, routeAuthService);
     }
 
     private WebSocketUpgradeRequest createRequest(String path) {
@@ -277,6 +275,17 @@ class WebSocketGatewayServiceTest {
         }
 
         @Test
+        @DisplayName("Should return ServiceNotFound when service ID is null")
+        void shouldReturnServiceNotFoundWhenServiceIdIsNull() {
+            var result = webSocketGatewayService
+                    .upgradePassThrough(null, createRequest("/ws/echo"))
+                    .await()
+                    .atMost(TIMEOUT);
+
+            assertInstanceOf(WebSocketUpgradeResult.ServiceNotFound.class, result);
+        }
+
+        @Test
         @DisplayName("Should return NotWebSocket when no WebSocket endpoint matches")
         void shouldReturnNotWebSocketWhenNoWebSocketEndpointMatches() {
             registerHttpService("test-service", "http://backend:9090", "/api/test");
@@ -309,6 +318,37 @@ class WebSocketGatewayServiceTest {
         }
 
         @Test
+        @DisplayName("Should apply route rewrites from the shared snapshot")
+        void shouldApplyRouteRewriteFromSharedSnapshot() {
+            var endpoint = new EndpointConfig(
+                    "/ws/{room}",
+                    Set.of("GET"),
+                    EndpointVisibility.PUBLIC,
+                    Optional.of("/socket/{room}"),
+                    false,
+                    EndpointType.WEBSOCKET);
+            var service = ServiceRegistration.builder("test-service")
+                    .baseUrl("http://backend:9090")
+                    .endpoints(List.of(endpoint))
+                    .build();
+            serviceRegistry.register(service).await().atMost(TIMEOUT);
+
+            var request = new WebSocketUpgradeRequest(
+                    "/ws/blue",
+                    Map.of("Upgrade", List.of("websocket"), "Connection", List.of("Upgrade")),
+                    URI.create("http://gateway:8080/ws/blue?channel=1"),
+                    "192.168.1.100");
+
+            var result = webSocketGatewayService
+                    .upgradePassThrough("test-service", request)
+                    .await()
+                    .atMost(TIMEOUT);
+
+            var authorized = assertInstanceOf(WebSocketUpgradeResult.Authorized.class, result);
+            assertEquals(URI.create("ws://backend:9090/socket/blue?channel=1"), authorized.backendUri());
+        }
+
+        @Test
         @DisplayName("Should return NotWebSocket when path does not match any endpoint")
         void shouldReturnNotWebSocketWhenPathDoesNotMatch() {
             registerWebSocketService("test-service", "http://backend:9090", "/ws/echo", false);
@@ -322,6 +362,19 @@ class WebSocketGatewayServiceTest {
 
             assertInstanceOf(WebSocketUpgradeResult.NotWebSocket.class, result);
         }
+
+        @Test
+        @DisplayName("Should not fall back to gateway routes for an unknown service")
+        void shouldNotFallBackToGatewayRoutesForUnknownService() {
+            registerWebSocketService("known-service", "http://backend:9090", "/ws/**", false);
+
+            var result = webSocketGatewayService
+                    .upgradePassThrough("unknown-service", createRequest("/ws/echo"))
+                    .await()
+                    .atMost(TIMEOUT);
+
+            assertInstanceOf(WebSocketUpgradeResult.ServiceNotFound.class, result);
+        }
     }
 
     @Nested
@@ -332,7 +385,7 @@ class WebSocketGatewayServiceTest {
         @DisplayName("Should return Unauthorized when auth fails")
         void shouldReturnUnauthorizedWhenAuthFails() {
             var failingAuthService = new FailingAuthService("Token expired");
-            webSocketGatewayService = new WebSocketGatewayService(serviceRegistry, failingAuthService, endpointMatcher);
+            webSocketGatewayService = new WebSocketGatewayService(serviceRegistry, failingAuthService);
 
             registerWebSocketService("test-service", "http://backend:9090", "/ws/protected", true);
 
@@ -349,8 +402,7 @@ class WebSocketGatewayServiceTest {
         @DisplayName("Should return Forbidden when access denied")
         void shouldReturnForbiddenWhenAccessDenied() {
             var forbiddingAuthService = new ForbiddingAuthService("Insufficient permissions");
-            webSocketGatewayService =
-                    new WebSocketGatewayService(serviceRegistry, forbiddingAuthService, endpointMatcher);
+            webSocketGatewayService = new WebSocketGatewayService(serviceRegistry, forbiddingAuthService);
 
             registerWebSocketService("test-service", "http://backend:9090", "/ws/admin", true);
 

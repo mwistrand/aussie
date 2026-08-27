@@ -199,6 +199,8 @@ public class RouteMatchingBenchmark {
 
         GatewaySnapshot snapshot;
         String matchingPath;
+        String matchingServiceId;
+        String matchingServicePath;
 
         @Setup
         public void setup() {
@@ -213,7 +215,9 @@ public class RouteMatchingBenchmark {
                 registrations.add(registration);
             }
             snapshot = GatewaySnapshot.build(registrations);
-            matchingPath = "/svc-" + (serviceCount - 1) + "/api/users/42";
+            matchingServiceId = "svc-" + (serviceCount - 1);
+            matchingServicePath = "/" + matchingServiceId + "/api/users/42";
+            matchingPath = matchingServicePath;
         }
     }
 
@@ -224,5 +228,10 @@ public class RouteMatchingBenchmark {
     @Benchmark
     public void registry_resolveAndMatch(ServiceCountScalingState state, Blackhole bh) {
         bh.consume(state.snapshot.match(state.matchingPath, "GET"));
+    }
+
+    @Benchmark
+    public void registry_resolveServiceAndMatch(ServiceCountScalingState state, Blackhole bh) {
+        bh.consume(state.snapshot.match(state.matchingServiceId, state.matchingServicePath, "GET"));
     }
 }
