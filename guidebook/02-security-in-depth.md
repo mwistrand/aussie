@@ -381,36 +381,21 @@ record AuthenticationLockout(
 
 Notice that severity is progressive. A first lockout is informational. A third lockout from the same key is critical. This prevents alert fatigue while still escalating persistent attackers.
 
-The `SecurityEventDispatcher` discovers handlers via `ServiceLoader` and dispatches events asynchronously on a dedicated daemon thread:
+The `SecurityEventDispatcher` discovers handlers via `ServiceLoader` and dispatches events asynchronously on a dedicated daemon thread. Its queue is bounded so a stalled handler cannot cause unbounded memory growth:
 
 ```java
-// SecurityEventDispatcher.java, lines 84-89
-executor = Executors.newSingleThreadExecutor(r -> {
-    var thread = new Thread(r, "security-event-dispatcher");
-    thread.setDaemon(true);
-    return thread;
-});
+executor = new ThreadPoolExecutor(
+        1, 1, 0, TimeUnit.MILLISECONDS,
+        new ArrayBlockingQueue<>(securityConfig.eventQueueCapacity()),
+        runnable -> {
+            var thread = new Thread(runnable, "security-event-dispatcher");
+            thread.setDaemon(true);
+            return thread;
+        },
+        new ThreadPoolExecutor.AbortPolicy());
 ```
 
-```java
-// SecurityEventDispatcher.java, lines 125-138
-public void dispatch(SecurityEvent event) {
-    if (!enabled || handlers == null || handlers.isEmpty()) {
-        return;
-    }
-
-    executor.submit(() -> {
-        for (var handler : handlers) {
-            try {
-                handler.handle(event);
-            } catch (Exception e) {
-                LOG.warnf("Handler %s failed to process event: %s",
-                    handler.name(), e.getMessage());
-            }
-        }
-    });
-}
-```
+`dispatch` uses `execute` and records `aussie.security.events.dispatch.rejected` when the queue is full or shutdown has begun. Shutdown stops admission, drains accepted work for `shutdown-drain-timeout`, then interrupts remaining work and counts queued drops.
 
 The `clientIdentifier` field on every event is a hashed IP address, not a raw IP. This is consistent throughout. The `RateLimitFilter` hashes client IDs before dispatching events (lines 306-311), and the `AuthRateLimitFilter` does the same (lines 254-259). Security events that contain raw client data would themselves become a data protection liability.
 
@@ -424,7 +409,7 @@ A senior would log authentication failures and call it done. The pieces that get
 
 ### Trade-offs
 
-The single-threaded executor for event dispatch means that a slow handler (e.g., one that calls an external webhook) blocks all subsequent handlers. This is a deliberate simplicity trade-off: a bounded thread pool would be more robust but introduces backpressure decisions, queue sizing, and dropped event policies. If a handler is slow, the correct fix is to make the handler asynchronous internally, not to add concurrency in the dispatcher.
+The single consumer preserves event order, so a slow handler still delays subsequent handlers. The bounded queue makes that delay fail predictably instead of growing memory without limit; operators size the queue and alert on rejected dispatches. Handlers that perform slow I/O should remain asynchronous internally.
 
 ## 2.7 Auth Rate Limiting with Account Lockout
 

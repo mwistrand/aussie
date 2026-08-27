@@ -122,6 +122,16 @@ public interface TelemetryConfig {
         @WithDefault("PT10M")
         Duration clientTrackingTtl();
 
+        /** Maximum number of security events waiting for handler dispatch. */
+        @WithName("event-queue-capacity")
+        @WithDefault("1000")
+        int eventQueueCapacity();
+
+        /** Maximum time allowed to drain accepted security events during shutdown. */
+        @WithName("shutdown-drain-timeout")
+        @WithDefault("PT5S")
+        Duration shutdownDrainTimeout();
+
         /**
          * DoS detection configuration.
          */

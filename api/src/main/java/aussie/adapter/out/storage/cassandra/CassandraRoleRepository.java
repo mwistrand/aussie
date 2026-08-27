@@ -180,19 +180,27 @@ public class CassandraRoleRepository implements RoleRepository {
     @Override
     public Uni<List<Role>> findAll() {
         final Executor executor = getContextExecutor();
+        final var workerExecutor = CassandraPageReader.workerExecutor();
         return Uni.createFrom()
                 .completionStage(() -> CassandraPageReader.readAll(
-                        session.executeAsync(selectAllStmt.bind()).toCompletableFuture(), this::fromRow))
+                        session.executeAsync(selectAllStmt.bind()).toCompletableFuture(),
+                        this::fromRow,
+                        workerExecutor))
                 .emitOn(executor);
     }
 
     @Override
     public Uni<List<Role>> findPage(int limit, int offset) {
         final var executor = getContextExecutor();
+        final var workerExecutor = CassandraPageReader.workerExecutor();
         final var statement = selectAllStmt.bind().setPageSize(limit);
         return Uni.createFrom()
                 .completionStage(() -> CassandraPageReader.readPage(
-                        session.executeAsync(statement).toCompletableFuture(), limit, offset, this::fromRow))
+                        session.executeAsync(statement).toCompletableFuture(),
+                        limit,
+                        offset,
+                        this::fromRow,
+                        workerExecutor))
                 .emitOn(executor);
     }
 

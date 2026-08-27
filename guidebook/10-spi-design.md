@@ -842,12 +842,12 @@ This asymmetry is deliberate: an ambiguous key is a security vulnerability that 
 
 ### The Bootstrap Initializer
 
-The startup hook at `api/src/main/java/aussie/adapter/in/bootstrap/BootstrapInitializer.java` (lines 36-136) handles the Quarkus lifecycle integration. Its most interesting aspect is the explicit documentation of its blocking behavior (lines 51-67):
+The startup hook at `api/src/main/java/aussie/adapter/in/bootstrap/BootstrapInitializer.java` handles the Quarkus lifecycle integration. It synchronously waits for each storage operation with the configured `aussie.bootstrap.operation-timeout` (default `PT10S`), so startup fails closed instead of blocking indefinitely:
 
 ```java
 /**
- * <p><strong>Note on blocking behavior:</strong> This method intentionally uses
- * {@code .await().indefinitely()} to block on reactive calls. This is required
+ * <p><strong>Note on blocking behavior:</strong> This method synchronously waits
+ * for reactive calls with the configured operation timeout. This is required
  * because Quarkus {@link StartupEvent} observers must be synchronous...
  *
  * <p>This is an acceptable use of blocking because:
@@ -859,14 +859,13 @@ The startup hook at `api/src/main/java/aussie/adapter/in/bootstrap/BootstrapInit
  */
 ```
 
-In a codebase that otherwise enforces non-blocking patterns (every SPI method returns `Uni` or `Multi`), this explicit justification for blocking is essential. Without it, a code reviewer would rightfully flag `await().indefinitely()` as a violation of the project's reactive discipline.
+In a codebase that otherwise enforces non-blocking patterns (every SPI method returns `Uni` or `Multi`), this explicit justification for bounded startup blocking is essential.
 
 The failure behavior is also explicitly designed (lines 94-108):
 
 ```java
 try {
-    // INTENTIONAL BLOCKING: Startup events must be synchronous
-    BootstrapResult result = bootstrapService.bootstrap().await().indefinitely();
+    BootstrapResult result = await(bootstrapService.bootstrap(), operationTimeout);
     logBootstrapResult(result);
 } catch (BootstrapException e) {
     LOG.error("========================================");
@@ -1076,7 +1075,7 @@ void init() {
             .toList();
 ```
 
-Events are dispatched asynchronously to all handlers, highest priority first (lines 125-139):
+Events are dispatched asynchronously to all handlers, highest priority first. A bounded queue prevents slow handlers from causing unbounded memory growth:
 
 ```java
 public void dispatch(SecurityEvent event) {
@@ -1084,20 +1083,23 @@ public void dispatch(SecurityEvent event) {
         return;
     }
 
-    executor.submit(() -> {
-        for (var handler : handlers) {
-            try {
-                handler.handle(event);
-            } catch (Exception e) {
-                LOG.warnf("Handler %s failed to process event: %s",
-                    handler.name(), e.getMessage());
+    try {
+        executor.execute(() -> {
+            for (var handler : handlers) {
+                try {
+                    handler.handle(event);
+                } catch (Exception e) {
+                    LOG.warnf("Handler %s failed to process event: %s", handler.name(), e.getMessage());
+                }
             }
-        }
-    });
+        });
+    } catch (RejectedExecutionException e) {
+        increment("aussie.security.events.dispatch.rejected");
+    }
 }
 ```
 
-Each handler is wrapped in a try/catch so one handler's failure does not prevent others from processing the event. The events themselves use a sealed interface hierarchy (from `api/src/main/java/aussie/spi/SecurityEvent.java`), which means handlers can use pattern matching:
+Each handler is wrapped in a try/catch so one handler's failure does not prevent others from processing the event. Rejected events are counted rather than blocking request processing. The events themselves use a sealed interface hierarchy (from `api/src/main/java/aussie/spi/SecurityEvent.java`), which means handlers can use pattern matching:
 
 ```java
 public class PagerDutySecurityEventHandler implements SecurityEventHandler {

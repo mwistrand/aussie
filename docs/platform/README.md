@@ -163,6 +163,9 @@ export AUSSIE_BOOTSTRAP_KEY="aussie_v1_$(openssl rand -base64 32 | tr '+/' '-_' 
 # Optional: Set TTL (default: 24 hours, maximum: 24 hours)
 export AUSSIE_BOOTSTRAP_TTL=PT24H
 
+# Optional: Bound each startup storage operation (default: 10 seconds)
+export AUSSIE_BOOTSTRAP_OPERATION_TIMEOUT=PT10S
+
 # Start the gateway
 make up
 ```
@@ -212,6 +215,7 @@ Recovery mode is logged with a security warning - review your system if you didn
 | `AUSSIE_BOOTSTRAP_ENABLED` | `false` | Enable bootstrap mode |
 | `AUSSIE_BOOTSTRAP_KEY` | - | Bootstrap key (`aussie_v1_` plus 43 Base64URL characters) |
 | `AUSSIE_BOOTSTRAP_TTL` | `PT24H` | Bootstrap key TTL (max: 24h) |
+| `AUSSIE_BOOTSTRAP_OPERATION_TIMEOUT` | `PT10S` | Maximum time for each bootstrap startup storage operation |
 | `AUSSIE_BOOTSTRAP_RECOVERY_MODE` | `false` | Allow bootstrap with existing keys |
 
 ## IdP Integration (RBAC)
@@ -1118,6 +1122,7 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | `AUSSIE_BOOTSTRAP_ENABLED` | `false` | Enable bootstrap mode |
 | `AUSSIE_BOOTSTRAP_KEY` | - | Bootstrap key (`aussie_v1_` plus 43 Base64URL characters) |
 | `AUSSIE_BOOTSTRAP_TTL` | `PT24H` | Bootstrap key TTL (max: 24h) |
+| `AUSSIE_BOOTSTRAP_OPERATION_TIMEOUT` | `PT10S` | Maximum time for each bootstrap startup storage operation |
 | `AUSSIE_BOOTSTRAP_RECOVERY_MODE` | `false` | Allow bootstrap with existing keys |
 
 ### Storage Configuration

@@ -78,6 +78,11 @@ class BootstrapServiceTest {
             }
 
             @Override
+            public Duration operationTimeout() {
+                return Duration.ofSeconds(10);
+            }
+
+            @Override
             public boolean recoveryMode() {
                 return recoveryMode;
             }

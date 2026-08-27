@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
@@ -44,6 +45,7 @@ public class WebSocketProxySession {
     private final ServerWebSocket clientSocket;
     private final WebSocket backendSocket;
     private final Vertx vertx;
+    private final Context owningContext;
     private final WebSocketConfig config;
     private final Optional<String> authSessionId;
     private final Optional<String> userId;
@@ -177,6 +179,8 @@ public class WebSocketProxySession {
         this.clientSocket = clientSocket;
         this.backendSocket = backendSocket;
         this.vertx = vertx;
+        final var currentContext = Vertx.currentContext();
+        this.owningContext = currentContext != null ? currentContext : vertx.getOrCreateContext();
         this.config = config;
         this.authSessionId = authSessionId;
         this.userId = userId;
@@ -414,6 +418,15 @@ public class WebSocketProxySession {
             return; // Already closing
         }
 
+        if (owningContext != null && Vertx.currentContext() != owningContext) {
+            owningContext.runOnContext(ignored -> closeOnOwningContext(code, reason));
+            return;
+        }
+
+        closeOnOwningContext(code, reason);
+    }
+
+    private void closeOnOwningContext(short code, String reason) {
         final var safeReason = safeCloseReason(reason);
 
         // Cancel all timers

@@ -3,11 +3,14 @@ package aussie.adapter.in.bootstrap;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -44,6 +47,7 @@ class BootstrapInitializerTest {
     @BeforeEach
     void setUp() {
         initializer = new BootstrapInitializer(bootstrapService, config);
+        lenient().when(config.operationTimeout()).thenReturn(Duration.ofSeconds(1));
     }
 
     @Nested
@@ -73,6 +77,7 @@ class BootstrapInitializerTest {
 
             var ex = assertThrows(BootstrapException.class, () -> initializer.onStart(startupEvent));
             assertEquals("Bootstrap is enabled but no key provided. Set AUSSIE_BOOTSTRAP_KEY.", ex.getMessage());
+            verify(config, never()).operationTimeout();
         }
 
         @Test
@@ -143,6 +148,60 @@ class BootstrapInitializerTest {
     @Nested
     @DisplayName("Bootstrap failure")
     class FailureTests {
+
+        @Test
+        @DisplayName("Should reject a non-positive operation timeout")
+        void shouldRejectNonPositiveOperationTimeout() {
+            when(config.enabled()).thenReturn(true);
+            when(config.key()).thenReturn(Optional.of("a-valid-key-that-is-long-enough-for-bootstrap"));
+            when(config.operationTimeout()).thenReturn(Duration.ZERO);
+
+            var ex = assertThrows(BootstrapException.class, () -> initializer.onStart(startupEvent));
+            assertEquals("Bootstrap operation timeout must be positive", ex.getMessage());
+            verifyNoInteractions(bootstrapService);
+        }
+
+        @Test
+        @DisplayName("Should fail closed when checking bootstrap times out")
+        void shouldFailClosedWhenCheckTimesOut() {
+            when(config.enabled()).thenReturn(true);
+            when(config.key()).thenReturn(Optional.of("a-valid-key-that-is-long-enough-for-bootstrap"));
+            when(config.operationTimeout()).thenReturn(Duration.ofMillis(10));
+            when(bootstrapService.shouldBootstrap()).thenReturn(Uni.createFrom().nothing());
+
+            var ex = assertThrows(BootstrapException.class, () -> initializer.onStart(startupEvent));
+            assertEquals("Bootstrap startup operation timed out", ex.getMessage());
+        }
+
+        @Test
+        @DisplayName("Should fail closed when bootstrap times out")
+        void shouldFailClosedWhenBootstrapTimesOut() {
+            when(config.enabled()).thenReturn(true);
+            when(config.key()).thenReturn(Optional.of("a-valid-key-that-is-long-enough-for-bootstrap"));
+            when(config.operationTimeout()).thenReturn(Duration.ofMillis(10));
+            when(bootstrapService.shouldBootstrap()).thenReturn(Uni.createFrom().item(true));
+            when(bootstrapService.bootstrap()).thenReturn(Uni.createFrom().nothing());
+
+            var ex = assertThrows(BootstrapException.class, () -> initializer.onStart(startupEvent));
+            assertEquals("Bootstrap startup operation timed out", ex.getMessage());
+        }
+
+        @Test
+        @DisplayName("Should restore interruption and fail closed")
+        void shouldRestoreInterruptionAndFailClosed() {
+            when(config.enabled()).thenReturn(true);
+            when(config.key()).thenReturn(Optional.of("a-valid-key-that-is-long-enough-for-bootstrap"));
+            when(bootstrapService.shouldBootstrap()).thenReturn(Uni.createFrom().nothing());
+            Thread.currentThread().interrupt();
+
+            try {
+                var ex = assertThrows(BootstrapException.class, () -> initializer.onStart(startupEvent));
+                assertEquals("Bootstrap startup operation interrupted", ex.getMessage());
+                assertTrue(Thread.currentThread().isInterrupted());
+            } finally {
+                Thread.interrupted();
+            }
+        }
 
         @Test
         @DisplayName("Should rethrow BootstrapException")

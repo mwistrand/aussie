@@ -18,6 +18,7 @@ import io.smallrye.config.WithDefault;
  *   <li>{@code aussie.bootstrap.enabled} - Enable bootstrap mode (default: false)</li>
  *   <li>{@code aussie.bootstrap.key} - Required versioned bootstrap key</li>
  *   <li>{@code aussie.bootstrap.ttl} - Bootstrap key TTL (default: PT24H, max: PT24H)</li>
+ *   <li>{@code aussie.bootstrap.operation-timeout} - Startup operation timeout (default: PT10S)</li>
  *   <li>{@code aussie.bootstrap.recovery-mode} - Allow bootstrap with existing keys (default: false)</li>
  * </ul>
  *
@@ -65,6 +66,10 @@ public interface BootstrapConfig {
      */
     @WithDefault("PT24H")
     Duration ttl();
+
+    /** Maximum time allowed for each bootstrap storage operation during startup. */
+    @WithDefault("PT10S")
+    Duration operationTimeout();
 
     /**
      * Recovery mode allows bootstrap even when admin keys already exist.

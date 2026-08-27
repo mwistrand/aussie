@@ -46,6 +46,8 @@ aussie.telemetry.attribution.enabled=true
 | `aussie.telemetry.security.enabled` | `false` | Enable security monitoring |
 | `aussie.telemetry.security.rate-limit-window` | `PT1M` | Window for security event rate limiting |
 | `aussie.telemetry.security.rate-limit-threshold` | `1000` | Max security events per window before throttling |
+| `aussie.telemetry.security.event-queue-capacity` | `1000` | Maximum security events waiting for handler dispatch |
+| `aussie.telemetry.security.shutdown-drain-timeout` | `PT5S` | Grace period for accepted events during shutdown |
 | `aussie.telemetry.security.dos-detection.enabled` | `true` | Enable automatic DoS pattern detection |
 | `aussie.telemetry.security.dos-detection.spike-threshold` | `5.0` | Request rate spike multiplier for DoS detection |
 | `aussie.telemetry.security.dos-detection.error-rate-threshold` | `0.5` | Error rate threshold for DoS detection |
@@ -202,6 +204,9 @@ These metrics expose configured bulkhead limits. For actual pool usage metrics, 
 | `aussie.security.auth.failures` | Counter | `reason`, `method` | Auth failures (via SPI handlers) |
 | `aussie.security.rate_limit.exceeded` | Counter | `service_id` | Rate limit violations |
 | `aussie.security.dos.detected` | Counter | `attack_type` | DoS attack detections |
+| `aussie.security.events.dispatch.rejected` | Counter | - | Events rejected because the dispatch queue is full or shutting down |
+| `aussie.security.events.dispatch.forced_drops` | Counter | - | Queued events dropped after the shutdown drain timeout |
+| `aussie.security.events.dispatch.shutdown_timeouts` | Counter | - | Dispatch shutdowns that exceeded the drain timeout |
 | `aussie.signing.key.ready` | Gauge | - | `1` when required token issuance has one active key published in JWKS; otherwise `0` |
 
 ### Traffic Attribution Metrics

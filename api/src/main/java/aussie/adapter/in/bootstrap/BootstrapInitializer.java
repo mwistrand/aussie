@@ -1,10 +1,14 @@
 package aussie.adapter.in.bootstrap;
 
+import java.time.Duration;
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
 import io.quarkus.runtime.StartupEvent;
+import io.smallrye.mutiny.TimeoutException;
+import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
 import aussie.core.config.BootstrapConfig;
@@ -50,8 +54,8 @@ public class BootstrapInitializer {
     /**
      * Bootstrap initialization runs at startup.
      *
-     * <p><strong>Note on blocking behavior:</strong> This method intentionally uses
-     * {@code .await().indefinitely()} to block on reactive calls. This is required
+     * <p><strong>Note on blocking behavior:</strong> This method synchronously waits
+     * for reactive calls with the configured operation timeout. This is required
      * because Quarkus {@link StartupEvent} observers must be synchronous - the
      * bootstrap process must complete before the application can accept requests.
      *
@@ -72,7 +76,6 @@ public class BootstrapInitializer {
         }
 
         LOG.info("Bootstrap mode is enabled");
-
         // Validate key is provided before checking anything else
         if (config.key().isEmpty() || config.key().get().isBlank()) {
             LOG.error("========================================");
@@ -82,18 +85,21 @@ public class BootstrapInitializer {
             throw new BootstrapException("Bootstrap is enabled but no key provided. Set AUSSIE_BOOTSTRAP_KEY.");
         }
 
-        // INTENTIONAL BLOCKING: Startup events must be synchronous
-        if (!bootstrapService.shouldBootstrap().await().indefinitely()) {
-            LOG.info("Bootstrap skipped: admin keys already exist (use recovery mode to override)");
-            AUDIT.infof("BOOTSTRAP_SKIPPED reason=admin_keys_exist recovery_mode=%s", config.recoveryMode());
-            return;
+        final var operationTimeout = config.operationTimeout();
+        if (operationTimeout == null || operationTimeout.isZero() || operationTimeout.isNegative()) {
+            throw new BootstrapException("Bootstrap operation timeout must be positive");
         }
-
-        LOG.info("Creating bootstrap admin key...");
+        LOG.infof("Bootstrap startup operation timeout configured: %s", operationTimeout);
 
         try {
-            // INTENTIONAL BLOCKING: Startup events must be synchronous
-            BootstrapResult result = bootstrapService.bootstrap().await().indefinitely();
+            if (!await(bootstrapService.shouldBootstrap(), operationTimeout)) {
+                LOG.info("Bootstrap skipped: admin keys already exist (use recovery mode to override)");
+                AUDIT.infof("BOOTSTRAP_SKIPPED reason=admin_keys_exist recovery_mode=%s", config.recoveryMode());
+                return;
+            }
+
+            LOG.info("Creating bootstrap admin key...");
+            BootstrapResult result = await(bootstrapService.bootstrap(), operationTimeout);
             logBootstrapResult(result);
         } catch (BootstrapException e) {
             LOG.error("========================================");
@@ -106,6 +112,29 @@ public class BootstrapInitializer {
             LOG.error("========================================");
             throw new BootstrapException("Bootstrap failed unexpectedly", e);
         }
+    }
+
+    private <T> T await(Uni<T> operation, Duration timeout) {
+        try {
+            return operation.await().atMost(timeout);
+        } catch (TimeoutException e) {
+            throw new BootstrapException("Bootstrap startup operation timed out", e);
+        } catch (RuntimeException e) {
+            if (hasCause(e, InterruptedException.class)) {
+                Thread.currentThread().interrupt();
+                throw new BootstrapException("Bootstrap startup operation interrupted", e);
+            }
+            throw e;
+        }
+    }
+
+    private static boolean hasCause(Throwable error, Class<? extends Throwable> type) {
+        for (var current = error; current != null; current = current.getCause()) {
+            if (type.isInstance(current)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void logBootstrapResult(BootstrapResult result) {

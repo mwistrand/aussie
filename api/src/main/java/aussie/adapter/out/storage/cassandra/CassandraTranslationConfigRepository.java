@@ -284,14 +284,17 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
     @Override
     public Uni<List<TranslationConfigVersion>> listVersions() {
         final var executor = getContextExecutor();
+        final var workerExecutor = CassandraPageReader.workerExecutor();
         return getMetadataValue(ACTIVE_VERSION_KEY).flatMap(activeId -> Uni.createFrom()
                 .completionStage(() -> CassandraPageReader.readAll(
-                        session.executeAsync(selectAllStmt.bind()).toCompletableFuture(), row -> {
+                        session.executeAsync(selectAllStmt.bind()).toCompletableFuture(),
+                        row -> {
                             final var version = fromRow(row);
                             final var isActive =
                                     activeId.isPresent() && activeId.get().equals(version.id());
                             return isActive ? version.activate() : version.deactivate();
-                        }))
+                        },
+                        workerExecutor))
                 .emitOn(executor)
                 .map(versions -> {
                     versions.sort(Comparator.comparing(TranslationConfigVersion::version)

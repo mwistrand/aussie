@@ -257,19 +257,27 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     @Override
     public Uni<List<ServiceRegistration>> findAll() {
         Executor executor = getContextExecutor();
+        final var workerExecutor = CassandraPageReader.workerExecutor();
         return Uni.createFrom()
                 .completionStage(() -> CassandraPageReader.readAll(
-                        session.executeAsync(selectAllStmt.bind()).toCompletableFuture(), this::fromRow))
+                        session.executeAsync(selectAllStmt.bind()).toCompletableFuture(),
+                        this::fromRow,
+                        workerExecutor))
                 .emitOn(executor);
     }
 
     @Override
     public Uni<List<ServiceRegistration>> findPage(int limit, int offset) {
         final var executor = getContextExecutor();
+        final var workerExecutor = CassandraPageReader.workerExecutor();
         final var statement = selectAllStmt.bind().setPageSize(limit);
         return Uni.createFrom()
                 .completionStage(() -> CassandraPageReader.readPage(
-                        session.executeAsync(statement).toCompletableFuture(), limit, offset, this::fromRow))
+                        session.executeAsync(statement).toCompletableFuture(),
+                        limit,
+                        offset,
+                        this::fromRow,
+                        workerExecutor))
                 .emitOn(executor);
     }
 
@@ -288,9 +296,10 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     @Override
     public Uni<Long> count() {
         Executor executor = getContextExecutor();
+        final var workerExecutor = CassandraPageReader.workerExecutor();
         return Uni.createFrom()
                 .completionStage(() -> CassandraPageReader.countAll(
-                        session.executeAsync(countStmt.bind()).toCompletableFuture()))
+                        session.executeAsync(countStmt.bind()).toCompletableFuture(), workerExecutor))
                 .emitOn(executor);
     }
 

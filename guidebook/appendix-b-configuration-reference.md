@@ -478,6 +478,7 @@ The test profile disables auth rate limiting because test suites exercising auth
 | `aussie.bootstrap.enabled` | `boolean` | `false` | `AUSSIE_BOOTSTRAP_ENABLED` | Enable bootstrap mode for first-time admin setup. |
 | `aussie.bootstrap.key` | `Optional<String>` | _(not set)_ | `AUSSIE_BOOTSTRAP_KEY` | Bootstrap key. Must be `aussie_v1_` plus 43 Base64URL characters. Required when bootstrap is enabled. |
 | `aussie.bootstrap.ttl` | `Duration` | `PT24H` | `AUSSIE_BOOTSTRAP_TTL` | Bootstrap key TTL. Maximum allowed is 24 hours; values exceeding this are capped. |
+| `aussie.bootstrap.operation-timeout` | `Duration` | `PT10S` | `AUSSIE_BOOTSTRAP_OPERATION_TIMEOUT` | Maximum time for each bootstrap storage operation during startup; must be positive. |
 | `aussie.bootstrap.recovery-mode` | `boolean` | `false` | `AUSSIE_BOOTSTRAP_RECOVERY_MODE` | Allow bootstrap even when admin keys exist. For emergency recovery only. |
 
 **Profile overrides:** None.
@@ -887,6 +888,8 @@ These failure semantics are security decisions. Rate limiting and token revocati
 | `aussie.telemetry.security.enabled` | `boolean` | `false` | `AUSSIE_TELEMETRY_SECURITY_ENABLED` | Enable security monitoring for anomaly detection. |
 | `aussie.telemetry.security.rate-limit-window` | `Duration` | `PT1M` | `AUSSIE_TELEMETRY_SECURITY_RATE_LIMIT_WINDOW` | Time window for rate limiting calculations. |
 | `aussie.telemetry.security.rate-limit-threshold` | `int` | `1000` | `AUSSIE_TELEMETRY_SECURITY_RATE_LIMIT_THRESHOLD` | Request threshold within window before triggering alerts. |
+| `aussie.telemetry.security.event-queue-capacity` | `int` | `1000` | `AUSSIE_TELEMETRY_SECURITY_EVENT_QUEUE_CAPACITY` | Maximum queued security events; must be positive. Events are rejected when full. |
+| `aussie.telemetry.security.shutdown-drain-timeout` | `Duration` | `PT5S` | `AUSSIE_TELEMETRY_SECURITY_SHUTDOWN_DRAIN_TIMEOUT` | Maximum shutdown drain interval; must be positive. |
 | `aussie.telemetry.security.dos-detection.enabled` | `boolean` | `true` | `AUSSIE_TELEMETRY_SECURITY_DOS_DETECTION_ENABLED` | Enable DoS attack pattern detection. |
 | `aussie.telemetry.security.dos-detection.spike-threshold` | `double` | `5.0` | `AUSSIE_TELEMETRY_SECURITY_DOS_DETECTION_SPIKE_THRESHOLD` | Spike multiplier. Alert when count exceeds `rate-limit-threshold * spike-threshold`. |
 | `aussie.telemetry.security.dos-detection.error-rate-threshold` | `double` | `0.5` | `AUSSIE_TELEMETRY_SECURITY_DOS_DETECTION_ERROR_RATE_THRESHOLD` | Error rate (0.0 to 1.0) that triggers suspicious activity alerts. |

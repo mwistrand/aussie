@@ -3,6 +3,7 @@ package aussie.adapter.in.websocket;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -17,9 +18,14 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Uni;
+import io.vertx.core.Context;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
@@ -90,6 +96,49 @@ class WebSocketProxySessionTest {
             assertEquals(Optional.empty(), session.authSessionId());
             assertEquals(Optional.empty(), session.userId());
             assertEquals(0L, session.rateLimitedMessageCount());
+        }
+
+        @Test
+        @DisplayName("should marshal worker-thread closure to the owning event loop")
+        void shouldMarshalWorkerThreadClosureToOwningEventLoop() throws Exception {
+            final var realVertx = Vertx.vertx();
+            final var created = new CountDownLatch(1);
+            final var closed = new CountDownLatch(1);
+            final var owningContext = new AtomicReference<Context>();
+            final var closeContext = new AtomicReference<Context>();
+            final var sessionReference = new AtomicReference<WebSocketProxySession>();
+            try {
+                realVertx.runOnContext(ignored -> {
+                    owningContext.set(Vertx.currentContext());
+                    sessionReference.set(new WebSocketProxySession(
+                            "s1",
+                            clientSocket,
+                            backendSocket,
+                            realVertx,
+                            config,
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            MessageRateLimitHandler.noOp(),
+                            () -> {
+                                closeContext.set(Vertx.currentContext());
+                                closed.countDown();
+                            }));
+                    created.countDown();
+                });
+                assertTrue(created.await(1, TimeUnit.SECONDS));
+                CompletableFuture.runAsync(() -> sessionReference.get().closeWithReason((short) 1008, "revoked"))
+                        .join();
+
+                assertTrue(closed.await(1, TimeUnit.SECONDS));
+                assertSame(owningContext.get(), closeContext.get());
+                verify(clientSocket).close((short) 1008, "revoked");
+                verify(backendSocket).close((short) 1008, "revoked");
+            } finally {
+                realVertx.close().toCompletionStage().toCompletableFuture().join();
+            }
         }
 
         @Test

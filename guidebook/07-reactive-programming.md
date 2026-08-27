@@ -632,7 +632,7 @@ Every interaction is event-driven:
 - **Either side closes**: close handler fires, closes the other side
 - **Error on either side**: exception handler fires, closes both sides with an error code
 
-The `closeWithReason` method uses `AtomicBoolean` for idempotency:
+The `closeWithReason` method uses `AtomicBoolean` for idempotency and marshals lifecycle work back to the session's owning Vert.x context. This matters for logout, revocation, and shutdown events that may arrive on worker threads:
 
 ```java
 // api/src/main/java/aussie/adapter/in/websocket/WebSocketProxySession.java, lines 411-448
@@ -640,12 +640,17 @@ public void closeWithReason(short code, String reason) {
     if (!closing.compareAndSet(false, true)) {
         return; // Already closing
     }
-    // Cancel all timers, close both connections
-    // ...
+
+    if (owningContext != null && Vertx.currentContext() != owningContext) {
+        owningContext.runOnContext(ignored -> closeOnOwningContext(code, reason));
+        return;
+    }
+
+    closeOnOwningContext(code, reason);
 }
 ```
 
-This prevents the cascade where client close triggers backend close, which triggers another close attempt on the already-closing client socket.
+This prevents the cascade where client close triggers backend close, which triggers another close attempt on the already-closing client socket, while keeping socket and timer mutations serialized on their event loop.
 
 ### Timer-Based Lifecycle Management
 

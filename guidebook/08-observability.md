@@ -325,64 +325,43 @@ private String hashClientId(String clientId) {
 }
 ```
 
-### Async Dispatch via Single-Threaded Executor
+### Async Dispatch via a Bounded Single-Threaded Executor
 
-The `SecurityEventDispatcher` uses a single-threaded executor with daemon threads to dispatch events asynchronously:
+The `SecurityEventDispatcher` uses one daemon worker to preserve event order and a bounded queue to cap memory when handlers fall behind:
 
 ```java
-// api/src/main/java/aussie/adapter/out/telemetry/SecurityEventDispatcher.java (lines 48-89)
-
-@PostConstruct
-void init() {
-    if (!enabled) {
-        LOG.debug("Security monitoring is disabled - event dispatcher inactive");
-        return;
-    }
-
-    // Load handlers via ServiceLoader
-    var loadedHandlers = ServiceLoader.load(SecurityEventHandler.class).stream()
-            .map(ServiceLoader.Provider::get)
-            .toList();
-
-    // Filter available and sort by priority
-    handlers = loadedHandlers.stream()
-            .filter(SecurityEventHandler::isAvailable)
-            .sorted(Comparator.comparingInt(SecurityEventHandler::priority).reversed())
-            .toList();
-
-    // Create executor for async dispatch
-    executor = Executors.newSingleThreadExecutor(r -> {
-        var thread = new Thread(r, "security-event-dispatcher");
-        thread.setDaemon(true);
-        return thread;
-    });
-}
+executor = new ThreadPoolExecutor(
+        1, 1, 0, TimeUnit.MILLISECONDS,
+        new ArrayBlockingQueue<>(securityConfig.eventQueueCapacity()),
+        runnable -> {
+            var thread = new Thread(runnable, "security-event-dispatcher");
+            thread.setDaemon(true);
+            return thread;
+        },
+        new ThreadPoolExecutor.AbortPolicy());
 ```
 
-The dispatch method itself is intentionally simple:
+Dispatch remains non-blocking. Saturated or shutting-down executors reject new work, which is counted for alerting:
 
 ```java
-// api/src/main/java/aussie/adapter/out/telemetry/SecurityEventDispatcher.java (lines 125-139)
-
-public void dispatch(SecurityEvent event) {
-    if (!enabled || handlers == null || handlers.isEmpty()) {
-        return;
-    }
-
-    executor.submit(() -> {
+try {
+    executor.execute(() -> {
         for (var handler : handlers) {
             try {
                 handler.handle(event);
             } catch (Exception e) {
-                LOG.warnf("Handler %s failed to process event: %s",
-                        handler.name(), e.getMessage());
+                LOG.warnf("Handler %s failed to process event: %s", handler.name(), e.getMessage());
             }
         }
     });
+} catch (RejectedExecutionException e) {
+    increment("aussie.security.events.dispatch.rejected");
 }
 ```
 
-A single-threaded executor is chosen because security events must be processed in order for correct correlation (a series of `AuthenticationFailure` events leading to an `AuthenticationLockout` should arrive at the SIEM in chronological order), and because throughput is not the concern. The rate of security events is orders of magnitude lower than the rate of requests.
+At shutdown, admission stops before the executor drains accepted events for `aussie.telemetry.security.shutdown-drain-timeout`. Work remaining after that bound is interrupted, and queued drops are counted.
+
+A single worker is chosen because security events must be processed in order for correct correlation. The bounded queue adds an explicit overload policy without adding concurrent delivery or reordering events.
 
 ### The Handler SPI
 
