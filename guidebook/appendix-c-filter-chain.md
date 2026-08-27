@@ -32,6 +32,10 @@ The following diagram traces a standard HTTP request from arrival through both f
   |         (higher priority = runs first)    |
   =============================================
   |                                           |
+  |  [Priority 105] RouteResolutionFilter     |
+  |    |                                      |
+  |    |-- resolves route snapshot, next()    |
+  |    v                                      |
   |  [Priority 100] CorsFilter               |
   |    |                                      |
   |    |-- preflight OPTIONS? --> 200/403     |----> RESPONSE (short-circuit)
@@ -126,13 +130,25 @@ A few things to note about this diagram. First, the WebSocket filters (prioritie
 
 ## Layer 1: Vert.x RouteFilters
 
+### RouteResolutionFilter (Priority 105)
+
+**File:** `api/src/main/java/aussie/system/filter/RouteResolutionFilter.java`
+
+This filter resolves the registered route for the inbound request once and caches the result on the `RoutingContext`, so downstream consumers (CORS, auth mechanisms, rate limit, access control) read the cached lookup instead of re-querying `ServiceRegistry`. It runs before CORS (100). For CORS preflight requests it resolves the method named by `Access-Control-Request-Method`; platform-owned `/admin`, `/auth`, and `/q` paths are excluded from service routing.
+
+The filter calls the non-blocking, TTL-aware `ServiceRegistry.findRouteAsync(path, method)` and stashes the `Optional<RouteLookupResult>` under the `aussie.route.lookup` key. When the resolved route's effective visibility is `PUBLIC`, the filter also sets `aussie.route.public = Boolean.TRUE`. `CredentialAuthenticationMechanism` consults this flag and short-circuits immediately for PUBLIC routes, skipping all credential extraction and validation. `AccessControlFilter` separately enforces source-based access for PRIVATE routes; PUBLIC routes pass through.
+
+**What it modifies:** Sets `aussie.route.lookup` and (when the route is PUBLIC) `aussie.route.public` on the `RoutingContext`.
+
+**Short-circuit conditions:** None. The filter always calls `rc.next()` after a successful lookup; lookup failures fail the routing context.
+
 ### CorsFilter (Priority 100)
 
 **File:** `api/src/main/java/aussie/adapter/in/http/CorsFilter.java`
 
-The CORS filter is the first code that touches every inbound request. It runs at the Vert.x routing layer rather than at the JAX-RS layer because the gateway proxies requests that may never reach a JAX-RS resource method. A JAX-RS response filter would miss those proxied requests entirely. By running at the Vert.x layer, the filter ensures that every response carries the correct CORS headers.
+The CORS filter runs at the Vert.x routing layer rather than at the JAX-RS layer because the gateway proxies requests that may never reach a JAX-RS resource method. A JAX-RS response filter would miss those proxied requests entirely. By running at the Vert.x layer, the filter ensures that every response carries the correct CORS headers.
 
-The filter reads a global `GatewayCorsConfig` from CDI as a fallback. If CORS is disabled or the config is not resolvable, it calls `rc.next()` and passes through. If the request carries no `Origin` header, it is not a CORS request and passes through. Otherwise, a matched route uses its service registration's `cors` policy; gateway-owned endpoints resolve the origin through the compiled service-policy index. The filter validates the origin and request method, then adds the appropriate response headers (`Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`, `Access-Control-Allow-Credentials`, `Access-Control-Max-Age`). When credentials are allowed, the filter echoes the specific origin rather than returning `*`, and sets `Vary: Origin` to prevent cache poisoning.
+The filter reads a global `GatewayCorsConfig` from CDI as a fallback. If CORS is disabled or the config is not resolvable, it calls `rc.next()` and passes through. If the request carries no `Origin` header, it is not a CORS request and passes through. Otherwise, a matched route uses the cached snapshot's service registration `cors` policy; gateway-owned endpoints resolve the origin through the compiled service-policy index. The filter validates the origin and request method, then adds the appropriate response headers (`Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`, `Access-Control-Allow-Credentials`, `Access-Control-Max-Age`). When credentials are allowed, the filter echoes the specific origin rather than returning `*`, and sets `Vary: Origin` to prevent cache poisoning.
 
 **What it modifies:** Response headers on the `RoutingContext`.
 
@@ -142,23 +158,11 @@ The filter reads a global `GatewayCorsConfig` from CDI as a fallback. If CORS is
 
 For non-preflight requests, the filter always calls `next()`, even if the origin is not allowed (it simply omits the CORS headers, and the browser enforces the policy on the client side).
 
-### RouteResolutionFilter (Priority 95)
-
-**File:** `api/src/main/java/aussie/system/filter/RouteResolutionFilter.java`
-
-This filter resolves the registered route for the inbound request once and caches the result on the `RoutingContext`, so downstream consumers (auth mechanisms, rate limit, access control) read the cached lookup instead of re-querying `ServiceRegistry`. It runs between CORS (100) and SecurityHeaders (90). CORS preflights resolve their requested route while selecting a policy, then short-circuit without invoking this filter. Platform-owned `/admin`, `/auth`, and `/q` paths are excluded from service routing.
-
-The filter calls the non-blocking, TTL-aware `ServiceRegistry.findRouteAsync(path, method)` and stashes the `Optional<RouteLookupResult>` under the `aussie.route.lookup` key. When the resolved route's effective visibility is `PUBLIC`, the filter also sets `aussie.route.public = Boolean.TRUE`. `CredentialAuthenticationMechanism` consults this flag and short-circuits immediately for PUBLIC routes, skipping all credential extraction and validation. `AccessControlFilter` separately enforces source-based access for PRIVATE routes; PUBLIC routes pass through.
-
-**What it modifies:** Sets `aussie.route.lookup` and (when the route is PUBLIC) `aussie.route.public` on the `RoutingContext`.
-
-**Short-circuit conditions:** None. The filter always calls `rc.next()`.
-
 ### SecurityHeadersFilter (Priority 90)
 
 **File:** `api/src/main/java/aussie/adapter/in/http/SecurityHeadersFilter.java`
 
-This filter adds OWASP-recommended security response headers to every response. It runs after CORS (priority 90 < 100) so that CORS headers set by `CorsFilter` are not overwritten. The filter reads global defaults from `SecurityHeadersConfig` and resolves per-service overrides from the local route cache via `ServiceRegistry.getServiceFromLocalCache()`. When a service declares header overrides, those values replace the global defaults; an empty string override suppresses the header. The filter sets five headers unconditionally and two optionally:
+This filter adds OWASP-recommended security response headers to every response. It runs after CORS (priority 90 < 100) so that CORS headers set by `CorsFilter` are not overwritten. The filter reads global defaults from `SecurityHeadersConfig` and resolves per-service overrides from the route snapshot cached on the `RoutingContext`. When a service declares header overrides, those values replace the global defaults; an empty string override suppresses the header. The filter sets five headers unconditionally and two optionally:
 
 | Header | Default | Purpose |
 |--------|---------|---------|
@@ -322,8 +326,8 @@ The following table lists every filter in numeric execution order across both la
 
 | Runs | Priority | Class | Package | Short-Circuits? |
 |------|----------|-------|---------|-----------------|
-| 1 | 100 | `CorsFilter` | `adapter.in.http` | Yes (OPTIONS preflight) |
-| 2 | 95 | `RouteResolutionFilter` | `system.filter` | No |
+| 1 | 105 | `RouteResolutionFilter` | `system.filter` | Only on lookup failure |
+| 2 | 100 | `CorsFilter` | `adapter.in.http` | Yes (OPTIONS preflight) |
 | 3 | 90 | `SecurityHeadersFilter` | `adapter.in.http` | No |
 | 4 | 50 | `WebSocketUpgradeFilter` | `adapter.in.websocket` | Yes (WS upgrade) |
 | 5 | 40 | `WebSocketRateLimitFilter` | `adapter.in.websocket` | Yes (429 on WS rate limit) |
@@ -344,7 +348,7 @@ Note: Filters at the same priority (900) have no guaranteed relative ordering. T
 
 The filter chain encodes a set of policy decisions about what information to reveal, what resources to protect, and what work to avoid. Each ordering choice has a specific rationale.
 
-**CORS before everything (100).** CORS preflight responses must include the correct headers even when the gateway rejects the subsequent request. If CORS ran after rate limiting, a rate-limited preflight would return 429 without CORS headers, and the browser would interpret this as a CORS failure rather than a rate limit, which is a confusing error for the API consumer.
+**Route resolution before CORS (105 vs. 100).** CORS needs the same TTL-aware route snapshot as downstream policy filters so a service's CORS override matches the route that the gateway authorizes and forwards. CORS still runs before filters that can reject a successfully resolved request, so preflight responses carry the correct headers instead of surfacing downstream failures as browser CORS errors.
 
 **Security headers before application logic (90).** Security headers must be present on every response, including error responses generated by downstream filters. If security headers ran after rate limiting, a 429 response would lack `X-Content-Type-Options` and `Content-Security-Policy`.
 

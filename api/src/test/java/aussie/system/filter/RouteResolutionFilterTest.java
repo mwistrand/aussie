@@ -99,6 +99,21 @@ class RouteResolutionFilterTest {
             verify(rc).put(RouteContextAttributes.PUBLIC, Boolean.TRUE);
             verify(rc).next();
         }
+
+        @Test
+        @DisplayName("uses the requested method when resolving a CORS preflight")
+        void preflightUsesRequestedMethod() {
+            stubRequest("/svc/api/public", HttpMethod.OPTIONS);
+            when(request.getHeader("Access-Control-Request-Method")).thenReturn("POST");
+            var match = publicRouteMatch();
+            when(serviceRegistry.findRouteAsync("/svc/api/public", "POST"))
+                    .thenReturn(Uni.createFrom().item(Optional.of(match)));
+
+            filter.resolveRoute(rc);
+
+            verify(serviceRegistry).findRouteAsync("/svc/api/public", "POST");
+            verify(rc).next();
+        }
     }
 
     @Nested

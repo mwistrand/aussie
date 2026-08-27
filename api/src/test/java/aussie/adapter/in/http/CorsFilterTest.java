@@ -22,6 +22,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.model.common.CorsConfig;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
@@ -317,7 +318,7 @@ class CorsFilterTest {
                     new EndpointConfig("/api/test", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty()),
                     "/api/test",
                     Map.of());
-            when(serviceRegistry.findRoute("/api/test", "GET")).thenReturn(Optional.of(route));
+            when(rc.get(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of(route));
             when(request.getHeader("Origin")).thenReturn("https://service.example");
 
             filter.corsHandler(rc);

@@ -172,7 +172,7 @@ These are not hypothetical decisions. Every one of them is enforced by running c
 
 **Consequences:**
 - CORS headers are added to every response, including proxied responses, WebSocket upgrades, health check responses, and Vert.x-generated error pages. No response leaves the gateway without proper CORS or security headers.
-- Filter ordering is explicit through the priority parameter: CORS at 100, security headers at 90, WebSocket upgrade at 50. Higher priorities run first.
+- Filter ordering is explicit through the priority parameter: route resolution at 105, CORS at 100, security headers at 90, WebSocket upgrade at 50. Higher priorities run first.
 - The filters inject configuration via `Instance<Config>` (CDI programmatic lookup) rather than direct injection. This allows the filter to gracefully skip when configuration is not resolvable, rather than failing at startup.
 - JAX-RS `@ServerRequestFilter` is still used for concerns that need JAX-RS context (rate limiting at `AUTHENTICATION - 50` priority, authentication, access control). The system uses both filter mechanisms, each for its appropriate use case.
 - The pattern couples the adapter layer to Vert.x APIs (`RoutingContext`), which is acceptable since adapters are allowed to depend on framework types.

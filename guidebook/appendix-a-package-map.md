@@ -808,7 +808,7 @@ JAX-RS server filters that intercept requests before they reach resource classes
 
 | Class | Priority | Description |
 |---|---|---|
-| `RouteResolutionFilter` | `@RouteFilter(95)` | Resolves one TTL-aware route snapshot for downstream authentication, rate limiting, and access control. |
+| `RouteResolutionFilter` | `@RouteFilter(105)` | Resolves one TTL-aware route snapshot for CORS, authentication, rate limiting, and access control. |
 | `RequestValidationFilter` | `AUTHENTICATION - 100` | Validates request body size and header sizes. Blocks oversized requests with 413/431. |
 | `AuthRateLimitFilter` | `AUTHENTICATION - 100` | Checks if the client IP is locked out due to brute-force attempts. Build-time conditional on `aussie.auth.rate-limit.enabled`. |
 | `RateLimitFilter` | `@ServerRequestFilter` | Enforces per-service and per-endpoint rate limits. Adds `X-RateLimit-*` response headers. Runs before authentication to reject floods cheaply. |

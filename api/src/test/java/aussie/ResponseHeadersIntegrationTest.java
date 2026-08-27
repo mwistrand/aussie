@@ -13,8 +13,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Integration tests for cross-cutting response headers applied by the
- * Vert.x {@code @RouteFilter} chain (CORS at priority 100, security headers
- * at priority 90).
+ * Vert.x {@code @RouteFilter} chain (route resolution at priority 105, CORS
+ * at priority 100, and security headers at priority 90).
  *
  * <p>Unit-level branch coverage lives in {@code CorsFilterTest} and
  * {@code SecurityHeadersFilterTest}. This test verifies the filters actually

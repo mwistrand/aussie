@@ -1,5 +1,6 @@
 package aussie.adapter.in.http;
 
+import java.util.Optional;
 import java.util.Set;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -10,8 +11,9 @@ import io.quarkus.vertx.web.RouteFilter;
 import io.vertx.ext.web.RoutingContext;
 import org.jboss.logging.Logger;
 
-import aussie.common.context.PlatformPaths;
+import aussie.common.context.RouteContextAttributes;
 import aussie.core.model.common.CorsConfig;
+import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.service.routing.ServiceRegistry;
 
 /**
@@ -187,15 +189,11 @@ public class CorsFilter {
     }
 
     private CorsConfig resolveCorsConfig(RoutingContext rc, String origin, CorsConfig globalConfig) {
-        final var requestedMethod =
-                "OPTIONS".equalsIgnoreCase(rc.request().method().name())
-                        ? rc.request().getHeader(ACCESS_CONTROL_REQUEST_METHOD)
-                        : rc.request().method().name();
-        if (requestedMethod != null && !PlatformPaths.owns(rc.request().path())) {
-            final var route = serviceRegistry.findRoute(rc.request().path(), requestedMethod);
-            if (route.isPresent()) {
-                return route.get().service().corsConfig().orElse(globalConfig);
-            }
+        final var lookup = rc.get(RouteContextAttributes.LOOKUP);
+        if (lookup instanceof Optional<?> optional
+                && optional.isPresent()
+                && optional.get() instanceof RouteLookupResult route) {
+            return route.service().corsConfig().orElse(globalConfig);
         }
         return serviceRegistry.getCorsConfigForOriginFromLocalCache(origin).orElse(globalConfig);
     }

@@ -20,9 +20,8 @@ import aussie.core.service.routing.ServiceRegistry;
  * rate limit/access-control filters) read the cached lookup instead of
  * re-querying {@link ServiceRegistry}.
  *
- * <p>Priority 95 places this filter between the existing CORS filter (100)
- * and the security-headers filter (90). CORS preflights short-circuit at
- * priority 100 without invoking this filter.
+ * <p>Priority 105 places this filter before the CORS filter (100), so both
+ * CORS and downstream security filters consume the same route snapshot.
  */
 @ApplicationScoped
 public class RouteResolutionFilter {
@@ -34,7 +33,7 @@ public class RouteResolutionFilter {
         this.serviceRegistry = serviceRegistry;
     }
 
-    @RouteFilter(95)
+    @RouteFilter(105)
     void resolveRoute(RoutingContext rc) {
         final var path = rc.request().path();
         if (PlatformPaths.owns(path)) {
@@ -43,8 +42,9 @@ public class RouteResolutionFilter {
             return;
         }
 
+        final var method = requestMethod(rc);
         serviceRegistry
-                .findRouteAsync(path, rc.request().method().name())
+                .findRouteAsync(path, method)
                 .subscribe()
                 .with(
                         lookup -> {
@@ -55,6 +55,14 @@ public class RouteResolutionFilter {
                             rc.next();
                         },
                         rc::fail);
+    }
+
+    private static String requestMethod(RoutingContext rc) {
+        if (!"OPTIONS".equalsIgnoreCase(rc.request().method().name())) {
+            return rc.request().method().name();
+        }
+        final var requestedMethod = rc.request().getHeader("Access-Control-Request-Method");
+        return requestedMethod == null || requestedMethod.isBlank() ? "OPTIONS" : requestedMethod;
     }
 
     private static boolean isPublic(RouteLookupResult route) {
