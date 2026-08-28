@@ -1,16 +1,20 @@
 package aussie.e2e;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
+import java.net.http.WebSocketHandshakeException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -82,6 +86,22 @@ final class WebSocketAcceptanceE2ETest {
                 socket.abort();
             }
         }
+    }
+
+    @Test
+    @DisplayName("rejects an unsupported subprotocol during the HTTP upgrade")
+    void rejectsUnsupportedSubprotocol() {
+        final var context = SuiteContext.get();
+        final var endpoint = websocketUri(context.gatewayBaseUri(), "/demo-service/ws/echo");
+
+        final var failure = assertThrows(CompletionException.class, () -> HttpClient.newHttpClient()
+                .newWebSocketBuilder()
+                .subprotocols("unsupported.v1")
+                .header("Origin", "http://localhost:3000")
+                .buildAsync(endpoint, new RecordingListener())
+                .join());
+        final var handshakeFailure = assertInstanceOf(WebSocketHandshakeException.class, failure.getCause());
+        assertEquals(400, handshakeFailure.getResponse().statusCode());
     }
 
     private static URI websocketUri(URI gateway, String path) {
