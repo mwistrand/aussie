@@ -26,6 +26,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.in.problem.ProblemDetail;
+import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.common.context.RouteContextAttributes;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
@@ -33,6 +35,7 @@ import aussie.core.model.routing.RouteLookupResult;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.ServiceRegistration;
+import aussie.core.service.lifecycle.StartupState;
 import aussie.core.service.routing.ServiceRegistry;
 
 @DisplayName("RouteResolutionFilter")
@@ -48,11 +51,19 @@ class RouteResolutionFilterTest {
     @Mock
     private HttpServerRequest request;
 
+    @Mock
+    private ProxyErrorWriter errorWriter;
+
+    private StartupState startupState;
     private RouteResolutionFilter filter;
 
     @BeforeEach
     void setUp() {
-        filter = new RouteResolutionFilter(serviceRegistry);
+        startupState = new StartupState();
+        for (final var phase : StartupState.Phase.values()) {
+            startupState.complete(phase);
+        }
+        filter = new RouteResolutionFilter(serviceRegistry, startupState, errorWriter);
     }
 
     private void stubRequest(String path, HttpMethod method) {
@@ -204,6 +215,21 @@ class RouteResolutionFilterTest {
         verify(rc).fail(failure);
         verify(rc, never()).next();
         verify(rc, never()).put(eq(RouteContextAttributes.LOOKUP), any());
+    }
+
+    @Test
+    @DisplayName("rejects service traffic before startup is ready")
+    void rejectsServiceTrafficBeforeStartupIsReady() {
+        startupState = new StartupState();
+        filter = new RouteResolutionFilter(serviceRegistry, startupState, errorWriter);
+        when(rc.request()).thenReturn(request);
+        when(request.path()).thenReturn("/svc/api/public");
+
+        filter.resolveRoute(rc);
+
+        verify(errorWriter).write(rc, ProblemDetail.serviceUnavailable("Gateway is not ready"));
+        verify(serviceRegistry, never()).findRouteAsync(any(), any());
+        verify(rc, never()).next();
     }
 
     @Nested

@@ -8,10 +8,13 @@ import jakarta.inject.Inject;
 import io.quarkus.vertx.web.RouteFilter;
 import io.vertx.ext.web.RoutingContext;
 
+import aussie.adapter.in.problem.ProblemDetail;
+import aussie.adapter.in.vertx.ProxyErrorWriter;
 import aussie.common.context.PlatformPaths;
 import aussie.common.context.RouteContextAttributes;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteLookupResult;
+import aussie.core.service.lifecycle.StartupState;
 import aussie.core.service.routing.ServiceRegistry;
 
 /**
@@ -27,10 +30,15 @@ import aussie.core.service.routing.ServiceRegistry;
 public class RouteResolutionFilter {
 
     private final ServiceRegistry serviceRegistry;
+    private final StartupState startupState;
+    private final ProxyErrorWriter errorWriter;
 
     @Inject
-    public RouteResolutionFilter(ServiceRegistry serviceRegistry) {
+    public RouteResolutionFilter(
+            ServiceRegistry serviceRegistry, StartupState startupState, ProxyErrorWriter errorWriter) {
         this.serviceRegistry = serviceRegistry;
+        this.startupState = startupState;
+        this.errorWriter = errorWriter;
     }
 
     @RouteFilter(105)
@@ -39,6 +47,10 @@ public class RouteResolutionFilter {
         if (PlatformPaths.owns(path)) {
             rc.put(RouteContextAttributes.LOOKUP, Optional.empty());
             rc.next();
+            return;
+        }
+        if (!startupState.isReady()) {
+            errorWriter.write(rc, ProblemDetail.serviceUnavailable("Gateway is not ready"));
             return;
         }
 
