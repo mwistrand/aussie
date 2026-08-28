@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -51,6 +52,7 @@ public class CassandraMigrationRunner {
     public void runKeyspaceMigration() {
         try {
             for (var statement : splitStatements(readMigrationFile("V1__create_keyspace.cql"))) {
+                checkInterrupted();
                 session.execute(statement.replace("aussie", keyspace));
             }
         } catch (IOException e) {
@@ -62,12 +64,14 @@ public class CassandraMigrationRunner {
 
     /** Applies every pending manifest entry and rejects changed applied scripts. */
     public int runMigrations() {
+        checkInterrupted();
         ensureMigrationTableExists();
         final var migrations = discoverMigrations();
         final var applied = getAppliedMigrations();
         var count = 0;
 
         for (var migration : migrations) {
+            checkInterrupted();
             if (migration.version() == 1) {
                 continue;
             }
@@ -113,11 +117,17 @@ public class CassandraMigrationRunner {
                 """
                         .formatted(keyspace));
 
+        checkInterrupted();
         session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS checksum text".formatted(keyspace));
+        checkInterrupted();
         session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS status text".formatted(keyspace));
+        checkInterrupted();
         session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS started_at timestamp".formatted(keyspace));
+        checkInterrupted();
         session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS error text".formatted(keyspace));
+        checkInterrupted();
         session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS lease_id text".formatted(keyspace));
+        checkInterrupted();
         session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS lease_until timestamp".formatted(keyspace));
     }
 
@@ -158,6 +168,7 @@ public class CassandraMigrationRunner {
             final var migrations = new ArrayList<Migration>();
             final var versions = new HashSet<Integer>();
             for (var entry : readManifest()) {
+                checkInterrupted();
                 final Matcher matcher = MIGRATION_PATTERN.matcher(entry.filename());
                 if (!matcher.matches()) {
                     throw new IllegalStateException("Invalid migration name: " + entry.filename());
@@ -215,7 +226,7 @@ public class CassandraMigrationRunner {
         LOG.infov("Applying migration V{0}: {1}", migration.version(), migration.filename());
         try (final var lease = new LeaseHeartbeat(migration.version())) {
             for (var statement : splitStatements(migration.content())) {
-                lease.check();
+                checkLease(lease);
                 final var executable = migrationStatement(migration.version(), statement);
                 if (executable.isEmpty() || executable.toUpperCase(Locale.ROOT).startsWith("USE ")) {
                     continue;
@@ -230,7 +241,7 @@ public class CassandraMigrationRunner {
                 backfillTranslationConfigVersionSequence(lease);
             }
 
-            lease.check();
+            checkLease(lease);
             recordCompleted(migration);
         } catch (Exception e) {
             recordFailed(migration, e);
@@ -454,8 +465,15 @@ public class CassandraMigrationRunner {
     }
 
     private void checkLease(LeaseHeartbeat lease) {
+        checkInterrupted();
         if (lease != null) {
             lease.check();
+        }
+    }
+
+    static void checkInterrupted() {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new CancellationException("Cassandra migration interrupted");
         }
     }
 

@@ -4,6 +4,12 @@ Aussie applies the ordered, checksummed manifest in `api/src/main/resources/db/c
 when `CASSANDRA_RUN_MIGRATIONS=true`. The application runner is the
 only supported migration path; `make migrate` starts the API and waits for readiness.
 
+Migration execution is synchronous during startup and bounded by
+`aussie.resiliency.cassandra.migration-timeout` (30 seconds by default); individual
+Cassandra operations remain bounded by `aussie.resiliency.cassandra.query-timeout`.
+The provider rejects a migration invocation from a Vert.x event loop before opening
+a session, so a request path cannot block the event loop on schema work.
+
 Each migration is claimed with a five-minute Cassandra LWT lease. A crashed runner
 can therefore be replaced after the lease expires, while a live runner prevents a
 second instance from applying the same version. Completed scripts are checked against

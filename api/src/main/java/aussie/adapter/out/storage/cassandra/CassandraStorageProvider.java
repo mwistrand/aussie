@@ -2,8 +2,13 @@ package aussie.adapter.out.storage.cassandra;
 
 import java.net.InetSocketAddress;
 import java.time.Duration;
+import java.time.format.DateTimeParseException;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.datastax.oss.driver.api.core.CqlSessionBuilder;
@@ -40,6 +45,8 @@ import aussie.spi.StorageRepositoryProvider;
 public class CassandraStorageProvider implements StorageRepositoryProvider, AutoCloseable {
 
     private static final Logger LOG = Logger.getLogger(CassandraStorageProvider.class);
+    private static final String MIGRATION_TIMEOUT_KEY = "aussie.resiliency.cassandra.migration-timeout";
+    private static final Duration DEFAULT_MIGRATION_TIMEOUT = Duration.ofSeconds(30);
 
     private CqlSession session;
 
@@ -93,8 +100,40 @@ public class CassandraStorageProvider implements StorageRepositoryProvider, Auto
     }
 
     private void runMigrations(StorageAdapterConfig config, String keyspace) {
-        LOG.info("Running Cassandra migrations...");
+        final var context = Vertx.currentContext();
+        if (context != null && context.isEventLoopContext()) {
+            throw new StorageProviderException("Cassandra migrations cannot run on a Vert.x event loop");
+        }
 
+        final var timeout = migrationTimeout(config);
+        LOG.infov("Running Cassandra migrations with timeout {0}...", timeout);
+        runMigration(
+                () -> runMigrationsSynchronously(config, keyspace), timeout, Infrastructure.getDefaultWorkerPool());
+        LOG.info("Cassandra migrations completed");
+    }
+
+    static void runMigration(Runnable operation, Duration timeout, Executor executor) {
+        final var migration = new FutureTask<Void>(operation, null);
+        executor.execute(migration);
+        try {
+            migration.get(TimeUnit.NANOSECONDS.convert(timeout), TimeUnit.NANOSECONDS);
+        } catch (InterruptedException e) {
+            migration.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new StorageProviderException("Cassandra migration interrupted", e);
+        } catch (TimeoutException e) {
+            migration.cancel(true);
+            throw new StorageProviderException("Cassandra migration timed out", e);
+        } catch (ExecutionException e) {
+            final var cause = e.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new StorageProviderException("Cassandra migration failed", cause);
+        }
+    }
+
+    private void runMigrationsSynchronously(StorageAdapterConfig config, String keyspace) {
         // First, connect without keyspace to run keyspace creation migration
         try (CqlSession noKeyspaceSession = buildSessionWithoutKeyspace(config)) {
             // Run V1 (keyspace creation) with session without keyspace
@@ -102,13 +141,25 @@ public class CassandraStorageProvider implements StorageRepositoryProvider, Auto
             keyspaceMigrationRunner.runKeyspaceMigration();
         }
 
+        CassandraMigrationRunner.checkInterrupted();
+
         // Then connect with keyspace for all other migrations
         try (CqlSession keyspaceSession = buildSessionInternal(config, keyspace)) {
             var migrationRunner = new CassandraMigrationRunner(keyspaceSession, keyspace);
             migrationRunner.runMigrations();
         }
+    }
 
-        LOG.info("Cassandra migrations completed");
+    private Duration migrationTimeout(StorageAdapterConfig config) {
+        try {
+            final var timeout = config.getDuration(MIGRATION_TIMEOUT_KEY).orElse(DEFAULT_MIGRATION_TIMEOUT);
+            if (timeout.isZero() || timeout.isNegative()) {
+                throw new StorageProviderException("Cassandra migration timeout must be positive");
+            }
+            return timeout;
+        } catch (DateTimeParseException e) {
+            throw new StorageProviderException("Cassandra migration timeout must be an ISO-8601 duration", e);
+        }
     }
 
     @Override

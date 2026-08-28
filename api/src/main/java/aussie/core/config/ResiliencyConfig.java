@@ -16,7 +16,7 @@ import io.smallrye.config.WithDefault;
  * <ul>
  *   <li>HTTP proxy connect and request timeouts</li>
  *   <li>JWKS fetch timeouts and cache limits</li>
- *   <li>Cassandra query timeouts</li>
+ *   <li>Cassandra query and migration timeouts</li>
  *   <li>Redis operation timeouts</li>
  * </ul>
  */
@@ -189,6 +189,10 @@ public interface ResiliencyConfig {
          */
         @WithDefault("PT5S")
         Duration queryTimeout();
+
+        /** Maximum total time allowed for startup Cassandra migrations. */
+        @WithDefault("PT30S")
+        Duration migrationTimeout();
 
         /**
          * Connections per node in local datacenter (bulkhead).

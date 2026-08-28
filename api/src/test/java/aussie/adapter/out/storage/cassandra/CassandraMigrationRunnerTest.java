@@ -9,11 +9,13 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.datastax.oss.driver.api.core.cql.ResultSet;
@@ -21,6 +23,22 @@ import com.datastax.oss.driver.api.core.cql.Row;
 import org.junit.jupiter.api.Test;
 
 class CassandraMigrationRunnerTest {
+
+    @Test
+    void stopsBeforeRunningStatementsWhenInterrupted() {
+        final var session = mock(CqlSession.class);
+        final var runner = new CassandraMigrationRunner(session, "aussie");
+
+        Thread.currentThread().interrupt();
+        try {
+            final var failure = assertThrows(CancellationException.class, runner::runMigrations);
+
+            assertEquals("Cassandra migration interrupted", failure.getMessage());
+            verifyNoInteractions(session);
+        } finally {
+            Thread.interrupted();
+        }
+    }
 
     @Test
     void rejectsChangedLegacyMigrationsBeforeAdoptingTheirStatus() {
