@@ -17,15 +17,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import jakarta.enterprise.inject.Instance;
 
 import io.smallrye.mutiny.Uni;
+import io.vertx.mutiny.core.Vertx;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import aussie.core.config.RouteAuthConfig;
 import aussie.core.model.auth.AussieToken;
@@ -202,6 +206,38 @@ class TokenIssuanceServiceTest {
         }
 
         @Test
+        @DisplayName("runs signing off the Vert.x event loop")
+        void runsSigningOffEventLoop() throws Exception {
+            var service = createService();
+            var validated = new TokenValidationResult.Valid(
+                    "user-1",
+                    "issuer",
+                    Map.of("sub", "user-1", "roles", List.of("admin")),
+                    Instant.now().plusSeconds(3600));
+            var expectedToken =
+                    new AussieToken("signed", "user-1", Instant.now().plusSeconds(300), Map.of());
+            when(roleManagement.expandRoles(Set.of("admin")))
+                    .thenReturn(Uni.createFrom().item(Set.of("read")));
+            final var signingThread = new CompletableFuture<String>();
+            when(issuer.issue(any(TokenValidationResult.Valid.class), any(), any()))
+                    .thenAnswer(invocation -> {
+                        signingThread.complete(Thread.currentThread().getName());
+                        return expectedToken;
+                    });
+            final var vertx = Vertx.vertx();
+
+            vertx.runOnContext(() -> service.issueAsync(validated, Optional.empty(), "test-service")
+                    .subscribe()
+                    .with(result -> {}, signingThread::completeExceptionally));
+
+            try {
+                assertFalse(signingThread.get(5, TimeUnit.SECONDS).contains("vert.x-eventloop"));
+            } finally {
+                vertx.close().await().atMost(Duration.ofSeconds(5));
+            }
+        }
+
+        @Test
         @DisplayName("should expand roles and enrich token claims")
         void shouldExpandRolesAndEnrichClaims() {
             var service = createService();
@@ -224,6 +260,10 @@ class TokenIssuanceServiceTest {
 
             assertTrue(result.isPresent());
             verify(roleManagement).expandRoles(Set.of("admin", "editor"));
+            final var validatedCaptor = ArgumentCaptor.forClass(TokenValidationResult.Valid.class);
+            verify(issuer).issue(validatedCaptor.capture(), any(), any());
+            assertEquals(Set.of("read", "write", "delete"), Set.copyOf((List<String>)
+                    validatedCaptor.getValue().claims().get("effective_permissions")));
         }
 
         @Test

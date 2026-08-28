@@ -19,10 +19,13 @@ import static org.mockito.Mockito.when;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.quarkus.runtime.LaunchMode;
 import io.smallrye.mutiny.Uni;
+import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.buffer.Buffer;
 import io.vertx.mutiny.core.net.SocketAddress;
 import io.vertx.mutiny.ext.web.client.HttpRequest;
@@ -115,12 +118,12 @@ class JwksCacheServiceTest {
     }
 
     @SuppressWarnings("unchecked")
-    private void mockFetchResponse(int statusCode, String body) {
-        mockFetchResponse(statusCode, body, "application/json");
+    private HttpResponse<Buffer> mockFetchResponse(int statusCode, String body) {
+        return mockFetchResponse(statusCode, body, "application/json");
     }
 
     @SuppressWarnings("unchecked")
-    private void mockFetchResponse(int statusCode, String body, String contentType) {
+    private HttpResponse<Buffer> mockFetchResponse(int statusCode, String body, String contentType) {
         HttpRequest<Buffer> request = (HttpRequest<Buffer>) org.mockito.Mockito.mock(HttpRequest.class);
         HttpResponse<Buffer> response = (HttpResponse<Buffer>) org.mockito.Mockito.mock(HttpResponse.class);
 
@@ -133,6 +136,7 @@ class JwksCacheServiceTest {
         if (body != null) {
             lenient().when(response.bodyAsString()).thenReturn(body);
         }
+        return response;
     }
 
     @SuppressWarnings("unchecked")
@@ -148,6 +152,27 @@ class JwksCacheServiceTest {
     @Nested
     @DisplayName("getKeySet()")
     class GetKeySetTests {
+
+        @Test
+        @DisplayName("parses JWKS responses off the Vert.x event loop")
+        void parsesJwksOffEventLoop() throws Exception {
+            final var response = mockFetchResponse(200, singleKeyJwks);
+            final var parsingThread = new CompletableFuture<String>();
+            when(response.bodyAsString()).thenAnswer(invocation -> {
+                parsingThread.complete(Thread.currentThread().getName());
+                return singleKeyJwks;
+            });
+            final var vertx = Vertx.vertx();
+
+            vertx.runOnContext(() ->
+                    service.getKeySet(JWKS_URI).subscribe().with(result -> {}, parsingThread::completeExceptionally));
+
+            try {
+                assertFalse(parsingThread.get(5, TimeUnit.SECONDS).contains("vert.x-eventloop"));
+            } finally {
+                vertx.close().await().atMost(Duration.ofSeconds(5));
+            }
+        }
 
         @Test
         @DisplayName("should fetch and cache JWKS on first call")

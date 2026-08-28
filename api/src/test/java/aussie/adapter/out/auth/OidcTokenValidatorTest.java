@@ -1,12 +1,15 @@
 package aussie.adapter.out.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -19,8 +22,11 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import io.smallrye.mutiny.Uni;
+import io.vertx.mutiny.core.Vertx;
 import org.jose4j.jwk.JsonWebKeySet;
 import org.jose4j.jwk.RsaJsonWebKey;
 import org.jose4j.jws.AlgorithmIdentifiers;
@@ -134,6 +140,34 @@ class OidcTokenValidatorTest {
     @Nested
     @DisplayName("validate() with valid tokens")
     class ValidTokenTests {
+
+        @Test
+        @DisplayName("runs JWT verification off the Vert.x event loop")
+        void runsJwtVerificationOffEventLoop() throws Exception {
+            final var token = createValidToken();
+            final var verificationKey = spy(rsaJwk);
+            final var verificationThread = new CompletableFuture<String>();
+            doAnswer(invocation -> {
+                        verificationThread.complete(Thread.currentThread().getName());
+                        return invocation.callRealMethod();
+                    })
+                    .when(verificationKey)
+                    .getKey();
+            when(jwksCache.getKey(TEST_JWKS_URI, TEST_KEY_ID))
+                    .thenReturn(Uni.createFrom().item(Optional.of(verificationKey)));
+            final var vertx = Vertx.vertx();
+
+            vertx.runOnContext(() -> validator
+                    .validate(token, config)
+                    .subscribe()
+                    .with(result -> {}, verificationThread::completeExceptionally));
+
+            try {
+                assertFalse(verificationThread.get(5, TimeUnit.SECONDS).contains("vert.x-eventloop"));
+            } finally {
+                vertx.close().await().atMost(Duration.ofSeconds(5));
+            }
+        }
 
         @Test
         @DisplayName("should return Valid for correctly signed token")

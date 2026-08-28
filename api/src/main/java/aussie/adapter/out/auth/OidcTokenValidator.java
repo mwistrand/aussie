@@ -13,6 +13,7 @@ import jakarta.inject.Inject;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 import org.jose4j.base64url.Base64Url;
 import org.jose4j.json.JsonUtil;
@@ -148,17 +149,19 @@ public class OidcTokenValidator implements TokenValidatorProvider {
     }
 
     private Uni<TokenValidationResult> validateWithKey(ParsedToken parsed, TokenProviderConfig config, JsonWebKey key) {
-        return Uni.createFrom().item(() -> {
-            try {
-                final var state = issuerState(config);
-                final var consumer = getOrBuildConsumer(state, key);
-                final var claims = consumer.processToClaims(parsed.token());
-                return buildValidResult(claims, state);
-            } catch (InvalidJwtException e) {
-                LOG.debugv("JWT validation failed: error_type={0}", SafeLogging.errorType(e));
-                return new TokenValidationResult.Invalid(summarizeJwtError(e));
-            }
-        });
+        return Uni.createFrom()
+                .item(() -> {
+                    try {
+                        final var state = issuerState(config);
+                        final var consumer = getOrBuildConsumer(state, key);
+                        final var claims = consumer.processToClaims(parsed.token());
+                        return buildValidResult(claims, state);
+                    } catch (InvalidJwtException e) {
+                        LOG.debugv("JWT validation failed: error_type={0}", SafeLogging.errorType(e));
+                        return new TokenValidationResult.Invalid(summarizeJwtError(e));
+                    }
+                })
+                .runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }
 
     private IssuerState issuerState(TokenProviderConfig config) {

@@ -13,6 +13,7 @@ import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 
 import aussie.core.config.RouteAuthConfig;
@@ -162,35 +163,15 @@ public class TokenIssuanceService {
         // Extract roles from claims
         final Set<String> roles = extractRoles(validated.claims());
 
-        if (roles.isEmpty()) {
-            // No roles to expand, use synchronous issuance
-            return Uni.createFrom().item(issue(validated, effectiveAudience));
-        }
+        final var tokenToIssue = roles.isEmpty()
+                ? Uni.createFrom().item(validated)
+                : roleManagement
+                        .expandRoles(roles)
+                        .map(expandedPermissions -> enrichWithPermissions(validated, expandedPermissions));
 
-        // Expand roles to permissions
-        return roleManagement.expandRoles(roles).map(expandedPermissions -> {
-            try {
-                // Create a new validated result with expanded permissions in claims
-                final var enrichedValidated = enrichWithPermissions(validated, expandedPermissions);
-                final var issuer =
-                        availableIssuer().orElseThrow(() -> new IllegalStateException("No issuer available"));
-                final AussieToken token = issuer.issue(enrichedValidated, jwsConfig, effectiveAudience);
-                if (LOG.isDebugEnabled()) {
-                    LOG.debugv(
-                            "Issued token for subject_hash {0} with {1} roles expanded to {2} permissions, audience_present: {3}",
-                            SafeLogging.identifier(validated.subject()),
-                            roles.size(),
-                            expandedPermissions.size(),
-                            effectiveAudience.isPresent());
-                }
-                return Optional.of(token);
-            } catch (Exception e) {
-                LOG.errorv(
-                        "Failed to issue token for subject_hash {0}, error_type: {1}",
-                        SafeLogging.identifier(validated.subject()), SafeLogging.errorType(e));
-                return Optional.<AussieToken>empty();
-            }
-        });
+        return tokenToIssue
+                .emitOn(Infrastructure.getDefaultWorkerPool())
+                .map(enrichedValidated -> issue(enrichedValidated, effectiveAudience));
     }
 
     /**

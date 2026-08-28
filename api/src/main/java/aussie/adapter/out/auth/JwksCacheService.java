@@ -22,6 +22,7 @@ import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 import io.quarkus.runtime.LaunchMode;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.mutiny.core.buffer.Buffer;
 import io.vertx.mutiny.ext.web.client.HttpResponse;
@@ -164,6 +165,7 @@ public class JwksCacheService implements JwksCache {
                     metrics.recordJwksFetchTimeout(jwksUri.getHost());
                     return new JwksFetchException("Timeout fetching JWKS");
                 })
+                .emitOn(Infrastructure.getDefaultWorkerPool())
                 .map(this::parseResponse)
                 .invoke(keySet -> {
                     final var expiresAt = Instant.now().plus(jwksConfig.cacheTtl());
