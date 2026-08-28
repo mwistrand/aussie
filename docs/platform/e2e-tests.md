@@ -70,6 +70,11 @@ network, verifies that it loads the existing route snapshot, stops the first
 instance, and continues routed requests through the replica before restoring
 the suite's original instance.
 
+The WebSocket acceptance lane verifies text fragmentation, binary frame
+preservation, ping/pong, normal close propagation, rejected origins and
+oversized logical messages. It is source-compiled in local runs and executes
+in the Docker-backed E2E gate.
+
 ## Demo test API
 
 When the demo runs under the e2e harness, it exposes a small state-mutation

@@ -3,6 +3,7 @@ package aussie.adapter.out.ratelimit.redis;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import io.quarkus.redis.datasource.keys.KeyScanArgs;
@@ -143,6 +144,7 @@ public final class RedisRateLimiter implements RateLimiter {
     private final RateLimiter fallback;
     private final RateLimitFallbackBehavior fallbackBehavior;
     private final Metrics metrics;
+    private final AtomicBoolean fallbackClosed = new AtomicBoolean();
 
     public RedisRateLimiter(ReactiveRedisDataSource redisDataSource, boolean enabled) {
         this(redisDataSource, enabled, RateLimitAlgorithm.BUCKET, null, RateLimitFallbackBehavior.DENY, null);
@@ -333,7 +335,7 @@ public final class RedisRateLimiter implements RateLimiter {
 
     @Override
     public void close() {
-        if (fallback != null) {
+        if (fallback != null && fallbackClosed.compareAndSet(false, true)) {
             fallback.close();
         }
     }

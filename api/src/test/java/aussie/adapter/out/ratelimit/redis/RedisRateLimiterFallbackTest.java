@@ -22,7 +22,10 @@ import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
+import aussie.adapter.out.ratelimit.memory.InMemoryRateLimiter;
 import aussie.core.config.RateLimitingConfig.RateLimitFallbackBehavior;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
 import aussie.core.model.ratelimit.RateLimitAlgorithm;
@@ -30,6 +33,7 @@ import aussie.core.model.ratelimit.RateLimitDecision;
 import aussie.core.model.ratelimit.RateLimitKey;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
+import aussie.core.service.ratelimit.AlgorithmRegistry;
 
 @DisplayName("RedisRateLimiter fallback behavior")
 class RedisRateLimiterFallbackTest {
@@ -42,15 +46,18 @@ class RedisRateLimiterFallbackTest {
     private Metrics metrics;
     private RateLimiter localFallback;
 
-    @Test
+    @ParameterizedTest(name = "{0}")
+    @EnumSource(
+            value = RateLimitAlgorithm.class,
+            names = {"FIXED_WINDOW", "SLIDING_WINDOW"})
     @DisplayName("rejects algorithms without Redis semantics")
-    void rejectsUnsupportedAlgorithms() {
+    void rejectsUnsupportedAlgorithms(RateLimitAlgorithm algorithm) {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new RedisRateLimiter(
                         mock(ReactiveRedisDataSource.class),
                         true,
-                        RateLimitAlgorithm.FIXED_WINDOW,
+                        algorithm,
                         null,
                         RateLimitFallbackBehavior.DENY,
                         null));
@@ -124,6 +131,24 @@ class RedisRateLimiterFallbackTest {
         }
 
         @Test
+        @DisplayName("keeps outage protection to one immediate request")
+        void doesNotReplayDistributedBurst() {
+            localFallback = new InMemoryRateLimiter(new AlgorithmRegistry(), RateLimitAlgorithm.BUCKET, true, 1);
+            try (final var limiter = newLimiter(RateLimitFallbackBehavior.LOCAL_BUCKET, localFallback)) {
+
+                final var first = limiter.checkAndConsume(KEY, new EffectiveRateLimit(100, 60, 100))
+                        .await()
+                        .atMost(Duration.ofSeconds(1));
+                final var second = limiter.checkAndConsume(KEY, new EffectiveRateLimit(100, 60, 100))
+                        .await()
+                        .atMost(Duration.ofSeconds(1));
+
+                assertTrue(first.allowed());
+                assertFalse(second.allowed());
+            }
+        }
+
+        @Test
         @DisplayName("preserves a zero rate or burst quota while using the emergency window")
         void preservesZeroQuota() {
             final var zeroEmergencyLimit = new EffectiveRateLimit(0, 1, 0);
@@ -149,8 +174,9 @@ class RedisRateLimiterFallbackTest {
             final var limiter = newLimiter(RateLimitFallbackBehavior.LOCAL_BUCKET, localFallback);
 
             limiter.close();
+            limiter.close();
 
-            verify(localFallback).close();
+            verify(localFallback, times(1)).close();
         }
 
         @Test

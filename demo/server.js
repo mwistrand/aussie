@@ -236,7 +236,11 @@ function extractClaims(req) {
 function handleEchoConnection(ws) {
   console.log("[Echo] Client connected");
 
-  ws.on("message", (data) => {
+  ws.on("message", (data, isBinary) => {
+    if (isBinary) {
+      ws.send(data, { binary: true });
+      return;
+    }
     var message = data.toString();
     console.log("[Echo] Received:", message);
 
