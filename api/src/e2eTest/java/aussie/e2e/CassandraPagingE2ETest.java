@@ -10,6 +10,7 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 import com.datastax.oss.driver.api.core.CqlSession;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,14 +32,24 @@ final class CassandraPagingE2ETest {
 
         try (var session = session(context)) {
             insertServices(session, ids);
-            final var repository = new CassandraServiceRegistrationRepository(new ObjectMapper(), session);
+            final var repository = new CassandraServiceRegistrationRepository(
+                    new ObjectMapper()
+                            .findAndRegisterModules()
+                            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false),
+                    session);
 
-            final var page = repository.findPage(100, 100).await().atMost(Duration.ofSeconds(30));
-            final var pageIds =
-                    page.stream().map(service -> service.serviceId()).toList();
+            final var firstPage = repository.findPage(100, 0).await().atMost(Duration.ofSeconds(30));
+            final var secondPage = repository.findPage(100, 100).await().atMost(Duration.ofSeconds(30));
+            final var firstPageIds =
+                    firstPage.stream().map(service -> service.serviceId()).toList();
+            final var secondPageIds =
+                    secondPage.stream().map(service -> service.serviceId()).toList();
+            final var idsAcrossPages = new HashSet<>(firstPageIds);
+            idsAcrossPages.addAll(secondPageIds);
 
-            assertEquals(100, pageIds.size());
-            assertEquals(new HashSet<>(ids.subList(100, 200)), new HashSet<>(pageIds));
+            assertEquals(100, firstPageIds.size());
+            assertEquals(100, secondPageIds.size());
+            assertEquals(200, idsAcrossPages.size());
         } finally {
             try (var session = session(context)) {
                 deleteServices(session, ids);

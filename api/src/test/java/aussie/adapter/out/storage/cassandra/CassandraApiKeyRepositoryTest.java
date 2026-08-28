@@ -1,6 +1,7 @@
 package aussie.adapter.out.storage.cassandra;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -9,15 +10,19 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.datastax.oss.driver.api.core.cql.AsyncResultSet;
 import com.datastax.oss.driver.api.core.cql.BoundStatement;
 import com.datastax.oss.driver.api.core.cql.PreparedStatement;
 import com.datastax.oss.driver.api.core.cql.Row;
+import io.vertx.mutiny.core.Vertx;
 import org.junit.jupiter.api.Test;
 
+import aussie.adapter.out.threading.VertxContextHelper;
 import aussie.core.model.auth.ApiKey;
 import aussie.core.service.auth.ApiKeyEncryptionService;
 
@@ -126,5 +131,42 @@ class CassandraApiKeyRepositoryTest {
         assertTrue(found.isEmpty());
         verify(session).executeAsync(selectByIdBound);
         verify(session).executeAsync(legacyBound);
+    }
+
+    @Test
+    void decryptsPagedRowsOffTheVertxEventLoop() throws Exception {
+        final var session = mock(CqlSession.class);
+        final var encryption = mock(ApiKeyEncryptionService.class);
+        final var statement = mock(PreparedStatement.class);
+        final var bound = mock(BoundStatement.class);
+        final var result = mock(AsyncResultSet.class);
+        final var row = mock(Row.class);
+        final var apiKey = ApiKey.builder("key-id", "hash").build();
+        final var decryptOnEventLoop = new CompletableFuture<Boolean>();
+
+        when(session.prepare(anyString())).thenReturn(statement);
+        when(statement.bind()).thenReturn(bound);
+        when(session.executeAsync(bound)).thenReturn(CompletableFuture.completedFuture(result));
+        when(result.currentPage()).thenReturn(List.of(row));
+        when(result.hasMorePages()).thenReturn(false);
+        when(row.getString("encrypted_data")).thenReturn("encrypted");
+        when(row.isNull("version")).thenReturn(true);
+        when(encryption.decrypt("encrypted")).thenAnswer(invocation -> {
+            decryptOnEventLoop.complete(VertxContextHelper.isOnEventLoop());
+            return apiKey;
+        });
+
+        final var repository = new CassandraApiKeyRepository(session, encryption);
+        final var vertx = Vertx.vertx();
+        try {
+            vertx.runOnContext(() -> repository
+                    .findAll()
+                    .subscribe()
+                    .with(ignoredKeys -> {}, decryptOnEventLoop::completeExceptionally));
+
+            assertFalse(decryptOnEventLoop.get(5, TimeUnit.SECONDS));
+        } finally {
+            vertx.close().await().atMost(Duration.ofSeconds(5));
+        }
     }
 }
