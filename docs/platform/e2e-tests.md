@@ -108,6 +108,7 @@ image elsewhere.
 | `AUSSIE_JWS_SIGNING_KEY` | Per-run 2048-bit RSA private key, base64-encoded in PKCS#8 format. |
 | `AUSSIE_AUTH_ROUTE_AUTH_ENABLED` | `false` so the bootstrap key isn't interpreted as a JWT. Per-test overrides flip this on. |
 | `CASSANDRA_RUN_MIGRATIONS` | `true`; the API applies migrations during startup. |
+| `AUSSIE_RESILIENCY_CASSANDRA_MIGRATION_TIMEOUT` | `PT2M`; explicit harness budget for applying the full schema on a fresh Cassandra container. |
 
 ## Adding tests
 

@@ -191,6 +191,10 @@ public final class E2EHarness {
                 .withEnv("AUSSIE_BOOTSTRAP_ENABLED", "true")
                 .withEnv("AUSSIE_BOOTSTRAP_KEY", BOOTSTRAP_KEY)
                 .withEnv("AUSSIE_JWS_SIGNING_KEY", JWS_SIGNING_KEY)
+                // A fresh Cassandra container can spend more than the production
+                // default deadline applying the full schema before the gateway
+                // becomes ready. Keep this packaged acceptance budget explicit.
+                .withEnv("AUSSIE_RESILIENCY_CASSANDRA_MIGRATION_TIMEOUT", "PT2M")
                 .withEnv("AUSSIE_STORAGE_REPOSITORY_PROVIDER", "cassandra")
                 // Dev profile turns on JWT route-auth which would treat the
                 // bootstrap API key as a JWT and short-circuit with 401. Later
