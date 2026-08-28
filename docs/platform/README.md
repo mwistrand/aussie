@@ -25,6 +25,7 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 - [Benchmarking](#benchmarking)
 - [JMH Microbenchmarks](jmh-benchmarks.md)
 - [End-to-End Test Suite](e2e-tests.md)
+- [Dependency Failure Matrix](dependency-failure-matrix.md)
 - [Service Permission Policies](#service-permission-policies)
 - [Service Configuration Pub/Sub](#service-configuration-pubsub)
 - [Environment Variables Reference](#environment-variables-reference)

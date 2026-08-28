@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -137,6 +138,89 @@ class WebSocketProxySessionTest {
                 verify(clientSocket).close((short) 1008, "revoked");
                 verify(backendSocket).close((short) 1008, "revoked");
             } finally {
+                realVertx.close().toCompletionStage().toCompletableFuture().join();
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        @DisplayName("should close once on the owning event loop when lifecycle signals race")
+        void shouldCloseOnceWhenLifecycleSignalsRace() throws Exception {
+            final var realVertx = Vertx.vertx();
+            final var created = new CountDownLatch(1);
+            final var closed = new CountDownLatch(1);
+            final var workersReady = new CountDownLatch(16);
+            final var workersDone = new CountDownLatch(16);
+            final var startWorkers = new CountDownLatch(1);
+            final var owningContext = new AtomicReference<Context>();
+            final var closeContext = new AtomicReference<Context>();
+            final var closeCount = new AtomicInteger();
+            final var sessionReference = new AtomicReference<WebSocketProxySession>();
+            final var idleTimer = new AtomicReference<Handler<Long>>();
+            final var workerPool = Executors.newFixedThreadPool(16);
+            try {
+                when(vertx.setTimer(anyLong(), any())).thenAnswer(invocation -> {
+                    idleTimer.compareAndSet(null, invocation.getArgument(1));
+                    return 1L;
+                });
+                realVertx.runOnContext(ignored -> {
+                    owningContext.set(Vertx.currentContext());
+                    final var session = new WebSocketProxySession(
+                            "s1",
+                            clientSocket,
+                            backendSocket,
+                            vertx,
+                            config,
+                            Optional.of("auth-session"),
+                            Optional.of("user"),
+                            Optional.empty(),
+                            Optional.empty(),
+                            Optional.empty(),
+                            MessageRateLimitHandler.noOp(),
+                            () -> {
+                                closeContext.set(Vertx.currentContext());
+                                closeCount.incrementAndGet();
+                                closed.countDown();
+                            });
+                    session.start();
+                    sessionReference.set(session);
+                    created.countDown();
+                });
+                assertTrue(created.await(1, TimeUnit.SECONDS));
+
+                for (var i = 0; i < 16; i++) {
+                    final var reason =
+                            switch (i % 3) {
+                                case 0 -> "logout";
+                                case 1 -> "revoked";
+                                default -> "shutdown";
+                            };
+                    final var code = (short) (i % 3 == 1 ? 1008 : 1000);
+                    workerPool.submit(() -> {
+                        workersReady.countDown();
+                        try {
+                            startWorkers.await();
+                            sessionReference.get().closeWithReason(code, reason);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        } finally {
+                            workersDone.countDown();
+                        }
+                    });
+                }
+                assertTrue(workersReady.await(1, TimeUnit.SECONDS));
+                startWorkers.countDown();
+                realVertx.runOnContext(ignored -> idleTimer.get().handle(1L));
+                assertTrue(workersDone.await(1, TimeUnit.SECONDS));
+                assertTrue(closed.await(1, TimeUnit.SECONDS));
+
+                assertSame(owningContext.get(), closeContext.get());
+                assertEquals(1, closeCount.get());
+                verify(vertx, times(2)).cancelTimer(1L);
+                verify(clientSocket, times(1)).close(any(short.class), any(String.class));
+                verify(backendSocket, times(1)).close(any(short.class), any(String.class));
+            } finally {
+                workerPool.shutdownNow();
                 realVertx.close().toCompletionStage().toCompletableFuture().join();
             }
         }
