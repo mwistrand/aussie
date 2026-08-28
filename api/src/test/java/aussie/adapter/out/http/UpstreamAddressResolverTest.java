@@ -1,6 +1,7 @@
 package aussie.adapter.out.http;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.net.InetAddress;
@@ -8,6 +9,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import io.vertx.mutiny.core.Vertx;
@@ -17,6 +19,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import aussie.adapter.out.http.UpstreamAddressResolver.EgressPolicyException;
+import aussie.adapter.out.threading.VertxContextHelper;
 
 @DisplayName("UpstreamAddressResolver")
 class UpstreamAddressResolverTest {
@@ -143,6 +146,21 @@ class UpstreamAddressResolverTest {
 
         assertEquals("93.184.216.34", result.hostAddress());
         assertEquals(1, lookups.get());
+    }
+
+    @Test
+    @DisplayName("runs DNS lookup off the Vert.x event loop")
+    void runsLookupOffEventLoop() throws Exception {
+        final var lookupOnEventLoop = new AtomicBoolean();
+        final var authorizedAddress = address("93.184.216.34");
+        final var resolver = new UpstreamAddressResolver(vertx, false, ignored -> {
+            lookupOnEventLoop.set(VertxContextHelper.isOnEventLoop());
+            return List.of(authorizedAddress);
+        });
+
+        resolver.resolve(URI.create("https://example.com")).await().atMost(Duration.ofSeconds(5));
+
+        assertFalse(lookupOnEventLoop.get());
     }
 
     @Test

@@ -12,6 +12,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.vertx.core.net.SocketAddress;
 import io.vertx.mutiny.core.Vertx;
 
@@ -24,7 +25,6 @@ public class UpstreamAddressResolver {
 
     private static final Duration LOOKUP_TIMEOUT = Duration.ofSeconds(5);
 
-    private final Vertx vertx;
     private final boolean allowPrivateUpstreams;
     private final Function<String, List<InetAddress>> lookup;
 
@@ -34,7 +34,6 @@ public class UpstreamAddressResolver {
     }
 
     UpstreamAddressResolver(Vertx vertx, boolean allowPrivateUpstreams, Function<String, List<InetAddress>> lookup) {
-        this.vertx = vertx;
         this.allowPrivateUpstreams = allowPrivateUpstreams;
         this.lookup = lookup;
     }
@@ -46,7 +45,9 @@ public class UpstreamAddressResolver {
             return Uni.createFrom().failure(new EgressPolicyException("Invalid upstream target"));
         }
 
-        return vertx.executeBlocking(() -> lookup.apply(host), false)
+        return Uni.createFrom()
+                .item(() -> lookup.apply(host))
+                .runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
                 .ifNoItem()
                 .after(LOOKUP_TIMEOUT)
                 .failWith(() -> new EgressPolicyException("Upstream DNS lookup timed out"))
