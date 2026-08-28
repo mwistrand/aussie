@@ -79,18 +79,37 @@ public class RedisRevocationEventPublisher implements RevocationEventPublisher {
     }
 
     @PreDestroy
-    void cleanup() {
-        if (messageHandler != null) {
-            messageHandler.complete();
+    synchronized void cleanup() {
+        final var handler = messageHandler;
+        messageHandler = null;
+        if (handler != null) {
+            handler.complete();
         }
-        if (subscriber != null) {
+        final var currentSubscriber = subscriber;
+        subscriber = null;
+        if (currentSubscriber != null) {
             try {
-                subscriber.unsubscribe();
+                currentSubscriber.unsubscribe();
                 LOG.info("Unsubscribed from revocation events");
             } catch (Exception e) {
-                LOG.warnf("Error unsubscribing from revocation events: error_type=%s", SafeLogging.errorType(e));
+                if (isConnectionClosed(e)) {
+                    LOG.debugf(
+                            "Revocation event unsubscribe skipped during teardown: error_type=%s",
+                            SafeLogging.errorType(e));
+                } else {
+                    LOG.warnf("Error unsubscribing from revocation events: error_type=%s", SafeLogging.errorType(e));
+                }
             }
         }
+    }
+
+    private static boolean isConnectionClosed(Throwable error) {
+        for (var cause = error; cause != null; cause = cause.getCause()) {
+            if ("Connection is closed".equals(cause.getMessage()) || "CONNECTION_CLOSED".equals(cause.getMessage())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

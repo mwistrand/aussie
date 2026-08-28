@@ -506,6 +506,21 @@ class WebSocketGatewayUnitTest {
         verify(vertx).cancelTimer(7L);
     }
 
+    @Test
+    @DisplayName("bean destruction closes active sessions")
+    void beanDestructionClosesActiveSessions() throws Exception {
+        final var activeSessionsField = WebSocketGateway.class.getDeclaredField("activeSessions");
+        activeSessionsField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        final var activeSessions = (java.util.Map<String, WebSocketProxySession>) activeSessionsField.get(gateway);
+        final var session = mock(WebSocketProxySession.class);
+        activeSessions.put("ws-session-1", session);
+
+        gateway.stopRevocationSubscription();
+
+        verify(session).closeWithReason((short) 1001, "Server shutting down");
+    }
+
     @Nested
     @DisplayName("handleGatewayUpgrade path edge cases")
     class GatewayUpgradePathTests {

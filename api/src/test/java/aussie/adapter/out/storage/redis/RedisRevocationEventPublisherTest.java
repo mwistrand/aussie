@@ -4,6 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -13,11 +18,14 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
+import io.quarkus.redis.datasource.RedisDataSource;
+import io.quarkus.redis.datasource.pubsub.PubSubCommands;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import aussie.core.config.TokenRevocationConfig;
 import aussie.core.model.auth.RevocationEvent;
 
 @DisplayName("RedisRevocationEventPublisher.MessageHandler")
@@ -125,6 +133,33 @@ class RedisRevocationEventPublisherTest {
     @Nested
     @DisplayName("General edge cases")
     class EdgeCases {
+
+        @Test
+        @DisplayName("cleanup completes subscribers and unsubscribes once")
+        @SuppressWarnings("unchecked")
+        void cleanupIsIdempotent() {
+            final var config = mock(TokenRevocationConfig.class);
+            final var pubsubConfig = mock(TokenRevocationConfig.PubSubConfig.class);
+            when(config.enabled()).thenReturn(true);
+            when(config.pubsub()).thenReturn(pubsubConfig);
+            when(pubsubConfig.enabled()).thenReturn(true);
+            when(pubsubConfig.channel()).thenReturn("test:revocations");
+            final var dataSource = mock(RedisDataSource.class);
+            final var pubsub = mock(PubSubCommands.class);
+            final var subscriber = mock(PubSubCommands.RedisSubscriber.class);
+            when(dataSource.pubsub(String.class)).thenReturn(pubsub);
+            when(pubsub.subscribe(anyString(), any())).thenReturn(subscriber);
+            final var publisher = new RedisRevocationEventPublisher(dataSource, config);
+            final var completed = new AtomicBoolean();
+            publisher.init();
+            publisher.subscribe().subscribe().with(ignored -> {}, ignored -> {}, () -> completed.set(true));
+
+            publisher.cleanup();
+            publisher.cleanup();
+
+            assertTrue(completed.get());
+            verify(subscriber).unsubscribe();
+        }
 
         @Test
         @DisplayName("completes the event stream")

@@ -16,6 +16,7 @@ import org.jboss.logging.Logger;
 import aussie.core.config.ServiceConfigPubSubConfig;
 import aussie.core.model.service.ServiceConfigEvent;
 import aussie.core.port.out.ServiceConfigEventPublisher;
+import aussie.core.util.SafeLogging;
 
 /**
  * Redis pub/sub implementation of ServiceConfigEventPublisher.
@@ -66,18 +67,38 @@ public class RedisServiceConfigEventPublisher implements ServiceConfigEventPubli
     }
 
     @PreDestroy
-    void cleanup() {
-        if (messageHandler != null) {
-            messageHandler.complete();
+    synchronized void cleanup() {
+        final var handler = messageHandler;
+        messageHandler = null;
+        if (handler != null) {
+            handler.complete();
         }
-        if (subscriber != null) {
+        final var currentSubscriber = subscriber;
+        subscriber = null;
+        if (currentSubscriber != null) {
             try {
-                subscriber.unsubscribe();
+                currentSubscriber.unsubscribe();
                 LOG.info("Unsubscribed from service config events");
             } catch (Exception e) {
-                LOG.warnf(e, "Error unsubscribing from service config events");
+                if (isConnectionClosed(e)) {
+                    LOG.debugf(
+                            "Service config event unsubscribe skipped during teardown: error_type=%s",
+                            SafeLogging.errorType(e));
+                } else {
+                    LOG.warnf(
+                            "Error unsubscribing from service config events: error_type=%s", SafeLogging.errorType(e));
+                }
             }
         }
+    }
+
+    private static boolean isConnectionClosed(Throwable error) {
+        for (var cause = error; cause != null; cause = cause.getCause()) {
+            if ("Connection is closed".equals(cause.getMessage()) || "CONNECTION_CLOSED".equals(cause.getMessage())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** {@inheritDoc} */

@@ -160,11 +160,13 @@ public class WebSocketGateway {
 
     @PreDestroy
     void stopRevocationSubscription() {
+        draining.set(true);
         if (revocationSubscription != null) {
             revocationSubscription.cancel();
             revocationSubscription = null;
         }
         cancelDrainTimer();
+        closeActiveSessions();
     }
 
     /**
