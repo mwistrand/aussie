@@ -13,6 +13,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import io.quarkus.redis.datasource.keys.ReactiveKeyCommands;
@@ -34,6 +36,7 @@ class RedisRateLimiterFallbackTest {
 
     private static final RateLimitKey KEY = RateLimitKey.http("client-1", "service-a", "endpoint-1");
     private static final EffectiveRateLimit LIMIT = new EffectiveRateLimit(60, 60L, 60L);
+    private static final EffectiveRateLimit EMERGENCY_LIMIT = new EffectiveRateLimit(1, 1, 1);
 
     private ReactiveRedisDataSource redisDataSource;
     private Metrics metrics;
@@ -108,7 +111,7 @@ class RedisRateLimiterFallbackTest {
         @DisplayName("delegates to the in-memory fallback and tags the metric local-bucket")
         void delegatesToFallback() {
             localFallback = mock(RateLimiter.class);
-            when(localFallback.checkAndConsume(KEY, LIMIT))
+            when(localFallback.checkAndConsume(KEY, EMERGENCY_LIMIT))
                     .thenReturn(Uni.createFrom().item(RateLimitDecision.allow()));
 
             final var limiter = newLimiter(RateLimitFallbackBehavior.LOCAL_BUCKET, localFallback);
@@ -116,8 +119,27 @@ class RedisRateLimiterFallbackTest {
             final var decision = limiter.checkAndConsume(KEY, LIMIT).await().atMost(Duration.ofSeconds(1));
 
             assertTrue(decision.allowed());
-            verify(localFallback, times(1)).checkAndConsume(KEY, LIMIT);
+            verify(localFallback, times(1)).checkAndConsume(KEY, EMERGENCY_LIMIT);
             verify(metrics).recordRateLimitFallback("service-a", "local-bucket");
+        }
+
+        @Test
+        @DisplayName("preserves a zero rate or burst quota while using the emergency window")
+        void preservesZeroQuota() {
+            final var zeroEmergencyLimit = new EffectiveRateLimit(0, 1, 0);
+            localFallback = mock(RateLimiter.class);
+            when(localFallback.checkAndConsume(KEY, zeroEmergencyLimit))
+                    .thenReturn(Uni.createFrom()
+                            .item(RateLimitDecision.rejected(0, 1, Instant.now().plusSeconds(1), 1, 0, null)));
+
+            final var limiter = newLimiter(RateLimitFallbackBehavior.LOCAL_BUCKET, localFallback);
+
+            for (final var zeroLimit : List.of(new EffectiveRateLimit(0, 60, 60), new EffectiveRateLimit(60, 60, 0))) {
+                final var decision =
+                        limiter.checkAndConsume(KEY, zeroLimit).await().atMost(Duration.ofSeconds(1));
+                assertFalse(decision.allowed());
+            }
+            verify(localFallback, times(2)).checkAndConsume(KEY, zeroEmergencyLimit);
         }
 
         @Test
@@ -207,14 +229,14 @@ class RedisRateLimiterFallbackTest {
         @DisplayName("LOCAL_BUCKET routes status checks through the fallback")
         void statusGoesThroughFallback() {
             localFallback = mock(RateLimiter.class);
-            when(localFallback.getStatus(KEY, LIMIT))
+            when(localFallback.getStatus(KEY, EMERGENCY_LIMIT))
                     .thenReturn(Uni.createFrom().item(RateLimitDecision.allow()));
 
             final var limiter = newLimiter(RateLimitFallbackBehavior.LOCAL_BUCKET, localFallback);
 
             limiter.getStatus(KEY, LIMIT).await().atMost(Duration.ofSeconds(1));
 
-            verify(localFallback).getStatus(KEY, LIMIT);
+            verify(localFallback).getStatus(KEY, EMERGENCY_LIMIT);
             verify(localFallback, never()).checkAndConsume(KEY, LIMIT);
         }
     }

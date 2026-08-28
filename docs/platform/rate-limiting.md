@@ -127,7 +127,9 @@ aussie.rate-limiting.fallback.behavior=DENY
 ```
 
 `DENY` is the default backend-outage policy. `LOCAL_BUCKET` is an explicitly
-weaker, per-instance emergency mode; `ALLOW` is intended only for development.
+weaker, per-instance emergency mode that replaces every nonzero quota with a
+one-request, one-second limit; zero request or burst quotas remain zero. `ALLOW`
+is intended only for development.
 When Redis is configured but cannot be constructed, startup fails instead of
 silently switching the cluster to independent in-memory quotas.
 

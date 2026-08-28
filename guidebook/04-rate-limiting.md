@@ -494,7 +494,7 @@ return {allowed, remaining, request_count, reset_at, retry_after}
 `RedisRateLimiter` applies the configured `aussie.rate-limiting.fallback.behavior` when an operation fails:
 
 - `DENY` (default) rejects the request with 429.
-- `LOCAL_BUCKET` delegates to a per-instance in-memory limiter and therefore provides weaker cluster-wide enforcement.
+- `LOCAL_BUCKET` replaces every nonzero quota with a per-instance one-request, one-second limit; zero request or burst quotas remain zero.
 - `ALLOW` preserves fail-open behavior for development or explicitly accepted risk.
 
 ### Provider Selection

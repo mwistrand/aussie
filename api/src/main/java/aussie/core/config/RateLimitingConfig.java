@@ -140,8 +140,8 @@ public interface RateLimitingConfig {
          * Behavior when the Redis backend errors.
          *
          * <p>{@code LOCAL_BUCKET} keeps coarse local protection by
-         * routing the request through the in-memory limiter using the same
-         * effective rate limit. {@code DENY} fails the request closed (429).
+         * routing the request through the in-memory limiter with a one-request,
+         * one-second emergency limit. {@code DENY} fails the request closed (429).
          * {@code ALLOW} preserves the legacy fail-open behavior and is intended
          * only for dev/test profiles.
          *
@@ -155,7 +155,7 @@ public interface RateLimitingConfig {
      * Choices for {@link FallbackConfig#behavior()}.
      */
     enum RateLimitFallbackBehavior {
-        /** Use the in-memory limiter as a coarse local backup. */
+        /** Use the in-memory limiter with a fixed one-request/one-second emergency limit. */
         LOCAL_BUCKET,
         /** Fail closed: reject the request with 429. */
         DENY,

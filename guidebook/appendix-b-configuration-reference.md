@@ -565,7 +565,7 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | `aussie.rate-limiting.burst-capacity` | `long` | `100` | `AUSSIE_RATE_LIMITING_BURST_CAPACITY` | Default burst capacity for token bucket algorithm. |
 | `aussie.rate-limiting.include-headers` | `boolean` | `true` | `AUSSIE_RATE_LIMITING_INCLUDE_HEADERS` | Include `X-RateLimit-*` headers in responses. |
 | `aussie.rate-limiting.redis.enabled` | `boolean` | `false` | `AUSSIE_RATE_LIMITING_REDIS_ENABLED` | Require Redis for distributed rate limiting. A missing provider fails startup. |
-| `aussie.rate-limiting.fallback.behavior` | `RateLimitFallbackBehavior` | `DENY` | `AUSSIE_RATE_LIMITING_FALLBACK_BEHAVIOR` | Runtime Redis failure policy: `DENY`, `LOCAL_BUCKET`, or `ALLOW`. |
+| `aussie.rate-limiting.fallback.behavior` | `RateLimitFallbackBehavior` | `DENY` | `AUSSIE_RATE_LIMITING_FALLBACK_BEHAVIOR` | Runtime Redis failure policy: `DENY`, fixed one-request/one-second `LOCAL_BUCKET`, or `ALLOW`. |
 
 ### 14.2 WebSocket Rate Limiting
 

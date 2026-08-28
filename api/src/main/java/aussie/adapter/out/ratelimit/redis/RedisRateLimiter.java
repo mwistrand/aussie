@@ -39,6 +39,8 @@ public final class RedisRateLimiter implements RateLimiter {
 
     private static final Logger LOG = Logger.getLogger(RedisRateLimiter.class);
     private static final long MAX_EXACT_REDIS_NUMBER = 9_007_199_254_740_991L;
+    private static final EffectiveRateLimit LOCAL_EMERGENCY_LIMIT = new EffectiveRateLimit(1, 1, 1);
+    private static final EffectiveRateLimit LOCAL_EMERGENCY_ZERO_LIMIT = new EffectiveRateLimit(0, 1, 0);
 
     /**
      * Lua script for atomic token bucket rate limiting.
@@ -215,8 +217,8 @@ public final class RedisRateLimiter implements RateLimiter {
      *
      * <p>Behavior is controlled by {@link RateLimitFallbackBehavior}:
      * <ul>
-     *   <li>{@code LOCAL_BUCKET} - delegate to the in-process limiter; if no fallback bucket is wired,
-     *       fail closed.</li>
+     *   <li>{@code LOCAL_BUCKET} - delegate to the in-process limiter with a one-request/one-second
+     *       emergency limit; if no fallback bucket is wired, fail closed.</li>
      *   <li>{@code DENY} - reject the request (fail closed).</li>
      *   <li>{@code ALLOW} - permit the request (fail open; legacy/dev behavior).</li>
      * </ul>
@@ -234,7 +236,10 @@ public final class RedisRateLimiter implements RateLimiter {
                             "Redis rate limit unavailable; routing through local fallback bucket for service={0}",
                             serviceId);
                     recordFallback(serviceId, "local-bucket");
-                    yield consume ? fallback.checkAndConsume(key, limit) : fallback.getStatus(key, limit);
+                    final var fallbackLimit = localFallbackLimit(limit);
+                    yield consume
+                            ? fallback.checkAndConsume(key, fallbackLimit)
+                            : fallback.getStatus(key, fallbackLimit);
                 }
                 LOG.warnv(
                         error,
@@ -267,6 +272,12 @@ public final class RedisRateLimiter implements RateLimiter {
         if (metrics != null) {
             metrics.recordRateLimitFallback(serviceId, mode);
         }
+    }
+
+    private static EffectiveRateLimit localFallbackLimit(EffectiveRateLimit limit) {
+        return limit.requestsPerWindow() == 0 || limit.burstCapacity() == 0
+                ? LOCAL_EMERGENCY_ZERO_LIMIT
+                : LOCAL_EMERGENCY_LIMIT;
     }
 
     /**
