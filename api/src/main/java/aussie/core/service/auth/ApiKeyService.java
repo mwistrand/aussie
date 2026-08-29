@@ -37,7 +37,7 @@ public class ApiKeyService implements ApiKeyManagement {
     public static final String API_KEY_PREFIX = "aussie_v1_";
     private static final int KEY_LENGTH_BYTES = 32;
     private static final int KEY_ID_LENGTH = 8;
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private final SecureRandom secureRandom = new SecureRandom();
 
     private final ApiKeyRepository repository;
     private final ApiKeyConfig config;
@@ -175,7 +175,7 @@ public class ApiKeyService implements ApiKeyManagement {
      */
     private String generateSecureKey() {
         byte[] bytes = new byte[KEY_LENGTH_BYTES];
-        SECURE_RANDOM.nextBytes(bytes);
+        secureRandom.nextBytes(bytes);
         return API_KEY_PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
@@ -209,7 +209,7 @@ public class ApiKeyService implements ApiKeyManagement {
      */
     private String generateKeyId() {
         byte[] bytes = new byte[KEY_ID_LENGTH / 2];
-        SECURE_RANDOM.nextBytes(bytes);
+        secureRandom.nextBytes(bytes);
         return HexFormat.of().formatHex(bytes);
     }
 

@@ -16,7 +16,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 public class SessionIdGenerator {
 
     private static final int SESSION_ID_BYTES = 32; // 256 bits
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private final SecureRandom secureRandom = new SecureRandom();
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
 
     /**
@@ -26,7 +26,7 @@ public class SessionIdGenerator {
      */
     public String generate() {
         byte[] bytes = new byte[SESSION_ID_BYTES];
-        SECURE_RANDOM.nextBytes(bytes);
+        secureRandom.nextBytes(bytes);
         return ENCODER.encodeToString(bytes);
     }
 }

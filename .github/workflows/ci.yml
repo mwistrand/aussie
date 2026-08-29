@@ -111,7 +111,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build native artifact
         working-directory: api
-        run: ./gradlew --dependency-verification=strict quarkusBuild -Dquarkus.native.enabled=true
+        run: ./gradlew --dependency-verification=strict quarkusBuild -Dquarkus.native.enabled=true -Dquarkus.package.jar.enabled=false
       - name: Verify native executable
         working-directory: api
         run: |
