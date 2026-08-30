@@ -2,7 +2,7 @@ plugins {
     id 'java'
     id 'jacoco'
     id 'io.quarkus'
-    id 'com.diffplug.spotless' version '6.25.0'
+    id 'com.diffplug.spotless' version '8.10.0'
     id 'me.champeau.jmh' version '0.7.3'
 }
 
@@ -26,8 +26,8 @@ dependencies {
     implementation 'io.smallrye.reactive:smallrye-mutiny-vertx-web-client'
 
     // Cassandra driver (standalone)
-    implementation 'org.apache.cassandra:java-driver-core:4.18.1'
-    implementation 'org.apache.cassandra:java-driver-query-builder:4.18.1'
+    implementation 'org.apache.cassandra:java-driver-core:4.19.3'
+    implementation 'org.apache.cassandra:java-driver-query-builder:4.19.3'
 
     // Redis support (Quarkus extension)
     implementation 'io.quarkus:quarkus-redis-client'
@@ -46,7 +46,7 @@ dependencies {
     implementation 'io.quarkus:quarkus-micrometer-registry-prometheus'
 
     // RFC 7807 Problem Details for error responses
-    implementation 'io.quarkiverse.resteasy-problem:quarkus-resteasy-problem:3.21.0'
+    implementation 'io.quarkiverse.httpproblem:quarkus-http-problem'
 
     // Security (RBAC with @RolesAllowed)
     implementation 'io.quarkus:quarkus-security'
@@ -55,31 +55,31 @@ dependencies {
     implementation 'io.quarkus:quarkus-hibernate-validator'
 
     // JWT/JOSE library for token validation and issuance
-    implementation 'org.bitbucket.b_c:jose4j:0.9.4'
+    implementation 'org.bitbucket.b_c:jose4j:0.9.6'
 
     // High-performance caching with TTL support
-    implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+    implementation 'com.github.ben-manes.caffeine:caffeine:3.2.3'
 
     // Guava for BloomFilter (token revocation)
-    implementation 'com.google.guava:guava:33.0.0-jre'
+    implementation 'com.google.guava:guava:33.5.0-jre'
 
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.rest-assured:rest-assured'
-    testImplementation 'org.wiremock:wiremock:3.3.1'
-    testImplementation 'com.tngtech.archunit:archunit-junit5:1.2.1'
-    testImplementation 'org.mockito:mockito-core:5.11.0'
-    testImplementation 'org.mockito:mockito-junit-jupiter:5.11.0'
-    testImplementation 'org.testcontainers:testcontainers:1.19.8'
-    testImplementation 'org.testcontainers:junit-jupiter:1.19.8'
-    testImplementation 'org.awaitility:awaitility:4.2.0'
+    testImplementation 'org.wiremock:wiremock:3.13.1'
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
+    testImplementation 'org.mockito:mockito-core:5.20.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.20.0'
+    testImplementation 'org.testcontainers:testcontainers:2.0.2'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter:2.0.2'
+    testImplementation 'org.awaitility:awaitility:4.3.0'
 }
 
 group = 'aussie'
 version = '1.0.0-SNAPSHOT'
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
 }
 
 sourceSets {
@@ -95,16 +95,16 @@ configurations {
 }
 
 dependencies {
-    e2eTestImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
-    e2eTestImplementation 'org.junit.platform:junit-platform-launcher:1.10.2'
-    e2eTestImplementation 'io.rest-assured:rest-assured:5.4.0'
-    e2eTestImplementation 'org.testcontainers:testcontainers:1.19.8'
-    e2eTestImplementation 'org.testcontainers:cassandra:1.19.8'
-    e2eTestImplementation 'org.testcontainers:junit-jupiter:1.19.8'
-    e2eTestImplementation 'org.awaitility:awaitility:4.2.0'
-    e2eTestImplementation 'org.assertj:assertj-core:3.25.3'
-    e2eTestImplementation 'com.fasterxml.jackson.core:jackson-databind:2.17.0'
-    e2eTestImplementation 'org.slf4j:slf4j-simple:2.0.13'
+    e2eTestImplementation 'org.junit.jupiter:junit-jupiter:5.13.4'
+    e2eTestImplementation 'org.junit.platform:junit-platform-launcher:1.13.4'
+    e2eTestImplementation 'io.rest-assured:rest-assured:5.5.6'
+    e2eTestImplementation 'org.testcontainers:testcontainers:2.0.2'
+    e2eTestImplementation 'org.testcontainers:testcontainers-cassandra:2.0.2'
+    e2eTestImplementation 'org.testcontainers:testcontainers-junit-jupiter:2.0.2'
+    e2eTestImplementation 'org.awaitility:awaitility:4.3.0'
+    e2eTestImplementation 'org.assertj:assertj-core:3.27.6'
+    e2eTestImplementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
+    e2eTestImplementation 'org.slf4j:slf4j-simple:2.0.17'
 }
 
 test {
@@ -189,7 +189,7 @@ jmh {
 }
 
 dependencies {
-    jmhImplementation 'org.mockito:mockito-core:5.11.0'
+    jmhImplementation 'org.mockito:mockito-core:5.20.0'
 }
 
 tasks.named('jmhJar') {

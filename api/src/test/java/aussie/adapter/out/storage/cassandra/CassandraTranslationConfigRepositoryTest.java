@@ -57,9 +57,7 @@ class CassandraTranslationConfigRepositoryTest {
         when(lookupResult.one()).thenReturn(lookupRow);
         when(lookupRow.getString("id")).thenReturn("version-id");
         when(lookupRow.getInt("version")).thenReturn(7);
-        when(lookupRow.getString("config_json"))
-                .thenReturn(
-                        """
+        when(lookupRow.getString("config_json")).thenReturn("""
                         {"version":1,"sources":[],"transforms":[],
                          "mappings":{"roleToPermissions":{},"directPermissions":{}},
                          "defaults":{"denyIfNoMatch":true,"includeUnmapped":false}}

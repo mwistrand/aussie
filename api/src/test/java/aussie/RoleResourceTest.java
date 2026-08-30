@@ -43,8 +43,7 @@ class RoleResourceTest {
     @DisplayName("should create, update, list and delete a role end-to-end")
     void shouldRoundTripRoleLifecycle() {
         given().contentType(ContentType.JSON)
-                .body(
-                        """
+                .body("""
                         {
                             "id": "platform-team",
                             "displayName": "Platform Team",
@@ -60,8 +59,7 @@ class RoleResourceTest {
                 .body("permissions", containsInAnyOrder("service.config.read", "service.config.create"));
 
         given().contentType(ContentType.JSON)
-                .body(
-                        """
+                .body("""
                         {
                             "displayName": "Updated Platform Team",
                             "permissions": ["*"]
@@ -84,8 +82,7 @@ class RoleResourceTest {
     @DisplayName("should map validation failures to problem+json")
     void shouldMapValidationFailuresToProblemJson() {
         given().contentType(ContentType.JSON)
-                .body(
-                        """
+                .body("""
                         {
                             "displayName": "No ID Role"
                         }

@@ -64,10 +64,11 @@ public class ClientContextResolverBenchmark {
                     .mapToObj(i -> i == 0 ? "203.0.113.5" : "10.0.0." + (i + 1))
                     .toList();
             switch (headerFormat) {
-                case "FORWARDED" -> forwarded = addresses.stream()
-                        .map(address -> "for=" + address + ";proto=https")
-                        .reduce((left, right) -> left + ", " + right)
-                        .orElseThrow();
+                case "FORWARDED" ->
+                    forwarded = addresses.stream()
+                            .map(address -> "for=" + address + ";proto=https")
+                            .reduce((left, right) -> left + ", " + right)
+                            .orElseThrow();
                 case "X_FORWARDED_FOR" -> {
                     xForwardedFor = String.join(", ", addresses);
                     xForwardedProto = IntStream.range(0, hopCount)

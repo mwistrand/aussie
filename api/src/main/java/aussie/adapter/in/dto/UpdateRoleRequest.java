@@ -16,8 +16,12 @@ import jakarta.validation.constraints.Size;
  * @param removePermissions permissions to remove from existing (null to skip)
  */
 public record UpdateRoleRequest(
-        @Size(max = 255, message = "displayName must be 255 characters or less") String displayName,
-        @Size(max = 1000, message = "description must be 1000 characters or less") String description,
+        @Size(max = 255, message = "displayName must be 255 characters or less")
+        String displayName,
+
+        @Size(max = 1000, message = "description must be 1000 characters or less")
+        String description,
+
         Set<String> permissions,
         Set<String> addPermissions,
         Set<String> removePermissions) {}

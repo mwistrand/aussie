@@ -62,16 +62,14 @@ public class RedisFailedAttemptRepository implements FailedAttemptRepository {
     private static final String FIELD_EXPIRES_AT = "expiresAt";
     private static final String FIELD_REASON = "reason";
     private static final String FIELD_FAILED_ATTEMPTS = "failedAttempts";
-    static final String RECORD_ATTEMPT_SCRIPT =
-            """
+    static final String RECORD_ATTEMPT_SCRIPT = """
             local initialized = redis.call('EXISTS', KEYS[1]) == 0
             if initialized then redis.call('SET', KEYS[1], ARGV[2]) end
             local count = redis.call('INCR', KEYS[1])
             if initialized then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
             return count
             """;
-    static final String RECORD_LOCKOUT_SCRIPT =
-            """
+    static final String RECORD_LOCKOUT_SCRIPT = """
             if redis.call('EXISTS', KEYS[1]) == 1 then
                 return tonumber(redis.call('GET', KEYS[2])) or 0
             end

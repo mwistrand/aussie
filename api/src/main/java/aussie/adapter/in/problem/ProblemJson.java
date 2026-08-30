@@ -5,7 +5,7 @@ import io.vertx.core.json.JsonObject;
 /**
  * RFC 9457 JSON serializer for {@link ProblemDetail}. Used by the native
  * Vert.x error-write path; the JAX-RS path goes through
- * {@code quarkus-resteasy-problem}'s own Jackson serializer (which conditionally
+ * {@code quarkus-http-problem}'s own Jackson serializer (which conditionally
  * omits {@code type} when not set).
  *
  * <p>Wire shape: {@code type, status, title, detail?, instance?, code, extras...}.

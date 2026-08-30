@@ -35,8 +35,7 @@ public class AuthSurfaceContainmentTest {
     @DisplayName("normal-mode flags reject every legacy identity-construction endpoint")
     void shouldRejectLegacyIdentityConstructionEndpoints() {
         final var createStatus = given().contentType(ContentType.JSON)
-                .body(
-                        """
+                .body("""
                         {
                           "userId": "attacker",
                           "issuer": "caller-controlled",
@@ -47,8 +46,7 @@ public class AuthSurfaceContainmentTest {
                 .post("/auth/session")
                 .statusCode();
 
-        final var forgedToken = unsignedToken(
-                """
+        final var forgedToken = unsignedToken("""
                 {"sub":"attacker","iss":"caller-controlled","permissions":["admin"]}
                 """);
         final var callbackStatus = given().queryParam("token", forgedToken)

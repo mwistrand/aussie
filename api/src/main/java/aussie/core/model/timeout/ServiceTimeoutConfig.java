@@ -17,7 +17,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *
  * @param requestTimeout maximum time to wait for a response from the upstream service
  */
-public record ServiceTimeoutConfig(@JsonProperty("requestTimeout") Optional<Duration> requestTimeout) {
+public record ServiceTimeoutConfig(
+        @JsonProperty("requestTimeout") Optional<Duration> requestTimeout) {
 
     @JsonCreator
     public ServiceTimeoutConfig {

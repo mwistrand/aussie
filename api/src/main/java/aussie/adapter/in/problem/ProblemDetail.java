@@ -68,9 +68,10 @@ public record ProblemDetail(String title, int status, String detail, Map<String,
                     case "Internal Server Error" -> "internal_error";
                     case "Service Unavailable" -> "service_unavailable";
                     case "Feature Disabled" -> "feature_disabled";
-                    default -> title.toLowerCase(Locale.ROOT)
-                            .replaceAll("[^a-z0-9]+", "_")
-                            .replaceAll("^_|_$", "");
+                    default ->
+                        title.toLowerCase(Locale.ROOT)
+                                .replaceAll("[^a-z0-9]+", "_")
+                                .replaceAll("^_|_$", "");
                 };
         return code.isEmpty() ? "unknown" : code;
     }

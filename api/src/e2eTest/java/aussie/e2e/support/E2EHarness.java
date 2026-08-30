@@ -114,7 +114,7 @@ public final class E2EHarness {
                 .waitingFor(Wait.forLogMessage(".*Ready to accept connections.*", 1))
                 .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("e2e.redis")));
 
-        this.demo = new GenericContainer<>(DockerImageName.parse("node:20-alpine"))
+        this.demo = new GenericContainer<>(DockerImageName.parse("node:24-alpine"))
                 .withNetwork(network)
                 .withNetworkAliases("demo")
                 .withExposedPorts(3000)
@@ -401,9 +401,7 @@ public final class E2EHarness {
         try {
             var path = apiProjectDir.resolve("build/e2e-alertmanager.yml");
             Files.createDirectories(path.getParent());
-            Files.writeString(
-                    path,
-                    """
+            Files.writeString(path, """
                     global: {}
                     route:
                       group_by: ['alertname']

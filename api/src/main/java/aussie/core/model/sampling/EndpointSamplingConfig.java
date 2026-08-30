@@ -13,7 +13,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *
  * @param samplingRate sampling rate (0.0 to 1.0), where 1.0 means no sampling (100% trace rate)
  */
-public record EndpointSamplingConfig(@JsonProperty("samplingRate") Optional<Double> samplingRate) {
+public record EndpointSamplingConfig(
+        @JsonProperty("samplingRate") Optional<Double> samplingRate) {
 
     @JsonCreator
     public EndpointSamplingConfig {

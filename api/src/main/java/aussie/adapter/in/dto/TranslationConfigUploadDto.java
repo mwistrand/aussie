@@ -15,7 +15,10 @@ import aussie.core.model.auth.TranslationConfigSchema;
  */
 public record TranslationConfigUploadDto(
         @NotNull(message = "config is required") @Valid TranslationConfigSchema config,
-        @Size(max = 1000, message = "comment must be 1000 characters or less") String comment,
+
+        @Size(max = 1000, message = "comment must be 1000 characters or less")
+        String comment,
+
         boolean activate) {
 
     public TranslationConfigUploadDto(TranslationConfigSchema config, String comment) {

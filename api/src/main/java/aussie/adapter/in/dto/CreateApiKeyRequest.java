@@ -18,12 +18,18 @@ import jakarta.validation.constraints.Size;
  */
 public record CreateApiKeyRequest(
         @NotBlank(message = "name is required") @Size(max = 255, message = "name must be 255 characters or less")
-                String name,
-        @Size(max = 1000, message = "description must be 1000 characters or less") String description,
+        String name,
+
+        @Size(max = 1000, message = "description must be 1000 characters or less")
+        String description,
+
         @Size(max = 255, message = "teamId must be 255 characters or less")
-                @Pattern(
-                        regexp = "^[a-zA-Z0-9._-]+$",
-                        message = "teamId must contain only alphanumeric characters, dots, hyphens, or underscores")
-                String teamId,
+        @Pattern(
+                regexp = "^[a-zA-Z0-9._-]+$",
+                message = "teamId must contain only alphanumeric characters, dots, hyphens, or underscores")
+        String teamId,
+
         Set<String> permissions,
-        @Min(value = 1, message = "ttlDays must be at least 1") Integer ttlDays) {}
+
+        @Min(value = 1, message = "ttlDays must be at least 1")
+        Integer ttlDays) {}

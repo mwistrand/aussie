@@ -112,8 +112,7 @@ public class AuthenticationIntegrationTest {
     void shouldAllowPostWithWritePermission() {
         given().header("Authorization", "Bearer " + validApiKey)
                 .contentType(ContentType.JSON)
-                .body(
-                        """
+                .body("""
                         {
                             "serviceId": "auth-test-service",
                             "displayName": "Auth Test Service",
@@ -131,8 +130,7 @@ public class AuthenticationIntegrationTest {
     void shouldRejectPostWithReadOnlyKey() {
         given().header("Authorization", "Bearer " + readOnlyApiKey)
                 .contentType(ContentType.JSON)
-                .body(
-                        """
+                .body("""
                         {
                             "serviceId": "denied-service",
                             "baseUrl": "http://backend.local:9999"

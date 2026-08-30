@@ -2,7 +2,7 @@ package aussie.adapter.in.problem;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import io.quarkiverse.resteasy.problem.HttpProblem;
+import io.quarkiverse.httpproblem.HttpProblem;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

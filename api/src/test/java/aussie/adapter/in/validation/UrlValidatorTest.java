@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.net.URI;
 
-import io.quarkiverse.resteasy.problem.HttpProblem;
+import io.quarkiverse.httpproblem.HttpProblem;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

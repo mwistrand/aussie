@@ -25,7 +25,7 @@ public final class UrlValidator {
      * @param paramName             the parameter name for error messages
      * @param allowPrivateUpstreams whether to allow site-local (private) addresses
      * @return the parsed and validated URI
-     * @throws io.quarkiverse.resteasy.problem.HttpProblem if validation fails
+     * @throws io.quarkiverse.httpproblem.HttpProblem if validation fails
      */
     public static URI validateServiceUrl(String url, String paramName, boolean allowPrivateUpstreams) {
         final URI uri;

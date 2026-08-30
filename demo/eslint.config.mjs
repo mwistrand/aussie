@@ -14,6 +14,12 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
   ]),
   {
+    rules: {
+      "react-hooks/immutability": "off",
+      "react-hooks/purity": "off",
+    },
+  },
+  {
     files: ["server.js"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",

@@ -56,8 +56,7 @@ class RedisRateLimiterIntegrationTest {
      * Deterministic model used for explicit time-progression tests.
      * The production script has a separate Redis-backed regression test below.
      */
-    private static final String TOKEN_BUCKET_SCRIPT =
-            """
+    private static final String TOKEN_BUCKET_SCRIPT = """
             local key = KEYS[1]
             local capacity = tonumber(ARGV[1])
             local refill_rate = tonumber(ARGV[2])
@@ -98,8 +97,7 @@ class RedisRateLimiterIntegrationTest {
     /**
      * Lua script for getting rate limit status without consuming.
      */
-    private static final String STATUS_SCRIPT =
-            """
+    private static final String STATUS_SCRIPT = """
             local key = KEYS[1]
             local capacity = tonumber(ARGV[1])
             local refill_rate = tonumber(ARGV[2])

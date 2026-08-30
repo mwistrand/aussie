@@ -20,7 +20,7 @@ import java.util.Set;
 
 import jakarta.ws.rs.core.Response;
 
-import io.quarkiverse.resteasy.problem.HttpProblem;
+import io.quarkiverse.httpproblem.HttpProblem;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jose4j.jwa.AlgorithmConstraints;

@@ -38,15 +38,21 @@ import aussie.core.model.timeout.EndpointTimeoutConfig;
  */
 @ValidEndpointMethods
 public record EndpointConfigDto(
-        @JsonProperty("path") @NotBlank(message = "path is required") String path,
+        @JsonProperty("path") @NotBlank(message = "path is required")
+        String path,
+
         @JsonProperty("methods") Set<String> methods,
+
         @JsonProperty("visibility")
-                @Pattern(regexp = "^(PUBLIC|PRIVATE)$", message = "visibility must be PUBLIC or PRIVATE")
-                String visibility,
+        @Pattern(regexp = "^(PUBLIC|PRIVATE)$", message = "visibility must be PUBLIC or PRIVATE")
+        String visibility,
+
         @JsonProperty("pathRewrite") String pathRewrite,
         @JsonProperty("authRequired") Boolean authRequired,
+
         @JsonProperty("type") @Pattern(regexp = "^(HTTP|WEBSOCKET)$", message = "type must be HTTP or WEBSOCKET")
-                String type,
+        String type,
+
         @JsonProperty("audience") String audience,
         @JsonProperty("rateLimitConfig") @Valid EndpointRateLimitConfigDto rateLimitConfig,
         @JsonProperty("samplingConfig") @Valid EndpointSamplingConfigDto samplingConfig,
@@ -57,11 +63,13 @@ public record EndpointConfigDto(
      */
     public record EndpointRateLimitConfigDto(
             @JsonProperty("requestsPerWindow") @Min(value = 1, message = "requestsPerWindow must be at least 1")
-                    Long requestsPerWindow,
+            Long requestsPerWindow,
+
             @JsonProperty("windowSeconds") @Min(value = 1, message = "windowSeconds must be at least 1")
-                    Long windowSeconds,
+            Long windowSeconds,
+
             @JsonProperty("burstCapacity") @Min(value = 1, message = "burstCapacity must be at least 1")
-                    Long burstCapacity) {
+            Long burstCapacity) {
 
         public EndpointRateLimitConfig toModel() {
             return new EndpointRateLimitConfig(
@@ -85,9 +93,9 @@ public record EndpointConfigDto(
      */
     public record EndpointSamplingConfigDto(
             @JsonProperty("samplingRate")
-                    @DecimalMin(value = "0.0", message = "samplingRate must be at least 0.0")
-                    @DecimalMax(value = "1.0", message = "samplingRate must be at most 1.0")
-                    Double samplingRate) {
+            @DecimalMin(value = "0.0", message = "samplingRate must be at least 0.0")
+            @DecimalMax(value = "1.0", message = "samplingRate must be at most 1.0")
+            Double samplingRate) {
 
         /**
          * Convert this DTO to an EndpointSamplingConfig model.
@@ -116,10 +124,10 @@ public record EndpointConfigDto(
      */
     public record EndpointTimeoutConfigDto(
             @JsonProperty("requestTimeout")
-                    @Pattern(
-                            regexp = "^PT(?:\\d+H)?(?:\\d+M)?(?:\\d+(?:\\.\\d+)?S)?$",
-                            message = "requestTimeout must be an ISO-8601 duration (e.g., PT30S, PT2M, PT1M30S)")
-                    String requestTimeout) {
+            @Pattern(
+                    regexp = "^PT(?:\\d+H)?(?:\\d+M)?(?:\\d+(?:\\.\\d+)?S)?$",
+                    message = "requestTimeout must be an ISO-8601 duration (e.g., PT30S, PT2M, PT1M30S)")
+            String requestTimeout) {
 
         /**
          * Convert this DTO to an EndpointTimeoutConfig model.

@@ -21,7 +21,7 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
-import io.quarkiverse.resteasy.problem.HttpProblem;
+import io.quarkiverse.httpproblem.HttpProblem;
 import io.quarkus.security.PermissionsAllowed;
 import io.quarkus.security.identity.CurrentIdentityAssociation;
 import io.quarkus.security.identity.SecurityIdentity;
@@ -188,12 +188,12 @@ public class AdminResource {
             var claims = extractClaims(identity);
 
             return serviceRegistry.getServiceAuthorized(serviceId, claims).map(result -> switch (result) {
-                case RegistrationResult.Success s -> Response.ok(
-                                ServiceRegistrationResponse.fromModel(s.registration()))
-                        .header(
-                                "ETag",
-                                VersionPreconditions.etag(s.registration().version()))
-                        .build();
+                case RegistrationResult.Success s ->
+                    Response.ok(ServiceRegistrationResponse.fromModel(s.registration()))
+                            .header(
+                                    "ETag",
+                                    VersionPreconditions.etag(s.registration().version()))
+                            .build();
                 case RegistrationResult.Failure f -> throw toGatewayProblem(f);
             });
         });

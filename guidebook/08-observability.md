@@ -403,7 +403,7 @@ The trade-off is that `ServiceLoader`-discovered handlers cannot use CDI injecti
 
 ### The Implementation
 
-`GatewayProblem` provides factory methods that create RFC 9457 structured error responses using the `quarkus-resteasy-problem` library:
+`GatewayProblem` provides factory methods that create RFC 9457 structured error responses using the `quarkus-http-problem` library:
 
 ```java
 // api/src/main/java/aussie/adapter/in/problem/GatewayProblem.java

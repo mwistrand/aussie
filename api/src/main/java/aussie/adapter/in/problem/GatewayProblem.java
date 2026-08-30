@@ -2,7 +2,7 @@ package aussie.adapter.in.problem;
 
 import java.net.URI;
 
-import io.quarkiverse.resteasy.problem.HttpProblem;
+import io.quarkiverse.httpproblem.HttpProblem;
 
 import aussie.core.model.gateway.GatewayResult;
 
@@ -10,7 +10,7 @@ import aussie.core.model.gateway.GatewayResult;
  * RFC 9457 Problem Details factory for gateway errors.
  *
  * <p>Provides static factory methods that create {@link HttpProblem} instances
- * from quarkus-resteasy-problem for consistent error responses across all
+ * from quarkus-http-problem for consistent error responses across all
  * gateway endpoints. The body shape is owned by {@link ProblemDetail}; both
  * this class and the native Vert.x error path read from the same factories
  * so the two paths emit identical responses.
