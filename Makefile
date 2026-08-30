@@ -93,6 +93,8 @@ demo-deps:
 # Run the e2e suite (Aussie + demo + Cassandra + Redis in Testcontainers).
 # Requires Docker. Standalone from :check; this is intentionally opt-in because
 # container boot is slow. See docs/platform/e2e-tests.md.
+e2e e2e-soak: demo-deps
+
 e2e:
 	cd api && ./gradlew e2eTest
 

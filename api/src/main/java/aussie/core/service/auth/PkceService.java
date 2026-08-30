@@ -37,7 +37,7 @@ public class PkceService {
     private static final Pattern CODE_CHALLENGE_PATTERN = Pattern.compile("[A-Za-z0-9_-]{43}");
     private static final Pattern CODE_VERIFIER_PATTERN = Pattern.compile("[A-Za-z0-9._~-]{43,128}");
     private static final Pattern STATE_PATTERN = Pattern.compile("[A-Za-z0-9_-]{43}");
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private final SecureRandom secureRandom = new SecureRandom();
 
     private final PkceChallengeRepository repository;
     private final PkceConfig config;
@@ -95,7 +95,7 @@ public class PkceService {
      */
     public String generateCodeVerifier() {
         byte[] randomBytes = new byte[VERIFIER_LENGTH];
-        SECURE_RANDOM.nextBytes(randomBytes);
+        secureRandom.nextBytes(randomBytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
     }
 
@@ -174,7 +174,7 @@ public class PkceService {
      */
     public String generateState() {
         final var bytes = new byte[STATE_LENGTH];
-        SECURE_RANDOM.nextBytes(bytes);
+        secureRandom.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
