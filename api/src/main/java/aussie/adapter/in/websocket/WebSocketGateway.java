@@ -338,6 +338,8 @@ public class WebSocketGateway {
                             httpClient
                                     .webSocket(options)
                                     .onSuccess(backendWs -> {
+                                        // Hold backend frames until the client upgrade has installed the proxy.
+                                        backendWs.pause();
                                         if (draining.get()) {
                                             backendWs.close((short) 1001, "Server shutting down");
                                             releaseConnection.run();
@@ -409,6 +411,7 @@ public class WebSocketGateway {
                                                         metrics.incrementActiveWebSockets();
                                                         metrics.recordWebSocketConnect(serviceId);
                                                         managedSession.start();
+                                                        backendWs.resume();
                                                     }
 
                                                     LOG.infov(
