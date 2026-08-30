@@ -1,6 +1,5 @@
 package aussie.benchmark;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 
@@ -17,8 +16,6 @@ import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
 
 import aussie.core.model.common.CorsConfig;
-import aussie.core.model.routing.GatewaySnapshot;
-import aussie.core.model.service.ServiceRegistration;
 
 /**
  * Benchmarks for CORS origin, method, and requested-header matching.
@@ -90,25 +87,6 @@ public class CorsMatchingBenchmark {
         }
     }
 
-    @State(Scope.Benchmark)
-    public static class ServiceOriginState {
-        GatewaySnapshot snapshot;
-
-        @Setup
-        public void setup() {
-            final var services = new ArrayList<ServiceRegistration>();
-            for (var i = 0; i < 1_000; i++) {
-                services.add(ServiceRegistration.builder("service-" + i)
-                        .baseUrl(URI.create("http://192.0.2.10"))
-                        .corsConfig(CorsConfig.builder()
-                                .allowedOrigins("https://service-" + i + ".example.com")
-                                .build())
-                        .build());
-            }
-            snapshot = GatewaySnapshot.build(services);
-        }
-    }
-
     @Benchmark
     public void isOriginAllowed_exactMatch(ExactMatchState state, Blackhole bh) {
         bh.consume(state.config.isOriginAllowed("https://dashboard.example.com"));
@@ -127,10 +105,5 @@ public class CorsMatchingBenchmark {
     @Benchmark
     public void isMethodAllowed(MethodState state, Blackhole bh) {
         bh.consume(state.config.isMethodAllowed("POST"));
-    }
-
-    @Benchmark
-    public void findServiceCorsAmongThousandOrigins(ServiceOriginState state, Blackhole bh) {
-        bh.consume(state.snapshot.corsConfigForOrigin("https://service-999.example.com"));
     }
 }

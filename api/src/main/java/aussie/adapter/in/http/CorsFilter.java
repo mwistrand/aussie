@@ -14,14 +14,14 @@ import org.jboss.logging.Logger;
 import aussie.common.context.RouteContextAttributes;
 import aussie.core.model.common.CorsConfig;
 import aussie.core.model.routing.RouteLookupResult;
-import aussie.core.service.routing.ServiceRegistry;
 
 /**
  * CORS filter for gateway requests using Vert.x RouteFilter.
  *
  * <p>
- * Handle CORS preflight (OPTIONS) requests and adds CORS headers to
- * responses. Registered service policies override the global defaults.
+ * Handle CORS preflight (OPTIONS) requests and add CORS headers to
+ * responses. A matched route's service policy overrides the gateway policy;
+ * platform and unknown paths use only the gateway policy.
  *
  * <p>
  * This filter runs at the Vert.x routing level (before JAX-RS) to ensure
@@ -45,12 +45,10 @@ public class CorsFilter {
     private static final int MAX_CORS_HEADER_LENGTH = 4096;
 
     private final Instance<GatewayCorsConfig> corsConfigInstance;
-    private final ServiceRegistry serviceRegistry;
 
     @Inject
-    public CorsFilter(Instance<GatewayCorsConfig> corsConfigInstance, ServiceRegistry serviceRegistry) {
+    public CorsFilter(Instance<GatewayCorsConfig> corsConfigInstance) {
         this.corsConfigInstance = corsConfigInstance;
-        this.serviceRegistry = serviceRegistry;
     }
 
     /**
@@ -83,7 +81,7 @@ public class CorsFilter {
                 "CORS request: %s %s from origin %s",
                 rc.request().method(), rc.request().path(), origin);
 
-        final var corsConfig = resolveCorsConfig(rc, origin, buildGlobalCorsConfig(globalConfig));
+        final var corsConfig = resolveCorsConfig(rc, buildGlobalCorsConfig(globalConfig));
 
         // Handle preflight (OPTIONS) requests
         if ("OPTIONS".equalsIgnoreCase(rc.request().method().name())) {
@@ -188,13 +186,13 @@ public class CorsFilter {
                 globalConfig.maxAge());
     }
 
-    private CorsConfig resolveCorsConfig(RoutingContext rc, String origin, CorsConfig globalConfig) {
+    private CorsConfig resolveCorsConfig(RoutingContext rc, CorsConfig globalConfig) {
         final var lookup = rc.get(RouteContextAttributes.LOOKUP);
         if (lookup instanceof Optional<?> optional
                 && optional.isPresent()
                 && optional.get() instanceof RouteLookupResult route) {
             return route.service().corsConfig().orElse(globalConfig);
         }
-        return serviceRegistry.getCorsConfigForOriginFromLocalCache(origin).orElse(globalConfig);
+        return globalConfig;
     }
 }

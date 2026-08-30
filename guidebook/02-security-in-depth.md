@@ -528,7 +528,7 @@ The `CorsFilter` uses Vert.x's `@RouteFilter` at priority 100 rather than a JAX-
 void corsHandler(RoutingContext rc) {
 ```
 
-Priority 100 is the highest in the filter chain. CORS runs before security headers (priority 90), before WebSocket handling (priority 50), and before any JAX-RS processing.
+Route resolution runs first at priority 105. CORS then runs before security headers (priority 90), before WebSocket handling (priority 50), and before any JAX-RS processing.
 
 The filter handles preflight (OPTIONS) requests completely, terminating the request without forwarding it to the application:
 
@@ -573,7 +573,7 @@ A senior would use the framework's built-in CORS support and discover the gap wh
 
 ### Trade-offs
 
-The global CORS configuration is the fallback. A matched route uses its registered service's `cors` policy, while gateway-owned endpoints such as `/auth/session` resolve the request origin through an index compiled from the same service registrations. Platform teams can therefore enable CORS once without maintaining a global list as service domains are onboarded.
+The global CORS configuration is the gateway policy and the fallback for matched services without a `cors` policy. A matched route may use only its registered service's policy. Platform-owned endpoints such as `/auth/session` and unknown paths use only the gateway policy, so registering a service cannot change the browser exposure of another service or a platform endpoint.
 
 ## 2.9 Security Headers
 

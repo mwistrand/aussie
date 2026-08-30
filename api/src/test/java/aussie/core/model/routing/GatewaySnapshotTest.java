@@ -3,7 +3,6 @@ package aussie.core.model.routing;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -15,7 +14,6 @@ import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.common.CorsConfig;
 import aussie.core.model.service.ServiceRegistration;
 
 class GatewaySnapshotTest {
@@ -77,22 +75,6 @@ class GatewaySnapshotTest {
         final var omegaFirst = service("omega-first", endpoint("/root/**/omega/**/alpha/**", "GET"));
 
         assertThrows(IllegalArgumentException.class, () -> GatewaySnapshot.build(List.of(alphaFirst, omegaFirst)));
-    }
-
-    @Test
-    void indexesServiceCorsPoliciesByOrigin() {
-        final var service = ServiceRegistration.builder("demo")
-                .baseUrl(URI.create("http://192.0.2.10"))
-                .corsConfig(CorsConfig.builder()
-                        .allowedOrigins("http://localhost:3000")
-                        .allowCredentials(true)
-                        .build())
-                .build();
-
-        final var config = GatewaySnapshot.build(List.of(service)).corsConfigForOrigin("http://localhost:3000");
-
-        assertTrue(config.isPresent());
-        assertTrue(config.get().allowCredentials());
     }
 
     private static EndpointConfig endpoint(String path, String method) {

@@ -184,6 +184,9 @@ public final class E2EHarness {
                 .withEnv("CASSANDRA_CONTACT_POINTS", "cassandra:9042")
                 .withEnv("QUARKUS_REDIS_HOSTS", "redis://redis:6379")
                 .withEnv("DEMO_APP_URL", "http://demo:3000")
+                // Keep 127.0.0.1 service-only so E2E can prove that service CORS
+                // registration does not expose platform endpoints.
+                .withEnv("AUSSIE_GATEWAY_CORS_ALLOWED_ORIGINS", "http://localhost:3000")
                 .withEnv("AUSSIE_AUTH_TOKEN_TRANSLATION_ENABLED", "true")
                 .withEnv("AUSSIE_AUTH_TOKEN_TRANSLATION_PROVIDER", "config")
                 .withEnv("AUSSIE_AUTH_TOKEN_TRANSLATION_CONFIG_PATH", "/etc/aussie/translation-config.json")

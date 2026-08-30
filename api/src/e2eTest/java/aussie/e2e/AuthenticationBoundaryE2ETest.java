@@ -39,6 +39,31 @@ final class AuthenticationBoundaryE2ETest {
     }
 
     @Test
+    @DisplayName("does not let a service-only CORS origin read the platform session endpoint")
+    void isolatesPlatformSessionCorsFromServicePolicy() {
+        final var context = SuiteContext.get();
+        final var serviceOnlyOrigin = "http://127.0.0.1:3000";
+
+        final var serviceResponse = given().baseUri(context.gatewayBaseUri().toString())
+                .header("Origin", serviceOnlyOrigin)
+                .when()
+                .get("/{serviceId}/api/health", context.demoServiceId());
+
+        assertEquals(200, serviceResponse.statusCode(), serviceResponse.asString());
+        assertEquals(serviceOnlyOrigin, serviceResponse.getHeader("Access-Control-Allow-Origin"));
+
+        final var sessionResponse = given().baseUri(context.gatewayBaseUri().toString())
+                .header("Origin", serviceOnlyOrigin)
+                .cookie("aussie_session", "invalid-session")
+                .when()
+                .get("/auth/session");
+
+        assertEquals(401, sessionResponse.statusCode(), sessionResponse.asString());
+        assertNull(sessionResponse.getHeader("Access-Control-Allow-Origin"));
+        assertNull(sessionResponse.getHeader("Access-Control-Allow-Credentials"));
+    }
+
+    @Test
     @DisplayName("does not expose the retired token-bearing callback")
     void rejectsRetiredCallback() {
         var token = unsignedToken("{\"sub\":\"attacker\",\"iss\":\"caller-controlled\"}");

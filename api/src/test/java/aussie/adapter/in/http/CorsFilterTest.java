@@ -1,5 +1,6 @@
 package aussie.adapter.in.http;
 
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -21,6 +22,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import aussie.common.context.RouteContextAttributes;
 import aussie.core.model.common.CorsConfig;
@@ -28,7 +31,6 @@ import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteMatch;
 import aussie.core.model.service.ServiceRegistration;
-import aussie.core.service.routing.ServiceRegistry;
 
 @DisplayName("CorsFilter")
 @SuppressWarnings("unchecked")
@@ -39,7 +41,6 @@ class CorsFilterTest {
     private RoutingContext rc;
     private HttpServerRequest request;
     private HttpServerResponse response;
-    private ServiceRegistry serviceRegistry;
     private CorsFilter filter;
 
     @BeforeEach
@@ -49,8 +50,6 @@ class CorsFilterTest {
         rc = mock(RoutingContext.class);
         request = mock(HttpServerRequest.class);
         response = mock(HttpServerResponse.class);
-        serviceRegistry = mock(ServiceRegistry.class);
-
         when(rc.request()).thenReturn(request);
         when(rc.response()).thenReturn(response);
         when(request.method()).thenReturn(HttpMethod.GET);
@@ -70,7 +69,7 @@ class CorsFilterTest {
                 .thenReturn(response);
         when(response.setStatusCode(org.mockito.ArgumentMatchers.anyInt())).thenReturn(response);
 
-        filter = new CorsFilter(corsConfigInstance, serviceRegistry);
+        filter = new CorsFilter(corsConfigInstance);
     }
 
     @Nested
@@ -216,22 +215,50 @@ class CorsFilterTest {
             verify(response).putHeader("Access-Control-Max-Age", "3600");
         }
 
-        @Test
-        @DisplayName("should use a registered service policy for gateway auth preflight")
-        void shouldUseRegisteredServicePolicyForGatewayAuthPreflight() {
-            when(request.path()).thenReturn("/auth/session");
-            when(request.getHeader("Origin")).thenReturn("http://localhost:3000");
+        @ParameterizedTest
+        @ValueSource(strings = {"/auth/session", "/admin/services", "/q/health", "/unknown"})
+        @DisplayName("should reject a service origin on platform and unknown paths")
+        void shouldRejectServiceOriginOutsideItsRoute(String path) {
+            when(request.path()).thenReturn(path);
+            when(rc.get(RouteContextAttributes.LOOKUP)).thenReturn(Optional.empty());
+            when(request.getHeader("Origin")).thenReturn("https://service.example");
             when(request.getHeader("Access-Control-Request-Method")).thenReturn("POST");
-            when(request.getHeader("Access-Control-Request-Headers")).thenReturn("Content-Type");
-            when(serviceRegistry.getCorsConfigForOriginFromLocalCache("http://localhost:3000"))
-                    .thenReturn(Optional.of(demoCorsConfig()));
 
             filter.corsHandler(rc);
 
-            verify(response).putHeader("Access-Control-Allow-Origin", "http://localhost:3000");
-            verify(response).putHeader("Access-Control-Allow-Credentials", "true");
+            verify(response).setStatusCode(403);
+        }
+
+        @Test
+        @DisplayName("should select methods and headers from the matched service")
+        void shouldSelectMatchedServicePolicy() {
+            final var alphaCors = CorsConfig.builder()
+                    .allowedOrigins("https://shared.example")
+                    .allowedMethods("GET")
+                    .allowedHeaders("X-Alpha")
+                    .build();
+            final var betaCors = CorsConfig.builder()
+                    .allowedOrigins("https://shared.example")
+                    .allowedMethods("POST")
+                    .allowedHeaders("X-Beta")
+                    .build();
+            when(request.getHeader("Origin")).thenReturn("https://shared.example");
+            when(request.getHeader("Access-Control-Request-Method")).thenReturn("POST");
+            when(request.getHeader("Access-Control-Request-Headers")).thenReturn("X-Beta");
+            when(rc.get(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of(route("alpha", alphaCors)));
+
+            filter.corsHandler(rc);
+
+            verify(response).setStatusCode(403);
+
+            clearInvocations(response);
+            when(rc.get(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of(route("beta", betaCors)));
+
+            filter.corsHandler(rc);
+
+            verify(response).putHeader("Access-Control-Allow-Methods", "POST");
+            verify(response).putHeader("Access-Control-Allow-Headers", "X-Beta");
             verify(response).setStatusCode(200);
-            verify(serviceRegistry, never()).findRoute("/auth/session", "POST");
         }
     }
 
@@ -287,38 +314,44 @@ class CorsFilterTest {
             verify(response).putHeader("Access-Control-Allow-Origin", "*");
         }
 
-        @Test
-        @DisplayName("should use a registered service policy for gateway auth endpoints")
-        void shouldUseRegisteredServicePolicyForGatewayAuth() {
-            when(request.path()).thenReturn("/auth/session");
-            when(request.getHeader("Origin")).thenReturn("http://localhost:3000");
-            when(serviceRegistry.getCorsConfigForOriginFromLocalCache("http://localhost:3000"))
-                    .thenReturn(Optional.of(demoCorsConfig()));
+        @ParameterizedTest
+        @ValueSource(strings = {"/auth/session", "/admin/services", "/q/health", "/unknown"})
+        @DisplayName("should not allow a service origin on platform and unknown paths")
+        void shouldNotAllowServiceOriginOutsideItsRoute(String path) {
+            when(request.path()).thenReturn(path);
+            when(rc.get(RouteContextAttributes.LOOKUP)).thenReturn(Optional.empty());
+            when(request.getHeader("Origin")).thenReturn("https://service.example");
 
             filter.corsHandler(rc);
 
-            verify(response).putHeader("Access-Control-Allow-Origin", "http://localhost:3000");
-            verify(response).putHeader("Access-Control-Allow-Credentials", "true");
-            verify(serviceRegistry, never()).findRoute("/auth/session", "GET");
+            verify(response, never()).putHeader("Access-Control-Allow-Origin", "https://service.example");
+            verify(rc).next();
+        }
+
+        @Test
+        @DisplayName("should not apply one service policy to another service route")
+        void shouldIsolateServicePoliciesByRoute() {
+            final var betaCors = CorsConfig.builder()
+                    .allowedOrigins("https://beta.example")
+                    .allowCredentials(true)
+                    .build();
+            when(rc.get(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of(route("beta", betaCors)));
+            when(request.getHeader("Origin")).thenReturn("https://alpha.example");
+
+            filter.corsHandler(rc);
+
+            verify(response, never()).putHeader("Access-Control-Allow-Origin", "https://alpha.example");
+            verify(rc).next();
         }
 
         @Test
         @DisplayName("should use a service policy for a matched route")
         void shouldUseServicePolicyForMatchedRoute() {
-            var serviceCors = CorsConfig.builder()
+            final var serviceCors = CorsConfig.builder()
                     .allowedOrigins("https://service.example")
                     .allowCredentials(true)
                     .build();
-            var service = ServiceRegistration.builder("service")
-                    .baseUrl(URI.create("http://service.example"))
-                    .corsConfig(serviceCors)
-                    .build();
-            var route = new RouteMatch(
-                    service,
-                    new EndpointConfig("/api/test", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty()),
-                    "/api/test",
-                    Map.of());
-            when(rc.get(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of(route));
+            when(rc.get(RouteContextAttributes.LOOKUP)).thenReturn(Optional.of(route("service", serviceCors)));
             when(request.getHeader("Origin")).thenReturn("https://service.example");
 
             filter.corsHandler(rc);
@@ -328,12 +361,15 @@ class CorsFilterTest {
         }
     }
 
-    private static CorsConfig demoCorsConfig() {
-        return CorsConfig.builder()
-                .allowedOrigins("http://localhost:3000")
-                .allowedMethods("POST")
-                .allowedHeaders("Content-Type")
-                .allowCredentials(true)
+    private static RouteMatch route(String serviceId, CorsConfig corsConfig) {
+        final var service = ServiceRegistration.builder(serviceId)
+                .baseUrl(URI.create("http://service.example"))
+                .corsConfig(corsConfig)
                 .build();
+        return new RouteMatch(
+                service,
+                new EndpointConfig("/api/test", Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty()),
+                "/api/test",
+                Map.of());
     }
 }

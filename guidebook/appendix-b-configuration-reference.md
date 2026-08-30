@@ -105,7 +105,7 @@ All durations use ISO-8601 format (e.g., `PT30S` for 30 seconds, `PT1H` for 1 ho
 | `%dev` | `aussie.gateway.cors.allow-credentials` | `true` |
 | `%prod` | `aussie.gateway.cors.enabled` | `true` |
 
-**Security considerations:** CORS is disabled and denies all origins by default. Production enables the filter, then matched routes use their service registration's `cors` policy and gateway-owned endpoints resolve registered service origins before falling back to this global policy. Exact origins are required in production; wildcard origins are rejected. The dev profile enables credentialed CORS only for the demo app's exact localhost origins.
+**Security considerations:** CORS is disabled and denies all origins by default. Production enables the filter, then matched routes use their service registration's `cors` policy and fall back to the global gateway policy when none is registered. Platform-owned and unknown paths use only the gateway policy; service registrations cannot grant cross-origin access to them. Exact origins are required in production; wildcard origins are rejected. The dev profile enables credentialed CORS only for the demo app's exact localhost origins.
 
 ## 3. Security Headers
 

@@ -6,19 +6,16 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 
-import aussie.core.model.common.CorsConfig;
 import aussie.core.model.service.ServiceRegistration;
 
 /** Immutable, fully compiled routing state published to request threads as one value. */
 public final class GatewaySnapshot {
 
-    private static final GatewaySnapshot EMPTY =
-            new GatewaySnapshot(Map.of(), List.of(), RouteIndex.build(List.of()), Map.of());
+    private static final GatewaySnapshot EMPTY = new GatewaySnapshot(Map.of(), List.of(), RouteIndex.build(List.of()));
 
     private final Map<String, ServiceRoutes> servicesById;
     private final List<ServiceRoutes> services;
     private final RouteIndex routes;
-    private final Map<String, CorsConfig> corsByOrigin;
 
     public static GatewaySnapshot empty() {
         return EMPTY;
@@ -39,19 +36,13 @@ public final class GatewaySnapshot {
                         routes,
                         RouteIndex.buildGateway(routesById.values().stream()
                                 .map(ServiceRoutes::service)
-                                .toList()),
-                        indexCors(routes));
+                                .toList()));
     }
 
-    private GatewaySnapshot(
-            Map<String, ServiceRoutes> servicesById,
-            List<ServiceRoutes> services,
-            RouteIndex routes,
-            Map<String, CorsConfig> corsByOrigin) {
+    private GatewaySnapshot(Map<String, ServiceRoutes> servicesById, List<ServiceRoutes> services, RouteIndex routes) {
         this.servicesById = servicesById;
         this.services = services;
         this.routes = routes;
-        this.corsByOrigin = corsByOrigin;
     }
 
     public GatewaySnapshot with(ServiceRegistration registration) {
@@ -75,11 +66,6 @@ public final class GatewaySnapshot {
         return routes == null ? Optional.empty() : Optional.of(routes.service());
     }
 
-    public Optional<CorsConfig> corsConfigForOrigin(String origin) {
-        final var config = corsByOrigin.getOrDefault(origin, corsByOrigin.get("*"));
-        return config != null && config.isOriginAllowed(origin) ? Optional.of(config) : Optional.empty();
-    }
-
     public RouteMatch match(String normalizedPath, String upperMethod) {
         return routes.match(normalizedPath, upperMethod);
     }
@@ -87,14 +73,6 @@ public final class GatewaySnapshot {
     public RouteMatch match(String serviceId, String normalizedPath, String upperMethod) {
         final var serviceRoutes = servicesById.get(serviceId);
         return serviceRoutes == null ? null : serviceRoutes.matchEndpoint(normalizedPath, upperMethod);
-    }
-
-    private static Map<String, CorsConfig> indexCors(List<ServiceRoutes> services) {
-        final var corsByOrigin = new TreeMap<String, CorsConfig>();
-        services.forEach(routes -> routes.service().corsConfig().ifPresent(config -> config.allowedOrigins().stream()
-                .filter(origin -> origin != null)
-                .forEach(origin -> corsByOrigin.putIfAbsent(origin, config))));
-        return Map.copyOf(corsByOrigin);
     }
 
     private static void rejectConflicts(List<ServiceRoutes> services) {
