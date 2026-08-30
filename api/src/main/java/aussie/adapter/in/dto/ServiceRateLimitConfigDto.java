@@ -15,9 +15,15 @@ import aussie.core.model.ratelimit.ServiceWebSocketRateLimitConfig.RateLimitValu
  * <p>Maps between the JSON representation and the domain model.
  */
 public record ServiceRateLimitConfigDto(
-        @Min(value = 1, message = "requestsPerWindow must be at least 1") Long requestsPerWindow,
-        @Min(value = 1, message = "windowSeconds must be at least 1") Long windowSeconds,
-        @Min(value = 1, message = "burstCapacity must be at least 1") Long burstCapacity,
+        @Min(value = 1, message = "requestsPerWindow must be at least 1")
+        Long requestsPerWindow,
+
+        @Min(value = 1, message = "windowSeconds must be at least 1")
+        Long windowSeconds,
+
+        @Min(value = 1, message = "burstCapacity must be at least 1")
+        Long burstCapacity,
+
         @Valid WebSocketRateLimitConfigDto websocket) {
 
     /**
@@ -48,7 +54,8 @@ public record ServiceRateLimitConfigDto(
     /**
      * WebSocket-specific rate limit configuration.
      */
-    public record WebSocketRateLimitConfigDto(@Valid RateLimitValuesDto connection, @Valid RateLimitValuesDto message) {
+    public record WebSocketRateLimitConfigDto(
+            @Valid RateLimitValuesDto connection, @Valid RateLimitValuesDto message) {
 
         /**
          * Convert this DTO to a ServiceWebSocketRateLimitConfig model.
@@ -76,9 +83,14 @@ public record ServiceRateLimitConfigDto(
      * Rate limit values for a specific context.
      */
     public record RateLimitValuesDto(
-            @Min(value = 1, message = "requestsPerWindow must be at least 1") Long requestsPerWindow,
-            @Min(value = 1, message = "windowSeconds must be at least 1") Long windowSeconds,
-            @Min(value = 1, message = "burstCapacity must be at least 1") Long burstCapacity) {
+            @Min(value = 1, message = "requestsPerWindow must be at least 1")
+            Long requestsPerWindow,
+
+            @Min(value = 1, message = "windowSeconds must be at least 1")
+            Long windowSeconds,
+
+            @Min(value = 1, message = "burstCapacity must be at least 1")
+            Long burstCapacity) {
 
         /**
          * Convert this DTO to a RateLimitValues model.

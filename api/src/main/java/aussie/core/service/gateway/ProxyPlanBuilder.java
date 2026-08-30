@@ -23,21 +23,25 @@ public class ProxyPlanBuilder {
 
     public ProxyPlan build(GatewayRequest request, RouteMatch routeMatch, RouteAuthResult authResult) {
         return switch (authResult) {
-            case RouteAuthResult.Authenticated auth -> new ProxyPlan.Ready(
-                    request,
-                    requestPreparer.prepare(request, routeMatch, Optional.of(auth.token())),
-                    routeMatch.service());
-            case RouteAuthResult.NotRequired ignored -> new ProxyPlan.Ready(
-                    request, requestPreparer.prepare(request, routeMatch), routeMatch.service());
-            case RouteAuthResult.Unauthorized unauthorized -> new ProxyPlan.Rejected(
-                    new GatewayResult.Unauthorized(unauthorized.reason()),
-                    routeMatch.service().serviceId());
-            case RouteAuthResult.Forbidden forbidden -> new ProxyPlan.Rejected(
-                    new GatewayResult.Forbidden(forbidden.reason()),
-                    routeMatch.service().serviceId());
-            case RouteAuthResult.BadRequest badRequest -> new ProxyPlan.Rejected(
-                    new GatewayResult.BadRequest(badRequest.reason()),
-                    routeMatch.service().serviceId());
+            case RouteAuthResult.Authenticated auth ->
+                new ProxyPlan.Ready(
+                        request,
+                        requestPreparer.prepare(request, routeMatch, Optional.of(auth.token())),
+                        routeMatch.service());
+            case RouteAuthResult.NotRequired ignored ->
+                new ProxyPlan.Ready(request, requestPreparer.prepare(request, routeMatch), routeMatch.service());
+            case RouteAuthResult.Unauthorized unauthorized ->
+                new ProxyPlan.Rejected(
+                        new GatewayResult.Unauthorized(unauthorized.reason()),
+                        routeMatch.service().serviceId());
+            case RouteAuthResult.Forbidden forbidden ->
+                new ProxyPlan.Rejected(
+                        new GatewayResult.Forbidden(forbidden.reason()),
+                        routeMatch.service().serviceId());
+            case RouteAuthResult.BadRequest badRequest ->
+                new ProxyPlan.Rejected(
+                        new GatewayResult.BadRequest(badRequest.reason()),
+                        routeMatch.service().serviceId());
         };
     }
 }

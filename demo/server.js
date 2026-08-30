@@ -428,9 +428,6 @@ app.prepare().then(() => {
       wss.handleUpgrade(req, socket, head, (ws) => {
         handleChatConnection(ws, req);
       });
-    } else {
-      console.log(`[WS] Unknown WebSocket path: ${pathname}`);
-      socket.destroy();
     }
   });
 

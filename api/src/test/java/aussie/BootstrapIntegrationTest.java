@@ -122,8 +122,7 @@ public class BootstrapIntegrationTest {
     void bootstrapKeyShouldAuthenticatePostRequests() {
         given().header("Authorization", "Bearer " + TEST_BOOTSTRAP_KEY)
                 .contentType(ContentType.JSON)
-                .body(
-                        """
+                .body("""
                                 {
                                     "serviceId": "bootstrap-test-service",
                                     "displayName": "Bootstrap Test Service",
@@ -157,8 +156,7 @@ public class BootstrapIntegrationTest {
     void bootstrapKeyShouldAllowCreatingNewApiKeys() {
         given().header("Authorization", "Bearer " + TEST_BOOTSTRAP_KEY)
                 .contentType(ContentType.JSON)
-                .body(
-                        """
+                .body("""
                                 {
                                     "name": "new-admin-key",
                                     "permissions": ["admin:read", "admin:write"]

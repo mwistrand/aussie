@@ -17,9 +17,9 @@ import aussie.core.model.timeout.ServiceTimeoutConfig;
  */
 public record ServiceTimeoutConfigDto(
         @Pattern(
-                        regexp = "^PT(?:\\d+H)?(?:\\d+M)?(?:\\d+(?:\\.\\d+)?S)?$",
-                        message = "requestTimeout must be an ISO-8601 duration (e.g., PT30S, PT2M, PT1M30S)")
-                String requestTimeout) {
+                regexp = "^PT(?:\\d+H)?(?:\\d+M)?(?:\\d+(?:\\.\\d+)?S)?$",
+                message = "requestTimeout must be an ISO-8601 duration (e.g., PT30S, PT2M, PT1M30S)")
+        String requestTimeout) {
 
     /**
      * Convert this DTO to a ServiceTimeoutConfig model.

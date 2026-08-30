@@ -133,13 +133,15 @@ public class WebSocketGatewayService implements WebSocketGatewayUseCase {
                 request.hasRouteSnapshot());
 
         return routeAuthService.authenticate(gatewayRequest, route).map(authResult -> switch (authResult) {
-            case RouteAuthResult.Authenticated auth -> new WebSocketUpgradeResult.Authorized(
-                    route,
-                    Optional.of(auth.token()),
-                    buildBackendUri(route, request.requestUri()),
-                    auth.authSessionId());
-            case RouteAuthResult.NotRequired nr -> new WebSocketUpgradeResult.Authorized(
-                    route, Optional.empty(), buildBackendUri(route, request.requestUri()), Optional.empty());
+            case RouteAuthResult.Authenticated auth ->
+                new WebSocketUpgradeResult.Authorized(
+                        route,
+                        Optional.of(auth.token()),
+                        buildBackendUri(route, request.requestUri()),
+                        auth.authSessionId());
+            case RouteAuthResult.NotRequired nr ->
+                new WebSocketUpgradeResult.Authorized(
+                        route, Optional.empty(), buildBackendUri(route, request.requestUri()), Optional.empty());
             case RouteAuthResult.Unauthorized u -> new WebSocketUpgradeResult.Unauthorized(u.reason());
             case RouteAuthResult.Forbidden f -> new WebSocketUpgradeResult.Forbidden(f.reason());
             case RouteAuthResult.BadRequest b -> new WebSocketUpgradeResult.Unauthorized(b.reason());

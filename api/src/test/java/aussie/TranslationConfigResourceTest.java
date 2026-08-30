@@ -18,8 +18,7 @@ import org.junit.jupiter.api.Test;
 @DisplayName("Translation Config Resource")
 class TranslationConfigResourceTest {
 
-    private static final String VALID_CONFIG_INACTIVE =
-            """
+    private static final String VALID_CONFIG_INACTIVE = """
             {
                 "config": {
                     "version": 1,

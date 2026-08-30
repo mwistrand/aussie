@@ -7,10 +7,10 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.ext.Provider;
 
-import io.quarkiverse.resteasy.problem.ExceptionMapperBase;
-import io.quarkiverse.resteasy.problem.HttpProblem;
-import io.quarkiverse.resteasy.problem.postprocessing.ProblemContext;
-import io.quarkiverse.resteasy.problem.postprocessing.ProblemPostProcessor;
+import io.quarkiverse.httpproblem.ExceptionMapperBase;
+import io.quarkiverse.httpproblem.HttpProblem;
+import io.quarkiverse.httpproblem.postprocessing.ProblemContext;
+import io.quarkiverse.httpproblem.postprocessing.ProblemPostProcessor;
 
 import aussie.core.service.auth.JwksFetchException;
 

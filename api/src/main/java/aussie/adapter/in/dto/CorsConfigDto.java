@@ -18,9 +18,10 @@ public record CorsConfigDto(
         Set<String> allowedHeaders,
         Set<String> exposedHeaders,
         Boolean allowCredentials,
+
         @Min(value = 0, message = "maxAge must be non-negative")
-                @Max(value = 86400, message = "maxAge must be at most 86400 seconds (24 hours)")
-                Long maxAge) {
+        @Max(value = 86400, message = "maxAge must be at most 86400 seconds (24 hours)")
+        Long maxAge) {
 
     /**
      * Convert this DTO to a CorsConfig model.

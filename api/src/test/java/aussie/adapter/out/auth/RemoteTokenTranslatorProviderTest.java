@@ -175,14 +175,11 @@ class RemoteTokenTranslatorProviderTest {
             var url = wireMockServer.baseUrl() + "/translate";
             initProvider(url);
 
-            wireMockServer.stubFor(
-                    post(urlEqualTo("/translate"))
-                            .willReturn(
-                                    aResponse()
-                                            .withStatus(200)
-                                            .withHeader("Content-Type", "application/json")
-                                            .withBody(
-                                                    """
+            wireMockServer.stubFor(post(urlEqualTo("/translate"))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody("""
                                     {
                                       "roles": ["admin", "user"],
                                       "permissions": ["read", "write", "delete"]
@@ -211,11 +208,7 @@ class RemoteTokenTranslatorProviderTest {
             var claims = Map.<String, Object>of("scope", "openid profile");
             provider.translate(ISSUER, SUBJECT, claims).await().atMost(Duration.ofSeconds(5));
 
-            wireMockServer.verify(
-                    postRequestedFor(urlEqualTo("/translate"))
-                            .withRequestBody(
-                                    equalToJson(
-                                            """
+            wireMockServer.verify(postRequestedFor(urlEqualTo("/translate")).withRequestBody(equalToJson("""
                             {
                               "issuer": "https://issuer.example.com",
                               "subject": "user-123",

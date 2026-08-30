@@ -15,7 +15,9 @@ import aussie.core.model.routing.EndpointVisibility;
 public record VisibilityRuleDto(
         @NotBlank(message = "pattern is required") String pattern,
         List<String> methods,
-        @Pattern(regexp = "^(PUBLIC|PRIVATE)$", message = "visibility must be PUBLIC or PRIVATE") String visibility) {
+
+        @Pattern(regexp = "^(PUBLIC|PRIVATE)$", message = "visibility must be PUBLIC or PRIVATE")
+        String visibility) {
 
     public VisibilityRule toModel() {
         var methodSet = methods != null ? Set.copyOf(methods) : Set.<String>of();

@@ -8,7 +8,7 @@ import java.util.List;
 
 import jakarta.ws.rs.container.ContainerRequestContext;
 
-import io.quarkiverse.resteasy.problem.HttpProblem;
+import io.quarkiverse.httpproblem.HttpProblem;
 import io.vertx.core.http.Cookie;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServerRequest;

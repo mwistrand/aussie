@@ -141,10 +141,11 @@ public class ServicePermissionsResource {
                                 .header("ETag", VersionPreconditions.etag(updatedService.version()))
                                 .build();
                     }
-                    case RegistrationResult.Failure failure -> throw switch (failure.statusCode()) {
-                        case 409 -> GatewayProblem.preconditionFailed(failure.reason());
-                        default -> GatewayProblem.badRequest(failure.reason());
-                    };
+                    case RegistrationResult.Failure failure ->
+                        throw switch (failure.statusCode()) {
+                            case 409 -> GatewayProblem.preconditionFailed(failure.reason());
+                            default -> GatewayProblem.badRequest(failure.reason());
+                        };
                 });
             });
         });

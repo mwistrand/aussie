@@ -16,7 +16,7 @@ import java.util.Set;
 
 import jakarta.ws.rs.container.ContainerRequestContext;
 
-import io.quarkiverse.resteasy.problem.HttpProblem;
+import io.quarkiverse.httpproblem.HttpProblem;
 import io.vertx.core.http.HttpServerRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

@@ -96,16 +96,14 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
     }
 
     private PreparedStatement prepareInsertVersion() {
-        return session.prepare(
-                """
+        return session.prepare("""
                 INSERT INTO translation_config_versions (id, version, config_json, created_by, created_at, comment)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """);
     }
 
     private PreparedStatement prepareInsertVersionByNumber() {
-        return session.prepare(
-                """
+        return session.prepare("""
                 INSERT INTO translation_config_versions_by_number
                     (version, id, config_json, created_by, created_at, comment)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -114,8 +112,7 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
 
     private PreparedStatement prepareInsertVersionBySequence() {
         // ponytail: one global partition; bucket by version if history growth makes compaction expensive.
-        return session.prepare(
-                """
+        return session.prepare("""
                 INSERT INTO translation_config_versions_by_sequence
                     (scope, version, id, config_json, created_by, created_at, comment)
                 VALUES ('global', ?, ?, ?, ?, ?, ?)
@@ -156,16 +153,14 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
     }
 
     private PreparedStatement prepareSetMetadata() {
-        return session.prepare(
-                """
+        return session.prepare("""
                 INSERT INTO translation_config_metadata (key, value, updated_at)
                 VALUES (?, ?, toTimestamp(now()))
                 """);
     }
 
     private PreparedStatement prepareCasMetadata() {
-        return session.prepare(
-                """
+        return session.prepare("""
                 UPDATE translation_config_metadata
                 SET value = ?, updated_at = toTimestamp(now())
                 WHERE key = ?
@@ -174,8 +169,7 @@ public class CassandraTranslationConfigRepository implements TranslationConfigRe
     }
 
     private PreparedStatement prepareInsertMetadata() {
-        return session.prepare(
-                """
+        return session.prepare("""
                 INSERT INTO translation_config_metadata (key, value, updated_at)
                 VALUES (?, ?, toTimestamp(now()))
                 IF NOT EXISTS

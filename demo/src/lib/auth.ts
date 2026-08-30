@@ -6,7 +6,7 @@ import crypto from 'crypto';
 
 // Generate a consistent key pair for demo purposes
 // This uses a deterministic approach for development
-let keyPair: { privateKey: jose.KeyLike; publicKey: jose.KeyLike } | null = null;
+let keyPair: { privateKey: jose.CryptoKey; publicKey: jose.CryptoKey } | null = null;
 let jwks: jose.JSONWebKeySet | null = null;
 
 async function getKeyPair() {

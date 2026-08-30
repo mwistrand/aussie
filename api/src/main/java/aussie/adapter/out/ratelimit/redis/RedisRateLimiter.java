@@ -56,8 +56,7 @@ public final class RedisRateLimiter implements RateLimiter {
      *
      * <p>Returns array: [allowed (0/1), remaining, tokens_used, reset_at_epoch_seconds, retry_after_seconds]
      */
-    static final String TOKEN_BUCKET_SCRIPT =
-            """
+    static final String TOKEN_BUCKET_SCRIPT = """
             local key = KEYS[1]
             local capacity = tonumber(ARGV[1])
             local refill_rate = tonumber(ARGV[2])
@@ -107,8 +106,7 @@ public final class RedisRateLimiter implements RateLimiter {
     /**
      * Lua script for getting rate limit status without consuming.
      */
-    static final String STATUS_SCRIPT =
-            """
+    static final String STATUS_SCRIPT = """
             local key = KEYS[1]
             local capacity = tonumber(ARGV[1])
             local refill_rate = tonumber(ARGV[2])

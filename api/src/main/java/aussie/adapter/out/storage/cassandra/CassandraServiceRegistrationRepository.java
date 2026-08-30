@@ -79,8 +79,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     }
 
     private PreparedStatement prepareInsert() {
-        return session.prepare(
-                """
+        return session.prepare("""
                         INSERT INTO service_registrations
                         (service_id, display_name, base_url, route_prefix,
                          default_visibility, default_auth_required, visibility_rules, endpoints, access_config,
@@ -91,8 +90,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     }
 
     private PreparedStatement prepareInsertIfAbsent() {
-        return session.prepare(
-                """
+        return session.prepare("""
                         INSERT INTO service_registrations
                         (service_id, display_name, base_url, route_prefix,
                          default_visibility, default_auth_required, visibility_rules, endpoints, access_config,
@@ -104,8 +102,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     }
 
     private PreparedStatement prepareUpdateIfVersion() {
-        return session.prepare(
-                """
+        return session.prepare("""
                         UPDATE service_registrations SET
                         display_name = ?, base_url = ?, route_prefix = ?, default_visibility = ?,
                         default_auth_required = ?, visibility_rules = ?, endpoints = ?, access_config = ?,
@@ -116,8 +113,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     }
 
     private PreparedStatement prepareInitializeLegacyVersion() {
-        return session.prepare(
-                """
+        return session.prepare("""
                         UPDATE service_registrations SET version = 1
                         WHERE service_id = ? IF version = NULL AND display_name != NULL
                         """);

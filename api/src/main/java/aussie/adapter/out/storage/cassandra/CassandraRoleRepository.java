@@ -67,8 +67,7 @@ public class CassandraRoleRepository implements RoleRepository {
     }
 
     private PreparedStatement prepareInsert() {
-        return session.prepare(
-                """
+        return session.prepare("""
                 INSERT INTO roles (role_id, encrypted_data, created_at, updated_at, version)
                 VALUES (?, ?, ?, ?, ?)
                 """);

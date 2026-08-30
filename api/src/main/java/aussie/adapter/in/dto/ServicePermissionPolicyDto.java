@@ -14,7 +14,8 @@ import aussie.core.model.auth.ServicePermissionPolicy;
  * @param permissions map of operation names to permission rules
  */
 public record ServicePermissionPolicyDto(
-        @NotEmpty(message = "permissions map cannot be empty") Map<String, @Valid OperationPermissionDto> permissions) {
+        @NotEmpty(message = "permissions map cannot be empty")
+        Map<String, @Valid OperationPermissionDto> permissions) {
 
     public ServicePermissionPolicy toModel() {
         if (permissions == null || permissions.isEmpty()) {

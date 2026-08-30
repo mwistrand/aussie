@@ -75,8 +75,7 @@ class EndpointConfigSerializationTest {
     @DisplayName("Should deserialize EndpointConfig from JSON string matching stored format")
     void shouldDeserializeFromStoredFormat() throws Exception {
         // This simulates what's stored in Cassandra
-        String json =
-                """
+        String json = """
                 [
                   {
                     "path": "/api/rate-limit-test",

@@ -24,8 +24,7 @@ public class ApiKeyResourceTest {
     @DisplayName("should create, retrieve and revoke API key end-to-end")
     void shouldRoundTripApiKey() {
         var keyId = given().contentType(ContentType.JSON)
-                .body(
-                        """
+                .body("""
                         {
                             "name": "round-trip-key",
                             "permissions": ["admin:read", "admin:write"]

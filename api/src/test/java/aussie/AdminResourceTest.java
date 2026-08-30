@@ -42,8 +42,7 @@ class AdminResourceTest {
     @Test
     @DisplayName("should round-trip service registration: create, list, get, delete")
     void shouldRoundTripServiceLifecycle() {
-        var requestBody =
-                """
+        var requestBody = """
                 {
                     "serviceId": "lifecycle-service",
                     "displayName": "Lifecycle Service",
@@ -84,8 +83,7 @@ class AdminResourceTest {
     @Test
     @DisplayName("should reject service with SSRF-prone baseUrl")
     void shouldRejectServiceWithBlockedBaseUrl() {
-        var requestBody =
-                """
+        var requestBody = """
                 {
                     "serviceId": "ssrf-service",
                     "baseUrl": "http://169.254.169.254/metadata"

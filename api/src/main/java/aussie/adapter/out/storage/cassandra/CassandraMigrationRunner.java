@@ -101,8 +101,7 @@ public class CassandraMigrationRunner {
     }
 
     private void ensureMigrationTableExists() {
-        session.execute(
-                """
+        session.execute("""
                 CREATE TABLE IF NOT EXISTS %s.schema_migrations (
                     version int PRIMARY KEY,
                     script_name text,
@@ -114,8 +113,7 @@ public class CassandraMigrationRunner {
                     lease_id text,
                     lease_until timestamp
                 )
-                """
-                        .formatted(keyspace));
+                """.formatted(keyspace));
 
         checkInterrupted();
         session.execute("ALTER TABLE %s.schema_migrations ADD IF NOT EXISTS checksum text".formatted(keyspace));
@@ -255,53 +253,45 @@ public class CassandraMigrationRunner {
         final String cql;
         final Object[] values;
         if (existing == null) {
-            cql =
-                    """
+            cql = """
                     INSERT INTO %s.schema_migrations
                         (version, script_name, checksum, status, started_at, lease_id, lease_until)
                     VALUES (?, ?, ?, 'STARTED', ?, ?, ?)
                     IF NOT EXISTS
-                    """
-                            .formatted(keyspace);
+                    """.formatted(keyspace);
             values = new Object[] {
                 migration.version(), migration.filename(), migration.checksum(), now, leaseId, leaseUntil
             };
         } else if ("FAILED".equals(existing.status())) {
-            cql =
-                    """
+            cql = """
                     UPDATE %s.schema_migrations
                     SET script_name = ?, checksum = ?, status = 'STARTED', started_at = ?,
                         lease_id = ?, lease_until = ?, error = null
                     WHERE version = ?
                     IF status = 'FAILED'
-                    """
-                            .formatted(keyspace);
+                    """.formatted(keyspace);
             values = new Object[] {
                 migration.filename(), migration.checksum(), now, leaseId, leaseUntil, migration.version()
             };
         } else if ("STARTED".equals(existing.status())
                 && (existing.leaseUntil() == null || existing.leaseUntil().isBefore(now))) {
             if (existing.leaseUntil() == null) {
-                cql =
-                        """
+                cql = """
                         UPDATE %s.schema_migrations
                         SET script_name = ?, checksum = ?, started_at = ?, lease_id = ?, lease_until = ?, error = null
                         WHERE version = ?
                         IF status = 'STARTED' AND lease_id = null
-                        """
-                                .formatted(keyspace);
+                        """.formatted(keyspace);
                 values = new Object[] {
                     migration.filename(), migration.checksum(), now, leaseId, leaseUntil, migration.version()
                 };
             } else {
-                cql =
-                        """
+                cql = """
                         UPDATE %s.schema_migrations
                         SET script_name = ?, checksum = ?, started_at = ?, lease_id = ?, lease_until = ?, error = null
                         WHERE version = ?
                         IF status = 'STARTED' AND lease_until < ?
-                        """
-                                .formatted(keyspace);
+                        """.formatted(keyspace);
                 values = new Object[] {
                     migration.filename(), migration.checksum(), now, leaseId, leaseUntil, migration.version(), now
                 };
@@ -331,8 +321,7 @@ public class CassandraMigrationRunner {
                     lease_id = null, lease_until = null, error = null
                 WHERE version = ?
                 IF lease_id = ?
-                """
-                        .formatted(keyspace),
+                """.formatted(keyspace),
                 migration.filename(),
                 migration.checksum(),
                 Instant.now(),
@@ -416,8 +405,7 @@ public class CassandraMigrationRunner {
 
     private void backfillTranslationConfigVersionLookup(LeaseHeartbeat lease) {
         checkLease(lease);
-        for (var row : session.execute(
-                """
+        for (var row : session.execute("""
                 SELECT id, version, config_json, created_by, created_at, comment
                 FROM translation_config_versions
                 """)) {
@@ -443,8 +431,7 @@ public class CassandraMigrationRunner {
 
     private void backfillTranslationConfigVersionSequence(LeaseHeartbeat lease) {
         checkLease(lease);
-        for (var row : session.execute(
-                """
+        for (var row : session.execute("""
                 SELECT id, version, config_json, created_by, created_at, comment
                 FROM translation_config_versions
                 """)) {

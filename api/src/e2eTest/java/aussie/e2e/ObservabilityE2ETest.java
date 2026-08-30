@@ -63,9 +63,7 @@ final class ObservabilityE2ETest {
             assertTrue(alertmanagers.contains("activeAlertmanagers"));
             assertTrue(alertmanagers.contains("alertmanager"));
 
-            post(
-                    harness.alertmanagerBaseUri().resolve("/api/v2/alerts"),
-                    """
+            post(harness.alertmanagerBaseUri().resolve("/api/v2/alerts"), """
                     [{"labels":{"alertname":"AussieE2EAlert","severity":"critical"},
                       "annotations":{"summary":"packaged alert delivery"}}]
                     """);

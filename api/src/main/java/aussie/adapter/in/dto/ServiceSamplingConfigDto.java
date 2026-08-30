@@ -16,8 +16,8 @@ import aussie.core.model.sampling.ServiceSamplingConfig;
  */
 public record ServiceSamplingConfigDto(
         @DecimalMin(value = "0.0", message = "samplingRate must be at least 0.0")
-                @DecimalMax(value = "1.0", message = "samplingRate must be at most 1.0")
-                Double samplingRate) {
+        @DecimalMax(value = "1.0", message = "samplingRate must be at most 1.0")
+        Double samplingRate) {
 
     /**
      * Convert this DTO to a ServiceSamplingConfig model.

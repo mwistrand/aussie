@@ -61,8 +61,7 @@ class ServicePermissionsResourceTest {
         var version = initialResponse.jsonPath().getInt("version");
         var etag = initialResponse.header("ETag");
 
-        var policy =
-                """
+        var policy = """
                 {
                     "permissions": {
                         "service.config.read": {
@@ -93,8 +92,7 @@ class ServicePermissionsResourceTest {
     }
 
     private void registerTestService(String serviceId) {
-        var requestBody = String.format(
-                """
+        var requestBody = String.format("""
                 {
                     "serviceId": "%s",
                     "baseUrl": "http://backend.local:8080",
@@ -102,8 +100,7 @@ class ServicePermissionsResourceTest {
                         { "path": "/api/test", "methods": ["GET"], "visibility": "PUBLIC" }
                     ]
                 }
-                """,
-                serviceId);
+                """, serviceId);
 
         given().contentType(ContentType.JSON)
                 .body(requestBody)

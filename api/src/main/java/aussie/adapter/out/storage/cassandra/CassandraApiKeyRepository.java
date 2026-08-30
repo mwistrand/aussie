@@ -81,8 +81,7 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
     }
 
     private PreparedStatement prepareInsert() {
-        return session.prepare(
-                """
+        return session.prepare("""
                 INSERT INTO api_keys (key_id, key_hash, encrypted_data, created_at, updated_at, version)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """);
@@ -99,8 +98,7 @@ public class CassandraApiKeyRepository implements ApiKeyRepository {
     }
 
     private PreparedStatement prepareInsertByHash() {
-        return session.prepare(
-                """
+        return session.prepare("""
                 INSERT INTO api_keys_by_hash (key_hash, key_id, encrypted_data, created_at, updated_at)
                 VALUES (?, ?, ?, toTimestamp(now()), toTimestamp(now()))
                 """);

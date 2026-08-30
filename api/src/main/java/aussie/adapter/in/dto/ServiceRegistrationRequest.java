@@ -37,15 +37,22 @@ import aussie.core.model.timeout.ServiceTimeoutConfig;
  * @param timeoutConfig       service-level timeout configuration
  */
 public record ServiceRegistrationRequest(
-        @Min(value = 1, message = "version must be at least 1") Long version,
+        @Min(value = 1, message = "version must be at least 1")
+        Long version,
+
         @NotBlank(message = "serviceId is required")
-                @Size(max = 64, message = "serviceId must be 64 characters or less")
-                String serviceId,
-        @Size(max = 255, message = "displayName must be 255 characters or less") String displayName,
+        @Size(max = 64, message = "serviceId must be 64 characters or less")
+        String serviceId,
+
+        @Size(max = 255, message = "displayName must be 255 characters or less")
+        String displayName,
+
         @NotBlank(message = "baseUrl is required") String baseUrl,
         String routePrefix,
+
         @Pattern(regexp = "^(PUBLIC|PRIVATE)$", message = "defaultVisibility must be PUBLIC or PRIVATE")
-                String defaultVisibility,
+        String defaultVisibility,
+
         Boolean defaultAuthRequired,
         List<@Valid VisibilityRuleDto> visibilityRules,
         List<@Valid EndpointConfigDto> endpoints,
@@ -61,7 +68,7 @@ public record ServiceRegistrationRequest(
      * <p>Validates {@code baseUrl} against SSRF blocklists during conversion.
      *
      * @param allowPrivateUpstreams whether to allow site-local (private) upstream addresses
-     * @throws io.quarkiverse.resteasy.problem.HttpProblem if baseUrl fails validation
+     * @throws io.quarkiverse.httpproblem.HttpProblem if baseUrl fails validation
      */
     public ServiceRegistration toModel(boolean allowPrivateUpstreams) {
         var defaultVis = defaultVisibility != null

@@ -70,59 +70,66 @@ public class LoggingSecurityEventHandler implements SecurityEventHandler {
 
     String formatEvent(SecurityEvent event) {
         return switch (event) {
-            case SecurityEvent.AuthenticationFailure e -> String.format(
-                    "AUTH_FAILURE: client_present=%s reason=%s method=%s failures=%d",
-                    present(e.clientIdentifier()),
-                    known(e.reason(), AUTH_REASONS),
-                    known(e.attemptedMethod(), AUTH_METHODS),
-                    e.failureCount());
+            case SecurityEvent.AuthenticationFailure e ->
+                String.format(
+                        "AUTH_FAILURE: client_present=%s reason=%s method=%s failures=%d",
+                        present(e.clientIdentifier()),
+                        known(e.reason(), AUTH_REASONS),
+                        known(e.attemptedMethod(), AUTH_METHODS),
+                        e.failureCount());
 
-            case SecurityEvent.AuthenticationLockout e -> String.format(
-                    "AUTH_LOCKOUT: client_present=%s key_type=%s attempts=%d duration=%ds lockout_count=%d",
-                    present(e.clientIdentifier()),
-                    keyType(e.lockedKey()),
-                    e.failedAttempts(),
-                    e.lockoutDurationSeconds(),
-                    e.lockoutCount());
+            case SecurityEvent.AuthenticationLockout e ->
+                String.format(
+                        "AUTH_LOCKOUT: client_present=%s key_type=%s attempts=%d duration=%ds lockout_count=%d",
+                        present(e.clientIdentifier()),
+                        keyType(e.lockedKey()),
+                        e.failedAttempts(),
+                        e.lockoutDurationSeconds(),
+                        e.lockoutCount());
 
-            case SecurityEvent.AccessDenied e -> String.format(
-                    "ACCESS_DENIED: client_present=%s source=%s direct_peer_present=%s trust_path_present=%s service_present=%s route_present=%s reason=%s policy_version=%d",
-                    present(e.clientIdentifier()),
-                    known(e.source(), SOURCES),
-                    present(e.directPeerIdentifier()),
-                    present(e.trustPath()),
-                    present(e.serviceId()),
-                    present(e.path()),
-                    known(e.reason(), ACCESS_REASONS),
-                    e.policyVersion());
+            case SecurityEvent.AccessDenied e ->
+                String.format(
+                        "ACCESS_DENIED: client_present=%s source=%s direct_peer_present=%s trust_path_present=%s service_present=%s route_present=%s reason=%s policy_version=%d",
+                        present(e.clientIdentifier()),
+                        known(e.source(), SOURCES),
+                        present(e.directPeerIdentifier()),
+                        present(e.trustPath()),
+                        present(e.serviceId()),
+                        present(e.path()),
+                        known(e.reason(), ACCESS_REASONS),
+                        e.policyVersion());
 
-            case SecurityEvent.RateLimitExceeded e -> String.format(
-                    "RATE_LIMIT: client_present=%s service_present=%s requests=%d threshold=%d window=%ds",
-                    present(e.clientIdentifier()),
-                    present(e.serviceId()),
-                    e.requestCount(),
-                    e.threshold(),
-                    e.windowSeconds());
+            case SecurityEvent.RateLimitExceeded e ->
+                String.format(
+                        "RATE_LIMIT: client_present=%s service_present=%s requests=%d threshold=%d window=%ds",
+                        present(e.clientIdentifier()),
+                        present(e.serviceId()),
+                        e.requestCount(),
+                        e.threshold(),
+                        e.windowSeconds());
 
-            case SecurityEvent.SuspiciousPattern e -> String.format(
-                    "SUSPICIOUS: client_present=%s type=%s confidence=%.2f details_present=%s",
-                    present(e.clientIdentifier()),
-                    known(e.patternType(), PATTERNS),
-                    e.confidenceScore(),
-                    present(e.details()));
+            case SecurityEvent.SuspiciousPattern e ->
+                String.format(
+                        "SUSPICIOUS: client_present=%s type=%s confidence=%.2f details_present=%s",
+                        present(e.clientIdentifier()),
+                        known(e.patternType(), PATTERNS),
+                        e.confidenceScore(),
+                        present(e.details()));
 
-            case SecurityEvent.DosAttackDetected e -> String.format(
-                    "DOS_ATTACK: client_present=%s type=%s evidence_present=%s",
-                    present(e.clientIdentifier()),
-                    known(e.attackType(), ATTACKS),
-                    e.evidence() != null && !e.evidence().isEmpty());
+            case SecurityEvent.DosAttackDetected e ->
+                String.format(
+                        "DOS_ATTACK: client_present=%s type=%s evidence_present=%s",
+                        present(e.clientIdentifier()),
+                        known(e.attackType(), ATTACKS),
+                        e.evidence() != null && !e.evidence().isEmpty());
 
-            case SecurityEvent.SessionInvalidated e -> String.format(
-                    "SESSION_INVALIDATED: client_present=%s session_present=%s user_present=%s reason=%s",
-                    present(e.clientIdentifier()),
-                    present(e.sessionId()),
-                    present(e.userId()),
-                    known(e.reason(), INVALIDATION_REASONS));
+            case SecurityEvent.SessionInvalidated e ->
+                String.format(
+                        "SESSION_INVALIDATED: client_present=%s session_present=%s user_present=%s reason=%s",
+                        present(e.clientIdentifier()),
+                        present(e.sessionId()),
+                        present(e.userId()),
+                        known(e.reason(), INVALIDATION_REASONS));
         };
     }
 

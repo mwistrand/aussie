@@ -115,8 +115,7 @@ class ServiceRateLimitConfigDtoTest {
         @Test
         @DisplayName("Should deserialize basic rate limit config")
         void shouldDeserializeBasicConfig() throws Exception {
-            var json =
-                    """
+            var json = """
                     {
                         "requestsPerWindow": 100,
                         "windowSeconds": 60,
@@ -134,8 +133,7 @@ class ServiceRateLimitConfigDtoTest {
         @Test
         @DisplayName("Should deserialize config with websocket settings")
         void shouldDeserializeWithWebsocket() throws Exception {
-            var json =
-                    """
+            var json = """
                     {
                         "requestsPerWindow": 100,
                         "burstCapacity": 5,

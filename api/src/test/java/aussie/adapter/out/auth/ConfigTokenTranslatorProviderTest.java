@@ -112,8 +112,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should be available when valid config loaded")
         void shouldBeAvailableWithValidConfig() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [],
@@ -129,8 +128,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should provide health check response when available")
         void shouldProvideHealthCheckWhenAvailable() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "roles", "claim": "roles", "type": "array" }],
@@ -153,8 +151,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should extract roles from array claim")
         void shouldExtractFromArrayClaim() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "roles", "claim": "roles", "type": "array" }],
@@ -176,8 +173,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should extract from space-delimited scope claim")
         void shouldExtractFromSpaceDelimitedClaim() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "scopes", "claim": "scope", "type": "space-delimited" }],
@@ -199,8 +195,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should extract from comma-delimited claim")
         void shouldExtractFromCommaDelimitedClaim() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "groups", "claim": "groups", "type": "comma-delimited" }],
@@ -223,8 +218,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should extract from nested claim using dot notation")
         void shouldExtractFromNestedClaim() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "realmRoles", "claim": "realm_access.roles", "type": "array" }],
@@ -246,8 +240,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should return empty when claim not present")
         void shouldReturnEmptyWhenClaimMissing() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "roles", "claim": "roles", "type": "array" }],
@@ -272,8 +265,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should strip prefix from values")
         void shouldStripPrefix() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "groups", "claim": "groups", "type": "array" }],
@@ -297,8 +289,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should replace characters")
         void shouldReplace() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "groups", "claim": "groups", "type": "array" }],
@@ -322,8 +313,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should convert to lowercase")
         void shouldLowercase() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "groups", "claim": "groups", "type": "array" }],
@@ -347,8 +337,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should convert to uppercase")
         void shouldUppercase() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "groups", "claim": "groups", "type": "array" }],
@@ -372,8 +361,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should apply regex replacement")
         void shouldApplyRegex() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "groups", "claim": "groups", "type": "array" }],
@@ -397,8 +385,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should apply multiple transforms in order")
         void shouldApplyMultipleTransforms() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "groups", "claim": "groups", "type": "array" }],
@@ -430,8 +417,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should map roles to permissions")
         void shouldMapRolesToPermissions() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "roles", "claim": "roles", "type": "array" }],
@@ -458,8 +444,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should map direct permissions")
         void shouldMapDirectPermissions() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "scopes", "claim": "scope", "type": "space-delimited" }],
@@ -485,8 +470,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should include unmapped values when configured")
         void shouldIncludeUnmappedValues() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "roles", "claim": "roles", "type": "array" }],
@@ -513,8 +497,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should handle Auth0 token structure")
         void shouldHandleAuth0Token() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [
@@ -541,8 +524,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should handle Keycloak token structure")
         void shouldHandleKeycloakToken() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [
@@ -571,8 +553,7 @@ class ConfigTokenTranslatorProviderTest {
         @Test
         @DisplayName("should handle Azure AD token structure with GUID groups")
         void shouldHandleAzureAdToken() throws IOException {
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [
@@ -607,8 +588,7 @@ class ConfigTokenTranslatorProviderTest {
         @DisplayName("should reload configuration from file")
         void shouldReloadConfig() throws IOException {
             // Initial config
-            initProviderWithConfig(
-                    """
+            initProviderWithConfig("""
                     {
                       "version": 1,
                       "sources": [{ "name": "roles", "claim": "roles", "type": "array" }],
@@ -626,9 +606,7 @@ class ConfigTokenTranslatorProviderTest {
             assertEquals(Set.of("old.permission"), result1.permissions());
 
             // Update config file
-            Files.writeString(
-                    configFile,
-                    """
+            Files.writeString(configFile, """
                     {
                       "version": 2,
                       "sources": [{ "name": "roles", "claim": "roles", "type": "array" }],
