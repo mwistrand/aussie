@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CASSANDRA_CONTACT_POINTS: localhost:9042
+      AUSSIE_TEST_REDIS_URL: redis://localhost:6379
     services:
       cassandra:
         image: cassandra:4.1.4

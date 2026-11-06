@@ -85,8 +85,8 @@ class SessionStorageProviderRegistryTest {
         }
 
         @Test
-        @DisplayName("should fall back to highest priority when configured provider unavailable")
-        void shouldFallBackToHighestPriority() {
+        @DisplayName("should retain configured provider when unavailable")
+        void shouldRetainConfiguredProviderWhenUnavailable() {
             var redis = createProvider("redis", 100, false);
             var memory = createProvider("memory", 0, true);
             when(storageConfig.provider()).thenReturn("redis");
@@ -95,7 +95,7 @@ class SessionStorageProviderRegistryTest {
             var registry = new SessionStorageProviderRegistry(providerInstance, config);
             var selected = registry.getSelectedProvider();
 
-            assertEquals("memory", selected.name());
+            assertEquals("redis", selected.name());
         }
 
         @Test
@@ -114,17 +114,16 @@ class SessionStorageProviderRegistryTest {
         }
 
         @Test
-        @DisplayName("should use highest priority when configured is not 'memory' and unavailable")
-        void shouldUseHighestPriorityWhenConfiguredUnavailable() {
+        @DisplayName("should reject configured provider that is not installed")
+        void shouldRejectMissingConfiguredProvider() {
             var custom = createProvider("custom", 200, true);
             var memory = createProvider("memory", 0, true);
             when(storageConfig.provider()).thenReturn("cassandra");
             when(providerInstance.stream()).thenReturn(Stream.of(custom, memory));
 
             var registry = new SessionStorageProviderRegistry(providerInstance, config);
-            var selected = registry.getSelectedProvider();
 
-            assertEquals("custom", selected.name());
+            assertThrows(IllegalStateException.class, registry::getSelectedProvider);
         }
 
         @Test

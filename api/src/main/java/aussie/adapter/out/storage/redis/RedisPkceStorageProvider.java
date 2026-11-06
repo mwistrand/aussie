@@ -2,6 +2,7 @@ package aussie.adapter.out.storage.redis;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.annotation.PostConstruct;
@@ -10,6 +11,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
+import io.quarkus.scheduler.Scheduled;
+import io.quarkus.scheduler.Scheduled.ConcurrentExecution;
 import io.smallrye.mutiny.subscription.Cancellable;
 import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.jboss.logging.Logger;
@@ -42,6 +45,7 @@ public class RedisPkceStorageProvider implements PkceStorageProvider {
     private volatile RedisPkceChallengeRepository repository;
     private final AtomicReference<AvailabilityState> availabilityState =
             new AtomicReference<>(AvailabilityState.CHECKING);
+    private final AtomicBoolean availabilityCheckInProgress = new AtomicBoolean();
     private volatile Cancellable availabilityCheck;
 
     @Inject
@@ -52,23 +56,41 @@ public class RedisPkceStorageProvider implements PkceStorageProvider {
 
     @PostConstruct
     void checkAvailability() {
-        // Check availability asynchronously at startup
-        availabilityCheck = redisDataSource
-                .key(String.class)
-                .exists("test-connection")
-                .ifNoItem()
-                .after(Duration.ofSeconds(5))
-                .fail()
-                .subscribe()
-                .with(
-                        result -> {
-                            availabilityState.set(AvailabilityState.AVAILABLE);
-                            LOG.info("Redis PKCE storage is available");
-                        },
-                        error -> {
-                            availabilityState.set(AvailabilityState.UNAVAILABLE);
-                            LOG.warnf("Redis PKCE storage is not available: %s", error.getMessage());
-                        });
+        refreshAvailability();
+    }
+
+    @Scheduled(every = "5s", concurrentExecution = ConcurrentExecution.SKIP)
+    void refreshAvailability() {
+        if (!availabilityCheckInProgress.compareAndSet(false, true)) {
+            return;
+        }
+        if (availabilityState.get() != AvailabilityState.AVAILABLE) {
+            availabilityState.set(AvailabilityState.CHECKING);
+        }
+        try {
+            availabilityCheck = redisDataSource
+                    .key(String.class)
+                    .exists("test-connection")
+                    .ifNoItem()
+                    .after(Duration.ofSeconds(5))
+                    .fail()
+                    .subscribe()
+                    .with(
+                            result -> {
+                                availabilityState.set(AvailabilityState.AVAILABLE);
+                                LOG.info("Redis PKCE storage is available");
+                                availabilityCheckInProgress.set(false);
+                            },
+                            error -> {
+                                availabilityState.set(AvailabilityState.UNAVAILABLE);
+                                LOG.warnf("Redis PKCE storage is not available: %s", error.getMessage());
+                                availabilityCheckInProgress.set(false);
+                            });
+        } catch (RuntimeException error) {
+            availabilityState.set(AvailabilityState.UNAVAILABLE);
+            availabilityCheckInProgress.set(false);
+            LOG.warnf("Redis PKCE storage is not available: %s", error.getMessage());
+        }
     }
 
     @PreDestroy
