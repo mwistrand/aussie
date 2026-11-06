@@ -524,6 +524,8 @@ The test profile disables auth rate limiting because test suites exercising auth
 | `aussie.session.storage.provider` | `String` | `redis` | `AUSSIE_SESSION_STORAGE_PROVIDER` | Storage provider. Options: `redis`, `memory`, or custom SPI name. |
 | `aussie.session.storage.redis.key-prefix` | `String` | `aussie:session:` | `AUSSIE_SESSION_STORAGE_REDIS_KEY_PREFIX` | Redis key prefix for session data. |
 
+The Redis session provider supports standalone, replication, and Sentinel clients, but not `quarkus.redis.client-type=cluster`; session records and their user index require atomic multi-key operations.
+
 ### 13.4 Session JWS Tokens
 
 **Prefix:** `aussie.session.jws`

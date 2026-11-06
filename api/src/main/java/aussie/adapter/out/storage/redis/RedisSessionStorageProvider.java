@@ -2,16 +2,20 @@ package aussie.adapter.out.storage.redis;
 
 import java.time.Duration;
 import java.util.Optional;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
+import io.quarkus.scheduler.Scheduled;
+import io.quarkus.scheduler.Scheduled.ConcurrentExecution;
 import io.smallrye.mutiny.subscription.Cancellable;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.jboss.logging.Logger;
 
@@ -37,10 +41,20 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
     private final SessionConfig sessionConfig;
     private final ResiliencyConfig resiliencyConfig;
     private final Metrics metrics;
+    private final ObjectMapper objectMapper;
+    private final boolean clusterClient;
 
     private RedisSessionRepository repository;
-    private final AtomicBoolean available = new AtomicBoolean(false);
-    private final CountDownLatch checkLatch = new CountDownLatch(1);
+
+    private enum AvailabilityState {
+        CHECKING,
+        AVAILABLE,
+        UNAVAILABLE
+    }
+
+    private final AtomicReference<AvailabilityState> availabilityState =
+            new AtomicReference<>(AvailabilityState.CHECKING);
+    private final AtomicBoolean availabilityCheckInProgress = new AtomicBoolean();
     private volatile Cancellable availabilityCheck;
 
     @Inject
@@ -48,34 +62,58 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
             ReactiveRedisDataSource redisDataSource,
             SessionConfig sessionConfig,
             ResiliencyConfig resiliencyConfig,
-            Metrics metrics) {
+            Metrics metrics,
+            ObjectMapper objectMapper,
+            @ConfigProperty(name = "quarkus.redis.client-type", defaultValue = "standalone") String redisClientType) {
         this.redisDataSource = redisDataSource;
         this.sessionConfig = sessionConfig;
         this.resiliencyConfig = resiliencyConfig;
         this.metrics = metrics;
+        this.objectMapper = objectMapper;
+        this.clusterClient = redisClientType.equalsIgnoreCase("cluster");
     }
 
     @PostConstruct
     void checkAvailability() {
-        // Check availability asynchronously at startup
-        availabilityCheck = redisDataSource
-                .key(String.class)
-                .exists("test-connection")
-                .ifNoItem()
-                .after(Duration.ofSeconds(5))
-                .fail()
-                .subscribe()
-                .with(
-                        result -> {
-                            available.set(true);
-                            checkLatch.countDown();
-                            LOG.info("Redis session storage is available");
-                        },
-                        error -> {
-                            available.set(false);
-                            checkLatch.countDown();
-                            LOG.warnf("Redis session storage is not available: %s", error.getMessage());
-                        });
+        refreshAvailability();
+    }
+
+    @Scheduled(every = "5s", concurrentExecution = ConcurrentExecution.SKIP)
+    void refreshAvailability() {
+        if (clusterClient) {
+            availabilityState.set(AvailabilityState.UNAVAILABLE);
+            return;
+        }
+        if (!availabilityCheckInProgress.compareAndSet(false, true)) {
+            return;
+        }
+        if (availabilityState.get() != AvailabilityState.AVAILABLE) {
+            availabilityState.set(AvailabilityState.CHECKING);
+        }
+        try {
+            availabilityCheck = redisDataSource
+                    .key(String.class)
+                    .exists("test-connection")
+                    .ifNoItem()
+                    .after(Duration.ofSeconds(5))
+                    .fail()
+                    .subscribe()
+                    .with(
+                            result -> {
+                                availabilityState.set(AvailabilityState.AVAILABLE);
+                                LOG.info("Redis session storage is available");
+                                availabilityCheckInProgress.set(false);
+                            },
+                            error -> {
+                                availabilityState.set(AvailabilityState.UNAVAILABLE);
+                                LOG.warnf("Redis session storage is not available: %s", error.getMessage());
+                                availabilityCheckInProgress.set(false);
+                            });
+        } catch (RuntimeException error) {
+            availabilityState.set(AvailabilityState.UNAVAILABLE);
+            availabilityCheckInProgress.set(false);
+            LOG.warnf("Redis session storage is not available: %s", error.getMessage());
+        }
     }
 
     @PreDestroy
@@ -98,22 +136,19 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
 
     @Override
     public boolean isAvailable() {
-        // Return cached availability state immediately - never block.
-        // The availability check runs asynchronously at startup via @PostConstruct.
-        // If the check hasn't completed yet, return false (memory provider will be used).
-        if (checkLatch.getCount() > 0) {
-            LOG.debug("Redis availability check not yet complete, returning false");
-            return false;
-        }
-        return available.get();
+        return availabilityState.get() == AvailabilityState.AVAILABLE;
     }
 
     @Override
     public SessionRepository createRepository() {
+        if (clusterClient) {
+            // shortcut: session records and user indexes span slots, redesign the key schema before cluster support.
+            throw new IllegalStateException("Redis session storage does not support Redis Cluster");
+        }
         if (repository == null) {
             var timeoutHelper =
                     new RedisTimeoutHelper(resiliencyConfig.redis().operationTimeout(), metrics, "SessionRepository");
-            repository = new RedisSessionRepository(redisDataSource, sessionConfig, timeoutHelper);
+            repository = new RedisSessionRepository(redisDataSource, sessionConfig, timeoutHelper, objectMapper);
             LOG.info("Created Redis session repository with prefix: "
                     + sessionConfig.storage().redis().keyPrefix());
         }
@@ -122,18 +157,20 @@ public class RedisSessionStorageProvider implements SessionStorageProvider {
 
     @Override
     public Optional<HealthCheckResponse> healthCheck() {
-        // Use cached availability state to avoid blocking on health checks
-        if (available.get()) {
+        if (availabilityState.get() == AvailabilityState.AVAILABLE) {
             return Optional.of(HealthCheckResponse.named("session-storage-redis")
                     .up()
                     .withData("type", "redis")
                     .withData("keyPrefix", sessionConfig.storage().redis().keyPrefix())
                     .build());
         } else {
+            final var error = availabilityState.get() == AvailabilityState.CHECKING
+                    ? "Availability check in progress"
+                    : clusterClient ? "Redis Cluster is not supported" : "Redis not available";
             return Optional.of(HealthCheckResponse.named("session-storage-redis")
                     .down()
                     .withData("type", "redis")
-                    .withData("error", "Redis not available or check not completed")
+                    .withData("error", error)
                     .build());
         }
     }
