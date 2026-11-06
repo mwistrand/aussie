@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.enterprise.inject.Instance;
 
@@ -13,8 +14,13 @@ import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.health.HealthCheckResponse.Status;
 import org.junit.jupiter.api.Test;
 
+import aussie.core.config.PkceConfig;
+import aussie.core.config.SessionConfig;
 import aussie.core.model.common.StorageHealth;
 import aussie.core.port.out.StorageHealthIndicator;
+import aussie.core.service.auth.PkceStorageProviderRegistry;
+import aussie.core.service.session.SessionStorageProviderRegistry;
+import aussie.spi.PkceStorageProvider;
 
 class DependencyReadinessHealthCheckTest {
 
@@ -66,6 +72,23 @@ class DependencyReadinessHealthCheckTest {
 
         assertEquals(Status.DOWN, response.getStatus());
         assertEquals("dependency_unavailable", response.getData().orElseThrow().get("reason"));
+    }
+
+    @Test
+    void treatsUnsupportedProviderHealthAsAvailable() {
+        final var sessionConfig = mock(SessionConfig.class);
+        final var pkceConfig = mock(PkceConfig.class);
+        when(pkceConfig.enabled()).thenReturn(true);
+        final var provider = mock(PkceStorageProvider.class);
+        when(provider.healthCheck()).thenReturn(Optional.empty());
+        final var pkceRegistry = mock(PkceStorageProviderRegistry.class);
+        when(pkceRegistry.getSelectedProvider()).thenReturn(provider);
+        final var check = new DependencyReadinessHealthCheck(
+                indicators(), mock(SessionStorageProviderRegistry.class), pkceRegistry, sessionConfig, pkceConfig);
+
+        check.refreshScheduled();
+
+        assertEquals(Status.UP, check.call().getStatus());
     }
 
     @SafeVarargs

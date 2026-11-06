@@ -2,7 +2,6 @@ package aussie.core.service.session;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -25,8 +24,7 @@ import aussie.spi.SessionStorageProvider;
  * <p>Selection order:
  * <ol>
  *   <li>Configured provider (aussie.session.storage.provider)</li>
- *   <li>Highest priority available provider</li>
- *   <li>Memory fallback (always available)</li>
+ *   <li>Highest priority available provider when no provider is configured</li>
  * </ol>
  */
 @ApplicationScoped
@@ -37,8 +35,8 @@ public class SessionStorageProviderRegistry {
     private final Instance<SessionStorageProvider> providers;
     private final SessionConfig config;
 
-    private SessionStorageProvider selectedProvider;
-    private SessionRepository repository;
+    private volatile SessionStorageProvider selectedProvider;
+    private volatile SessionRepository repository;
 
     @Inject
     public SessionStorageProviderRegistry(Instance<SessionStorageProvider> providers, SessionConfig config) {
@@ -67,7 +65,7 @@ public class SessionStorageProviderRegistry {
      *
      * @return Session repository instance
      */
-    public SessionRepository getRepository() {
+    public synchronized SessionRepository getRepository() {
         if (repository == null) {
             repository = getSelectedProvider().createRepository();
         }
@@ -79,7 +77,7 @@ public class SessionStorageProviderRegistry {
      *
      * @return Selected provider
      */
-    public SessionStorageProvider getSelectedProvider() {
+    public synchronized SessionStorageProvider getSelectedProvider() {
         if (selectedProvider == null) {
             selectedProvider = selectProvider();
         }
@@ -87,8 +85,19 @@ public class SessionStorageProviderRegistry {
     }
 
     private SessionStorageProvider selectProvider() {
-        String configuredProvider = config.storage().provider();
-        List<SessionStorageProvider> availableProviders = providers.stream()
+        final var configuredProvider = config.storage().provider();
+        if (configuredProvider != null && !configuredProvider.isBlank()) {
+            final var configured = providers.stream()
+                    .filter(p -> p.name().equals(configuredProvider))
+                    .findFirst();
+            if (configured.isEmpty()) {
+                throw new IllegalStateException("Configured session storage provider not found: " + configuredProvider);
+            }
+            LOG.infof("Using configured session storage provider: %s", configuredProvider);
+            return configured.get();
+        }
+
+        final List<SessionStorageProvider> availableProviders = providers.stream()
                 .filter(SessionStorageProvider::isAvailable)
                 .sorted(Comparator.comparingInt(SessionStorageProvider::priority)
                         .reversed())
@@ -98,29 +107,12 @@ public class SessionStorageProviderRegistry {
                 "Available session storage providers: %s",
                 availableProviders.stream().map(SessionStorageProvider::name).toList());
 
-        // First, try to find the configured provider
-        Optional<SessionStorageProvider> configured = availableProviders.stream()
-                .filter(p -> p.name().equals(configuredProvider))
-                .findFirst();
-
-        if (configured.isPresent()) {
-            LOG.infof("Using configured session storage provider: %s", configuredProvider);
-            return configured.get();
-        }
-
-        // If configured provider not available, log warning and use highest priority
-        if (!configuredProvider.equals("memory")) {
-            LOG.warnf("Configured session storage provider '%s' is not available, falling back", configuredProvider);
-        }
-
-        // Use highest priority available provider
         if (!availableProviders.isEmpty()) {
             SessionStorageProvider provider = availableProviders.get(0);
             LOG.infof("Using session storage provider: %s (priority: %d)", provider.name(), provider.priority());
             return provider;
         }
 
-        // This shouldn't happen as memory provider is always available
         throw new IllegalStateException("No session storage providers available");
     }
 

@@ -69,6 +69,14 @@ class ProductionConfigurationValidatorTest {
         assertThrows(IllegalStateException.class, () -> validator(configuration).validate(LaunchMode.NORMAL));
     }
 
+    @Test
+    void rejectsRedisClusterForSessionStorage() {
+        final var configuration = safeConfiguration();
+        configuration.put("quarkus.redis.client-type", "cluster");
+
+        assertThrows(IllegalStateException.class, () -> validator(configuration).validate(LaunchMode.NORMAL));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"aussie.session.cookie.secure", "aussie.session.cookie.http-only"})
     void rejectsInsecureSessionCookies(String property) {
