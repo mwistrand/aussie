@@ -1,9 +1,12 @@
 package aussie.adapter.out.storage.cassandra;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.datastax.oss.driver.api.core.cql.AsyncResultSet;
@@ -17,6 +20,7 @@ import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
+import org.jboss.logging.Logger;
 
 import aussie.core.model.auth.ServiceAccessConfig;
 import aussie.core.model.auth.ServicePermissionPolicy;
@@ -41,6 +45,10 @@ import aussie.core.port.out.ServiceRegistrationRepository;
  */
 public class CassandraServiceRegistrationRepository implements ServiceRegistrationRepository {
 
+    private static final Logger LOG = Logger.getLogger(CassandraServiceRegistrationRepository.class);
+    private static final int MAX_GENERATION_ATTEMPTS = 8;
+    private static final int MAX_GENERATION_JITTER_MILLIS = 25;
+
     private final ObjectMapper objectMapper;
     private final CqlSession session;
     private final PreparedStatement insertStmt;
@@ -56,6 +64,8 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     private final PreparedStatement selectGenerationStmt;
     private final PreparedStatement initializeGenerationStmt;
     private final PreparedStatement updateGenerationStmt;
+    private final AtomicReference<Uni<Void>> generationReconciliation =
+            new AtomicReference<>(Uni.createFrom().voidItem());
 
     public CassandraServiceRegistrationRepository(ObjectMapper objectMapper, CqlSession session) {
         this.objectMapper = objectMapper;
@@ -150,7 +160,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                 .completionStage(() -> session.executeAsync(bindInsert(insertStmt, registration))
                         .toCompletableFuture())
                 .emitOn(executor)
-                .call(ignored -> advanceGeneration())
+                .call(ignored -> scheduleGenerationAdvance())
                 .replaceWithVoid();
     }
 
@@ -163,7 +173,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                 .emitOn(executor)
                 .map(this::createResult)
                 .call(result -> result.applied()
-                        ? advanceGeneration()
+                        ? scheduleGenerationAdvance()
                         : Uni.createFrom().voidItem());
     }
 
@@ -199,7 +209,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                 .map(this::conditionalResult);
         return retryAfterLegacyVersionInitialization(registration.serviceId(), expectedVersion, mutation)
                 .call(result -> result.applied()
-                        ? advanceGeneration()
+                        ? scheduleGenerationAdvance()
                         : Uni.createFrom().voidItem());
     }
 
@@ -231,7 +241,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                         return session.executeAsync(bound).toCompletableFuture();
                     })
                     .emitOn(executor)
-                    .call(ignored -> advanceGeneration())
+                    .call(ignored -> scheduleGenerationAdvance())
                     .map(rs -> true);
         });
     }
@@ -246,7 +256,7 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                 .map(this::conditionalResult);
         return retryAfterLegacyVersionInitialization(serviceId, expectedVersion, mutation)
                 .call(result -> result.applied()
-                        ? advanceGeneration()
+                        ? scheduleGenerationAdvance()
                         : Uni.createFrom().voidItem());
     }
 
@@ -313,6 +323,53 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     }
 
     private Uni<Void> advanceGeneration() {
+        return advanceGeneration(0);
+    }
+
+    private Uni<Void> scheduleGenerationAdvance() {
+        final var previous = generationReconciliation.get();
+        final var next = previous.onFailure()
+                .recoverWithNull()
+                .call(ignored -> advanceGenerationUntilSuccess())
+                .memoize()
+                .indefinitely();
+        generationReconciliation.compareAndSet(previous, next);
+        return Uni.createFrom().voidItem();
+    }
+
+    @Override
+    public Uni<Void> awaitGeneration() {
+        return generationReconciliation.get();
+    }
+
+    @Override
+    public Uni<Void> reconcileGeneration() {
+        scheduleGenerationAdvance();
+        return awaitGeneration();
+    }
+
+    private Uni<Void> advanceGenerationUntilSuccess() {
+        return advanceGeneration(0)
+                .onFailure()
+                .invoke(error -> LOG.warnf(
+                        error,
+                        "Service configuration committed but durable generation advancement is pending: error_type=%s",
+                        error.getClass().getSimpleName()))
+                .onFailure()
+                .recoverWithUni(error -> Uni.createFrom()
+                        .voidItem()
+                        .onItem()
+                        .delayIt()
+                        .by(Duration.ofMillis(MAX_GENERATION_JITTER_MILLIS))
+                        .flatMap(ignored -> advanceGenerationUntilSuccess()));
+    }
+
+    private Uni<Void> advanceGeneration(int attempt) {
+        if (attempt >= MAX_GENERATION_ATTEMPTS) {
+            return Uni.createFrom()
+                    .failure(new IllegalStateException("Durable generation contention retry limit reached"));
+        }
+
         return currentGeneration().flatMap(current -> {
             final var executor = getContextExecutor();
             return Uni.createFrom()
@@ -323,18 +380,29 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                         if (result.wasApplied()) {
                             return Uni.createFrom().voidItem();
                         }
-                        if (current != 0L) {
-                            return advanceGeneration();
-                        }
-                        return Uni.createFrom()
-                                .completionStage(() -> session.executeAsync(initializeGenerationStmt.bind())
-                                        .toCompletableFuture())
-                                .emitOn(executor)
-                                .flatMap(initialized -> initialized.wasApplied()
-                                        ? Uni.createFrom().voidItem()
-                                        : advanceGeneration());
+                        return retryGeneration(attempt, current == 0L, executor);
                     });
         });
+    }
+
+    private Uni<Void> retryGeneration(int attempt, boolean initialize, Executor executor) {
+        return Uni.createFrom()
+                .voidItem()
+                .onItem()
+                .delayIt()
+                .by(Duration.ofMillis(ThreadLocalRandom.current().nextLong(MAX_GENERATION_JITTER_MILLIS + 1L)))
+                .flatMap(ignored -> {
+                    if (!initialize) {
+                        return advanceGeneration(attempt + 1);
+                    }
+                    return Uni.createFrom()
+                            .completionStage(() -> session.executeAsync(initializeGenerationStmt.bind())
+                                    .toCompletableFuture())
+                            .emitOn(executor)
+                            .flatMap(initialized -> initialized.wasApplied()
+                                    ? Uni.createFrom().voidItem()
+                                    : advanceGeneration(attempt + 1));
+                });
     }
 
     private BoundStatement bindInsert(PreparedStatement statement, ServiceRegistration registration) {

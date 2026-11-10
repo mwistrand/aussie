@@ -834,10 +834,12 @@ Treat Redis as sensitive storage: an idempotent API-key creation response contai
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/admin/services` | GET | List registered services (`limit`, `offset`) |
-| `/admin/services` | POST | Register a new service |
-| `/admin/services/routing-status` | GET | Show local routing generation, durable generation, convergence lag, checksum, and last rejected generation |
+| `/admin/services` | POST | Register a new service (`Idempotency-Key` supports replay-safe retries) |
+| `/admin/services/routing-status` | GET | Show local/durable generations, convergence lag, snapshot age, propagation errors/backlog, checksum, and last rejected generation |
 | `/admin/services/{id}` | GET | Get a specific service |
-| `/admin/services/{id}` | DELETE | Unregister a service |
+| `/admin/services/{id}` | DELETE | Unregister a service (`Idempotency-Key` is supported for replay-safe retries) |
+
+Successful service mutations mean the authoritative service row committed. A response may include `X-Aussie-Propagation-State: pending` while route snapshot, cache, and pub/sub propagation reconcile. Inspect `routing-status` for the bounded backlog and `pendingPropagations` service/version entries; a failed attempt remains retryable and is removed after convergence.
 
 **CLI equivalents:**
 ```bash
