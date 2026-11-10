@@ -358,7 +358,7 @@ Domain services implementing inbound ports and composing outbound ports. All are
 |---|---|
 | `BootstrapService` | Implements `BootstrapManagement`. Creates time-limited admin keys on first startup. |
 | `IpNetwork` | Parses and matches exact IP/CIDR policies without DNS resolution. Shared by proxy trust and access control. |
-| `RequestSizeValidator` | Validates request body size and header sizes against `LimitsConfig`. |
+| `RequestSizeValidator` | Validates individual header sizes that native HTTP limits cannot express. |
 | `TrustedProxyValidator` | Matches direct peers and forwarding hops against pre-parsed trusted proxy networks. |
 
 **Allowed dependencies:** `core/model`, `core/config`.
@@ -809,7 +809,7 @@ JAX-RS server filters that intercept requests before they reach resource classes
 | Class | Priority | Description |
 |---|---|---|
 | `RouteResolutionFilter` | `@RouteFilter(105)` | Resolves one TTL-aware route snapshot for CORS, authentication, rate limiting, and access control. |
-| `RequestValidationFilter` | `AUTHENTICATION - 100` | Validates request body size and header sizes. Blocks oversized requests with 413/431. |
+| `TransportRequestValidationFilter` | `@RouteFilter(110)` | Rejects malformed or ambiguous `Content-Length` framing and oversized individual headers before route dispatch. |
 | `AuthRateLimitFilter` | `AUTHENTICATION - 100` | Checks if the client IP is locked out due to brute-force attempts. Build-time conditional on `aussie.auth.rate-limit.enabled`. |
 | `RateLimitFilter` | `@ServerRequestFilter` | Enforces per-service and per-endpoint rate limits. Adds `X-RateLimit-*` response headers. Runs before authentication to reject floods cheaply. |
 | `CsrfProtectionFilter` | `AUTHENTICATION + 10` | Requires an allowed origin and matching double-submit token for unsafe session-cookie requests. |
@@ -869,6 +869,6 @@ JAX-RS server filters that intercept requests before they reach resource classes
 
 **Adding a new REST endpoint.** Create the DTO in `adapter/in/dto`. Create the resource class in `adapter/in/rest`. The resource depends on a core port or service, never on adapter/out classes. If the endpoint needs a new use case, define it in `core/port/in` and implement it in `core/service`.
 
-**Adding a new filter.** Place it in `system/filter`. Filters are the one place where imports from both `adapter` and `core` are acceptable. Set the priority relative to the existing chain: `ClientContextFilter` runs first (`AUTHENTICATION - 150`), then `RequestValidationFilter` and `AuthRateLimitFilter` (`AUTHENTICATION - 100`), then `RateLimitFilter`, then `AccessControlFilter`, then authentication. New filters that need the resolved client IP must read it via `ClientContextResolver.getOrCompute(ctx, vertxRequest)` rather than re-parsing forwarded headers.
+**Adding a new filter.** Place it in `system/filter`. Filters are the one place where imports from both `adapter` and `core` are acceptable. Set the priority relative to the existing chain: `ClientContextFilter` runs first (`AUTHENTICATION - 150`), then `AuthRateLimitFilter` (`AUTHENTICATION - 100`), then `RateLimitFilter`, then `AccessControlFilter`, then authentication. New filters that need the resolved client IP must read it via `ClientContextResolver.getOrCompute(ctx, vertxRequest)` rather than re-parsing forwarded headers.
 
 **Finding where something is implemented.** Start at the interface in `core/port/out`. Search for classes that `implements` it. In-memory implementations are in `adapter/out/storage/memory` or `adapter/out/ratelimit/memory`. Redis implementations are in the corresponding `redis` subpackages. Cassandra implementations are in `adapter/out/storage/cassandra`.

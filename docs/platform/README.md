@@ -627,7 +627,19 @@ export AUSSIE_GATEWAY_LIMITS_MAX_HEADER_SIZE=8192
 
 # Maximum total headers size (default: 32 KB)
 export AUSSIE_GATEWAY_LIMITS_MAX_TOTAL_HEADERS_SIZE=32768
+
+# Maximum HTTP/1 request line / target size (default: 4 KB)
+export AUSSIE_GATEWAY_LIMITS_MAX_INITIAL_LINE_LENGTH=4096
 ```
+
+The body, aggregate-header, request-line, form, and parameter limits are applied by
+Quarkus/Vert.x before REST parsing or body aggregation. A request that exceeds one
+of those native limits may receive a `413`/`431` response or have its connection
+closed/reset before Aussie can write an RFC 9457 problem document. The per-header
+limit remains an application check and returns `431`. Malformed, negative, duplicate,
+or conflicting `Content-Length` headers are rejected with `400`; chunked requests
+are still bounded by the native body limit. Proxy streaming keeps its route-aware
+byte accounting and error handling as defense in depth.
 
 ## Per-Route Authentication
 
@@ -1155,6 +1167,11 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | `AUSSIE_GATEWAY_LIMITS_MAX_BODY_SIZE` | `10485760` | Maximum request body size (bytes) |
 | `AUSSIE_GATEWAY_LIMITS_MAX_HEADER_SIZE` | `8192` | Maximum single header size (bytes) |
 | `AUSSIE_GATEWAY_LIMITS_MAX_TOTAL_HEADERS_SIZE` | `32768` | Maximum total headers size (bytes) |
+| `AUSSIE_GATEWAY_LIMITS_MAX_INITIAL_LINE_LENGTH` | `4096` | Maximum HTTP/1 request line / target size (bytes) |
+| `AUSSIE_GATEWAY_LIMITS_MAX_FORM_ATTRIBUTE_SIZE` | `8192` | Maximum form attribute size (bytes) |
+| `AUSSIE_GATEWAY_LIMITS_MAX_FORM_BUFFERED_BYTES` | `1024` | Maximum bytes buffered by form decoding |
+| `AUSSIE_GATEWAY_LIMITS_MAX_FORM_FIELDS` | `256` | Maximum form fields |
+| `AUSSIE_GATEWAY_LIMITS_MAX_PARAMETERS` | `1000` | Maximum request parameters |
 | `AUSSIE_GATEWAY_CORS_ENABLED` | `true` | Enable CORS support |
 | `AUSSIE_GATEWAY_CORS_ALLOWED_ORIGINS` | Required | Allowed exact HTTPS origins (comma-separated; wildcards are rejected in production) |
 | `AUSSIE_GATEWAY_CORS_ALLOWED_METHODS` | `GET,POST,PUT,DELETE,PATCH,OPTIONS,HEAD` | Allowed HTTP methods |

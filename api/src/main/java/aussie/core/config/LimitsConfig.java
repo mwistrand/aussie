@@ -25,4 +25,24 @@ public interface LimitsConfig {
      */
     @WithDefault("32768")
     int maxTotalHeadersSize();
+
+    /** Maximum HTTP/1 initial line (request target) size in bytes. Default: 4 KB. */
+    @WithDefault("4096")
+    int maxInitialLineLength();
+
+    /** Maximum form attribute size in bytes. Default: 8 KB. */
+    @WithDefault("8192")
+    int maxFormAttributeSize();
+
+    /** Maximum bytes buffered while decoding a form. Default: 1 KB. */
+    @WithDefault("1024")
+    int maxFormBufferedBytes();
+
+    /** Maximum number of form fields. Default: 256. */
+    @WithDefault("256")
+    int maxFormFields();
+
+    /** Maximum number of request parameters. Default: 1000. */
+    @WithDefault("1000")
+    int maxParameters();
 }

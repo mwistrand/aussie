@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -16,7 +15,7 @@ import org.junit.jupiter.api.Test;
 
 import aussie.core.config.LimitsConfig;
 import aussie.core.model.common.ValidationResult;
-import aussie.core.service.common.*;
+import aussie.core.service.common.RequestSizeValidator;
 
 @DisplayName("RequestSizeValidator")
 class RequestSizeValidatorTest {
@@ -28,52 +27,6 @@ class RequestSizeValidatorTest {
     void setUp() {
         config = new TestLimitsConfig();
         validator = new RequestSizeValidator(config);
-    }
-
-    @Nested
-    @DisplayName("Body Size Validation")
-    class BodySizeTests {
-
-        @Test
-        @DisplayName("Should accept body within limit")
-        void shouldAcceptBodyWithinLimit() {
-            config.setMaxBodySize(1024);
-            var result = validator.validateBodySize(512);
-
-            assertTrue(result.isValid());
-        }
-
-        @Test
-        @DisplayName("Should accept body exactly at limit")
-        void shouldAcceptBodyAtLimit() {
-            config.setMaxBodySize(1024);
-            var result = validator.validateBodySize(1024);
-
-            assertTrue(result.isValid());
-        }
-
-        @Test
-        @DisplayName("Should reject body over limit")
-        void shouldRejectBodyOverLimit() {
-            config.setMaxBodySize(1024);
-            var result = validator.validateBodySize(1025);
-
-            assertFalse(result.isValid());
-            assertInstanceOf(ValidationResult.Invalid.class, result);
-            var invalid = (ValidationResult.Invalid) result;
-            assertEquals(413, invalid.suggestedStatusCode());
-            assertTrue(invalid.reason().contains("1025"));
-            assertTrue(invalid.reason().contains("1024"));
-        }
-
-        @Test
-        @DisplayName("Should accept zero-length body")
-        void shouldAcceptZeroLengthBody() {
-            config.setMaxBodySize(1024);
-            var result = validator.validateBodySize(0);
-
-            assertTrue(result.isValid());
-        }
     }
 
     @Nested
@@ -124,125 +77,17 @@ class RequestSizeValidatorTest {
             assertFalse(
                     validator.validateHeaderSize("X-Test", "abcdefghijklmno").isValid());
         }
-    }
-
-    @Nested
-    @DisplayName("Total Headers Size Validation")
-    class TotalHeadersSizeTests {
 
         @Test
-        @DisplayName("Should accept total headers within limit")
-        void shouldAcceptTotalHeadersWithinLimit() {
-            config.setMaxTotalHeadersSize(16384);
-            Map<String, List<String>> headers = new HashMap<>();
-            headers.put("Content-Type", List.of("application/json"));
-            headers.put("Accept", List.of("application/json"));
+        @DisplayName("Should reject the first oversized header in an iterable")
+        void shouldRejectFirstOversizedHeaderInIterable() {
+            config.setMaxHeaderSize(20);
 
-            var result = validator.validateTotalHeadersSize(headers);
-            assertTrue(result.isValid());
-        }
+            var result = validator.validateHeaders(List.of(
+                    Map.entry("X-Small", "ok"), Map.entry("X-Large", "x".repeat(30)), Map.entry("X-Later", "ok")));
 
-        @Test
-        @DisplayName("Should reject oversized total headers")
-        void shouldRejectOversizedTotalHeaders() {
-            config.setMaxTotalHeadersSize(100);
-            Map<String, List<String>> headers = new HashMap<>();
-            headers.put("X-Header-1", List.of("x".repeat(50)));
-            headers.put("X-Header-2", List.of("x".repeat(50)));
-            headers.put("X-Header-3", List.of("x".repeat(50)));
-
-            var result = validator.validateTotalHeadersSize(headers);
             assertFalse(result.isValid());
-            assertInstanceOf(ValidationResult.Invalid.class, result);
-            var invalid = (ValidationResult.Invalid) result;
-            assertEquals(431, invalid.suggestedStatusCode());
-        }
-
-        @Test
-        @DisplayName("Should count multi-value headers correctly")
-        void shouldCountMultiValueHeaders() {
-            config.setMaxTotalHeadersSize(100);
-            Map<String, List<String>> headers = new HashMap<>();
-            headers.put("Accept", List.of("text/html", "application/json", "text/plain"));
-
-            var result = validator.validateTotalHeadersSize(headers);
-            // Each value is counted separately with header name
-            assertTrue(result.isValid() || !result.isValid()); // Just check it doesn't throw
-        }
-
-        @Test
-        @DisplayName("Should accept empty headers")
-        void shouldAcceptEmptyHeaders() {
-            config.setMaxTotalHeadersSize(100);
-            var result = validator.validateTotalHeadersSize(Map.of());
-
-            assertTrue(result.isValid());
-        }
-    }
-
-    @Nested
-    @DisplayName("Combined Request Validation")
-    class CombinedValidationTests {
-
-        @Test
-        @DisplayName("Should validate body size first")
-        void shouldValidateBodySizeFirst() {
-            config.setMaxBodySize(100);
-            config.setMaxHeaderSize(1000);
-            config.setMaxTotalHeadersSize(10000);
-
-            Map<String, List<String>> headers = new HashMap<>();
-            headers.put("Content-Type", List.of("application/json"));
-
-            var result = validator.validateRequest(200, headers);
-            assertFalse(result.isValid());
-            assertEquals(413, ((ValidationResult.Invalid) result).suggestedStatusCode());
-        }
-
-        @Test
-        @DisplayName("Should validate individual headers second")
-        void shouldValidateIndividualHeadersSecond() {
-            config.setMaxBodySize(10000);
-            config.setMaxHeaderSize(50);
-            config.setMaxTotalHeadersSize(100000);
-
-            Map<String, List<String>> headers = new HashMap<>();
-            headers.put("X-Large", List.of("x".repeat(100)));
-
-            var result = validator.validateRequest(100, headers);
-            assertFalse(result.isValid());
-            assertEquals(431, ((ValidationResult.Invalid) result).suggestedStatusCode());
-        }
-
-        @Test
-        @DisplayName("Should validate total headers size last")
-        void shouldValidateTotalHeadersSizeLast() {
-            config.setMaxBodySize(10000);
-            config.setMaxHeaderSize(1000);
-            config.setMaxTotalHeadersSize(50);
-
-            Map<String, List<String>> headers = new HashMap<>();
-            headers.put("Header-1", List.of("value1"));
-            headers.put("Header-2", List.of("value2"));
-            headers.put("Header-3", List.of("value3"));
-
-            var result = validator.validateRequest(100, headers);
-            assertFalse(result.isValid());
-        }
-
-        @Test
-        @DisplayName("Should pass when all validations succeed")
-        void shouldPassWhenAllValid() {
-            config.setMaxBodySize(10000);
-            config.setMaxHeaderSize(1000);
-            config.setMaxTotalHeadersSize(10000);
-
-            Map<String, List<String>> headers = new HashMap<>();
-            headers.put("Content-Type", List.of("application/json"));
-            headers.put("Accept", List.of("application/json"));
-
-            var result = validator.validateRequest(100, headers);
-            assertTrue(result.isValid());
+            assertTrue(((ValidationResult.Invalid) result).reason().contains("X-Large"));
         }
     }
 
@@ -250,30 +95,10 @@ class RequestSizeValidatorTest {
      * Simple test implementation of LimitsConfig.
      */
     private static class TestLimitsConfig implements LimitsConfig {
-        private long maxBodySize = 10 * 1024 * 1024; // 10MB
         private int maxHeaderSize = 8 * 1024; // 8KB
-        private int maxTotalHeadersSize = 32 * 1024; // 32KB
-
-        void setMaxBodySize(long size) {
-            this.maxBodySize = size;
-        }
 
         void setMaxHeaderSize(int size) {
             this.maxHeaderSize = size;
-        }
-
-        void setMaxTotalHeadersSize(int size) {
-            this.maxTotalHeadersSize = size;
-        }
-
-        @Override
-        public long maxBodySize() {
-            return maxBodySize;
-        }
-
-        @Override
-        public long maxResponseBodySize() {
-            return maxBodySize;
         }
 
         @Override
@@ -282,8 +107,43 @@ class RequestSizeValidatorTest {
         }
 
         @Override
+        public long maxBodySize() {
+            return 10 * 1024 * 1024;
+        }
+
+        @Override
+        public long maxResponseBodySize() {
+            return 100 * 1024 * 1024;
+        }
+
+        @Override
         public int maxTotalHeadersSize() {
-            return maxTotalHeadersSize;
+            return 32 * 1024;
+        }
+
+        @Override
+        public int maxInitialLineLength() {
+            return 4096;
+        }
+
+        @Override
+        public int maxFormAttributeSize() {
+            return 8192;
+        }
+
+        @Override
+        public int maxFormBufferedBytes() {
+            return 1024;
+        }
+
+        @Override
+        public int maxFormFields() {
+            return 256;
+        }
+
+        @Override
+        public int maxParameters() {
+            return 1000;
         }
     }
 }
