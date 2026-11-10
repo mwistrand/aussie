@@ -60,6 +60,18 @@ class ResponseHeadersIntegrationTest {
         }
 
         @Test
+        @DisplayName("preflight should reject an oversized individual header before CORS")
+        void preflightShouldRejectOversizedHeader() {
+            given().header("Origin", "https://app.example.com")
+                    .header("Access-Control-Request-Method", "GET")
+                    .header("X-Large-Header", "x".repeat(5000))
+                    .when()
+                    .options("/admin/services")
+                    .then()
+                    .statusCode(431);
+        }
+
+        @Test
         @DisplayName("non-preflight CORS request should echo Access-Control-Allow-Origin")
         void nonPreflightShouldEmitCorsHeaders() {
             given().header("Origin", "https://app.example.com")

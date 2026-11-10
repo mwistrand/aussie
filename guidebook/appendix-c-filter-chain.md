@@ -32,6 +32,10 @@ The following diagram traces a standard HTTP request from arrival through both f
   |         (higher priority = runs first)    |
   =============================================
   |                                           |
+  |  [Priority 110] TransportRequestValidationFilter |
+  |    |-- invalid framing/header? --> 400/431 |----> RESPONSE (short-circuit)
+  |    |-- valid? --> next()                 |
+  |    v                                      |
   |  [Priority 105] RouteResolutionFilter     |
   |    |                                      |
   |    |-- resolves route snapshot, next()    |
@@ -74,12 +78,6 @@ The following diagram traces a standard HTTP request from arrival through both f
   |    |            (@ServerRequestFilter)    |
   |    |-- not auth endpoint? --> continue    |
   |    |-- locked out? --> 429                |----> RESPONSE (short-circuit)
-  |    |-- ok? --> continue                   |
-  |    v                                      |
-  |  [Priority 900] RequestValidationFilter   |
-  |    |            (@Provider + @Priority)   |
-  |    |-- payload too large? --> 413         |----> RESPONSE (short-circuit)
-  |    |-- headers too large? --> 431         |----> RESPONSE (short-circuit)
   |    |-- ok? --> continue                   |
   |    v                                      |
   |  [Priority 950] RateLimitFilter           |
@@ -126,9 +124,19 @@ The following diagram traces a standard HTTP request from arrival through both f
                   RESPONSE
 ```
 
-A few things to note about this diagram. First, the WebSocket filters (priorities 50 and 40) only affect WebSocket upgrade requests. For standard HTTP requests, both call `ctx.next()` immediately and pass through in microseconds. Second, `ClientContextFilter` runs at priority 850 (`Priorities.AUTHENTICATION - 150`) so it precedes every filter that needs the client IP or the trusted-proxy decision; downstream HTTP and WebSocket consumers reuse the value shared through the Vert.x and JAX-RS request contexts instead of re-parsing `Forwarded` / `X-Forwarded-For` headers. Third, the two filters at priority 900 (`AuthRateLimitFilter` and `RequestValidationFilter`) have no guaranteed relative order. Fourth, the response path is considerably simpler than the request path; only `RateLimitFilter` has a response filter, and it only adds headers.
+A few things to note about this diagram. First, the WebSocket filters (priorities 50 and 40) only affect WebSocket upgrade requests. For standard HTTP requests, both call `ctx.next()` immediately and pass through in microseconds. Second, `ClientContextFilter` runs at priority 850 (`Priorities.AUTHENTICATION - 150`) so it precedes every filter that needs the client IP or the trusted-proxy decision; downstream HTTP and WebSocket consumers reuse the value shared through the Vert.x and JAX-RS request contexts instead of re-parsing `Forwarded` / `X-Forwarded-For` headers. Third, the response path is considerably simpler than the request path; only `RateLimitFilter` has a response filter, and it only adds headers.
 
 ## Layer 1: Vert.x RouteFilters
+
+### TransportRequestValidationFilter (Priority 110)
+
+**File:** `api/src/main/java/aussie/system/filter/TransportRequestValidationFilter.java`
+
+This filter rejects malformed, negative, duplicate, or conflicting `Content-Length`
+headers and oversized individual headers before route dispatch. Quarkus/Vert.x
+applies the body, aggregate-header, HTTP/2 header-list, request-line, form, and
+parameter limits before this filter; those native failures may return a status
+without a problem document or close/reset the connection.
 
 ### RouteResolutionFilter (Priority 105)
 
@@ -247,21 +255,6 @@ The filter is conditionally enabled via the `@IfBuildProperty` annotation. When 
 - Request path is not an auth endpoint: returns null, continues.
 - Client is locked out: returns a 429 response with `Retry-After` header and an RFC 9457 Problem Details body. Dispatches a `SecurityEvent.AuthenticationLockout` event.
 
-### RequestValidationFilter (Priority 900 = Priorities.AUTHENTICATION - 100)
-
-**File:** `api/src/main/java/aussie/system/filter/RequestValidationFilter.java`
-
-This filter validates inbound request size constraints before any further processing. It checks the `Content-Length` header against a configured maximum payload size and validates header sizes. This is a defense-in-depth measure that catches oversized requests at the application layer, complementing any size limits enforced by the load balancer or reverse proxy in front of the gateway.
-
-The filter delegates to `RequestSizeValidator` for the actual validation logic and maps the result to the appropriate HTTP error response.
-
-**What it modifies:** Nothing on success. On failure, throws a `GatewayProblem` exception.
-
-**Short-circuit conditions:**
-- Payload too large: throws `GatewayProblem.payloadTooLarge()`, which maps to HTTP 413.
-- Headers too large: throws `GatewayProblem.headerTooLarge()`, which maps to HTTP 431.
-- Other validation failure: throws `GatewayProblem.badRequest()`, which maps to HTTP 400.
-
 ### RateLimitFilter (Priority 950 = Priorities.AUTHENTICATION - 50)
 
 **File:** `api/src/main/java/aussie/system/filter/RateLimitFilter.java`
@@ -326,23 +319,21 @@ The following table lists every filter in numeric execution order across both la
 
 | Runs | Priority | Class | Package | Short-Circuits? |
 |------|----------|-------|---------|-----------------|
-| 1 | 105 | `RouteResolutionFilter` | `system.filter` | Only on lookup failure |
-| 2 | 100 | `CorsFilter` | `adapter.in.http` | Yes (OPTIONS preflight) |
-| 3 | 90 | `SecurityHeadersFilter` | `adapter.in.http` | No |
-| 4 | 50 | `WebSocketUpgradeFilter` | `adapter.in.websocket` | Yes (WS upgrade) |
-| 5 | 40 | `WebSocketRateLimitFilter` | `adapter.in.websocket` | Yes (429 on WS rate limit) |
+| 1 | 110 | `TransportRequestValidationFilter` | `system.filter` | Yes (400/431 on invalid framing or headers) |
+| 2 | 105 | `RouteResolutionFilter` | `system.filter` | Only on lookup failure |
+| 3 | 100 | `CorsFilter` | `adapter.in.http` | Yes (OPTIONS preflight) |
+| 4 | 90 | `SecurityHeadersFilter` | `adapter.in.http` | No |
+| 5 | 50 | `WebSocketUpgradeFilter` | `adapter.in.websocket` | Yes (WS upgrade) |
+| 6 | 40 | `WebSocketRateLimitFilter` | `adapter.in.websocket` | Yes (429 on WS rate limit) |
 
 ### JAX-RS Layer (lower number = runs first)
 
 | Runs | Priority | Constant Expression | Class | Package | Short-Circuits? |
 |------|----------|---------------------|-------|---------|-----------------|
-| 5 | 900 | `AUTH - 100` | `AuthRateLimitFilter` | `system.filter` | Yes (429 on lockout) |
-| 6 | 900 | `AUTH - 100` | `RequestValidationFilter` | `system.filter` | Yes (413, 431, 400) |
-| 7 | 950 | `AUTH - 50` | `RateLimitFilter` | `system.filter` | Yes (429 on rate limit) |
-| 8 | 1010 | `AUTH + 10` | `CsrfProtectionFilter` | `system.filter` | Yes (403 on invalid origin/token) |
-| 9 | 5000 | (default) | `AccessControlFilter` | `system.filter` | Yes (404 on denied) |
-
-Note: Filters at the same priority (900) have no guaranteed relative ordering. The container may execute them in any order. In practice, Quarkus tends to order them by discovery order (classpath scanning), but this is an implementation detail, not a contract.
+| 7 | 900 | `AUTH - 100` | `AuthRateLimitFilter` | `system.filter` | Yes (429 on lockout) |
+| 8 | 950 | `AUTH - 50` | `RateLimitFilter` | `system.filter` | Yes (429 on rate limit) |
+| 9 | 1010 | `AUTH + 10` | `CsrfProtectionFilter` | `system.filter` | Yes (403 on invalid origin/token) |
+| 10 | 5000 | (default) | `AccessControlFilter` | `system.filter` | Yes (404 on denied) |
 
 ## Why This Ordering Matters
 
@@ -395,7 +386,9 @@ When a request is rejected and you need to identify which filter is responsible,
 1. **Check the HTTP status code.** Each filter produces a characteristic status:
    - 200 with CORS headers only: `CorsFilter` (preflight)
    - 401 with authentication challenge: `CredentialAuthenticationMechanism`
-   - 400/413/431 with Problem Details: `RequestValidationFilter`
+   - 400 with Problem Details: `TransportRequestValidationFilter`
+   - 431 with Problem Details: `TransportRequestValidationFilter`
+   - 413/431 or a closed/reset connection without a problem body: native HTTP limits
    - 404 with "Not found": `AccessControlFilter`
    - 429 with `Retry-After`: `RateLimitFilter`, `AuthRateLimitFilter`, or `WebSocketRateLimitFilter`
 
@@ -403,6 +396,6 @@ When a request is rejected and you need to identify which filter is responsible,
 
 3. **Check OpenTelemetry spans.** The `aussie.rate_limit.limited`, `aussie.rate_limit.type`, and `aussie.auth.rate_limited` span attributes indicate which rate limiter made the decision.
 
-4. **Check the response body format.** `AccessControlFilter`, `RateLimitFilter`, and `RequestValidationFilter` use RFC 9457 Problem Details format (JSON with `type`, `title`, `status`, `detail` fields). Quarkus Security supplies authentication challenges. `CorsFilter` and `SecurityHeadersFilter` never generate response bodies on their own.
+4. **Check the response body format.** `AccessControlFilter`, `RateLimitFilter`, and `TransportRequestValidationFilter` use RFC 9457 Problem Details format (JSON with `type`, `title`, `status`, `detail` fields). Quarkus Security supplies authentication challenges. `CorsFilter` and `SecurityHeadersFilter` never generate response bodies on their own.
 
 5. **Enable DEBUG logging** for the relevant filter class. Every filter logs its decision at DEBUG or TRACE level, including the reason for pass-through or rejection.

@@ -32,6 +32,11 @@ All durations use ISO-8601 format (e.g., `PT30S` for 30 seconds, `PT1H` for 1 ho
 | `aussie.gateway.limits.max-response-body-size` | `long` | `104857600` (100 MB) | `AUSSIE_GATEWAY_LIMITS_MAX_RESPONSE_BODY_SIZE` | Maximum streamed upstream response size in bytes. |
 | `aussie.gateway.limits.max-header-size` | `int` | `8192` (8 KB) | `AUSSIE_GATEWAY_LIMITS_MAX_HEADER_SIZE` | Maximum size of a single header in bytes. |
 | `aussie.gateway.limits.max-total-headers-size` | `int` | `32768` (32 KB) | `AUSSIE_GATEWAY_LIMITS_MAX_TOTAL_HEADERS_SIZE` | Maximum total size of all headers in bytes. |
+| `aussie.gateway.limits.max-initial-line-length` | `int` | `4096` (4 KB) | `AUSSIE_GATEWAY_LIMITS_MAX_INITIAL_LINE_LENGTH` | Maximum HTTP/1 request line and request-target size in bytes. |
+| `aussie.gateway.limits.max-form-attribute-size` | `int` | `8192` (8 KB) | `AUSSIE_GATEWAY_LIMITS_MAX_FORM_ATTRIBUTE_SIZE` | Maximum form attribute size in bytes. |
+| `aussie.gateway.limits.max-form-buffered-bytes` | `int` | `1024` (1 KB) | `AUSSIE_GATEWAY_LIMITS_MAX_FORM_BUFFERED_BYTES` | Maximum bytes buffered by form decoding. |
+| `aussie.gateway.limits.max-form-fields` | `int` | `256` | `AUSSIE_GATEWAY_LIMITS_MAX_FORM_FIELDS` | Maximum number of form fields. |
+| `aussie.gateway.limits.max-parameters` | `int` | `1000` | `AUSSIE_GATEWAY_LIMITS_MAX_PARAMETERS` | Maximum number of request parameters. |
 
 **Profile overrides:** None.
 

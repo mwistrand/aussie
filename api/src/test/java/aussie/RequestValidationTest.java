@@ -59,8 +59,18 @@ class RequestValidationTest {
                     .when()
                     .get("/gateway/any/path")
                     .then()
-                    .statusCode(431)
-                    .body(containsString("exceeds maximum"));
+                    .statusCode(431);
+        }
+
+        @Test
+        @DisplayName("Should reject an oversized fixed-length body before dispatch")
+        void shouldRejectOversizedBodyBeforeDispatch() {
+            given().contentType(ContentType.JSON)
+                    .body("x".repeat(1_048_577))
+                    .when()
+                    .post("/gateway/any/path")
+                    .then()
+                    .statusCode(413);
         }
     }
 }
