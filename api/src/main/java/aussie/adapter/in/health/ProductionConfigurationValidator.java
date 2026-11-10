@@ -59,6 +59,12 @@ public class ProductionConfigurationValidator {
         if (enabled("aussie.session.enabled", true)) {
             requireProvider("aussie.session.storage.provider");
             requireSecureSessionCookie();
+            if (value("aussie.session.storage.provider")
+                            .filter("redis"::equalsIgnoreCase)
+                            .isPresent()
+                    && value("quarkus.redis.client-type").orElse("standalone").equalsIgnoreCase("cluster")) {
+                throw invalid("Redis session storage does not support quarkus.redis.client-type=cluster");
+            }
         }
         if (enabled("aussie.auth.pkce.enabled", true)) {
             requireProvider("aussie.auth.pkce.storage.provider");

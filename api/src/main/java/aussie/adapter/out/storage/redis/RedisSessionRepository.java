@@ -1,5 +1,6 @@
 package aussie.adapter.out.storage.redis;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -8,252 +9,302 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import io.quarkus.redis.datasource.keys.ReactiveKeyCommands;
 import io.quarkus.redis.datasource.value.ReactiveValueCommands;
-import io.quarkus.redis.datasource.value.SetArgs;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
 import aussie.core.config.SessionConfig;
 import aussie.core.model.session.Session;
 import aussie.core.port.out.SessionRepository;
-import aussie.core.util.SafeLogging;
 import aussie.core.util.SecureHash;
 
-/**
- * Redis implementation of SessionRepository.
- *
- * <p>Sessions are stored as serialized JSON with Redis TTL for automatic expiration.
- * Uses SETNX semantics for atomic insert-if-absent to prevent ID collisions.
- */
+/** Redis implementation of SessionRepository. */
 public class RedisSessionRepository implements SessionRepository {
 
     private static final Logger LOG = Logger.getLogger(RedisSessionRepository.class);
     private static final String USER_INDEX_PREFIX = "aussie:session:user:";
+    private static final int SCHEMA_VERSION = 1;
+    private static final int MAX_RECORD_BYTES = 64 * 1024;
 
+    static final String SAVE_SCRIPT = """
+            local result = redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[3])
+            if not result then return 0 end
+            redis.call('SADD', KEYS[2], ARGV[2])
+            redis.call('EXPIRE', KEYS[2], ARGV[4])
+            return 1
+            """;
+
+    static final String REPLACE_SCRIPT = """
+            redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[3])
+            redis.call('SADD', KEYS[2], ARGV[2])
+            redis.call('EXPIRE', KEYS[2], ARGV[4])
+            return 1
+            """;
+
+    static final String MIGRATE_SCRIPT = """
+            if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+            redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[4])
+            redis.call('SADD', KEYS[2], ARGV[3])
+            redis.call('EXPIRE', KEYS[2], ARGV[5])
+            return 1
+            """;
+
+    static final String UPDATE_SCRIPT = """
+            local ttl = redis.call('TTL', KEYS[1])
+            if ttl == -2 then return 0 end
+            if ttl < 1 then ttl = ARGV[2] end
+            redis.call('SET', KEYS[1], ARGV[1], 'XX', 'EX', ttl)
+            return 1
+            """;
+
+    static final String DELETE_SCRIPT = """
+            redis.call('DEL', KEYS[1])
+            redis.call('SREM', KEYS[2], ARGV[1])
+            return 1
+            """;
+
+    static final String DELETE_BY_USER_SCRIPT = """
+            local ids = redis.call('SMEMBERS', KEYS[1])
+            local legacy = redis.call('GET', KEYS[2])
+            if legacy then
+                for id in string.gmatch(legacy, '([^,]+)') do
+                    id = string.match(id, '^%s*(.-)%s*$')
+                    if id ~= '' then table.insert(ids, id) end
+                end
+            end
+            for _, id in ipairs(ids) do redis.call('DEL', ARGV[1] .. id) end
+            redis.call('DEL', KEYS[1], KEYS[2])
+            return #ids
+            """;
+
+    private final ReactiveRedisDataSource redisDataSource;
     private final ReactiveValueCommands<String, String> valueCommands;
     private final ReactiveKeyCommands<String> keyCommands;
     private final String keyPrefix;
     private final Duration sessionTtl;
     private final RedisTimeoutHelper timeoutHelper;
+    private final ObjectMapper objectMapper;
 
     public RedisSessionRepository(
-            ReactiveRedisDataSource redisDataSource, SessionConfig config, RedisTimeoutHelper timeoutHelper) {
+            ReactiveRedisDataSource redisDataSource,
+            SessionConfig config,
+            RedisTimeoutHelper timeoutHelper,
+            ObjectMapper objectMapper) {
+        this.redisDataSource = redisDataSource;
         this.valueCommands = redisDataSource.value(String.class, String.class);
         this.keyCommands = redisDataSource.key(String.class);
         this.keyPrefix = config.storage().redis().keyPrefix();
         this.sessionTtl = config.ttl();
         this.timeoutHelper = timeoutHelper;
+        this.objectMapper = objectMapper;
     }
 
     @Override
     public Uni<Boolean> saveIfAbsent(Session session) {
-        String key = keyPrefix + session.id();
-        String value = serialize(session);
-
-        // Use SETNX semantics (SET with NX flag)
-        SetArgs args = new SetArgs().nx().ex(sessionTtl);
-
-        var operation = valueCommands.set(key, value, args).map(result -> {
-            if (result != null) {
-                // Successfully set - update user index
-                updateUserIndex(session.userId(), session.id());
-                if (LOG.isDebugEnabled()) {
-                    LOG.debugf("Session created in Redis: hash=%s", SecureHash.truncatedSha256(session.id(), 8));
-                }
-                return true;
-            }
-            if (LOG.isDebugEnabled()) {
-                LOG.debugf("Session ID collision in Redis: hash=%s", SecureHash.truncatedSha256(session.id(), 8));
-            }
-            return false;
-        });
+        final var operation = redisDataSource
+                .execute(
+                        "EVAL",
+                        SAVE_SCRIPT,
+                        "2",
+                        sessionKey(session.id()),
+                        userIndexKey(session.userId()),
+                        serialize(session),
+                        session.id(),
+                        String.valueOf(ttlSeconds()),
+                        String.valueOf(indexTtlSeconds()))
+                .map(result -> result.toLong() == 1)
+                .invoke(saved -> LOG.debugf(
+                        "Session %s in Redis: hash=%s",
+                        saved ? "created" : "already exists", SecureHash.truncatedSha256(session.id(), 8)));
         return timeoutHelper.withTimeout(operation, "saveIfAbsent");
     }
 
     @Override
     public Uni<Session> save(Session session) {
-        String key = keyPrefix + session.id();
-        String value = serialize(session);
-
-        var operation = valueCommands
-                .setex(key, sessionTtl.toSeconds(), value)
-                .replaceWith(session)
-                .invoke(() -> updateUserIndex(session.userId(), session.id()));
+        final var operation = redisDataSource
+                .execute(
+                        "EVAL",
+                        REPLACE_SCRIPT,
+                        "2",
+                        sessionKey(session.id()),
+                        userIndexKey(session.userId()),
+                        serialize(session),
+                        session.id(),
+                        String.valueOf(ttlSeconds()),
+                        String.valueOf(indexTtlSeconds()))
+                .replaceWith(session);
         return timeoutHelper.withTimeout(operation, "save");
     }
 
     @Override
     public Uni<Optional<Session>> findById(String sessionId) {
-        String key = keyPrefix + sessionId;
-
-        var operation = valueCommands.get(key).map(value -> {
+        final var key = sessionKey(sessionId);
+        final var operation = valueCommands.get(key).flatMap(value -> {
             if (value == null) {
-                return Optional.<Session>empty();
+                return Uni.createFrom().item(Optional.<Session>empty());
             }
-            return Optional.of(deserialize(value));
+            final var session = deserialize(value);
+            if (!isLegacy(value)) {
+                return Uni.createFrom().item(Optional.of(session));
+            }
+            return keyCommands.ttl(key).flatMap(ttl -> redisDataSource
+                    .execute(
+                            "EVAL",
+                            MIGRATE_SCRIPT,
+                            "2",
+                            key,
+                            userIndexKey(session.userId()),
+                            value,
+                            serialize(session),
+                            session.id(),
+                            String.valueOf(ttl > 0 ? ttl : ttlSeconds()),
+                            String.valueOf(indexTtlSeconds()))
+                    .map(result -> result.toLong() == 1 ? Optional.of(session) : Optional.<Session>empty()));
         });
         return timeoutHelper.withTimeout(operation, "findById");
     }
 
     @Override
     public Uni<Session> update(Session session) {
-        String key = keyPrefix + session.id();
-        String value = serialize(session);
-
-        // Keep existing TTL by using SETEX with remaining TTL
-        var operation = keyCommands
-                .ttl(key)
-                .flatMap(ttl -> {
-                    long seconds = ttl > 0 ? ttl : sessionTtl.toSeconds();
-                    return valueCommands.setex(key, seconds, value);
-                })
+        final var operation = redisDataSource
+                .execute(
+                        "EVAL",
+                        UPDATE_SCRIPT,
+                        "1",
+                        sessionKey(session.id()),
+                        serialize(session),
+                        String.valueOf(ttlSeconds()))
                 .replaceWith(session);
         return timeoutHelper.withTimeout(operation, "update");
     }
 
     @Override
     public Uni<Void> delete(String sessionId) {
-        String key = keyPrefix + sessionId;
-
-        var operation = findById(sessionId)
-                .flatMap(sessionOpt -> {
-                    if (sessionOpt.isPresent()) {
-                        removeFromUserIndex(sessionOpt.get().userId(), sessionId);
-                    }
-                    return keyCommands.del(key);
-                })
-                .replaceWithVoid();
+        final var operation = findById(sessionId)
+                .flatMap(session -> session.isPresent()
+                        ? redisDataSource
+                                .execute(
+                                        "EVAL",
+                                        DELETE_SCRIPT,
+                                        "2",
+                                        sessionKey(sessionId),
+                                        userIndexKey(session.get().userId()),
+                                        sessionId)
+                                .replaceWithVoid()
+                        : keyCommands.del(sessionKey(sessionId)).replaceWithVoid());
         return timeoutHelper.withTimeout(operation, "delete");
     }
 
     @Override
     public Uni<Void> deleteByUserId(String userId) {
-        String userIndexKey = USER_INDEX_PREFIX + userId;
-
-        var operation = valueCommands.get(userIndexKey).flatMap(sessionIds -> {
-            if (sessionIds == null || sessionIds.isBlank()) {
-                return Uni.createFrom().voidItem();
-            }
-
-            String[] ids = sessionIds.split(",");
-            var deletions = new java.util.ArrayList<Uni<Integer>>();
-
-            for (String sessionId : ids) {
-                if (!sessionId.isBlank()) {
-                    deletions.add(keyCommands.del(keyPrefix + sessionId.trim()));
-                }
-            }
-
-            return Uni.join()
-                    .all(deletions)
-                    .andCollectFailures()
-                    .flatMap(results -> keyCommands.del(userIndexKey))
-                    .replaceWithVoid();
-        });
+        final var operation = redisDataSource
+                .execute(
+                        "EVAL", DELETE_BY_USER_SCRIPT, "2", userIndexKey(userId), legacyUserIndexKey(userId), keyPrefix)
+                .replaceWithVoid();
         return timeoutHelper.withTimeout(operation, "deleteByUserId");
     }
 
     @Override
     public Uni<Boolean> exists(String sessionId) {
-        String key = keyPrefix + sessionId;
-        // exists(String key) returns Uni<Boolean> directly
-        var operation = keyCommands.exists(key);
-        return timeoutHelper.withTimeout(operation, "exists");
+        return timeoutHelper.withTimeout(keyCommands.exists(sessionKey(sessionId)), "exists");
     }
 
-    private void updateUserIndex(String userId, String sessionId) {
-        String userIndexKey = USER_INDEX_PREFIX + userId;
-
-        valueCommands
-                .get(userIndexKey)
-                .subscribe()
-                .with(
-                        existing -> {
-                            String newValue;
-                            if (existing == null || existing.isBlank()) {
-                                newValue = sessionId;
-                            } else if (!existing.contains(sessionId)) {
-                                newValue = existing + "," + sessionId;
-                            } else {
-                                return; // Already indexed
-                            }
-                            valueCommands
-                                    .setex(userIndexKey, sessionTtl.toSeconds() * 2, newValue)
-                                    .subscribe()
-                                    .with(
-                                            success -> {},
-                                            error -> LOG.warnf(
-                                                    "Failed to update user index: error_type=%s",
-                                                    SafeLogging.errorType(error)));
-                        },
-                        error -> LOG.warnf("Failed to read user index: error_type=%s", SafeLogging.errorType(error)));
+    private String sessionKey(String sessionId) {
+        return keyPrefix + sessionId;
     }
 
-    private void removeFromUserIndex(String userId, String sessionId) {
-        String userIndexKey = USER_INDEX_PREFIX + userId;
+    private String userIndexKey(String userId) {
+        return USER_INDEX_PREFIX + SecureHash.truncatedSha256(userId, 64);
+    }
 
-        valueCommands
-                .get(userIndexKey)
-                .subscribe()
-                .with(
-                        existing -> {
-                            if (existing == null || existing.isBlank()) {
-                                return;
-                            }
-                            String[] ids = existing.split(",");
-                            StringBuilder newValue = new StringBuilder();
-                            for (String id : ids) {
-                                if (!id.trim().equals(sessionId)) {
-                                    if (newValue.length() > 0) {
-                                        newValue.append(",");
-                                    }
-                                    newValue.append(id.trim());
-                                }
-                            }
-                            if (newValue.length() > 0) {
-                                valueCommands
-                                        .setex(userIndexKey, sessionTtl.toSeconds() * 2, newValue.toString())
-                                        .subscribe()
-                                        .with(success -> {}, error -> {});
-                            } else {
-                                keyCommands.del(userIndexKey).subscribe().with(success -> {}, error -> {});
-                            }
-                        },
-                        error -> LOG.warnf("Failed to update user index: error_type=%s", SafeLogging.errorType(error)));
+    private String legacyUserIndexKey(String userId) {
+        return USER_INDEX_PREFIX + userId;
+    }
+
+    private long ttlSeconds() {
+        return Math.max(1, sessionTtl.toSeconds());
+    }
+
+    private long indexTtlSeconds() {
+        return Math.max(1, ttlSeconds() * 2);
     }
 
     private String serialize(Session session) {
-        // Simple pipe-separated format for efficiency
-        StringBuilder sb = new StringBuilder();
-        sb.append(session.id()).append("|");
-        sb.append(session.userId()).append("|");
-        sb.append(session.issuer() != null ? session.issuer() : "").append("|");
-        sb.append(serializeClaims(session.claims())).append("|");
-        sb.append(serializePermissions(session.permissions())).append("|");
-        sb.append(session.createdAt().toEpochMilli()).append("|");
-        sb.append(session.expiresAt() != null ? session.expiresAt().toEpochMilli() : "")
-                .append("|");
-        sb.append(session.lastAccessedAt() != null ? session.lastAccessedAt().toEpochMilli() : "")
-                .append("|");
-        sb.append(session.userAgent() != null ? session.userAgent() : "").append("|");
-        sb.append(session.ipAddress() != null ? session.ipAddress() : "");
-        return sb.toString();
+        return serialize(objectMapper, session);
+    }
+
+    static String serialize(ObjectMapper objectMapper, Session session) {
+        try {
+            final var node = objectMapper.createObjectNode();
+            node.put("id", session.id());
+            node.put("userId", session.userId());
+            putNullable(node, objectMapper, "issuer", session.issuer());
+            node.set("claims", objectMapper.valueToTree(session.claims()));
+            node.set("permissions", objectMapper.valueToTree(session.permissions()));
+            node.set("createdAt", objectMapper.valueToTree(session.createdAt()));
+            node.set("expiresAt", objectMapper.valueToTree(session.expiresAt()));
+            node.set("lastAccessedAt", objectMapper.valueToTree(session.lastAccessedAt()));
+            putNullable(node, objectMapper, "userAgent", session.userAgent());
+            putNullable(node, objectMapper, "ipAddress", session.ipAddress());
+            node.put("schemaVersion", SCHEMA_VERSION);
+            final var value = objectMapper.writeValueAsString(node);
+            checkSize(value);
+            return value;
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Failed to serialize session", e);
+        }
+    }
+
+    private static void putNullable(ObjectNode node, ObjectMapper mapper, String name, String value) {
+        if (value == null) {
+            node.putNull(name);
+        } else {
+            node.put(name, value);
+        }
     }
 
     private Session deserialize(String value) {
-        String[] parts = value.split("\\|", -1);
-        if (parts.length < 10) {
-            throw new IllegalArgumentException("Invalid session format");
-        }
+        return deserialize(objectMapper, value);
+    }
 
+    static Session deserialize(ObjectMapper objectMapper, String value) {
+        checkSize(value);
+        if (isLegacy(value)) {
+            return deserializeLegacy(value);
+        }
+        try {
+            final JsonNode node = objectMapper.readTree(value);
+            if (node.path("schemaVersion").asInt(-1) != SCHEMA_VERSION) {
+                throw new IllegalArgumentException("Unsupported session schema version");
+            }
+            ((ObjectNode) node).remove("schemaVersion");
+            return objectMapper.treeToValue(node, Session.class);
+        } catch (JsonProcessingException | ClassCastException e) {
+            throw new IllegalArgumentException("Invalid session record", e);
+        }
+    }
+
+    private static boolean isLegacy(String value) {
+        return !value.trim().startsWith("{");
+    }
+
+    private static Session deserializeLegacy(String value) {
+        final var parts = value.split("\\|", -1);
+        if (parts.length < 10) {
+            throw new IllegalArgumentException("Invalid legacy session format");
+        }
         return new Session(
                 parts[0],
                 parts[1],
                 parts[2].isEmpty() ? null : parts[2],
-                deserializeClaims(parts[3]),
-                deserializePermissions(parts[4]),
+                deserializeLegacyClaims(parts[3]),
+                deserializeLegacyPermissions(parts[4]),
                 Instant.ofEpochMilli(Long.parseLong(parts[5])),
                 parts[6].isEmpty() ? null : Instant.ofEpochMilli(Long.parseLong(parts[6])),
                 parts[7].isEmpty() ? null : Instant.ofEpochMilli(Long.parseLong(parts[7])),
@@ -261,51 +312,36 @@ public class RedisSessionRepository implements SessionRepository {
                 parts[9].isEmpty() ? null : parts[9]);
     }
 
-    private String serializeClaims(Map<String, Object> claims) {
-        if (claims == null || claims.isEmpty()) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder();
-        for (var entry : claims.entrySet()) {
-            if (sb.length() > 0) {
-                sb.append(";");
-            }
-            sb.append(entry.getKey()).append("=").append(entry.getValue());
-        }
-        return sb.toString();
-    }
-
-    private Map<String, Object> deserializeClaims(String value) {
-        Map<String, Object> claims = new HashMap<>();
+    private static Map<String, Object> deserializeLegacyClaims(String value) {
+        final var claims = new HashMap<String, Object>();
         if (value == null || value.isEmpty()) {
             return claims;
         }
-        for (String pair : value.split(";")) {
-            String[] kv = pair.split("=", 2);
-            if (kv.length == 2) {
-                claims.put(kv[0], kv[1]);
+        for (final var pair : value.split(";")) {
+            final var keyValue = pair.split("=", 2);
+            if (keyValue.length == 2) {
+                claims.put(keyValue[0], keyValue[1]);
             }
         }
         return claims;
     }
 
-    private String serializePermissions(Set<String> permissions) {
-        if (permissions == null || permissions.isEmpty()) {
-            return "";
-        }
-        return String.join(";", permissions);
-    }
-
-    private Set<String> deserializePermissions(String value) {
-        Set<String> permissions = new HashSet<>();
+    private static Set<String> deserializeLegacyPermissions(String value) {
+        final var permissions = new HashSet<String>();
         if (value == null || value.isEmpty()) {
             return permissions;
         }
-        for (String perm : value.split(";")) {
-            if (!perm.isEmpty()) {
-                permissions.add(perm);
+        for (final var permission : value.split(";")) {
+            if (!permission.isEmpty()) {
+                permissions.add(permission);
             }
         }
         return permissions;
+    }
+
+    private static void checkSize(String value) {
+        if (value.getBytes(StandardCharsets.UTF_8).length > MAX_RECORD_BYTES) {
+            throw new IllegalArgumentException("Session record exceeds " + MAX_RECORD_BYTES + " bytes");
+        }
     }
 }

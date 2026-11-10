@@ -729,6 +729,8 @@ aussie.session.jws.issuer=aussie-gateway
 aussie.session.jws.include-claims=sub,email,name,roles
 ```
 
+Redis session storage supports standalone, replication, and Sentinel clients. It does not support `quarkus.redis.client-type=cluster` because session records and their user index must be updated atomically.
+
 When `sliding-expiration` is enabled, the idle timeout resets on each request. Sessions are hard-capped by the earlier of `ttl` and the validated token's expiration regardless of activity.
 
 `POST /auth/session` creates sessions only after the supplied token passes a configured route-auth validator. It remains enabled only by the `%dev` profile; the token-bearing `GET /auth/callback` endpoint has been retired. Production browser sessions use the OIDC transaction flow, which binds state, nonce, provider, and redirect URI atomically.
