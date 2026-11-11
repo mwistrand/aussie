@@ -15,6 +15,11 @@ import (
 
 const maxResponseSize = 10 << 20
 
+const (
+	controlPlaneVersionHeader    = "X-Aussie-Control-Plane-Version"
+	supportedControlPlaneVersion = "v1"
+)
+
 // Client is the one authenticated HTTP transport used by CLI API commands.
 type Client struct {
 	baseURL    *url.URL
@@ -93,6 +98,9 @@ func (c *Client) DoJSONWithHeaders(method, path string, body any, headers http.H
 			request.Header.Add(key, value)
 		}
 	}
+	if isControlPlanePath(endpoint.Path) {
+		request.Header.Set(controlPlaneVersionHeader, supportedControlPlaneVersion)
+	}
 	request.Header.Del("Authorization")
 	if c.token != "" {
 		request.Header.Set("Authorization", "Bearer "+c.token)
@@ -114,7 +122,16 @@ func (c *Client) DoJSONWithHeaders(method, path string, body any, headers http.H
 	if len(data) > maxResponseSize {
 		return nil, fmt.Errorf("server response exceeds %d bytes", maxResponseSize)
 	}
+	if isControlPlanePath(endpoint.Path) {
+		if version := response.Header.Get(controlPlaneVersionHeader); version != "" && version != supportedControlPlaneVersion {
+			return nil, fmt.Errorf("server requires unsupported Aussie control-plane contract %q; upgrade the CLI", version)
+		}
+	}
 	return &Response{StatusCode: response.StatusCode, Status: response.Status, Header: response.Header, body: data}, nil
+}
+
+func isControlPlanePath(path string) bool {
+	return strings.HasPrefix(path, "/admin/") || strings.HasPrefix(path, "/auth/") || path == "/admin" || path == "/auth"
 }
 
 // DecodeJSON decodes the response body into a caller-owned typed value.

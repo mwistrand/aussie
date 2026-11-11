@@ -1,0 +1,414 @@
+openapi: 3.0.3
+info:
+  title: Aussie control-plane API
+  version: v1
+  description: >-
+    Versioned contract for gateway-owned administration and authentication
+    endpoints. Proxied service routes are intentionally excluded.
+servers:
+  - url: /
+tags:
+  - name: capabilities
+  - name: services
+  - name: permissions
+  - name: roles
+  - name: api-keys
+  - name: signing-keys
+  - name: tokens
+  - name: translation-config
+  - name: lockouts
+  - name: authentication
+paths:
+  /admin/capabilities:
+    get:
+      tags: [capabilities]
+      summary: Discover the supported control-plane contract
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Supported contract versions and specification location
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Capabilities'}
+  /admin/whoami:
+    get:
+      tags: [authentication]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/services:
+    get:
+      tags: [services]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Offset'}]
+      responses: {$ref: '#/components/responses/Json'}
+    post:
+      tags: [services]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/IfMatch'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/services/{serviceId}:
+    parameters: [{$ref: '#/components/parameters/ServiceId'}]
+    get:
+      tags: [services]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+    delete:
+      tags: [services]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/IfMatch'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      responses: {$ref: '#/components/responses/Empty'}
+  /admin/services/routing-status:
+    get:
+      tags: [services]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/services/{serviceId}/permissions:
+    parameters: [{$ref: '#/components/parameters/ServiceId'}]
+    get:
+      tags: [permissions]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+    put:
+      tags: [permissions]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/roles:
+    get:
+      tags: [roles]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Offset'}]
+      responses: {$ref: '#/components/responses/Json'}
+    post:
+      tags: [roles]
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/roles/{roleId}:
+    parameters: [{$ref: '#/components/parameters/RoleId'}]
+    get:
+      tags: [roles]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+    put:
+      tags: [roles]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Json'}
+    delete:
+      tags: [roles]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      responses: {$ref: '#/components/responses/Empty'}
+  /admin/api-keys:
+    get:
+      tags: [api-keys]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Offset'}]
+      responses: {$ref: '#/components/responses/Json'}
+    post:
+      tags: [api-keys]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/api-keys/{keyId}:
+    parameters: [{$ref: '#/components/parameters/KeyId'}]
+    get:
+      tags: [api-keys]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+    delete:
+      tags: [api-keys]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/IfMatch'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      responses: {$ref: '#/components/responses/Empty'}
+  /admin/keys:
+    get:
+      tags: [signing-keys]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/keys/{keyId}:
+    parameters: [{$ref: '#/components/parameters/KeyId'}]
+    get:
+      tags: [signing-keys]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+    delete:
+      tags: [signing-keys]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      responses: {$ref: '#/components/responses/Empty'}
+  /admin/keys/rotate:
+    post:
+      tags: [signing-keys]
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/keys/{keyId}/deprecate:
+    post:
+      tags: [signing-keys]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/KeyId'}]
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/keys/health:
+    get:
+      tags: [signing-keys]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/tokens/{jti}:
+    parameters: [{$ref: '#/components/parameters/Jti'}]
+    delete:
+      tags: [tokens]
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Empty'}
+  /admin/tokens/revoke:
+    post:
+      tags: [tokens]
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/tokens/users/{userId}:
+    parameters: [{$ref: '#/components/parameters/UserId'}]
+    delete:
+      tags: [tokens]
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Empty'}
+  /admin/tokens/{jti}/status:
+    parameters: [{$ref: '#/components/parameters/Jti'}]
+    get:
+      tags: [tokens]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/tokens/users:
+    get:
+      tags: [tokens]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Offset'}]
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/tokens/inspect:
+    post:
+      tags: [tokens]
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/tokens/bloom-filter/rebuild:
+    post:
+      tags: [tokens]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/translation-config:
+    get:
+      tags: [translation-config]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/Limit'}, {$ref: '#/components/parameters/Offset'}]
+      responses: {$ref: '#/components/responses/Json'}
+    post:
+      tags: [translation-config]
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/translation-config/{versionId}:
+    parameters: [{$ref: '#/components/parameters/VersionId'}]
+    get:
+      tags: [translation-config]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+    delete:
+      tags: [translation-config]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Empty'}
+  /admin/translation-config/validate:
+    post:
+      tags: [translation-config]
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/translation-config/test:
+    post:
+      tags: [translation-config]
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/translation-config/active:
+    get:
+      tags: [translation-config]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/translation-config/{versionId}/activate:
+    put:
+      tags: [translation-config]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/VersionId'}]
+      responses: {$ref: '#/components/responses/Empty'}
+  /admin/translation-config/rollback/{versionNumber}:
+    post:
+      tags: [translation-config]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/VersionNumber'}]
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/translation-config/status:
+    get:
+      tags: [translation-config]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/translation-config/cache/invalidate:
+    post:
+      tags: [translation-config]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Empty'}
+  /admin/lockouts:
+    get:
+      tags: [lockouts]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/Limit'}]
+      responses: {$ref: '#/components/responses/Json'}
+  /admin/lockouts/ips/{ip}:
+    parameters: [{$ref: '#/components/parameters/Ip'}]
+    get:
+      tags: [lockouts]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+    delete:
+      tags: [lockouts]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Empty'}
+  /admin/lockouts/users/{identifier}:
+    parameters: [{$ref: '#/components/parameters/Identifier'}]
+    get:
+      tags: [lockouts]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+    delete:
+      tags: [lockouts]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Empty'}
+  /admin/lockouts/apikeys/{keyPrefix}:
+    parameters: [{$ref: '#/components/parameters/KeyPrefix'}]
+    get:
+      tags: [lockouts]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+    delete:
+      tags: [lockouts]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Empty'}
+  /admin/lockouts:reset:
+    post:
+      tags: [lockouts]
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Empty'}
+  /auth/.well-known/jwks.json:
+    get:
+      tags: [authentication]
+      security: []
+      responses: {$ref: '#/components/responses/Json'}
+  /auth/oidc/authorize:
+    get:
+      tags: [authentication]
+      security: []
+      responses: {$ref: '#/components/responses/Json'}
+  /auth/oidc/token:
+    post:
+      tags: [authentication]
+      security: []
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Json'}
+  /auth/session:
+    get:
+      tags: [authentication]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+    post:
+      tags: [authentication]
+      security: []
+      requestBody: {$ref: '#/components/requestBodies/Json'}
+      responses: {$ref: '#/components/responses/Json'}
+    delete:
+      tags: [authentication]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Empty'}
+  /auth/sessions:
+    delete:
+      tags: [authentication]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Empty'}
+  /auth/session/refresh:
+    post:
+      tags: [authentication]
+      security: [{bearerAuth: []}]
+      responses: {$ref: '#/components/responses/Json'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Versioned Aussie API key or JWT bearer credential.
+  parameters:
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+    Offset: {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+    IfMatch: {name: If-Match, in: header, schema: {type: string, pattern: '^"?[1-9][0-9]*"?$'}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, schema: {type: string, minLength: 1, maxLength: 256}}
+    ServiceId: {name: serviceId, in: path, required: true, schema: {type: string}}
+    RoleId: {name: roleId, in: path, required: true, schema: {type: string}}
+    KeyId: {name: keyId, in: path, required: true, schema: {type: string}}
+    Jti: {name: jti, in: path, required: true, schema: {type: string}}
+    UserId: {name: userId, in: path, required: true, schema: {type: string}}
+    VersionId: {name: versionId, in: path, required: true, schema: {type: string}}
+    VersionNumber: {name: versionNumber, in: path, required: true, schema: {type: integer, minimum: 1}}
+    Ip: {name: ip, in: path, required: true, schema: {type: string}}
+    Identifier: {name: identifier, in: path, required: true, schema: {type: string}}
+    KeyPrefix: {name: keyPrefix, in: path, required: true, schema: {type: string}}
+  requestBodies:
+    Json:
+      required: true
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: true}
+  responses:
+    Json:
+      description: JSON response; resource-specific fields are additive within v1.
+      headers:
+        X-Aussie-Control-Plane-Version: {$ref: '#/components/headers/ContractVersion'}
+        ETag: {$ref: '#/components/headers/ETag'}
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: true}
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    Empty:
+      description: Successful mutation with no response body.
+      headers:
+        X-Aussie-Control-Plane-Version: {$ref: '#/components/headers/ContractVersion'}
+        ETag: {$ref: '#/components/headers/ETag'}
+  headers:
+    ContractVersion:
+      description: Control-plane protocol version selected for this response.
+      schema: {type: string, enum: [v1]}
+    ETag:
+      description: Opaque resource version used with If-Match.
+      schema: {type: string}
+  schemas:
+    Capabilities:
+      type: object
+      required: [contractVersion, supportedContractVersions, openApi]
+      properties:
+        contractVersion: {type: string, enum: [v1]}
+        supportedContractVersions: {type: array, items: {type: string, enum: [v1]}}
+        openApi: {type: string, example: /openapi.yaml}
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: {type: string, format: uri}
+        title: {type: string}
+        status: {type: integer, minimum: 400, maximum: 599}
+        detail: {type: string}
+        code: {type: string}
+
