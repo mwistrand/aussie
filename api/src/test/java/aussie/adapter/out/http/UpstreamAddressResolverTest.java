@@ -3,12 +3,15 @@ package aussie.adapter.out.http;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.InetAddress;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -174,6 +177,33 @@ class UpstreamAddressResolverTest {
 
         assertEquals("10.0.0.7", result.hostAddress());
         assertEquals(8080, result.port());
+    }
+
+    @Test
+    @DisplayName("rejects lookups above the dedicated capacity budget")
+    void rejectsLookupsAboveCapacityBudget() throws Exception {
+        final var entered = new CountDownLatch(1);
+        final var release = new CountDownLatch(1);
+        final var authorizedAddress = address("93.184.216.34");
+        final var resolver = new UpstreamAddressResolver(vertx, false, Duration.ofSeconds(5), 1, ignored -> {
+            entered.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+            return List.of(authorizedAddress);
+        });
+
+        final var first = resolver.resolve(URI.create("https://example.com")).subscribeAsCompletionStage();
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+        assertThrows(EgressPolicyException.class, () -> resolver.resolve(URI.create("https://other.example"))
+                .await()
+                .atMost(Duration.ofSeconds(5)));
+
+        release.countDown();
+        first.toCompletableFuture().get(5, TimeUnit.SECONDS);
     }
 
     private UpstreamAddressResolver resolver(boolean allowPrivate, InetAddress... addresses) {

@@ -258,6 +258,11 @@ public class ProductionConfigurationValidator {
         if (perHost < 1 || total < perHost) {
             throw invalid("HTTP connection limits must be positive and total must cover each host pool");
         }
+        final var dnsTimeout = duration("aussie.resiliency.dns.lookup-timeout", Duration.ofSeconds(5));
+        final var dnsConcurrency = integer("aussie.resiliency.dns.max-concurrent-lookups", 64);
+        if (dnsTimeout.isZero() || dnsTimeout.isNegative() || dnsConcurrency < 1) {
+            throw invalid("DNS lookup timeout and concurrency must be positive");
+        }
     }
 
     private void validateTelemetry() {
