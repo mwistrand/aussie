@@ -92,7 +92,8 @@ public class KeyRotationService {
      * <p>Generates and immediately activates a new key. The current
      * active key is deprecated. Use this for emergency rotations.
      *
-     * @param reason Optional reason for the rotation (logged)
+     * @param reason Optional reason for the rotation; the administrative REST boundary retains it in the
+     *     access-controlled audit record and normal telemetry records presence only
      * @return Uni with the new active key
      */
     public Uni<SigningKeyRecord> triggerRotation(String reason) {
@@ -100,7 +101,7 @@ public class KeyRotationService {
             return Uni.createFrom().failure(new IllegalStateException("Key rotation not enabled"));
         }
 
-        LOG.warnv("Manual key rotation triggered: {0}", reason != null ? reason : "no reason provided");
+        LOG.warnv("Manual key rotation triggered: reason_present={0}", reason != null && !reason.isBlank());
 
         return registry.generateAndRegisterKey()
                 .flatMap(newKey -> registry.activateKey(newKey.keyId())

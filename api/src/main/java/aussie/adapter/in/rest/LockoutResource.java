@@ -17,6 +17,7 @@ import jakarta.ws.rs.core.Response;
 
 import io.quarkus.arc.properties.IfBuildProperty;
 import io.quarkus.security.PermissionsAllowed;
+import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
@@ -24,6 +25,7 @@ import aussie.adapter.in.problem.GatewayProblem;
 import aussie.core.config.AuthRateLimitConfig;
 import aussie.core.model.auth.Permission;
 import aussie.core.service.auth.AuthRateLimitService;
+import aussie.core.util.SafeLogging;
 import aussie.spi.FailedAttemptRepository.LockoutInfo;
 
 /**
@@ -52,10 +54,18 @@ public class LockoutResource {
 
     private final AuthRateLimitService rateLimitService;
     private final AuthRateLimitConfig config;
+    private final SecurityIdentity identity;
+    private final RedisAdminMutationStore mutationStore;
 
-    public LockoutResource(AuthRateLimitService rateLimitService, AuthRateLimitConfig config) {
+    public LockoutResource(
+            AuthRateLimitService rateLimitService,
+            AuthRateLimitConfig config,
+            SecurityIdentity identity,
+            RedisAdminMutationStore mutationStore) {
         this.rateLimitService = rateLimitService;
         this.config = config;
+        this.identity = identity;
+        this.mutationStore = mutationStore;
     }
 
     /**
@@ -188,11 +198,17 @@ public class LockoutResource {
             throw GatewayProblem.featureDisabled("Authentication rate limiting");
         }
 
-        final var reason = request != null ? request.reason() : null;
-        LOG.infof("Clearing IP lockout: ip=%s, reason=%s", ip, reason);
+        LOG.infof("Clearing IP lockout: identifier_hash=%s", SafeLogging.identifier(ip));
 
         return rateLimitService.clearIpLockout(ip).map(v -> {
-            LOG.infof("IP lockout cleared: ip=%s", ip);
+            AdminMutationSupport.audit(
+                    mutationStore,
+                    identity,
+                    "lockout.clear",
+                    "ip:" + SafeLogging.identifier(ip),
+                    "success",
+                    request != null ? request.reason() : null);
+            LOG.infof("IP lockout cleared: identifier_hash=%s", SafeLogging.identifier(ip));
             return Response.noContent().build();
         });
     }
@@ -213,11 +229,17 @@ public class LockoutResource {
             throw GatewayProblem.featureDisabled("Authentication rate limiting");
         }
 
-        final var reason = request != null ? request.reason() : null;
-        LOG.infof("Clearing user lockout: identifier=%s, reason=%s", identifier, reason);
+        LOG.infof("Clearing user lockout: identifier_hash=%s", SafeLogging.identifier(identifier));
 
         return rateLimitService.clearUserLockout(identifier).map(v -> {
-            LOG.infof("User lockout cleared: identifier=%s", identifier);
+            AdminMutationSupport.audit(
+                    mutationStore,
+                    identity,
+                    "lockout.clear",
+                    "user:" + SafeLogging.identifier(identifier),
+                    "success",
+                    request != null ? request.reason() : null);
+            LOG.infof("User lockout cleared: identifier_hash=%s", SafeLogging.identifier(identifier));
             return Response.noContent().build();
         });
     }
@@ -238,11 +260,17 @@ public class LockoutResource {
             throw GatewayProblem.featureDisabled("Authentication rate limiting");
         }
 
-        final var reason = request != null ? request.reason() : null;
-        LOG.infof("Clearing API key lockout: keyPrefix=%s, reason=%s", keyPrefix, reason);
+        LOG.infof("Clearing API key lockout: identifier_hash=%s", SafeLogging.identifier(keyPrefix));
 
         return rateLimitService.clearLockout("apikey:" + keyPrefix).map(v -> {
-            LOG.infof("API key lockout cleared: keyPrefix=%s", keyPrefix);
+            AdminMutationSupport.audit(
+                    mutationStore,
+                    identity,
+                    "lockout.clear",
+                    "apikey:" + SafeLogging.identifier(keyPrefix),
+                    "success",
+                    request != null ? request.reason() : null);
+            LOG.infof("API key lockout cleared: identifier_hash=%s", SafeLogging.identifier(keyPrefix));
             return Response.noContent().build();
         });
     }
@@ -270,8 +298,7 @@ public class LockoutResource {
             throw GatewayProblem.badRequest("Must set force=true to clear all lockouts");
         }
 
-        final var reason = request.reason();
-        LOG.warnf("Clearing ALL lockouts: reason=%s", reason);
+        LOG.warn("Clearing ALL lockouts");
 
         return rateLimitService
                 .streamAllLockouts()
@@ -280,6 +307,8 @@ public class LockoutResource {
                 .collect()
                 .asList()
                 .map(cleared -> {
+                    AdminMutationSupport.audit(
+                            mutationStore, identity, "lockout.reset", "all", "success", request.reason());
                     LOG.warnf("Cleared %d lockouts", cleared.size());
                     return Response.ok(Map.of(
                                     "status",

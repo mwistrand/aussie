@@ -18,6 +18,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import io.quarkus.security.PermissionsAllowed;
+import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
 
 import aussie.adapter.in.problem.GatewayProblem;
@@ -48,15 +49,21 @@ public class SigningKeyResource {
     private final SigningKeyRegistry keyRegistry;
     private final KeyRotationService keyRotationService;
     private final KeyRotationConfig keyRotationConfig;
+    private final SecurityIdentity identity;
+    private final RedisAdminMutationStore mutationStore;
 
     @Inject
     public SigningKeyResource(
             SigningKeyRegistry keyRegistry,
             KeyRotationService keyRotationService,
-            KeyRotationConfig keyRotationConfig) {
+            KeyRotationConfig keyRotationConfig,
+            SecurityIdentity identity,
+            RedisAdminMutationStore mutationStore) {
         this.keyRegistry = keyRegistry;
         this.keyRotationService = keyRotationService;
         this.keyRotationConfig = keyRotationConfig;
+        this.identity = identity;
+        this.mutationStore = mutationStore;
     }
 
     /**
@@ -113,9 +120,12 @@ public class SigningKeyResource {
         final var reason =
                 request != null && request.reason() != null ? request.reason() : "Manual rotation via admin API";
 
-        return keyRotationService.triggerRotation(reason).map(newKey -> Response.ok(KeySummaryResponse.from(newKey))
-                .status(Response.Status.CREATED)
-                .build());
+        return keyRotationService.triggerRotation(reason).map(newKey -> {
+            AdminMutationSupport.audit(mutationStore, identity, "key.rotate", newKey.keyId(), "success", reason);
+            return Response.ok(KeySummaryResponse.from(newKey))
+                    .status(Response.Status.CREATED)
+                    .build();
+        });
     }
 
     /**

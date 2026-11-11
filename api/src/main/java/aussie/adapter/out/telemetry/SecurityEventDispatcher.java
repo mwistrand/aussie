@@ -18,6 +18,7 @@ import jakarta.inject.Inject;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.jboss.logging.Logger;
 
+import aussie.core.util.SafeLogging;
 import aussie.spi.SecurityEvent;
 import aussie.spi.SecurityEventHandler;
 
@@ -151,7 +152,7 @@ public class SecurityEventDispatcher {
                 try {
                     handler.close();
                 } catch (Exception e) {
-                    LOG.warnf("Error closing handler %s: %s", handler.name(), e.getMessage());
+                    LOG.warnf("Error closing handler %s: error_type=%s", handler.name(), SafeLogging.errorType(e));
                 }
             });
         }
@@ -190,7 +191,9 @@ public class SecurityEventDispatcher {
                     try {
                         handler.handle(event);
                     } catch (Exception e) {
-                        LOG.warnf("Handler %s failed to process event: %s", handler.name(), e.getMessage());
+                        LOG.warnf(
+                                "Handler %s failed to process event: error_type=%s",
+                                handler.name(), SafeLogging.errorType(e));
                     }
                 }
             });

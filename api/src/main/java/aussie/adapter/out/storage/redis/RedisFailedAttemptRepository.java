@@ -20,6 +20,7 @@ import org.jboss.logging.Logger;
 
 import aussie.core.config.ResiliencyConfig;
 import aussie.core.port.out.Metrics;
+import aussie.core.util.SafeLogging;
 import aussie.spi.FailedAttemptRepository;
 
 /**
@@ -125,7 +126,8 @@ public class RedisFailedAttemptRepository implements FailedAttemptRepository {
                         String.valueOf(ttlSeconds),
                         String.valueOf(initialCount)))
                 .map(response -> response.toLong())
-                .invoke(count -> LOG.debugf("Recorded failed attempt for %s: count=%d", key, count));
+                .invoke(count -> LOG.debugf(
+                        "Recorded failed attempt for lockout_key=%s: count=%d", SafeLogging.lockoutKey(key), count));
         return timeoutHelper.withTimeout(operation, "recordFailedAttempt");
     }
 
@@ -139,7 +141,7 @@ public class RedisFailedAttemptRepository implements FailedAttemptRepository {
     @Override
     public Uni<Void> clearFailedAttempts(String key) {
         var operation = deleteCurrentAndLegacy(FAILED_PREFIX, key)
-                .invoke(() -> LOG.debugf("Cleared failed attempts for %s", key));
+                .invoke(() -> LOG.debugf("Cleared failed attempts for lockout_key=%s", SafeLogging.lockoutKey(key)));
         return timeoutHelper.withTimeout(operation, "clearFailedAttempts");
     }
 
@@ -168,7 +170,7 @@ public class RedisFailedAttemptRepository implements FailedAttemptRepository {
                         String.valueOf(initialCount)))
                 .call(() -> keyCommands.del(legacyKey(FAILED_PREFIX, key)))
                 .replaceWithVoid()
-                .invoke(() -> LOG.infof("Recorded lockout for %s: reason=%s", key, reason));
+                .invoke(() -> LOG.infof("Recorded lockout for lockout_key=%s", SafeLogging.lockoutKey(key)));
         return timeoutHelper.withTimeout(operation, "recordLockout");
     }
 
@@ -197,8 +199,8 @@ public class RedisFailedAttemptRepository implements FailedAttemptRepository {
 
     @Override
     public Uni<Void> clearLockout(String key) {
-        var operation =
-                deleteCurrentAndLegacy(LOCKOUT_PREFIX, key).invoke(() -> LOG.infof("Cleared lockout for %s", key));
+        var operation = deleteCurrentAndLegacy(LOCKOUT_PREFIX, key)
+                .invoke(() -> LOG.infof("Cleared lockout for lockout_key=%s", SafeLogging.lockoutKey(key)));
         return timeoutHelper.withTimeout(operation, "clearLockout");
     }
 
@@ -232,7 +234,7 @@ public class RedisFailedAttemptRepository implements FailedAttemptRepository {
                             Base64.getUrlDecoder().decode(storedKey.substring(1, storedKey.length() - 1)),
                             StandardCharsets.UTF_8);
         } catch (IllegalArgumentException error) {
-            LOG.warnv(error, "Ignoring malformed authentication lockout key: {0}", redisKey);
+            LOG.warnf("Ignoring malformed authentication lockout key: key_hash=%s", SafeLogging.identifier(redisKey));
             return Uni.createFrom().nullItem();
         }
         final Uni<LockoutInfo> operation = hashCommands.hgetall(redisKey).flatMap(fields -> {

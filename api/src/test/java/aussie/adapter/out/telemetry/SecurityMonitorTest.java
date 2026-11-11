@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import aussie.common.context.ClientContext;
+import aussie.core.util.SafeLogging;
 import aussie.spi.SecurityEvent;
 
 @DisplayName("SecurityMonitor")
@@ -266,7 +267,8 @@ class SecurityMonitorTest {
 
             var captor = ArgumentCaptor.forClass(SecurityEvent.class);
             verify(dispatcher).dispatch(captor.capture());
-            assertTrue(captor.getValue() instanceof SecurityEvent.SessionInvalidated);
+            var event = (SecurityEvent.SessionInvalidated) captor.getValue();
+            assertEquals(SafeLogging.identifier("user-1"), event.userId());
         }
 
         @Test

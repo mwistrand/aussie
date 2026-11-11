@@ -118,12 +118,6 @@ public class TelemetryHelper {
         }
     }
 
-    public void setAuthLockoutKey(Span span, String value) {
-        if (isTracingEnabled() && attrs().authLockoutKey()) {
-            span.setAttribute(SpanAttributes.AUTH_LOCKOUT_KEY, value);
-        }
-    }
-
     public void setAuthLockoutRetryAfter(Span span, long value) {
         if (isTracingEnabled() && attrs().authLockoutRetryAfter()) {
             span.setAttribute(SpanAttributes.AUTH_LOCKOUT_RETRY_AFTER, value);

@@ -930,7 +930,6 @@ Team ID is derived from the authenticated API key's `teamId` field, not from req
 | `aussie.telemetry.attributes.rate-limit-type` | `boolean` | `true` | `AUSSIE_TELEMETRY_ATTRIBUTES_RATE_LIMIT_TYPE` | Include rate limit type. |
 | `aussie.telemetry.attributes.rate-limit-retry-after` | `boolean` | `true` | `AUSSIE_TELEMETRY_ATTRIBUTES_RATE_LIMIT_RETRY_AFTER` | Include retry-after value. |
 | `aussie.telemetry.attributes.auth-rate-limited` | `boolean` | `true` | `AUSSIE_TELEMETRY_ATTRIBUTES_AUTH_RATE_LIMITED` | Include auth rate limiting status. |
-| `aussie.telemetry.attributes.auth-lockout-key` | `boolean` | `true` | `AUSSIE_TELEMETRY_ATTRIBUTES_AUTH_LOCKOUT_KEY` | Include auth lockout key. |
 | `aussie.telemetry.attributes.auth-lockout-retry-after` | `boolean` | `true` | `AUSSIE_TELEMETRY_ATTRIBUTES_AUTH_LOCKOUT_RETRY_AFTER` | Include auth lockout retry-after value. |
 
 **Profile overrides:**

@@ -227,9 +227,6 @@ public final class SpanAttributes {
     /** Whether the request was blocked by auth rate limiting (lockout). */
     public static final String AUTH_RATE_LIMITED = "aussie.auth.rate_limited";
 
-    /** The key that triggered the auth lockout (ip:xxx, user:xxx, apikey:xxx). */
-    public static final String AUTH_LOCKOUT_KEY = "aussie.auth.lockout_key";
-
     /** Seconds until the auth lockout expires. */
     public static final String AUTH_LOCKOUT_RETRY_AFTER = "aussie.auth.lockout_retry_after";
 }

@@ -260,10 +260,6 @@ public interface TelemetryConfig {
         @WithDefault("true")
         boolean authRateLimited();
 
-        @WithName("auth-lockout-key")
-        @WithDefault("true")
-        boolean authLockoutKey();
-
         @WithName("auth-lockout-retry-after")
         @WithDefault("true")
         boolean authLockoutRetryAfter();

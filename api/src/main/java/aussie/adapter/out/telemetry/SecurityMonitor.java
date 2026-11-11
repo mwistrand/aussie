@@ -15,6 +15,7 @@ import org.jboss.logging.Logger;
 
 import aussie.common.context.ClientContext;
 import aussie.core.port.out.SecurityMonitoring;
+import aussie.core.util.SafeLogging;
 import aussie.core.util.SecureHash;
 import aussie.spi.SecurityEvent;
 
@@ -197,7 +198,7 @@ public class SecurityMonitor implements SecurityMonitoring {
         }
 
         var event = new SecurityEvent.SessionInvalidated(
-                Instant.now(), hashIp(clientIp), hashSessionId(sessionId), userId, reason);
+                Instant.now(), hashIp(clientIp), hashSessionId(sessionId), SafeLogging.identifier(userId), reason);
         dispatcher.dispatch(event);
     }
 
@@ -286,11 +287,7 @@ public class SecurityMonitor implements SecurityMonitoring {
     }
 
     private String hashSessionId(String sessionId) {
-        if (sessionId == null) {
-            return "unknown";
-        }
-        var hash = Integer.toHexString(sessionId.hashCode());
-        return hash.substring(0, Math.min(8, hash.length()));
+        return SafeLogging.identifier(sessionId);
     }
 
     /**

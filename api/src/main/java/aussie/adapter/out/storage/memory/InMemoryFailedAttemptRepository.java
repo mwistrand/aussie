@@ -15,6 +15,7 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
+import aussie.core.util.SafeLogging;
 import aussie.spi.FailedAttemptRepository;
 
 /**
@@ -64,7 +65,9 @@ public class InMemoryFailedAttemptRepository implements FailedAttemptRepository 
                 return new FailedAttemptEntry(existing.count() + 1, expiresAt);
             });
 
-            LOG.debugf("Recorded failed attempt for %s: count=%d, expires=%s", key, entry.count(), entry.expiresAt());
+            LOG.debugf(
+                    "Recorded failed attempt for lockout_key=%s: count=%d, expires=%s",
+                    SafeLogging.lockoutKey(key), entry.count(), entry.expiresAt());
             return (long) entry.count();
         });
     }
@@ -89,7 +92,7 @@ public class InMemoryFailedAttemptRepository implements FailedAttemptRepository 
     public Uni<Void> clearFailedAttempts(String key) {
         return Uni.createFrom().item(() -> {
             failedAttempts.remove(key);
-            LOG.debugf("Cleared failed attempts for %s", key);
+            LOG.debugf("Cleared failed attempts for lockout_key=%s", SafeLogging.lockoutKey(key));
             return null;
         });
     }
@@ -106,7 +109,7 @@ public class InMemoryFailedAttemptRepository implements FailedAttemptRepository 
             final var failedCount = attemptEntry != null ? attemptEntry.count() : 0;
 
             lockouts.put(key, new LockoutEntry(now, expiresAt, reason, failedCount));
-            LOG.infof("Recorded lockout for %s: reason=%s, expires=%s", key, reason, expiresAt);
+            LOG.infof("Recorded lockout for lockout_key=%s, expires=%s", SafeLogging.lockoutKey(key), expiresAt);
             return null;
         });
     }
@@ -142,7 +145,7 @@ public class InMemoryFailedAttemptRepository implements FailedAttemptRepository 
     public Uni<Void> clearLockout(String key) {
         return Uni.createFrom().item(() -> {
             lockouts.remove(key);
-            LOG.infof("Cleared lockout for %s", key);
+            LOG.infof("Cleared lockout for lockout_key=%s", SafeLogging.lockoutKey(key));
             return null;
         });
     }

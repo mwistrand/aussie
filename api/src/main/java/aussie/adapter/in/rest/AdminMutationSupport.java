@@ -177,12 +177,25 @@ final class AdminMutationSupport {
             String action,
             String target,
             String outcome) {
+        audit(distributedStore, identity, action, target, outcome, null);
+    }
+
+    static void audit(
+            RedisAdminMutationStore distributedStore,
+            SecurityIdentity identity,
+            String action,
+            String target,
+            String outcome,
+            String reason) {
         var actor = actor(identity);
         var safeTarget = safe(target);
-        AUDIT.infof("admin_mutation action=%s actor=%s target=%s outcome=%s", action, actor, safeTarget, outcome);
+        AUDIT.infof(
+                "admin_mutation action=%s actor=%s target=%s outcome=%s reason_present=%s",
+                action, actor, safeTarget, outcome, reason != null && !reason.isBlank());
         if (distributedStore != null && distributedStore.enabled()) {
+            final var safeReason = auditReason(reason);
             distributedStore
-                    .appendAudit(actor, action, safeTarget, outcome)
+                    .appendAudit(actor, action, safeTarget, outcome, safeReason)
                     .subscribe()
                     .with(
                             ignored -> {},
@@ -215,6 +228,14 @@ final class AdminMutationSupport {
 
     private static String safe(String value) {
         return value == null ? "unknown" : value.replaceAll("[^A-Za-z0-9_.:@-]", "_");
+    }
+
+    private static String auditReason(String reason) {
+        if (reason == null || reason.isBlank()) {
+            return null;
+        }
+        final var sanitized = reason.replaceAll("[\\p{Cntrl}]", "_");
+        return sanitized.substring(0, Math.min(1024, sanitized.length()));
     }
 
     private static String operationKey(IdempotencyKey key) {

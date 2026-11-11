@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import jakarta.ws.rs.core.Response;
@@ -70,6 +71,19 @@ class AdminMutationSupportTest {
         var identity = identity("user", "user-1");
 
         assertThrows(HttpProblem.class, () -> AdminMutationSupport.requireTeam(identity, null));
+    }
+
+    @Test
+    void preservesSanitizedReasonInDurableAudit() {
+        var identity = identity("operator", "operator-1");
+        var store = mock(RedisAdminMutationStore.class);
+        when(store.enabled()).thenReturn(true);
+        when(store.appendAudit("operator-1", "key.rotate", "key-1", "success", "incident_reason"))
+                .thenReturn(Uni.createFrom().voidItem());
+
+        AdminMutationSupport.audit(store, identity, "key.rotate", "key-1", "success", "incident\nreason");
+
+        verify(store).appendAudit("operator-1", "key.rotate", "key-1", "success", "incident_reason");
     }
 
     private SecurityIdentity identity(String name, String principalId) {

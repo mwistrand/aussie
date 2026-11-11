@@ -177,14 +177,6 @@ class TelemetryHelperTest {
         }
 
         @Test
-        @DisplayName("should set auth lockout key when enabled")
-        void shouldSetAuthLockoutKey() {
-            when(attrsConfig.authLockoutKey()).thenReturn(true);
-            createHelper().setAuthLockoutKey(span, "ip:1.2.3.4");
-            verify(span).setAttribute(SpanAttributes.AUTH_LOCKOUT_KEY, "ip:1.2.3.4");
-        }
-
-        @Test
         @DisplayName("should set auth lockout retry after when enabled")
         void shouldSetAuthLockoutRetryAfter() {
             when(attrsConfig.authLockoutRetryAfter()).thenReturn(true);

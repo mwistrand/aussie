@@ -16,6 +16,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 import io.quarkus.security.PermissionsAllowed;
+import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.jose4j.jwt.JwtClaims;
@@ -53,14 +54,20 @@ public class TokenRevocationResource {
     private final TokenRevocationService revocationService;
     private final TokenRevocationConfig config;
     private final TokenValidationService tokenValidationService;
+    private final SecurityIdentity identity;
+    private final RedisAdminMutationStore mutationStore;
 
     public TokenRevocationResource(
             TokenRevocationService revocationService,
             TokenRevocationConfig config,
-            TokenValidationService tokenValidationService) {
+            TokenValidationService tokenValidationService,
+            SecurityIdentity identity,
+            RedisAdminMutationStore mutationStore) {
         this.revocationService = revocationService;
         this.config = config;
         this.tokenValidationService = tokenValidationService;
+        this.identity = identity;
+        this.mutationStore = mutationStore;
     }
 
     /**
@@ -85,10 +92,16 @@ public class TokenRevocationResource {
 
         var expiresAt = request != null && request.expiresAt() != null ? request.expiresAt() : null;
 
-        var reason = request != null ? request.reason() : null;
-        LOG.infof("Revoking token: jti_hash=%s, reason=%s", SafeLogging.identifier(jti), reason);
+        LOG.infof("Revoking token: jti_hash=%s", SafeLogging.identifier(jti));
 
         return revocationService.revokeToken(jti, expiresAt).map(v -> {
+            AdminMutationSupport.audit(
+                    mutationStore,
+                    identity,
+                    "token.revoke",
+                    SafeLogging.identifier(jti),
+                    "success",
+                    request != null ? request.reason() : null);
             LOG.infof("Token revoked: jti_hash=%s", SafeLogging.identifier(jti));
             return Response.noContent().build();
         });
@@ -127,9 +140,16 @@ public class TokenRevocationResource {
                     .filter(tokenId -> !tokenId.isBlank())
                     .orElseThrow(() -> GatewayProblem.badRequest("Token does not contain a JTI claim"));
             final var expiresAt = identity.expiresAt();
-            LOG.infof("Revoking token by JWT: jti_hash=%s, reason=%s", SafeLogging.identifier(jti), request.reason());
+            LOG.infof("Revoking token by JWT: jti_hash=%s", SafeLogging.identifier(jti));
 
             return revocationService.revokeToken(jti, expiresAt).map(v -> {
+                AdminMutationSupport.audit(
+                        mutationStore,
+                        this.identity,
+                        "token.revoke",
+                        SafeLogging.identifier(jti),
+                        "success",
+                        request.reason());
                 LOG.infof("Token revoked: jti_hash=%s", SafeLogging.identifier(jti));
                 return Response.ok(Map.of(
                                 "jti",
@@ -167,10 +187,16 @@ public class TokenRevocationResource {
             throw GatewayProblem.badRequest("User ID is required");
         }
 
-        var reason = request != null ? request.reason() : null;
-        LOG.infof("Revoking all tokens for user: user_id_hash=%s, reason=%s", SafeLogging.identifier(userId), reason);
+        LOG.infof("Revoking all tokens for user: user_id_hash=%s", SafeLogging.identifier(userId));
 
         return revocationService.revokeAllUserTokens(userId).map(v -> {
+            AdminMutationSupport.audit(
+                    mutationStore,
+                    identity,
+                    "user-tokens.revoke",
+                    SafeLogging.identifier(userId),
+                    "success",
+                    request != null ? request.reason() : null);
             LOG.infof("All tokens revoked for user: user_id_hash=%s", SafeLogging.identifier(userId));
             return Response.noContent().build();
         });
