@@ -33,6 +33,9 @@ func TestClientSendsBoundOriginAndBearerToken(t *testing.T) {
 		if got := r.Header.Get("If-Match"); got != "2" {
 			t.Errorf("If-Match = %q, want 2", got)
 		}
+		if got := r.Header.Get(controlPlaneVersionHeader); got != supportedControlPlaneVersion {
+			t.Errorf("control-plane version = %q, want %q", got, supportedControlPlaneVersion)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"detail":"ok"}`))
 	}))
@@ -51,6 +54,22 @@ func TestClientSendsBoundOriginAndBearerToken(t *testing.T) {
 	}
 	if response.StatusCode != http.StatusOK || response.Detail() != "ok" {
 		t.Fatalf("response = %#v, detail = %q", response, response.Detail())
+	}
+}
+
+func TestClientRejectsUnsupportedControlPlaneVersion(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(controlPlaneVersionHeader, "v99")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.DoJSON(http.MethodGet, "/admin/capabilities", nil); err == nil {
+		t.Fatal("DoJSON accepted an unsupported control-plane version")
 	}
 }
 
