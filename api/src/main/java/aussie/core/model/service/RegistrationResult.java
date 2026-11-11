@@ -14,7 +14,11 @@ public sealed interface RegistrationResult {
      * @return Success result
      */
     static RegistrationResult success(ServiceRegistration registration) {
-        return new Success(registration);
+        return new Success(registration, false);
+    }
+
+    static RegistrationResult committed(ServiceRegistration registration) {
+        return new Success(registration, true);
     }
 
     /**
@@ -33,7 +37,12 @@ public sealed interface RegistrationResult {
      *
      * @param registration The registered service
      */
-    record Success(ServiceRegistration registration) implements RegistrationResult {}
+    record Success(ServiceRegistration registration, boolean propagationPending) implements RegistrationResult {
+
+        public Success(ServiceRegistration registration) {
+            this(registration, false);
+        }
+    }
 
     /**
      * Failed registration.

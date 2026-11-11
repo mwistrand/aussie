@@ -11,8 +11,13 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -65,6 +70,7 @@ import aussie.core.service.auth.ServiceAuthorizationService;
 public class ServiceRegistry {
 
     private static final Logger LOG = Logger.getLogger(ServiceRegistry.class);
+    private static final int MAX_RECONCILIATION_BACKLOG = 1_000;
 
     private final ServiceRegistrationRepository repository;
     private final ConfigurationCache cache;
@@ -79,6 +85,9 @@ public class ServiceRegistry {
     private final AtomicLong durableGeneration = new AtomicLong();
     private final AtomicReference<RoutingSnapshotStatus.RejectedGeneration> lastRejectedGeneration =
             new AtomicReference<>();
+    private final AtomicReference<String> lastPropagationErrorClass = new AtomicReference<>();
+    private final AtomicInteger reconciliationBacklog = new AtomicInteger();
+    private final ConcurrentHashMap<String, PendingPropagation> pendingPropagations = new ConcurrentHashMap<>();
 
     // TTL tracking for multi-instance cache refresh
     private final AtomicReference<Instant> lastRefreshed = new AtomicReference<>(Instant.MIN);
@@ -114,7 +123,7 @@ public class ServiceRegistry {
      */
     public Uni<Void> initialize() {
         subscribeToConfigEvents();
-        return refreshRouteCache();
+        return repositoryReconcileGeneration().flatMap(ignored -> refreshRouteCache());
     }
 
     /**
@@ -178,7 +187,17 @@ public class ServiceRegistry {
      * @return Uni completing when refresh is done
      */
     private Uni<Void> refreshRouteCache() {
-        return refreshRouteCache(0);
+        return repositoryAwaitGeneration().flatMap(ignored -> refreshRouteCache(0));
+    }
+
+    private Uni<Void> repositoryAwaitGeneration() {
+        var result = repository.awaitGeneration();
+        return result == null ? Uni.createFrom().voidItem() : result;
+    }
+
+    private Uni<Void> repositoryReconcileGeneration() {
+        var result = repository.reconcileGeneration();
+        return result == null ? Uni.createFrom().voidItem() : result;
     }
 
     private Uni<Void> refreshRouteCache(int attempt) {
@@ -207,6 +226,7 @@ public class ServiceRegistry {
                                         candidateState,
                                         (current, next) -> next.generation() < current.generation() ? current : next);
                                 lastRefreshed.set(Instant.now());
+                                retryPendingPropagations();
                                 return Uni.createFrom().voidItem();
                             }));
                 })
@@ -240,6 +260,7 @@ public class ServiceRegistry {
      */
     private Uni<Void> ensureCacheFresh() {
         if (!isCacheStale()) {
+            retryPendingPropagations();
             return Uni.createFrom().voidItem();
         }
 
@@ -319,6 +340,16 @@ public class ServiceRegistry {
 
     /** Register or update a service with an optional current-version precondition. */
     public Uni<RegistrationResult> register(ServiceRegistration service, Set<String> claims, Long expectedVersion) {
+        return registerWithCommit(
+                service, claims, expectedVersion, ignored -> Uni.createFrom().voidItem());
+    }
+
+    /** Register or update, persisting an idempotent response immediately after the row commit. */
+    public Uni<RegistrationResult> registerWithCommit(
+            ServiceRegistration service,
+            Set<String> claims,
+            Long expectedVersion,
+            Function<ServiceRegistration, Uni<Void>> onCommit) {
         // Validate against gateway policies
         ValidationResult validationResult = validator.validate(service);
         if (validationResult instanceof ValidationResult.Invalid invalid) {
@@ -399,7 +430,13 @@ public class ServiceRegistry {
                     return Uni.createFrom()
                             .item(expectedVersion == null ? versionConflict(result) : preconditionFailed());
                 }
-                return publishChange(service).replaceWith(RegistrationResult.success(service));
+                return onCommit.apply(service)
+                        .onFailure()
+                        .invoke(error -> LOG.warnf(error, "Committed service response could not be persisted"))
+                        .onFailure()
+                        .recoverWithNull()
+                        .call(ignored -> publishChange(service))
+                        .replaceWith(RegistrationResult.committed(service));
             });
         });
     }
@@ -456,7 +493,7 @@ public class ServiceRegistry {
                 if (!result.applied()) {
                     return Uni.createFrom().item(false);
                 }
-                return publishRemoval(serviceId).replaceWith(true);
+                return publishRemoval(serviceId, opt.get().version()).replaceWith(true);
             });
         });
     }
@@ -474,6 +511,16 @@ public class ServiceRegistry {
 
     /** Delete a service only when its current version matches the supplied ETag. */
     public Uni<RegistrationResult> unregisterAuthorized(String serviceId, Set<String> claims, Long expectedVersion) {
+        return unregisterAuthorizedWithCommit(
+                serviceId, claims, expectedVersion, ignored -> Uni.createFrom().voidItem());
+    }
+
+    /** Delete a service and persist the idempotent response before propagation begins. */
+    public Uni<RegistrationResult> unregisterAuthorizedWithCommit(
+            String serviceId,
+            Set<String> claims,
+            Long expectedVersion,
+            Function<ServiceRegistration, Uni<Void>> onCommit) {
         return repository.findById(serviceId).flatMap(opt -> {
             if (opt.isEmpty()) {
                 return Uni.createFrom().item(RegistrationResult.failure("Service not found: " + serviceId, 404));
@@ -497,7 +544,13 @@ public class ServiceRegistry {
                     return Uni.createFrom()
                             .item(expectedVersion == null ? versionConflict(result) : preconditionFailed());
                 }
-                return publishRemoval(serviceId).replaceWith(RegistrationResult.success(existing));
+                return onCommit.apply(existing)
+                        .onFailure()
+                        .invoke(error -> LOG.warnf(error, "Committed service deletion response could not be persisted"))
+                        .onFailure()
+                        .recoverWithNull()
+                        .call(ignored -> publishRemoval(serviceId, existing.version()))
+                        .replaceWith(RegistrationResult.committed(existing));
             });
         });
     }
@@ -598,34 +651,109 @@ public class ServiceRegistry {
             if (!result.applied()) {
                 return Uni.createFrom().item(versionConflict(result));
             }
-            return publishChange(service).replaceWith(RegistrationResult.success(service));
+            return publishChange(service).replaceWith(RegistrationResult.committed(service));
         });
     }
 
     private Uni<Void> publishChange(ServiceRegistration service) {
-        return refreshRouteCache()
+        schedulePropagation(service.serviceId(), service.version(), () -> refreshRouteCache()
                 .call(() -> eventPublisher.publishServiceChanged(
                         service.serviceId(), routingState.get().generation()))
-                .call(() -> cache.put(service)
-                        .onFailure()
-                        .invoke(err -> LOG.warnf(err, "Failed to update cache for service: %s", service.serviceId()))
-                        .onFailure()
-                        .recoverWithNull());
+                .call(() -> cache.put(service)));
+        return Uni.createFrom().voidItem();
     }
 
-    private Uni<Void> publishRemoval(String serviceId) {
-        return refreshRouteCache()
+    private Uni<Void> publishRemoval(String serviceId, long version) {
+        schedulePropagation(serviceId, version, () -> refreshRouteCache()
                 .call(() -> eventPublisher.publishServiceRemoved(
                         serviceId, routingState.get().generation()))
-                .call(() -> cache.invalidate(serviceId)
-                        .onFailure()
-                        .invoke(err -> LOG.warnf(err, "Failed to invalidate cache for service: %s", serviceId))
-                        .onFailure()
-                        .recoverWithNull());
+                .call(() -> cache.invalidate(serviceId)));
+        return Uni.createFrom().voidItem();
+    }
+
+    private void schedulePropagation(String serviceId, long version, Supplier<Uni<Void>> propagation) {
+        var pending = new PendingPropagation(serviceId, version, propagation);
+        var previous = pendingPropagations.put(serviceId, pending);
+        if (previous != null) {
+            previous.cancel();
+        }
+        updateReconciliationBacklog();
+        startPropagation(pending);
+    }
+
+    private void retryPendingPropagations() {
+        pendingPropagations.values().forEach(this::startPropagation);
+    }
+
+    private void startPropagation(PendingPropagation pending) {
+        if (!pending.start()) {
+            return;
+        }
+        pending.operation()
+                .get()
+                .subscribe()
+                .with(
+                        ignored -> {
+                            pendingPropagations.remove(pending.serviceId(), pending);
+                            updateReconciliationBacklog();
+                            pending.finish();
+                        },
+                        error -> {
+                            pending.finish();
+                            lastPropagationErrorClass.set(error.getClass().getSimpleName());
+                            LOG.warnf(
+                                    error,
+                                    "Service propagation remains pending: service_id=%s version=%d error_type=%s",
+                                    pending.serviceId(),
+                                    pending.version(),
+                                    error.getClass().getSimpleName());
+                        });
+    }
+
+    private void updateReconciliationBacklog() {
+        reconciliationBacklog.set(Math.min(MAX_RECONCILIATION_BACKLOG, pendingPropagations.size()));
+    }
+
+    private static final class PendingPropagation {
+        private final String serviceId;
+        private final long version;
+        private final Supplier<Uni<Void>> operation;
+        private final AtomicBoolean running = new AtomicBoolean();
+
+        private PendingPropagation(String serviceId, long version, Supplier<Uni<Void>> operation) {
+            this.serviceId = serviceId;
+            this.version = version;
+            this.operation = operation;
+        }
+
+        private String serviceId() {
+            return serviceId;
+        }
+
+        private long version() {
+            return version;
+        }
+
+        private Supplier<Uni<Void>> operation() {
+            return operation;
+        }
+
+        private boolean start() {
+            return running.compareAndSet(false, true);
+        }
+
+        private void finish() {
+            running.set(false);
+        }
+
+        private void cancel() {
+            running.set(false);
+        }
     }
 
     /** Return local routing state together with the latest durable generation. */
     public Uni<RoutingSnapshotStatus> routingStatus() {
+        retryPendingPropagations();
         return repository.currentGeneration().map(generation -> {
             durableGeneration.accumulateAndGet(generation, Math::max);
             return localRoutingStatus();
@@ -636,12 +764,25 @@ public class ServiceRegistry {
         final var state = routingState.get();
         final var active = state.generation();
         final var durable = durableGeneration.get();
+        final var refreshed = lastRefreshed.get();
+        final var snapshotAgeSeconds = refreshed.equals(Instant.MIN)
+                ? -1L
+                : Math.max(0L, Duration.between(refreshed, Instant.now()).toSeconds());
         return new RoutingSnapshotStatus(
                 active,
                 durable,
                 Math.max(0L, durable - active),
                 state.checksum(),
-                Optional.ofNullable(lastRejectedGeneration.get()));
+                Optional.ofNullable(lastRejectedGeneration.get()),
+                snapshotAgeSeconds,
+                Optional.ofNullable(lastPropagationErrorClass.get()),
+                reconciliationBacklog.get(),
+                pendingPropagations.values().stream()
+                        .sorted(Comparator.comparing(PendingPropagation::serviceId))
+                        .limit(MAX_RECONCILIATION_BACKLOG)
+                        .map(pending ->
+                                new RoutingSnapshotStatus.PendingPropagation(pending.serviceId(), pending.version()))
+                        .toList());
     }
 
     private static String checksum(List<ServiceRegistration> registrations) {

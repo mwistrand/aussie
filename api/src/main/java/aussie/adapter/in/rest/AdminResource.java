@@ -102,13 +102,7 @@ public class AdminResource {
                     return registration.map(result -> switch (result) {
                         case RegistrationResult.Success s -> {
                             audit(identity, "service.register", service.serviceId(), "success");
-                            yield Response.status(Response.Status.CREATED)
-                                    .entity(ServiceRegistrationResponse.fromModel(s.registration()))
-                                    .header(
-                                            "ETag",
-                                            VersionPreconditions.etag(
-                                                    s.registration().version()))
-                                    .build();
+                            yield registrationResponse(s.registration(), s.propagationPending());
                         }
                         case RegistrationResult.Failure f -> {
                             audit(identity, "service.register", service.serviceId(), "rejected_" + f.statusCode());
@@ -116,6 +110,41 @@ public class AdminResource {
                         }
                     });
                 };
+                if (mutationStore != null && mutationStore.enabled()) {
+                    return AdminMutationSupport.idempotentWithCommit(
+                            mutationStore,
+                            identity,
+                            "service.register",
+                            idempotencyKey,
+                            new RegistrationFingerprint(service, expectedVersion),
+                            committed -> {
+                                var registration = expectedVersion == null
+                                        ? serviceRegistry.registerWithCommit(
+                                                service,
+                                                claims,
+                                                null,
+                                                ignored -> committed.commit(registrationResponse(service)))
+                                        : serviceRegistry.registerWithCommit(
+                                                service,
+                                                claims,
+                                                expectedVersion,
+                                                ignored -> committed.commit(registrationResponse(service)));
+                                return registration.map(result -> switch (result) {
+                                    case RegistrationResult.Success s -> {
+                                        audit(identity, "service.register", service.serviceId(), "success");
+                                        yield registrationResponse(s.registration(), s.propagationPending());
+                                    }
+                                    case RegistrationResult.Failure f -> {
+                                        audit(
+                                                identity,
+                                                "service.register",
+                                                service.serviceId(),
+                                                "rejected_" + f.statusCode());
+                                        throw toGatewayProblem(f);
+                                    }
+                                });
+                            });
+                }
                 return AdminMutationSupport.idempotent(
                         mutationStore,
                         identity,
@@ -130,31 +159,77 @@ public class AdminResource {
     }
 
     public Uni<Response> unregisterService(String serviceId) {
-        return unregisterService(serviceId, null);
+        return unregisterService(serviceId, null, null);
+    }
+
+    public Uni<Response> unregisterService(String serviceId, String ifMatch) {
+        return unregisterService(serviceId, ifMatch, null);
     }
 
     @DELETE
     @Path("/{serviceId}")
     @PermissionsAllowed({Permission.SERVICE_CONFIG_DELETE_VALUE, Permission.ADMIN_VALUE})
     public Uni<Response> unregisterService(
-            @PathParam("serviceId") String serviceId, @HeaderParam("If-Match") String ifMatch) {
+            @PathParam("serviceId") String serviceId,
+            @HeaderParam("If-Match") String ifMatch,
+            @HeaderParam("Idempotency-Key") String idempotencyKey) {
         final Long expectedVersion = VersionPreconditions.parseIfMatch(ifMatch);
         return identityAssociation.getDeferredIdentity().flatMap(identity -> {
             var claims = extractClaims(identity);
 
-            var deletion = expectedVersion == null
-                    ? serviceRegistry.unregisterAuthorized(serviceId, claims)
-                    : serviceRegistry.unregisterAuthorized(serviceId, claims, expectedVersion);
-            return deletion.map(result -> switch (result) {
-                case RegistrationResult.Success s -> {
-                    audit(identity, "service.delete", serviceId, "success");
-                    yield Response.noContent().build();
+            Supplier<Uni<Response>> operation =
+                    () -> deleteResponse(identity, serviceId, claims, expectedVersion, false);
+            if (mutationStore != null && mutationStore.enabled()) {
+                return AdminMutationSupport.idempotentWithCommit(
+                        mutationStore,
+                        identity,
+                        "service.delete",
+                        idempotencyKey,
+                        new DeletionFingerprint(serviceId, expectedVersion),
+                        committed -> deleteResponse(identity, serviceId, claims, expectedVersion, true, committed));
+            }
+            return AdminMutationSupport.idempotent(
+                    mutationStore,
+                    identity,
+                    "service.delete",
+                    idempotencyKey,
+                    new DeletionFingerprint(serviceId, expectedVersion),
+                    operation);
+        });
+    }
+
+    private Uni<Response> deleteResponse(
+            SecurityIdentity identity,
+            String serviceId,
+            Set<String> claims,
+            Long expectedVersion,
+            boolean commitAware,
+            RedisAdminMutationStore.CommittedOperation... committed) {
+        var deletion = commitAware
+                ? (expectedVersion == null
+                        ? serviceRegistry.unregisterAuthorizedWithCommit(
+                                serviceId, claims, null, ignored -> committed[0].commit(pendingDeleteResponse()))
+                        : serviceRegistry.unregisterAuthorizedWithCommit(
+                                serviceId,
+                                claims,
+                                expectedVersion,
+                                ignored -> committed[0].commit(pendingDeleteResponse())))
+                : (expectedVersion == null
+                        ? serviceRegistry.unregisterAuthorized(serviceId, claims)
+                        : serviceRegistry.unregisterAuthorized(serviceId, claims, expectedVersion));
+        return deletion.map(result -> switch (result) {
+            case RegistrationResult.Success s -> {
+                audit(identity, "service.delete", serviceId, "success");
+                var response = Response.noContent();
+                if (s.propagationPending()) {
+                    response.header("X-Aussie-Propagation-State", "pending");
                 }
-                case RegistrationResult.Failure f -> {
-                    audit(identity, "service.delete", serviceId, "rejected_" + f.statusCode());
-                    throw toGatewayProblem(f);
-                }
-            });
+                yield response.build();
+            }
+            case RegistrationResult.Failure f -> {
+                audit(identity, "service.delete", serviceId, "rejected_" + f.statusCode());
+                throw toGatewayProblem(f);
+            }
         });
     }
 
@@ -236,5 +311,27 @@ public class AdminResource {
         AdminMutationSupport.audit(mutationStore, identity, action, target, outcome);
     }
 
+    private Response registrationResponse(ServiceRegistration service) {
+        return registrationResponse(service, true);
+    }
+
+    private Response registrationResponse(ServiceRegistration service, boolean propagationPending) {
+        var response = Response.status(Response.Status.CREATED)
+                .entity(ServiceRegistrationResponse.fromModel(service))
+                .header("ETag", VersionPreconditions.etag(service.version()));
+        if (propagationPending) {
+            response.header("X-Aussie-Propagation-State", "pending");
+        }
+        return response.build();
+    }
+
+    private Response pendingDeleteResponse() {
+        return Response.noContent()
+                .header("X-Aussie-Propagation-State", "pending")
+                .build();
+    }
+
     private record RegistrationFingerprint(ServiceRegistration service, Long expectedVersion) {}
+
+    private record DeletionFingerprint(String serviceId, Long expectedVersion) {}
 }

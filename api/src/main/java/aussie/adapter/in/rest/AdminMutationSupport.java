@@ -2,6 +2,7 @@ package aussie.adapter.in.rest;
 
 import java.time.Duration;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import jakarta.ws.rs.core.Response;
@@ -60,6 +61,50 @@ final class AdminMutationSupport {
         }
 
         var result = action.get().memoize().indefinitely();
+        var prior = OPERATIONS.asMap().putIfAbsent(cacheKey, new Entry(fingerprint, result));
+        if (prior == null) {
+            return result;
+        }
+        return prior.fingerprint().equals(fingerprint)
+                ? prior.result()
+                : Uni.createFrom()
+                        .failure(GatewayProblem.conflict("Idempotency-Key was already used for a different request"));
+    }
+
+    static Uni<Response> idempotentWithCommit(
+            RedisAdminMutationStore distributedStore,
+            SecurityIdentity identity,
+            String scope,
+            String key,
+            Object fingerprint,
+            Function<RedisAdminMutationStore.CommittedOperation, Uni<Response>> action) {
+        if (key == null || key.isBlank()) {
+            return action.apply(response -> Uni.createFrom().voidItem());
+        }
+        if (key.length() > 128) {
+            throw GatewayProblem.badRequest("Idempotency-Key must be 128 characters or less");
+        }
+
+        var cacheKey = new IdempotencyKey(
+                scope,
+                identityAttribute(identity, "authenticationMethod"),
+                identityAttribute(identity, "issuer"),
+                principalId(identity),
+                key);
+        var existing = OPERATIONS.getIfPresent(cacheKey);
+        if (existing != null) {
+            if (!existing.fingerprint().equals(fingerprint)) {
+                throw GatewayProblem.conflict("Idempotency-Key was already used for a different request");
+            }
+            return existing.result();
+        }
+
+        if (distributedStore != null && distributedStore.enabled()) {
+            return distributedStore.execute(operationKey(cacheKey), fingerprint, action);
+        }
+
+        var result =
+                action.apply(response -> Uni.createFrom().voidItem()).memoize().indefinitely();
         var prior = OPERATIONS.asMap().putIfAbsent(cacheKey, new Entry(fingerprint, result));
         if (prior == null) {
             return result;

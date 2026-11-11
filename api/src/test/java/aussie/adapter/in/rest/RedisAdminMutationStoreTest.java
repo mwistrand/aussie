@@ -2,6 +2,7 @@ package aussie.adapter.in.rest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -98,6 +99,33 @@ class RedisAdminMutationStoreTest {
                         .indefinitely());
 
         assertEquals(1, calls.get());
+    }
+
+    @Test
+    void storesCommittedResponseBeforeMutationCompletes() {
+        var fixture = fixture();
+        var response = Response.noContent()
+                .header("X-Aussie-Propagation-State", "pending")
+                .build();
+
+        var result = fixture.store()
+                .execute("commit-before-propagation", "same-fingerprint", committed -> committed
+                        .commit(response)
+                        .replaceWith(response))
+                .await()
+                .indefinitely();
+
+        assertEquals(response.getStatus(), result.getStatus());
+        assertTrue(fixture.stored().get().contains("\"status\":\"complete\""));
+
+        var replay = fixture.store()
+                .execute("commit-before-propagation", "same-fingerprint", () -> Uni.createFrom()
+                        .item(Response.serverError().build()))
+                .await()
+                .indefinitely();
+        assertEquals(
+                response.getHeaderString("X-Aussie-Propagation-State"),
+                replay.getHeaderString("X-Aussie-Propagation-State"));
     }
 
     @Test

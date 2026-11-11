@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -28,9 +30,11 @@ import aussie.core.model.auth.ServicePermissionPolicy;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointVisibility;
 import aussie.core.model.routing.RouteMatch;
+import aussie.core.model.routing.RoutingSnapshotStatus;
 import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.RegistrationResult;
 import aussie.core.model.service.ServiceRegistration;
+import aussie.core.port.out.ServiceConfigEventPublisher;
 import aussie.core.service.auth.*;
 import aussie.core.service.routing.*;
 
@@ -978,6 +982,54 @@ class ServiceRegistryTest {
 
             assertTrue(registry.getServiceFromLocalCache("lookup-service").isEmpty());
         }
+    }
+
+    @Test
+    @DisplayName("Committed registration remains successful when propagation fails")
+    void committedRegistrationDoesNotBecomeFailureWhenPropagationFails() {
+        var failingPublisher = new ServiceConfigEventPublisher() {
+            @Override
+            public Uni<Void> publishServiceChanged(String serviceId) {
+                return Uni.createFrom().failure(new IllegalStateException("pub/sub unavailable"));
+            }
+
+            @Override
+            public Uni<Void> publishServiceRemoved(String serviceId) {
+                return Uni.createFrom().failure(new IllegalStateException("pub/sub unavailable"));
+            }
+
+            @Override
+            public Multi<aussie.core.model.service.ServiceConfigEvent> subscribe() {
+                return Multi.createFrom().empty();
+            }
+        };
+        var validator = new ServiceRegistrationValidator(
+                PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG);
+        var propagationRegistry = new ServiceRegistry(
+                repository,
+                NoOpConfigurationCache.INSTANCE,
+                validator,
+                authService,
+                failingPublisher,
+                TEST_CACHE_CONFIG);
+
+        var result = propagationRegistry
+                .register(createService("propagation-service", "http://192.0.2.10:8080"))
+                .await()
+                .atMost(TIMEOUT);
+
+        assertInstanceOf(RegistrationResult.Success.class, result);
+        assertTrue(repository
+                .findById("propagation-service")
+                .await()
+                .atMost(TIMEOUT)
+                .isPresent());
+        var status = propagationRegistry.routingStatus().await().atMost(TIMEOUT);
+        assertEquals(Optional.of("IllegalStateException"), status.lastPropagationErrorClass());
+        assertEquals(1, status.reconciliationBacklog());
+        assertEquals(
+                List.of(new RoutingSnapshotStatus.PendingPropagation("propagation-service", 1L)),
+                status.pendingPropagations());
     }
 
     private ServiceRegistration createService(String serviceId, String baseUrl) {

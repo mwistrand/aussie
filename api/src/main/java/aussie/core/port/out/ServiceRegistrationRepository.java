@@ -81,4 +81,14 @@ public interface ServiceRegistrationRepository {
 
     /** Return the durable, monotonically increasing generation of service configuration. */
     Uni<Long> currentGeneration();
+
+    /** Wait for any generation reconciliation already required by a committed mutation. */
+    default Uni<Void> awaitGeneration() {
+        return Uni.createFrom().voidItem();
+    }
+
+    /** Reconcile the durable generation before the initial snapshot is built. */
+    default Uni<Void> reconcileGeneration() {
+        return Uni.createFrom().voidItem();
+    }
 }

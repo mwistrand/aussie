@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -63,6 +64,10 @@ public class RedisAdminMutationStore {
     }
 
     Uni<Response> execute(String operationKey, Object fingerprint, Supplier<Uni<Response>> action) {
+        return execute(operationKey, fingerprint, ignored -> action.get());
+    }
+
+    Uni<Response> execute(String operationKey, Object fingerprint, Function<CommittedOperation, Uni<Response>> action) {
         final var key = OPERATION_PREFIX + operationKey;
         final var fingerprintHash = fingerprintHash(fingerprint);
         final var pending = pending(fingerprintHash);
@@ -87,10 +92,25 @@ public class RedisAdminMutationStore {
                 .replaceWithVoid();
     }
 
-    private Uni<Response> runAndStore(String key, String fingerprint, Supplier<Uni<Response>> action) {
-        return action.get().flatMap(response -> encode(fingerprint, response)
-                .flatMap(encoded ->
-                        values.setex(key, RETRY_TTL.toSeconds(), encoded).replaceWith(response)));
+    private Uni<Response> runAndStore(
+            String key, String fingerprint, Function<CommittedOperation, Uni<Response>> action) {
+        final var committed = new java.util.concurrent.atomic.AtomicBoolean();
+        final CommittedOperation commit = response -> {
+            return encode(fingerprint, response)
+                    .flatMap(encoded -> values.setex(key, RETRY_TTL.toSeconds(), encoded))
+                    .invoke(() -> committed.set(true));
+        };
+        return action.apply(commit).flatMap(response -> {
+            if (committed.get()) {
+                return Uni.createFrom().item(response);
+            }
+            return commit.commit(response).replaceWith(response);
+        });
+    }
+
+    @FunctionalInterface
+    interface CommittedOperation {
+        Uni<Void> commit(Response response);
     }
 
     private Uni<Response> replay(String encoded, String fingerprint) {
