@@ -173,7 +173,9 @@ public class RedisServiceConfigEventPublisher implements ServiceConfigEventPubli
                     processor.onNext(event);
                 }
             } catch (Exception e) {
-                LOG.warnf(e, "Failed to parse service config event: %s", message);
+                LOG.warnf(
+                        "Failed to parse service config event: error_type=%s message_hash=%s",
+                        SafeLogging.errorType(e), SafeLogging.identifier(message));
             }
         }
 
@@ -199,7 +201,7 @@ public class RedisServiceConfigEventPublisher implements ServiceConfigEventPubli
 
             final var firstSep = message.indexOf(MESSAGE_SEPARATOR);
             if (firstSep < 0) {
-                LOG.warnf("Invalid service config event format: %s", message);
+                LOG.warnf("Invalid service config event format: message_hash=%s", SafeLogging.identifier(message));
                 return null;
             }
 
@@ -210,24 +212,30 @@ public class RedisServiceConfigEventPublisher implements ServiceConfigEventPubli
             if (type.endsWith("-v1")) {
                 final var secondSep = payload.indexOf(MESSAGE_SEPARATOR);
                 if (secondSep <= 0) {
-                    LOG.warnf("Invalid versioned service config event format: %s", message);
+                    LOG.warnf(
+                            "Invalid versioned service config event format: message_hash=%s",
+                            SafeLogging.identifier(message));
                     return null;
                 }
                 try {
                     generation = Long.parseLong(payload.substring(0, secondSep));
                     serviceId = payload.substring(secondSep + 1);
                 } catch (NumberFormatException invalidGeneration) {
-                    LOG.warnf("Invalid service config event generation: %s", message);
+                    LOG.warnf(
+                            "Invalid service config event generation: message_hash=%s",
+                            SafeLogging.identifier(message));
                     return null;
                 }
                 if (generation < 0L) {
-                    LOG.warnf("Negative service config event generation: %s", message);
+                    LOG.warnf(
+                            "Negative service config event generation: message_hash=%s",
+                            SafeLogging.identifier(message));
                     return null;
                 }
             }
 
             if (serviceId.isEmpty()) {
-                LOG.warnf("Empty service ID in config event: %s", message);
+                LOG.warnf("Empty service ID in config event: message_hash=%s", SafeLogging.identifier(message));
                 return null;
             }
 

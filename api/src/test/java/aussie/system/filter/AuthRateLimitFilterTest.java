@@ -457,6 +457,7 @@ class AuthRateLimitFilterTest {
             final var eventCaptor = ArgumentCaptor.forClass(SecurityEvent.class);
             verify(securityEventDispatcher).dispatch(eventCaptor.capture());
             final var event = (SecurityEvent.AuthenticationLockout) eventCaptor.getValue();
+            assertEquals("ip:c5eb5a4cc76a", event.lockedKey());
             assertEquals(0, event.lockoutCount());
         }
 

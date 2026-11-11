@@ -21,6 +21,7 @@ import java.util.Set;
 import jakarta.ws.rs.core.Response;
 
 import io.quarkiverse.httpproblem.HttpProblem;
+import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jose4j.jwa.AlgorithmConstraints;
@@ -58,11 +59,18 @@ class TokenRevocationResourceTest {
     @Mock
     private TokenValidationService tokenValidationService;
 
+    @Mock
+    private SecurityIdentity identity;
+
+    @Mock
+    private RedisAdminMutationStore mutationStore;
+
     private TokenRevocationResource resource;
 
     @BeforeEach
     void setUp() {
-        resource = new TokenRevocationResource(revocationService, config, tokenValidationService);
+        resource =
+                new TokenRevocationResource(revocationService, config, tokenValidationService, identity, mutationStore);
     }
 
     private void whenTokenIsValidated(String token, String jti, Instant expiresAt) {

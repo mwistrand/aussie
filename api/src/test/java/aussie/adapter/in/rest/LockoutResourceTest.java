@@ -14,6 +14,7 @@ import java.util.Map;
 import jakarta.ws.rs.core.Response;
 
 import io.quarkiverse.httpproblem.HttpProblem;
+import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,11 +39,17 @@ class LockoutResourceTest {
     @Mock
     private AuthRateLimitConfig config;
 
+    @Mock
+    private SecurityIdentity identity;
+
+    @Mock
+    private RedisAdminMutationStore mutationStore;
+
     private LockoutResource resource;
 
     @BeforeEach
     void setUp() {
-        resource = new LockoutResource(rateLimitService, config);
+        resource = new LockoutResource(rateLimitService, config, identity, mutationStore);
     }
 
     private LockoutInfo createLockoutInfo(String key) {

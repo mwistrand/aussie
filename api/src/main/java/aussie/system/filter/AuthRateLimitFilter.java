@@ -20,6 +20,7 @@ import aussie.adapter.out.telemetry.SecurityEventDispatcher;
 import aussie.adapter.out.telemetry.TelemetryHelper;
 import aussie.core.config.AuthRateLimitConfig;
 import aussie.core.service.auth.AuthRateLimitService;
+import aussie.core.util.SafeLogging;
 import aussie.core.util.SecureHash;
 import aussie.spi.FailedAttemptRepository;
 import aussie.spi.SecurityEvent;
@@ -118,7 +119,7 @@ public class AuthRateLimitFilter {
                     final var event = new SecurityEvent.AuthenticationLockout(
                             Instant.now(),
                             hashClientId(ip),
-                            result.key(),
+                            SafeLogging.lockoutKey(result.key()),
                             0, // Will be filled by getLockoutInfo if needed
                             result.retryAfterSeconds(),
                             lockoutCount);
@@ -157,7 +158,6 @@ public class AuthRateLimitFilter {
 
     private void setLockoutSpanAttributes(AuthRateLimitService.RateLimitResult result) {
         final var span = Span.current();
-        telemetryHelper.setAuthLockoutKey(span, result.key());
         telemetryHelper.setAuthLockoutRetryAfter(span, result.retryAfterSeconds());
     }
 

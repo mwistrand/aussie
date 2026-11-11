@@ -11,6 +11,7 @@ import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
 import aussie.core.config.AuthRateLimitConfig;
+import aussie.core.util.SafeLogging;
 import aussie.spi.FailedAttemptRepository;
 import aussie.spi.FailedAttemptRepository.LockoutInfo;
 
@@ -127,7 +128,9 @@ public class AuthRateLimitService {
                     final var retryAfter = expiry != null
                             ? Duration.between(Instant.now(), expiry).toSeconds()
                             : config.lockoutDuration().toSeconds();
-                    LOG.debugf("Auth blocked for %s: locked out until %s", key, expiry);
+                    LOG.debugf(
+                            "Auth blocked for lockout_key=%s: locked out until %s",
+                            SafeLogging.lockoutKey(key), expiry);
                     return RateLimitResult.blocked(key, Math.max(0, retryAfter), expiry);
                 });
             }
@@ -154,7 +157,9 @@ public class AuthRateLimitService {
         final var ipKey = ip != null && config.trackByIp() ? IP_PREFIX + ip : null;
         final var identifierKey = identifier != null && config.trackByIdentifier() ? USER_PREFIX + identifier : null;
 
-        LOG.debugf("Recording failed auth attempt: ip=%s, identifier=%s, reason=%s", ip, identifier, reason);
+        LOG.debugf(
+                "Recording failed auth attempt: ip_hash=%s, identifier_hash=%s, reason_code=%s",
+                SafeLogging.identifier(ip), SafeLogging.identifier(identifier), reasonCode(reason));
 
         // Record both IP and identifier attempts
         Uni<LockoutResult> ipResult = ipKey != null
@@ -192,7 +197,9 @@ public class AuthRateLimitService {
         final var ipKey = ip != null && config.trackByIp() ? IP_PREFIX + ip : null;
         final var keyKey = keyPrefix != null && config.trackByIdentifier() ? API_KEY_PREFIX + keyPrefix : null;
 
-        LOG.debugf("Recording failed API key attempt: ip=%s, keyPrefix=%s, reason=%s", ip, keyPrefix, reason);
+        LOG.debugf(
+                "Recording failed API key attempt: ip_hash=%s, key_prefix_hash=%s, reason_code=%s",
+                SafeLogging.identifier(ip), SafeLogging.identifier(keyPrefix), reasonCode(reason));
 
         // Record both IP and key prefix attempts
         Uni<LockoutResult> ipResult = ipKey != null
@@ -224,14 +231,16 @@ public class AuthRateLimitService {
                             .recordLockout(key, lockoutDuration, reason)
                             .map(v -> {
                                 LOG.warnf(
-                                        "Auth lockout triggered for %s: attempts=%d, duration=%s",
-                                        key, count, lockoutDuration);
+                                        "Auth lockout triggered for lockout_key=%s: attempts=%d, duration=%s",
+                                        SafeLogging.lockoutKey(key), count, lockoutDuration);
                                 return LockoutResult.locked(key, count.intValue(), lockoutDuration.toSeconds());
                             });
                 });
             }
 
-            LOG.debugf("Failed attempt recorded for %s: count=%d, remaining=%d", key, count, Math.max(0, remaining));
+            LOG.debugf(
+                    "Failed attempt recorded for lockout_key=%s: count=%d, remaining=%d",
+                    SafeLogging.lockoutKey(key), count, Math.max(0, remaining));
             return Uni.createFrom().item(LockoutResult.notLocked(count.intValue(), Math.max(0, remaining)));
         });
     }
@@ -269,7 +278,9 @@ public class AuthRateLimitService {
         final var ipKey = ip != null && config.trackByIp() ? IP_PREFIX + ip : null;
         final var identifierKey = identifier != null && config.trackByIdentifier() ? USER_PREFIX + identifier : null;
 
-        LOG.debugf("Clearing failed attempts: ip=%s, identifier=%s", ip, identifier);
+        LOG.debugf(
+                "Clearing failed attempts: ip_hash=%s, identifier_hash=%s",
+                SafeLogging.identifier(ip), SafeLogging.identifier(identifier));
 
         Uni<Void> ipClear = ipKey != null
                 ? repository.clearFailedAttempts(ipKey)
@@ -290,8 +301,22 @@ public class AuthRateLimitService {
      * @return Uni completing when cleared
      */
     public Uni<Void> clearLockout(String key) {
-        LOG.infof("Clearing lockout for %s", key);
+        LOG.infof("Clearing lockout for lockout_key=%s", SafeLogging.lockoutKey(key));
         return repository.clearLockout(key).call(() -> repository.clearFailedAttempts(key));
+    }
+
+    private static String reasonCode(String reason) {
+        return switch (reason == null ? "" : reason) {
+            case "invalid_key",
+                    "invalid_api_key_format",
+                    "invalid_authorization",
+                    "invalid_session",
+                    "expired_session",
+                    "invalid_token",
+                    "ambiguous_credential",
+                    "conflicting_authentication" -> reason;
+            default -> "other";
+        };
     }
 
     /**

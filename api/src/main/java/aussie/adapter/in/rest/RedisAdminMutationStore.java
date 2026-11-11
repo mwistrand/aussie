@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
-import java.util.Map;
+import java.util.HashMap;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -80,15 +80,20 @@ public class RedisAdminMutationStore {
     }
 
     Uni<Void> appendAudit(String actor, String action, String target, String outcome) {
-        return audit.xadd(
-                        AUDIT_STREAM,
-                        new XAddArgs().maxlen(10_000L).nearlyExactTrimming(),
-                        Map.of(
-                                "at", Instant.now().toString(),
-                                "actor", actor,
-                                "action", action,
-                                "target", target,
-                                "outcome", outcome))
+        return appendAudit(actor, action, target, outcome, null);
+    }
+
+    Uni<Void> appendAudit(String actor, String action, String target, String outcome, String reason) {
+        final var fields = new HashMap<String, String>();
+        fields.put("at", Instant.now().toString());
+        fields.put("actor", actor);
+        fields.put("action", action);
+        fields.put("target", target);
+        fields.put("outcome", outcome);
+        if (reason != null && !reason.isBlank()) {
+            fields.put("reason", reason);
+        }
+        return audit.xadd(AUDIT_STREAM, new XAddArgs().maxlen(10_000L).nearlyExactTrimming(), fields)
                 .replaceWithVoid();
     }
 

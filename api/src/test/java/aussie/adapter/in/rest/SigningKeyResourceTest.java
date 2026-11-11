@@ -20,6 +20,7 @@ import java.util.Optional;
 import jakarta.ws.rs.core.Response;
 
 import io.quarkiverse.httpproblem.HttpProblem;
+import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -48,11 +49,17 @@ class SigningKeyResourceTest {
     @Mock
     private KeyRotationConfig keyRotationConfig;
 
+    @Mock
+    private SecurityIdentity identity;
+
+    @Mock
+    private RedisAdminMutationStore mutationStore;
+
     private SigningKeyResource resource;
 
     @BeforeEach
     void setUp() {
-        resource = new SigningKeyResource(keyRegistry, keyRotationService, keyRotationConfig);
+        resource = new SigningKeyResource(keyRegistry, keyRotationService, keyRotationConfig, identity, mutationStore);
     }
 
     private SigningKeyRecord createKeyRecord(String keyId, KeyStatus status) {

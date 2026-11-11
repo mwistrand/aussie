@@ -268,8 +268,24 @@ Some span attributes can be enabled or disabled to control cardinality and stora
 | `aussie.telemetry.attributes.rate-limit-type` | `true` | Type of rate limit (http, ws_connection) |
 | `aussie.telemetry.attributes.rate-limit-retry-after` | `true` | Seconds until rate limit resets |
 | `aussie.telemetry.attributes.auth-rate-limited` | `true` | Whether request was auth rate limited (brute force protection) |
-| `aussie.telemetry.attributes.auth-lockout-key` | `true` | The lockout key (IP or identifier) |
 | `aussie.telemetry.attributes.auth-lockout-retry-after` | `true` | Seconds until auth lockout resets |
+
+### Privacy and retention
+
+Normal logs, spans, metrics, and security events do not contain credentials,
+credential fragments, session or token identifiers, IP addresses, usernames,
+emails, full URLs, or operator-supplied reason text. Lockout correlation uses a
+stable short hash plus the bounded key type; retry-after and counts remain
+available for operations. The raw `auth-lockout-key` span attribute is removed.
+
+Durable administrative audit records are written to the access-controlled Redis
+stream `aussie:admin:audit`, retained at approximately 10,000 entries. Reasons
+supplied for administrative mutations are bounded and control-character sanitized
+in this stream while normal telemetry records only whether a reason was present.
+Restrict
+Redis and telemetry backend access to the platform/security operators, use
+encrypted transport, and apply the organization's retention and deletion policy
+to exported logs, traces, metrics, and audit records.
 
 **High-Cardinality Warning**: `upstream-uri` is disabled by default because variable path segments can create unbounded cardinality. User info, query parameters, and fragments are always omitted to avoid exporting credentials or other sensitive values. Enable only for debugging in non-production environments.
 
