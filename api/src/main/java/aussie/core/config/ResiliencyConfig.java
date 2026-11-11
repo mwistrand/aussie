@@ -28,6 +28,9 @@ public interface ResiliencyConfig {
      */
     HttpConfig http();
 
+    /** Outbound DNS resolver capacity and timeout configuration. */
+    DnsConfig dns();
+
     /**
      * JWKS fetch and cache configuration.
      */
@@ -116,6 +119,18 @@ public interface ResiliencyConfig {
             @WithDefault("PT10S")
             Duration handshakeTimeout();
         }
+    }
+
+    /** DNS resolution settings. */
+    interface DnsConfig {
+
+        /** Maximum time allowed for one DNS lookup. */
+        @WithDefault("PT5S")
+        Duration lookupTimeout();
+
+        /** Maximum number of concurrent DNS lookups. */
+        @WithDefault("64")
+        int maxConcurrentLookups();
     }
 
     /**
