@@ -111,9 +111,7 @@ func runRolesUpdate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("role not found: %s", roleID)
 	}
 	if resp.StatusCode == http.StatusBadRequest {
-		var errResp struct {
-			Detail string `json:"detail"`
-		}
+		var errResp ProblemResponse
 		_ = resp.DecodeJSON(&errResp)
 		return fmt.Errorf("invalid request: %s", errResp.Detail)
 	}

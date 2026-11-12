@@ -190,6 +190,14 @@ type APIKey struct {
 	Revoked     bool     `json:"revoked"`
 }
 
+// APIKeyCreateRequest is the request body for creating an API key.
+type APIKeyCreateRequest struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	TtlDays     *int     `json:"ttlDays,omitempty"`
+	Permissions []string `json:"permissions"`
+}
+
 // APIKeyCreateResponse is the response from creating an API key.
 type APIKeyCreateResponse struct {
 	KeyId       string   `json:"keyId"`
@@ -235,4 +243,25 @@ type TranslationConfigValidation struct {
 type TranslationTestResult struct {
 	Roles       []string `json:"roles"`
 	Permissions []string `json:"permissions"`
+}
+
+// WhoAmIResponse is the authenticated principal returned by the control plane.
+type WhoAmIResponse struct {
+	KeyId                string   `json:"keyId,omitempty"`
+	Subject              string   `json:"sub,omitempty"`
+	Name                 string   `json:"name,omitempty"`
+	Permissions          []string `json:"permissions,omitempty"`
+	Groups               []string `json:"groups,omitempty"`
+	EffectivePermissions []string `json:"effectivePermissions,omitempty"`
+	ExpiresAt            string   `json:"expiresAt,omitempty"`
+}
+
+// ProblemResponse is the RFC-style error detail used by control-plane endpoints.
+type ProblemResponse struct {
+	Detail string `json:"detail,omitempty"`
+}
+
+// ErrorResponse is the legacy validation error returned by API-key creation.
+type ErrorResponse struct {
+	Error string `json:"error,omitempty"`
 }

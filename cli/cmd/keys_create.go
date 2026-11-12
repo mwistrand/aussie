@@ -50,15 +50,15 @@ func runKeysCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build request body
-	reqBody := map[string]interface{}{
-		"name":        createKeyName,
-		"permissions": createKeyPermissions,
-	}
-	if createKeyDescription != "" {
-		reqBody["description"] = createKeyDescription
-	}
+	var ttlDays *int
 	if createKeyTtlDays > 0 {
-		reqBody["ttlDays"] = createKeyTtlDays
+		ttlDays = &createKeyTtlDays
+	}
+	reqBody := APIKeyCreateRequest{
+		Name:        createKeyName,
+		Description: createKeyDescription,
+		TtlDays:     ttlDays,
+		Permissions: createKeyPermissions,
 	}
 
 	resp, err := client.DoJSON(http.MethodPost, "/admin/api-keys", reqBody)
@@ -73,9 +73,7 @@ func runKeysCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("insufficient permissions to create API keys")
 	}
 	if resp.StatusCode == http.StatusBadRequest {
-		var errResp struct {
-			Error string `json:"error"`
-		}
+		var errResp ErrorResponse
 		_ = resp.DecodeJSON(&errResp)
 		return fmt.Errorf("invalid request: %s", errResp.Error)
 	}

@@ -41,6 +41,19 @@ func TestServiceRegistrationMatchesGoldenFixture(t *testing.T) {
 	}
 }
 
+func TestAPIKeyCreateRequestOmitsUnsetTTL(t *testing.T) {
+	data, err := json.Marshal(APIKeyCreateRequest{
+		Name:        "ci",
+		Permissions: []string{"admin"},
+	})
+	if err != nil {
+		t.Fatalf("marshal API key request: %v", err)
+	}
+	if string(data) != `{"name":"ci","permissions":["admin"]}` {
+		t.Fatalf("unexpected request JSON: %s", data)
+	}
+}
+
 func mustJSON(t *testing.T, value any) []byte {
 	t.Helper()
 	data, err := json.Marshal(value)

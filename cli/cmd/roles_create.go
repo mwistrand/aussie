@@ -65,9 +65,7 @@ func runRolesCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("insufficient permissions to create roles (requires admin)")
 	}
 	if resp.StatusCode == http.StatusBadRequest {
-		var errResp struct {
-			Detail string `json:"detail"`
-		}
+		var errResp ProblemResponse
 		_ = resp.DecodeJSON(&errResp)
 		return fmt.Errorf("invalid request: %s", errResp.Detail)
 	}

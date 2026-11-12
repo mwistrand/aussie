@@ -131,15 +131,7 @@ func validateWithServer(cfg *config.Config, token string) error {
 
 // displayServerResponse parses and displays the whoami response.
 func displayServerResponse(resp *api.Response) error {
-	var whoami struct {
-		KeyId                string   `json:"keyId,omitempty"`
-		Subject              string   `json:"sub,omitempty"`
-		Name                 string   `json:"name,omitempty"`
-		Permissions          []string `json:"permissions,omitempty"`
-		Groups               []string `json:"groups,omitempty"`
-		EffectivePermissions []string `json:"effectivePermissions,omitempty"`
-		ExpiresAt            string   `json:"expiresAt,omitempty"`
-	}
+	var whoami WhoAmIResponse
 
 	if err := resp.DecodeJSON(&whoami); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
