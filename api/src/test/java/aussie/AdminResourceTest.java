@@ -4,6 +4,9 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import jakarta.inject.Inject;
 
 import io.quarkus.test.junit.QuarkusTest;
@@ -42,20 +45,13 @@ class AdminResourceTest {
     @Test
     @DisplayName("should round-trip service registration: create, list, get, delete")
     void shouldRoundTripServiceLifecycle() {
-        var requestBody = """
-                {
-                    "serviceId": "lifecycle-service",
-                    "displayName": "Lifecycle Service",
-                    "baseUrl": "http://backend.local:8081",
-                    "endpoints": [
-                        {
-                            "path": "/api/test",
-                            "methods": ["GET", "POST"],
-                            "visibility": "PUBLIC"
-                        }
-                    ]
-                }
-                """;
+        String requestBody;
+        try {
+            requestBody = Files.readString(
+                    Path.of("..", "contract-fixtures", "control-plane", "service-registration-request.json"));
+        } catch (java.io.IOException e) {
+            throw new AssertionError("unable to read control-plane contract fixture", e);
+        }
 
         given().contentType(ContentType.JSON)
                 .body(requestBody)
@@ -63,21 +59,21 @@ class AdminResourceTest {
                 .post("/admin/services")
                 .then()
                 .statusCode(201)
-                .body("serviceId", equalTo("lifecycle-service"))
+                .body("serviceId", equalTo("contract-fixture-service"))
                 .body("endpoints", hasSize(1))
-                .body("endpoints[0].path", equalTo("/api/test"));
+                .body("endpoints[0].path", equalTo("/api/users"));
 
         given().when().get("/admin/services").then().statusCode(200).body("$", hasSize(1));
 
         given().when()
-                .get("/admin/services/lifecycle-service")
+                .get("/admin/services/contract-fixture-service")
                 .then()
                 .statusCode(200)
                 .body("baseUrl", equalTo("http://backend.local:8081"));
 
-        given().when().delete("/admin/services/lifecycle-service").then().statusCode(204);
+        given().when().delete("/admin/services/contract-fixture-service").then().statusCode(204);
 
-        given().when().get("/admin/services/lifecycle-service").then().statusCode(404);
+        given().when().get("/admin/services/contract-fixture-service").then().statusCode(404);
     }
 
     @Test

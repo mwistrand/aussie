@@ -32,18 +32,6 @@ func init() {
 	serviceCmd.AddCommand(servicePreviewCmd)
 }
 
-// ServiceResponse represents the API response for a service
-type ServiceResponse struct {
-	ServiceID         string               `json:"serviceId"`
-	DisplayName       string               `json:"displayName"`
-	BaseURL           string               `json:"baseUrl"`
-	RoutePrefix       string               `json:"routePrefix"`
-	DefaultVisibility string               `json:"defaultVisibility"`
-	VisibilityRules   []VisibilityRule     `json:"visibilityRules"`
-	Endpoints         []EndpointConfig     `json:"endpoints"`
-	AccessConfig      *ServiceAccessConfig `json:"accessConfig"`
-}
-
 func runServicePreview(cmd *cobra.Command, args []string) error {
 	serviceID := args[0]
 

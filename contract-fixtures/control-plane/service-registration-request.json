@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "serviceId": "contract-fixture-service",
+  "displayName": "Contract Fixture Service",
+  "baseUrl": "http://backend.local:8081",
+  "routePrefix": "/api",
+  "defaultVisibility": "PRIVATE",
+  "defaultAuthRequired": true,
+  "visibilityRules": [
+    {
+      "pattern": "/health",
+      "methods": ["GET"],
+      "visibility": "PUBLIC"
+    }
+  ],
+  "endpoints": [
+    {
+      "path": "/api/users",
+      "methods": ["GET", "POST"],
+      "visibility": "PRIVATE",
+      "authRequired": true,
+      "type": "HTTP",
+      "rateLimitConfig": {
+        "requestsPerWindow": 100,
+        "windowSeconds": 60,
+        "burstCapacity": 20
+      }
+    }
+  ],
+  "accessConfig": {
+    "allowedIps": ["10.0.0.0/8"]
+  },
+  "cors": {
+    "allowedOrigins": ["https://console.example.test"],
+    "allowedMethods": ["GET", "POST"],
+    "allowedHeaders": ["Authorization", "Content-Type"],
+    "exposedHeaders": ["ETag"],
+    "allowCredentials": true,
+    "maxAge": 3600
+  },
+  "permissionPolicy": {
+    "permissions": {
+      "service.read": {
+        "anyOfPermissions": ["operator.read"]
+      }
+    }
+  },
+  "rateLimitConfig": {
+    "requestsPerWindow": 1000,
+    "windowSeconds": 60,
+    "burstCapacity": 100
+  }
+}
