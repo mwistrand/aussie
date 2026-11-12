@@ -1,0 +1,10 @@
+[
+  {
+    "id": "translation-1",
+    "version": 1,
+    "active": true,
+    "createdBy": "contract-user",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "comment": "contract fixture"
+  }
+]

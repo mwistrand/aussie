@@ -49,7 +49,9 @@ public class RedisServiceConfigEventPublisher implements ServiceConfigEventPubli
 
     public RedisServiceConfigEventPublisher(RedisDataSource redisDataSource, ServiceConfigPubSubConfig config) {
         this.config = config;
-        this.pubsub = redisDataSource.pubsub(String.class);
+        synchronized (RedisCommandInitializationLock.INSTANCE) {
+            this.pubsub = redisDataSource.pubsub(String.class);
+        }
         this.channel = config.topic();
         LOG.infof("Initialized Redis service config event publisher (topic: %s)", channel);
     }

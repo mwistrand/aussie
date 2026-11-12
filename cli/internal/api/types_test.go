@@ -261,6 +261,48 @@ func TestControlPlaneContractFixturesRoundTrip(t *testing.T) {
 	}
 }
 
+func TestEndpointFixtureMatrixIsValid(t *testing.T) {
+	fixtureDir := filepath.Join(filepath.Dir(mustSourceFile(t)), "../../../contract-fixtures/control-plane")
+	matrixData, err := os.ReadFile(filepath.Join(fixtureDir, "endpoint-matrix.json"))
+	if err != nil {
+		t.Fatalf("read endpoint matrix: %v", err)
+	}
+
+	var matrix struct {
+		Operations []struct {
+			Method          string  `json:"method"`
+			Path            string  `json:"path"`
+			SuccessStatus   int     `json:"successStatus"`
+			RequestFixture  *string `json:"requestFixture"`
+			ResponseFixture *string `json:"responseFixture"`
+		} `json:"operations"`
+	}
+	if err := json.Unmarshal(matrixData, &matrix); err != nil {
+		t.Fatalf("decode endpoint matrix: %v", err)
+	}
+
+	seen := make(map[string]bool, len(matrix.Operations))
+	for _, operation := range matrix.Operations {
+		key := operation.Method + " " + operation.Path
+		if operation.Method == "" || operation.Path == "" || operation.SuccessStatus < 200 || seen[key] {
+			t.Fatalf("invalid or duplicate endpoint operation: %#v", operation)
+		}
+		seen[key] = true
+		for _, fixture := range []*string{operation.RequestFixture, operation.ResponseFixture} {
+			if fixture == nil {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(fixtureDir, *fixture))
+			if err != nil {
+				t.Fatalf("read %s fixture for %s: %v", *fixture, key, err)
+			}
+			if !json.Valid(data) {
+				t.Fatalf("invalid JSON in %s fixture for %s", *fixture, key)
+			}
+		}
+	}
+}
+
 func mustSourceFile(t *testing.T) string {
 	t.Helper()
 	_, sourceFile, _, ok := runtime.Caller(1)

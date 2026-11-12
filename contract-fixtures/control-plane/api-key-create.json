@@ -1,0 +1,8 @@
+{
+  "keyId": "key-1",
+  "key": "aussie_test_secret",
+  "name": "automation",
+  "permissions": ["admin:read"],
+  "createdBy": "contract-user",
+  "expiresAt": "2026-02-01T00:00:00Z"
+}

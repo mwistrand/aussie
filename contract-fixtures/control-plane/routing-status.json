@@ -1,0 +1,11 @@
+{
+  "activeGeneration": 1,
+  "durableGeneration": 1,
+  "convergenceLag": 0,
+  "checksum": "contract-checksum",
+  "lastRejectedGeneration": null,
+  "snapshotAgeSeconds": 0,
+  "lastPropagationErrorClass": null,
+  "reconciliationBacklog": 0,
+  "pendingPropagations": []
+}

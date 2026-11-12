@@ -68,24 +68,26 @@ public class RedisPkceStorageProvider implements PkceStorageProvider {
             availabilityState.set(AvailabilityState.CHECKING);
         }
         try {
-            availabilityCheck = redisDataSource
-                    .key(String.class)
-                    .exists("test-connection")
-                    .ifNoItem()
-                    .after(Duration.ofSeconds(5))
-                    .fail()
-                    .subscribe()
-                    .with(
-                            result -> {
-                                availabilityState.set(AvailabilityState.AVAILABLE);
-                                LOG.info("Redis PKCE storage is available");
-                                availabilityCheckInProgress.set(false);
-                            },
-                            error -> {
-                                availabilityState.set(AvailabilityState.UNAVAILABLE);
-                                LOG.warnf("Redis PKCE storage is not available: %s", error.getMessage());
-                                availabilityCheckInProgress.set(false);
-                            });
+            synchronized (RedisCommandInitializationLock.INSTANCE) {
+                availabilityCheck = redisDataSource
+                        .key(String.class)
+                        .exists("test-connection")
+                        .ifNoItem()
+                        .after(Duration.ofSeconds(5))
+                        .fail()
+                        .subscribe()
+                        .with(
+                                result -> {
+                                    availabilityState.set(AvailabilityState.AVAILABLE);
+                                    LOG.info("Redis PKCE storage is available");
+                                    availabilityCheckInProgress.set(false);
+                                },
+                                error -> {
+                                    availabilityState.set(AvailabilityState.UNAVAILABLE);
+                                    LOG.warnf("Redis PKCE storage is not available: %s", error.getMessage());
+                                    availabilityCheckInProgress.set(false);
+                                });
+            }
         } catch (RuntimeException error) {
             availabilityState.set(AvailabilityState.UNAVAILABLE);
             availabilityCheckInProgress.set(false);

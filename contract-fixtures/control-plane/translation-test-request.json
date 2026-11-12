@@ -1,0 +1,12 @@
+{
+  "config": {
+    "version": 1,
+    "sources": [{"name": "roles", "claim": "roles", "type": "array"}],
+    "transforms": [],
+    "mappings": {"roleToPermissions": {"admin": ["service.config.read"]}, "directPermissions": {}},
+    "defaults": {"denyIfNoMatch": true, "includeUnmapped": false}
+  },
+  "issuer": "https://idp.example.com",
+  "subject": "contract-user",
+  "claims": {"roles": ["admin"]}
+}

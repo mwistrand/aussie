@@ -22,6 +22,8 @@ import jakarta.ws.rs.core.Response;
 import io.quarkiverse.httpproblem.HttpProblem;
 import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.mutiny.Uni;
+import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -196,6 +198,9 @@ class SigningKeyResourceTest {
             var response = resource.rotateKeys(request).await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Response.Status.CREATED.getStatusCode(), response.getStatus());
+            var serialized = new JsonObject(Json.encode(response.getEntity()));
+            assertEquals("ACTIVE", serialized.getString("status"));
+            assertFalse(serialized.containsKey("previousKeyId"));
             verify(keyRotationService).triggerRotation("security update");
         }
 

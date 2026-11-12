@@ -1,0 +1,6 @@
+{
+  "id": "platform-team",
+  "displayName": "Platform Team",
+  "description": "Platform infrastructure team",
+  "permissions": ["service.config.create", "service.config.read"]
+}

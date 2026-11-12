@@ -1,0 +1,4 @@
+{
+  "displayName": "Updated Platform Team",
+  "permissions": ["service.config.read"]
+}
