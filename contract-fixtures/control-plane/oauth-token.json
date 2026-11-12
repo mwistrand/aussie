@@ -1,0 +1,7 @@
+{
+  "access_token": "access-token",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "id_token": "id-token",
+  "scope": "openid profile email"
+}

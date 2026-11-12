@@ -1,0 +1,8 @@
+{
+  "type": "urn:aussie:problem:bad_gateway",
+  "title": "Bad Gateway",
+  "status": 502,
+  "detail": "IdP response missing ID token",
+  "instance": "/auth/oidc/token",
+  "code": "bad_gateway"
+}

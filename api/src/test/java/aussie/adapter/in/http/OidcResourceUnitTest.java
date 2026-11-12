@@ -11,6 +11,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -27,6 +29,7 @@ import jakarta.ws.rs.core.Response;
 
 import io.quarkiverse.httpproblem.HttpProblem;
 import io.smallrye.mutiny.Uni;
+import io.vertx.core.json.JsonObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -415,7 +418,7 @@ class OidcResourceUnitTest {
     }
 
     @Test
-    void returnsTokensOnlyAfterValidatingPublicClientIdToken() {
+    void returnsTokensOnlyAfterValidatingPublicClientIdToken() throws java.io.IOException {
         setupExchange(transaction(OidcAuthorizationTransaction.ClientType.PUBLIC));
         when(tokenExchangeProvider.exchange(any())).thenReturn(Uni.createFrom().item(tokenResponse()));
         when(tokenValidationService.validate("id-token"))
@@ -427,8 +430,9 @@ class OidcResourceUnitTest {
 
         assertEquals(Response.Status.OK.getStatusCode(), result.getStatus());
         final var body = assertInstanceOf(Map.class, result.getEntity());
-        assertEquals("access-token", body.get("access_token"));
-        assertEquals("id-token", body.get("id_token"));
+        final var expected = new JsonObject(
+                Files.readString(Path.of("..", "contract-fixtures", "control-plane", "oauth-token.json")));
+        assertEquals(expected.getMap(), new JsonObject(io.vertx.core.json.Json.encode(body)).getMap());
         assertEquals(0, result.getCookies().get("aussie_oidc_state").getMaxAge());
         verify(sessionManagement, never()).createSession(any(), any(), any());
     }
@@ -487,7 +491,13 @@ class OidcResourceUnitTest {
 
     private OidcTokenExchangeResponse tokenResponse(String idToken) {
         return new OidcTokenExchangeResponse(
-                "access-token", Optional.of(idToken), Optional.empty(), "Bearer", 3600, Optional.empty(), Map.of());
+                "access-token",
+                Optional.of(idToken),
+                Optional.empty(),
+                "Bearer",
+                3600,
+                Optional.of("openid profile email"),
+                Map.of());
     }
 
     private ValidatedIdentity identity() {
