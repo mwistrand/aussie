@@ -1,0 +1,31 @@
+{
+  "name": "development-mode",
+  "permissions": ["*"],
+  "roles": [
+    "*",
+    "admin",
+    "apikeys.read",
+    "apikeys.write",
+    "aussie:admin",
+    "auth.roles.create",
+    "auth.roles.delete",
+    "auth.roles.read",
+    "auth.roles.update",
+    "benchmark.run",
+    "keys.read",
+    "keys.rotate",
+    "keys.write",
+    "lockouts.read",
+    "lockouts.write",
+    "service.config.create",
+    "service.config.delete",
+    "service.config.read",
+    "service.config.update",
+    "service.permissions.read",
+    "service.permissions.write",
+    "tokens.read",
+    "tokens.revoke",
+    "translation.config.read",
+    "translation.config.write"
+  ]
+}

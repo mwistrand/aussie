@@ -4,13 +4,18 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Set;
 
 import jakarta.inject.Inject;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
+import io.vertx.core.json.JsonObject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -42,7 +47,7 @@ class RoleResourceTest {
     @Test
     @DisplayName("should create, update, list and delete a role end-to-end")
     void shouldRoundTripRoleLifecycle() {
-        given().contentType(ContentType.JSON)
+        var created = given().contentType(ContentType.JSON)
                 .body("""
                         {
                             "id": "platform-team",
@@ -56,7 +61,18 @@ class RoleResourceTest {
                 .then()
                 .statusCode(201)
                 .body("id", equalTo("platform-team"))
-                .body("permissions", containsInAnyOrder("service.config.read", "service.config.create"));
+                .body("permissions", containsInAnyOrder("service.config.read", "service.config.create"))
+                .extract()
+                .response();
+
+        var fixture = fixture("role.json");
+        var actual = new JsonObject(created.asString());
+        for (var field : new String[] {"id", "displayName", "description", "version"}) {
+            assertEquals(fixture.getValue(field), actual.getValue(field));
+        }
+        assertEquals(
+                Set.copyOf(fixture.getJsonArray("permissions").getList()),
+                Set.copyOf(actual.getJsonArray("permissions").getList()));
 
         given().contentType(ContentType.JSON)
                 .body("""
@@ -95,5 +111,13 @@ class RoleResourceTest {
                 .body("type", equalTo("urn:aussie:problem:bad_request"))
                 .body("code", equalTo("bad_request"))
                 .body("violations[0].message", equalTo("id is required"));
+    }
+
+    private JsonObject fixture(String name) {
+        try {
+            return new JsonObject(Files.readString(Path.of("..", "contract-fixtures", "control-plane", name)));
+        } catch (java.io.IOException e) {
+            throw new AssertionError("unable to read control-plane contract fixture", e);
+        }
     }
 }

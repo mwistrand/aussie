@@ -19,6 +19,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/aussie/cli/internal/api"
 	"github.com/aussie/cli/internal/auth"
 	"github.com/aussie/cli/internal/config"
 )
@@ -39,21 +40,8 @@ type deviceGrantError struct {
 
 func (e *deviceGrantError) Error() string { return e.code }
 
-type deviceCodeResponse struct {
-	DeviceCode              string `json:"device_code"`
-	UserCode                string `json:"user_code"`
-	VerificationURI         string `json:"verification_uri"`
-	VerificationURL         string `json:"verification_url"`
-	VerificationURIComplete string `json:"verification_uri_complete"`
-	ExpiresIn               int    `json:"expires_in"`
-	Interval                int    `json:"interval"`
-}
-
-type deviceTokenResponse struct {
-	Token       string `json:"token"`
-	AccessToken string `json:"access_token"`
-	Error       string `json:"error"`
-}
+type deviceCodeResponse = api.OAuthDeviceCodeResponse
+type deviceTokenResponse = api.OAuthTokenResponse
 
 var loginCmd = &cobra.Command{
 	Use:   "login",
@@ -420,11 +408,7 @@ func exchangeOAuthCode(cfg *config.Config, code, verifier, state, redirectURI st
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("OAuth token exchange failed with status %d", resp.StatusCode)
 	}
-	var tokenResponse struct {
-		Token       string `json:"token"`
-		AccessToken string `json:"access_token"`
-		Error       string `json:"error"`
-	}
+	var tokenResponse api.OAuthTokenResponse
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&tokenResponse); err != nil {
 		return "", fmt.Errorf("invalid OAuth token response: %w", err)
 	}

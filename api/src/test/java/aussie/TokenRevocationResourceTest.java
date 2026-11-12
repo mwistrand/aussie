@@ -3,12 +3,16 @@ package aussie;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.KeyPairGenerator;
 import java.time.Instant;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
+import io.vertx.core.json.JsonObject;
 import org.jose4j.jwa.AlgorithmConstraints;
 import org.jose4j.jws.AlgorithmIdentifiers;
 import org.jose4j.jws.JsonWebSignature;
@@ -47,6 +51,23 @@ public class TokenRevocationResourceTest {
                 .body("jti", equalTo(jti))
                 .body("revoked", equalTo(true))
                 .body("checkedAt", notNullValue());
+    }
+
+    @Test
+    @DisplayName("should keep the token status fixture shape")
+    void shouldMatchTokenStatusContractFixture() throws java.io.IOException {
+        var response = given().when()
+                .get("/admin/tokens/contract-jti/status")
+                .then()
+                .statusCode(200)
+                .extract()
+                .response();
+
+        var expected = new JsonObject(
+                Files.readString(Path.of("..", "contract-fixtures", "control-plane", "token-revocation-status.json")));
+        var actual = new JsonObject(response.asString());
+        assertEquals(expected.getString("jti"), actual.getString("jti"));
+        assertEquals(expected.getBoolean("revoked"), actual.getBoolean("revoked"));
     }
 
     @Test
