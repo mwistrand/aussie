@@ -1,0 +1,10 @@
+{
+  "id": "key-1",
+  "name": "automation",
+  "description": "CI automation key",
+  "permissions": ["admin:read"],
+  "createdBy": "contract-user",
+  "createdAt": "2026-01-01T00:00:00Z",
+  "expiresAt": "2026-02-01T00:00:00Z",
+  "revoked": false
+}

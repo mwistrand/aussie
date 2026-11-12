@@ -247,13 +247,11 @@ type TranslationTestResult struct {
 
 // WhoAmIResponse is the authenticated principal returned by the control plane.
 type WhoAmIResponse struct {
-	KeyId                string   `json:"keyId,omitempty"`
-	Subject              string   `json:"sub,omitempty"`
-	Name                 string   `json:"name,omitempty"`
-	Permissions          []string `json:"permissions,omitempty"`
-	Groups               []string `json:"groups,omitempty"`
-	EffectivePermissions []string `json:"effectivePermissions,omitempty"`
-	ExpiresAt            string   `json:"expiresAt,omitempty"`
+	KeyId       string   `json:"keyId,omitempty"`
+	Name        string   `json:"name,omitempty"`
+	Permissions []string `json:"permissions,omitempty"`
+	Roles       []string `json:"roles,omitempty"`
+	ExpiresAt   string   `json:"expiresAt,omitempty"`
 }
 
 // Capabilities is the control-plane version discovery response.
@@ -265,11 +263,24 @@ type Capabilities struct {
 
 // OAuthTokenResponse is the public OIDC token exchange response.
 type OAuthTokenResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	ExpiresIn   int64  `json:"expires_in"`
+	Token       string `json:"token,omitempty"`
+	AccessToken string `json:"access_token,omitempty"`
+	TokenType   string `json:"token_type,omitempty"`
+	ExpiresIn   int64  `json:"expires_in,omitempty"`
 	IDToken     string `json:"id_token,omitempty"`
 	Scope       string `json:"scope,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
+// OAuthDeviceCodeResponse is the external provider response that starts a device flow.
+type OAuthDeviceCodeResponse struct {
+	DeviceCode              string `json:"device_code"`
+	UserCode                string `json:"user_code"`
+	VerificationURI         string `json:"verification_uri"`
+	VerificationURL         string `json:"verification_url"`
+	VerificationURIComplete string `json:"verification_uri_complete"`
+	ExpiresIn               int    `json:"expires_in"`
+	Interval                int    `json:"interval"`
 }
 
 // ProblemResponse is the RFC-style error detail used by control-plane endpoints.

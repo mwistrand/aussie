@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
@@ -60,6 +61,26 @@ class ControlPlaneContractTest {
                 .contentType(org.hamcrest.Matchers.containsString("yaml"))
                 .body(org.hamcrest.Matchers.containsString("openapi: 3.0.3"))
                 .body(org.hamcrest.Matchers.containsString("/admin/services:"));
+    }
+
+    @Test
+    void whoamiMatchesTheSharedFixture() {
+        var response = given().when()
+                .get("/admin/whoami")
+                .then()
+                .statusCode(200)
+                .extract()
+                .response();
+
+        var expected = fixture("whoami.json");
+        var actual = new JsonObject(response.asString());
+        assertEquals(expected.getString("name"), actual.getString("name"));
+        assertEquals(
+                Set.copyOf(expected.getJsonArray("permissions").getList()),
+                Set.copyOf(actual.getJsonArray("permissions").getList()));
+        assertEquals(
+                Set.copyOf(expected.getJsonArray("roles").getList()),
+                Set.copyOf(actual.getJsonArray("roles").getList()));
     }
 
     private JsonObject fixture(String name) {

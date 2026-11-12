@@ -146,15 +146,12 @@ func displayServerResponse(resp *api.Response) error {
 		fmt.Printf("  Name: %s\n", whoami.Name)
 	}
 
-	// Show groups if present
-	if len(whoami.Groups) > 0 {
-		fmt.Printf("  Groups: %s\n", strings.Join(whoami.Groups, ", "))
+	// Show roles if present
+	if len(whoami.Roles) > 0 {
+		fmt.Printf("  Roles: %s\n", strings.Join(whoami.Roles, ", "))
 	}
 
-	// Show effective permissions (expanded from groups + direct)
-	if len(whoami.EffectivePermissions) > 0 {
-		fmt.Printf("  Effective Permissions: %s\n", strings.Join(whoami.EffectivePermissions, ", "))
-	} else if len(whoami.Permissions) > 0 {
+	if len(whoami.Permissions) > 0 {
 		fmt.Printf("  Permissions: %s\n", strings.Join(whoami.Permissions, ", "))
 	}
 

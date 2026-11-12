@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "activeProvider": "config",
+  "providerHealthy": true,
+  "cache": {
+    "currentSize": 0,
+    "maxSize": 1000,
+    "ttlSeconds": 300
+  }
+}

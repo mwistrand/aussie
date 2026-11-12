@@ -138,6 +138,92 @@ func TestControlPlaneContractFixturesRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name: "oauth-device-code",
+			value: OAuthDeviceCodeResponse{
+				DeviceCode:              "device-code",
+				UserCode:                "ABCD-EFGH",
+				VerificationURI:         "https://idp.example.com/device",
+				VerificationURL:         "https://idp.example.com/device",
+				VerificationURIComplete: "https://idp.example.com/device?user_code=ABCD-EFGH",
+				ExpiresIn:               600,
+				Interval:                5,
+			},
+		},
+		{
+			name: "oauth-device-token",
+			value: OAuthTokenResponse{
+				AccessToken: "access-token",
+				TokenType:   "Bearer",
+				ExpiresIn:   3600,
+			},
+		},
+		{
+			name: "role",
+			value: Role{
+				ID:          "platform-team",
+				DisplayName: "Platform Team",
+				Description: "Platform infrastructure team",
+				Permissions: []string{"service.config.create", "service.config.read"},
+				Version:     1,
+			},
+		},
+		{
+			name: "translation-status",
+			value: TranslationStatus{
+				Enabled:         true,
+				ActiveProvider:  "config",
+				ProviderHealthy: true,
+				Cache:           TranslationCacheStatus{CurrentSize: 0, MaxSize: 1000, TtlSeconds: 300},
+			},
+		},
+		{
+			name:  "translation-validation",
+			value: TranslationConfigValidation{Valid: false, Errors: []string{"Configuration is required"}},
+		},
+		{
+			name: "signing-key-health",
+			value: SigningKeyHealthStatus{
+				Enabled: true, Status: "healthy", ActiveKeyId: "key-2026",
+				VerificationKeyCount: 2, LastCacheRefresh: "2026-01-01T00:00:00Z",
+			},
+		},
+		{
+			name: "api-key",
+			value: APIKey{
+				Id: "key-1", Name: "automation", Description: "CI automation key",
+				Permissions: []string{"admin:read"}, CreatedBy: "contract-user",
+				CreatedAt: "2026-01-01T00:00:00Z", ExpiresAt: "2026-02-01T00:00:00Z",
+				Revoked: false,
+			},
+		},
+		{
+			name:  "token-revocation-status",
+			value: TokenRevocationStatus{JTI: "contract-jti", Revoked: false, CheckedAt: "2026-01-01T00:00:00Z"},
+		},
+		{
+			name: "lockout-status",
+			value: LockoutStatus{
+				Type: "user", Value: "contract-user", Key: "user:contract-user", MaxAttempts: 5,
+				CheckedAt: "2026-01-01T00:00:00Z",
+			},
+		},
+		{
+			name: "whoami",
+			value: WhoAmIResponse{
+				Name:        "development-mode",
+				Permissions: []string{"*"},
+				Roles: []string{
+					"*", "admin", "apikeys.read", "apikeys.write", "aussie:admin",
+					"auth.roles.create", "auth.roles.delete", "auth.roles.read", "auth.roles.update",
+					"benchmark.run", "keys.read", "keys.rotate", "keys.write",
+					"lockouts.read", "lockouts.write", "service.config.create", "service.config.delete",
+					"service.config.read", "service.config.update", "service.permissions.read",
+					"service.permissions.write", "tokens.read", "tokens.revoke",
+					"translation.config.read", "translation.config.write",
+				},
+			},
+		},
+		{
 			name: "problem",
 			value: ProblemResponse{
 				Type:     "urn:aussie:problem:bad_gateway",

@@ -2,9 +2,14 @@ package aussie;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
+import io.vertx.core.json.JsonObject;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -61,5 +66,22 @@ class TranslationConfigResourceTest {
                 .statusCode(200)
                 .body("id", equalTo(versionId))
                 .body("active", equalTo(true));
+    }
+
+    @Test
+    @DisplayName("should keep validation response fixture shape")
+    void shouldMatchValidationContractFixture() throws java.io.IOException {
+        var response = given().contentType(ContentType.JSON)
+                .body("null")
+                .when()
+                .post("/admin/translation-config/validate")
+                .then()
+                .statusCode(200)
+                .extract()
+                .response();
+
+        var expected = new JsonObject(
+                Files.readString(Path.of("..", "contract-fixtures", "control-plane", "translation-validation.json")));
+        assertEquals(expected.getMap(), new JsonObject(response.asString()).getMap());
     }
 }
