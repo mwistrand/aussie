@@ -6,8 +6,11 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.Base64;
+import java.util.Map;
 
 import io.quarkus.test.junit.QuarkusTest;
 import org.junit.jupiter.api.DisplayName;
@@ -43,7 +46,7 @@ public class OidcResourceTest {
 
     @Test
     @DisplayName("should consume valid PKCE state and require an ID token")
-    void shouldConsumePkceStateAndRequireIdToken() {
+    void shouldConsumePkceStateAndRequireIdToken() throws java.io.IOException {
         var verifier = "valid-verifier-123456789012345678901234567890123";
         var challenge = generateChallenge(verifier);
 
@@ -76,7 +79,7 @@ public class OidcResourceTest {
                 .then()
                 .statusCode(400);
 
-        given().contentType("application/x-www-form-urlencoded")
+        var response = given().contentType("application/x-www-form-urlencoded")
                 .formParam("code", "test-code")
                 .formParam("state", state)
                 .formParam("code_verifier", verifier)
@@ -85,7 +88,23 @@ public class OidcResourceTest {
                 .post("/auth/oidc/token")
                 .then()
                 .statusCode(502)
-                .body("detail", containsString("missing ID token"));
+                .body("detail", containsString("missing ID token"))
+                .extract()
+                .response();
+
+        var problem = new io.vertx.core.json.JsonObject(
+                Files.readString(Path.of("..", "contract-fixtures", "control-plane", "problem.json")));
+        var actual = new io.vertx.core.json.JsonObject(response.asString()).getMap();
+        for (var field : Map.of(
+                        "type", "type",
+                        "title", "title",
+                        "status", "status",
+                        "detail", "detail",
+                        "instance", "instance",
+                        "code", "code")
+                .entrySet()) {
+            assertEquals(problem.getValue(field.getKey()), actual.get(field.getValue()));
+        }
 
         // Replayed state must be rejected (one-time use)
         given().contentType("application/x-www-form-urlencoded")

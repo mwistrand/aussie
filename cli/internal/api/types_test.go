@@ -114,6 +114,76 @@ func TestTokenInspectionPreservesNullClaims(t *testing.T) {
 	}
 }
 
+func TestControlPlaneContractFixturesRoundTrip(t *testing.T) {
+	tests := []struct {
+		name  string
+		value any
+	}{
+		{
+			name: "capabilities",
+			value: Capabilities{
+				ContractVersion:           "v1",
+				SupportedContractVersions: []string{"v1"},
+				OpenAPI:                   "/openapi.yaml",
+			},
+		},
+		{
+			name: "oauth-token",
+			value: OAuthTokenResponse{
+				AccessToken: "access-token",
+				TokenType:   "Bearer",
+				ExpiresIn:   3600,
+				IDToken:     "id-token",
+				Scope:       "openid profile email",
+			},
+		},
+		{
+			name: "problem",
+			value: ProblemResponse{
+				Type:     "urn:aussie:problem:bad_gateway",
+				Title:    "Bad Gateway",
+				Status:   502,
+				Detail:   "IdP response missing ID token",
+				Instance: "/auth/oidc/token",
+				Code:     "bad_gateway",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixturePath := filepath.Join(filepath.Dir(mustSourceFile(t)), "../../../contract-fixtures/control-plane", test.name+".json")
+			fixture, err := os.ReadFile(fixturePath)
+			if err != nil {
+				t.Fatalf("read fixture: %v", err)
+			}
+			encoded, err := json.Marshal(test.value)
+			if err != nil {
+				t.Fatalf("encode value: %v", err)
+			}
+			var want, got any
+			if err := json.Unmarshal(fixture, &want); err != nil {
+				t.Fatalf("decode fixture: %v", err)
+			}
+			if err := json.Unmarshal(encoded, &got); err != nil {
+				t.Fatalf("decode encoded value: %v", err)
+			}
+			if !bytes.Equal(mustJSON(t, want), mustJSON(t, got)) {
+				t.Fatalf("encoded value does not match fixture: %s", encoded)
+			}
+		})
+	}
+}
+
+func mustSourceFile(t *testing.T) string {
+	t.Helper()
+	_, sourceFile, _, ok := runtime.Caller(1)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	return sourceFile
+}
+
 func mustJSON(t *testing.T, value any) []byte {
 	t.Helper()
 	data, err := json.Marshal(value)

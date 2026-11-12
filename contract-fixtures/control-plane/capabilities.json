@@ -1,0 +1,5 @@
+{
+  "contractVersion": "v1",
+  "supportedContractVersions": ["v1"],
+  "openApi": "/openapi.yaml"
+}

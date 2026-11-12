@@ -256,9 +256,30 @@ type WhoAmIResponse struct {
 	ExpiresAt            string   `json:"expiresAt,omitempty"`
 }
 
+// Capabilities is the control-plane version discovery response.
+type Capabilities struct {
+	ContractVersion           string   `json:"contractVersion"`
+	SupportedContractVersions []string `json:"supportedContractVersions"`
+	OpenAPI                   string   `json:"openApi"`
+}
+
+// OAuthTokenResponse is the public OIDC token exchange response.
+type OAuthTokenResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int64  `json:"expires_in"`
+	IDToken     string `json:"id_token,omitempty"`
+	Scope       string `json:"scope,omitempty"`
+}
+
 // ProblemResponse is the RFC-style error detail used by control-plane endpoints.
 type ProblemResponse struct {
-	Detail string `json:"detail,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Title    string `json:"title,omitempty"`
+	Status   int    `json:"status,omitempty"`
+	Detail   string `json:"detail,omitempty"`
+	Instance string `json:"instance,omitempty"`
+	Code     string `json:"code,omitempty"`
 }
 
 // ErrorResponse is the legacy validation error returned by API-key creation.
