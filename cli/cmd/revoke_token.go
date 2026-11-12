@@ -68,12 +68,7 @@ func runRevokeToken(cmd *cobra.Command, args []string) error {
 
 func revokeByFullToken(client *api.Client, fullToken string) error {
 	// Use POST /admin/tokens/revoke endpoint
-	reqBody := map[string]interface{}{
-		"token": fullToken,
-	}
-	if revokeTokenReason != "" {
-		reqBody["reason"] = revokeTokenReason
-	}
+	reqBody := RevokeByTokenRequest{Token: fullToken, Reason: revokeTokenReason}
 
 	resp, err := client.DoJSON(http.MethodPost, "/admin/tokens/revoke", reqBody)
 	if err != nil {
@@ -82,21 +77,19 @@ func revokeByFullToken(client *api.Client, fullToken string) error {
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		var result map[string]interface{}
+		var result TokenRevocationResult
 		if err := resp.DecodeJSON(&result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
 
-		jti, _ := result["jti"].(string)
-
 		if revokeTokenFormat == "json" {
 			if revokeTokenReason != "" {
-				result["reason"] = revokeTokenReason
+				result.Reason = revokeTokenReason
 			}
 			output, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(output))
 		} else {
-			fmt.Printf("✓ Token revoked (JTI: %s)\n", jti)
+			fmt.Printf("✓ Token revoked (JTI: %s)\n", result.JTI)
 			if revokeTokenReason != "" {
 				fmt.Printf("  Reason: %s\n", revokeTokenReason)
 			}
@@ -117,14 +110,9 @@ func revokeByFullToken(client *api.Client, fullToken string) error {
 
 func revokeByJti(client *api.Client, jti string) error {
 	// Use DELETE /admin/tokens/{jti} endpoint
-	reqBody := map[string]interface{}{}
-	if revokeTokenReason != "" {
-		reqBody["reason"] = revokeTokenReason
-	}
-
 	var body any
-	if len(reqBody) > 0 {
-		body = reqBody
+	if revokeTokenReason != "" {
+		body = RevokeTokenRequest{Reason: revokeTokenReason}
 	}
 	resp, err := client.DoJSON(http.MethodDelete, "/admin/tokens/"+jti, body)
 	if err != nil {
@@ -134,13 +122,13 @@ func revokeByJti(client *api.Client, jti string) error {
 	switch resp.StatusCode {
 	case http.StatusNoContent:
 		if revokeTokenFormat == "json" {
-			result := map[string]interface{}{
-				"jti":       jti,
-				"status":    "revoked",
-				"revokedAt": time.Now().UTC().Format(time.RFC3339),
+			result := TokenRevocationResult{
+				JTI:       jti,
+				Status:    "revoked",
+				RevokedAt: time.Now().UTC().Format(time.RFC3339),
 			}
 			if revokeTokenReason != "" {
-				result["reason"] = revokeTokenReason
+				result.Reason = revokeTokenReason
 			}
 			output, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(output))

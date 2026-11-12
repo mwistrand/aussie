@@ -265,3 +265,125 @@ type ProblemResponse struct {
 type ErrorResponse struct {
 	Error string `json:"error,omitempty"`
 }
+
+// RevokeTokenRequest is the optional body for revoking a token by JTI.
+type RevokeTokenRequest struct {
+	Reason string `json:"reason,omitempty"`
+}
+
+// RevokeByTokenRequest is the body for revoking a token by its JWT.
+type RevokeByTokenRequest struct {
+	Token  string `json:"token"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// RevokeUserTokensRequest is the optional body for revoking all user tokens.
+type RevokeUserTokensRequest struct {
+	Reason string `json:"reason,omitempty"`
+}
+
+// TokenRevocationList is a bounded token or user revocation response.
+type TokenRevocationList struct {
+	RevokedTokens []string `json:"revokedTokens"`
+	Count         int      `json:"count"`
+	Limit         int      `json:"limit"`
+}
+
+// UserRevocationList is the bounded blanket-revocation response.
+type UserRevocationList struct {
+	RevokedUsers []string `json:"revokedUsers"`
+	Count        int      `json:"count"`
+	Limit        int      `json:"limit"`
+}
+
+// TokenRevocationStatus is the response from checking one JTI.
+type TokenRevocationStatus struct {
+	JTI       string `json:"jti"`
+	Revoked   bool   `json:"revoked"`
+	CheckedAt string `json:"checkedAt"`
+}
+
+// TokenRevocationResult is returned after revoking a token.
+type TokenRevocationResult struct {
+	JTI       string `json:"jti"`
+	Status    string `json:"status"`
+	RevokedAt string `json:"revokedAt"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+// UserRevocationResult is the CLI result for revoking all tokens for a user.
+type UserRevocationResult struct {
+	UserID    string `json:"userId"`
+	Status    string `json:"status"`
+	RevokedAt string `json:"revokedAt"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+// BloomFilterRebuildResult is returned after a revocation filter rebuild.
+type BloomFilterRebuildResult struct {
+	Status    string `json:"status"`
+	RebuiltAt string `json:"rebuiltAt"`
+}
+
+// TokenInspection is the decoded, unvalidated JWT claim response.
+type TokenInspection struct {
+	JTI         *string        `json:"jti"`
+	Subject     *string        `json:"subject"`
+	Issuer      *string        `json:"issuer"`
+	Audience    any            `json:"audience"`
+	IssuedAt    *string        `json:"issuedAt"`
+	ExpiresAt   *string        `json:"expiresAt"`
+	NotBefore   *string        `json:"notBefore"`
+	OtherClaims map[string]any `json:"otherClaims,omitempty"`
+}
+
+// LockoutInfo is one entry returned by the lockout list endpoint.
+type LockoutInfo struct {
+	Key            string `json:"key"`
+	Type           string `json:"type"`
+	Value          string `json:"value"`
+	LockedAt       string `json:"lockedAt"`
+	ExpiresAt      string `json:"expiresAt"`
+	Reason         string `json:"reason"`
+	FailedAttempts int    `json:"failedAttempts"`
+	LockoutCount   int    `json:"lockoutCount"`
+}
+
+// LockoutList is the bounded lockout list response.
+type LockoutList struct {
+	Lockouts []LockoutInfo `json:"lockouts"`
+	Count    int           `json:"count"`
+	Limit    int           `json:"limit"`
+}
+
+// LockoutStatus is the response for one lockout identifier.
+type LockoutStatus struct {
+	Type           string `json:"type"`
+	Value          string `json:"value"`
+	Key            string `json:"key"`
+	LockedOut      bool   `json:"lockedOut"`
+	FailedAttempts int    `json:"failedAttempts"`
+	MaxAttempts    int    `json:"maxAttempts"`
+	LockoutStarted string `json:"lockoutStarted,omitempty"`
+	LockoutExpires string `json:"lockoutExpires,omitempty"`
+	LockoutCount   int    `json:"lockoutCount,omitempty"`
+	CheckedAt      string `json:"checkedAt"`
+}
+
+// ClearLockoutRequest is the body for clearing one lockout.
+type ClearLockoutRequest struct {
+	Reason string `json:"reason,omitempty"`
+}
+
+// ClearAllLockoutsRequest is the body for clearing all lockouts.
+type ClearAllLockoutsRequest struct {
+	Force  bool   `json:"force"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// ClearAllLockoutsResult is returned after clearing all lockouts.
+type ClearAllLockoutsResult struct {
+	Status    string `json:"status"`
+	Count     int    `json:"count"`
+	ClearedAt string `json:"clearedAt"`
+}

@@ -48,9 +48,7 @@ func runInspectToken(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build request body
-	reqBody := map[string]interface{}{
-		"token": token,
-	}
+	reqBody := RevokeByTokenRequest{Token: token}
 
 	resp, err := client.DoJSON(http.MethodPost, "/admin/tokens/inspect", reqBody)
 	if err != nil {
@@ -59,7 +57,7 @@ func runInspectToken(cmd *cobra.Command, args []string) error {
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		var result map[string]interface{}
+		var result TokenInspection
 		if err := resp.DecodeJSON(&result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
@@ -82,7 +80,7 @@ func runInspectToken(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func printTokenClaims(claims map[string]interface{}) {
+func printTokenClaims(claims TokenInspection) {
 	fmt.Println("Token Claims:")
 	fmt.Println("─────────────────────────────────────────")
 
@@ -100,16 +98,25 @@ func printTokenClaims(claims map[string]interface{}) {
 		{"notBefore", "Not Before"},
 	}
 
+	values := map[string]any{
+		"jti":       inspectionString(claims.JTI),
+		"subject":   inspectionString(claims.Subject),
+		"issuer":    inspectionString(claims.Issuer),
+		"audience":  claims.Audience,
+		"issuedAt":  inspectionString(claims.IssuedAt),
+		"expiresAt": inspectionString(claims.ExpiresAt),
+		"notBefore": inspectionString(claims.NotBefore),
+	}
 	for _, field := range keyFields {
-		if val, ok := claims[field.key]; ok && val != nil {
+		if val := values[field.key]; val != nil && val != "" {
 			fmt.Printf("  %-14s %v\n", field.label+":", val)
 		}
 	}
 
 	// Print other claims if present
-	if otherClaims, ok := claims["otherClaims"].(map[string]interface{}); ok && len(otherClaims) > 0 {
+	if len(claims.OtherClaims) > 0 {
 		fmt.Println("\nOther Claims:")
-		for key, val := range otherClaims {
+		for key, val := range claims.OtherClaims {
 			fmt.Printf("  %-14s %v\n", key+":", val)
 		}
 	}
@@ -117,7 +124,14 @@ func printTokenClaims(claims map[string]interface{}) {
 	fmt.Println("─────────────────────────────────────────")
 
 	// Highlight the JTI for easy copying
-	if jti, ok := claims["jti"].(string); ok && jti != "" {
-		fmt.Printf("\n💡 To revoke this token: aussie auth revoke token %s\n", jti)
+	if claims.JTI != nil && *claims.JTI != "" {
+		fmt.Printf("\n💡 To revoke this token: aussie auth revoke token %s\n", *claims.JTI)
 	}
+}
+
+func inspectionString(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return *value
 }

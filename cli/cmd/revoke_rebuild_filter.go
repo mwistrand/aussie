@@ -68,7 +68,7 @@ func runRevokeRebuildFilter(cmd *cobra.Command, args []string) error {
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		var result map[string]interface{}
+		var result BloomFilterRebuildResult
 		if err := resp.DecodeJSON(&result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
@@ -77,11 +77,8 @@ func runRevokeRebuildFilter(cmd *cobra.Command, args []string) error {
 			output, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(output))
 		} else {
-			status, _ := result["status"].(string)
-			rebuiltAt, _ := result["rebuiltAt"].(string)
-
-			fmt.Printf("✓ Bloom filter %s\n", status)
-			fmt.Printf("  Completed: %s\n", rebuiltAt)
+			fmt.Printf("✓ Bloom filter %s\n", result.Status)
+			fmt.Printf("  Completed: %s\n", result.RebuiltAt)
 		}
 		return nil
 	case http.StatusUnauthorized:

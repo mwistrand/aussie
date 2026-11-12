@@ -68,15 +68,9 @@ func runRevokeUser(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Build request body
-	reqBody := map[string]interface{}{}
-	if revokeUserReason != "" {
-		reqBody["reason"] = revokeUserReason
-	}
-
 	var body any
-	if len(reqBody) > 0 {
-		body = reqBody
+	if revokeUserReason != "" {
+		body = RevokeUserTokensRequest{Reason: revokeUserReason}
 	}
 	resp, err := client.DoJSON(http.MethodDelete, "/admin/tokens/users/"+userId, body)
 	if err != nil {
@@ -86,13 +80,13 @@ func runRevokeUser(cmd *cobra.Command, args []string) error {
 	switch resp.StatusCode {
 	case http.StatusNoContent:
 		if revokeUserFormat == "json" {
-			result := map[string]interface{}{
-				"userId":    userId,
-				"status":    "all_tokens_revoked",
-				"revokedAt": time.Now().UTC().Format(time.RFC3339),
+			result := UserRevocationResult{
+				UserID:    userId,
+				Status:    "all_tokens_revoked",
+				RevokedAt: time.Now().UTC().Format(time.RFC3339),
 			}
 			if revokeUserReason != "" {
-				result["reason"] = revokeUserReason
+				result.Reason = revokeUserReason
 			}
 			output, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(output))

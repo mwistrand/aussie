@@ -45,20 +45,14 @@ func runLockoutList(cmd *cobra.Command, args []string) error {
 
 	switch resp.StatusCode {
 	case http.StatusOK:
+		var result LockoutList
+		if err := resp.DecodeJSON(&result); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
 		if lockoutListFormat == "json" {
-			// Pretty print JSON
-			var result interface{}
-			if err := resp.DecodeJSON(&result); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
 			output, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(output))
 		} else {
-			// Parse and format as table
-			var result map[string]interface{}
-			if err := resp.DecodeJSON(&result); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
 			printLockouts(result)
 		}
 		return nil
@@ -73,31 +67,26 @@ func runLockoutList(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func printLockouts(result map[string]interface{}) {
-	lockouts, ok := result["lockouts"].([]interface{})
-	if !ok {
+func printLockouts(result LockoutList) {
+	if result.Lockouts == nil {
 		fmt.Println("No lockouts found.")
 		return
 	}
 
-	count := int(result["count"].(float64))
-	limit := int(result["limit"].(float64))
-
-	fmt.Printf("Active Lockouts (%d shown, limit %d):\n", count, limit)
+	fmt.Printf("Active Lockouts (%d shown, limit %d):\n", result.Count, result.Limit)
 	fmt.Println("================================================================================")
 
-	if len(lockouts) == 0 {
+	if len(result.Lockouts) == 0 {
 		fmt.Println("  (none)")
 		return
 	}
 
-	for _, l := range lockouts {
-		lockout := l.(map[string]interface{})
-		lockoutType := lockout["type"].(string)
-		value := lockout["value"].(string)
-		expiresAt := lockout["expiresAt"].(string)
-		failedAttempts := int(lockout["failedAttempts"].(float64))
-		lockoutCount := int(lockout["lockoutCount"].(float64))
+	for _, lockout := range result.Lockouts {
+		lockoutType := lockout.Type
+		value := lockout.Value
+		expiresAt := lockout.ExpiresAt
+		failedAttempts := lockout.FailedAttempts
+		lockoutCount := lockout.LockoutCount
 
 		fmt.Printf("\n  Type:            %s\n", lockoutType)
 		fmt.Printf("  Value:           %s\n", value)
@@ -107,7 +96,7 @@ func printLockouts(result map[string]interface{}) {
 		fmt.Println("  ----------------------------------------")
 	}
 
-	if count >= limit {
+	if result.Count >= result.Limit {
 		fmt.Printf("\n(Results may be truncated. Use --limit to see more.)\n")
 	}
 }

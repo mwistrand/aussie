@@ -91,9 +91,7 @@ func runLockoutClear(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create request body
-	body := map[string]string{
-		"reason": lockoutClearReason,
-	}
+	body := ClearLockoutRequest{Reason: lockoutClearReason}
 	resp, err := client.DoJSON(http.MethodDelete, path, body)
 	if err != nil {
 		return err
@@ -125,10 +123,7 @@ func runLockoutClearAll(cmd *cobra.Command) error {
 	}
 
 	// Create request body
-	body := map[string]interface{}{
-		"force":  true,
-		"reason": lockoutClearReason,
-	}
+	body := ClearAllLockoutsRequest{Force: true, Reason: lockoutClearReason}
 	resp, err := client.DoJSON(http.MethodPost, "/admin/lockouts:reset", body)
 	if err != nil {
 		return err
@@ -136,12 +131,11 @@ func runLockoutClearAll(cmd *cobra.Command) error {
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		var result map[string]interface{}
+		var result ClearAllLockoutsResult
 		if err := resp.DecodeJSON(&result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
-		count := int(result["count"].(float64))
-		fmt.Printf("✓ Cleared %d lockouts\n", count)
+		fmt.Printf("✓ Cleared %d lockouts\n", result.Count)
 		return nil
 	case http.StatusBadRequest:
 		return fmt.Errorf("must set force=true to clear all lockouts")

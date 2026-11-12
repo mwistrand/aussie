@@ -56,24 +56,30 @@ func runRevokeList(cmd *cobra.Command, args []string) error {
 	switch resp.StatusCode {
 	case http.StatusOK:
 		if revokeListFormat == "json" {
-			// Pretty print JSON
-			var result interface{}
-			if err := resp.DecodeJSON(&result); err != nil {
+			var result any
+			if revokeListUsers {
+				result = new(UserRevocationList)
+			} else {
+				result = new(TokenRevocationList)
+			}
+			if err := resp.DecodeJSON(result); err != nil {
 				return fmt.Errorf("failed to parse response: %w", err)
 			}
 			output, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(output))
 		} else {
-			// Parse and format as table
-			var result map[string]interface{}
-			if err := resp.DecodeJSON(&result); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
-
 			if revokeListUsers {
-				printUserRevocations(result)
+				var result UserRevocationList
+				if err := resp.DecodeJSON(&result); err != nil {
+					return fmt.Errorf("failed to parse response: %w", err)
+				}
+				printUserRevocations(result.RevokedUsers, result.Count, result.Limit)
 			} else {
-				printTokenRevocations(result)
+				var result TokenRevocationList
+				if err := resp.DecodeJSON(&result); err != nil {
+					return fmt.Errorf("failed to parse response: %w", err)
+				}
+				printTokenRevocations(result.RevokedTokens, result.Count, result.Limit)
 			}
 		}
 		return nil
@@ -88,15 +94,11 @@ func runRevokeList(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func printTokenRevocations(result map[string]interface{}) {
-	tokens, ok := result["revokedTokens"].([]interface{})
-	if !ok {
+func printTokenRevocations(tokens []string, count, limit int) {
+	if tokens == nil {
 		fmt.Println("No revoked tokens found.")
 		return
 	}
-
-	count := int(result["count"].(float64))
-	limit := int(result["limit"].(float64))
 
 	fmt.Printf("Revoked Tokens (%d shown, limit %d):\n", count, limit)
 	fmt.Println("----------------------------------------")
@@ -115,15 +117,11 @@ func printTokenRevocations(result map[string]interface{}) {
 	}
 }
 
-func printUserRevocations(result map[string]interface{}) {
-	users, ok := result["revokedUsers"].([]interface{})
-	if !ok {
+func printUserRevocations(users []string, count, limit int) {
+	if users == nil {
 		fmt.Println("No users with blanket revocations found.")
 		return
 	}
-
-	count := int(result["count"].(float64))
-	limit := int(result["limit"].(float64))
 
 	fmt.Printf("Users with Blanket Revocations (%d shown, limit %d):\n", count, limit)
 	fmt.Println("--------------------------------------------------")

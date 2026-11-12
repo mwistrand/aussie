@@ -52,7 +52,7 @@ func runRevokeCheck(cmd *cobra.Command, args []string) error {
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		var result map[string]interface{}
+		var result TokenRevocationStatus
 		if err := resp.DecodeJSON(&result); err != nil {
 			return fmt.Errorf("failed to parse response: %w", err)
 		}
@@ -61,17 +61,14 @@ func runRevokeCheck(cmd *cobra.Command, args []string) error {
 			output, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(output))
 		} else {
-			revoked, _ := result["revoked"].(bool)
-			checkedAt, _ := result["checkedAt"].(string)
-
 			fmt.Printf("Token Status: %s\n", jti)
 			fmt.Println("----------------------------------")
-			if revoked {
+			if result.Revoked {
 				fmt.Println("  Status:    REVOKED")
 			} else {
 				fmt.Println("  Status:    VALID (not revoked)")
 			}
-			fmt.Printf("  Checked:   %s\n", checkedAt)
+			fmt.Printf("  Checked:   %s\n", result.CheckedAt)
 		}
 		return nil
 	case http.StatusUnauthorized:
