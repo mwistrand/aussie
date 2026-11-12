@@ -46,6 +46,8 @@ jobs:
           --health-retries 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -71,6 +73,31 @@ jobs:
           go mod verify
           go vet ./...
           go test -race ./...
+      - name: Prepare previous OpenAPI contract
+        id: openapi-base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE_SHA" ] && git cat-file -e "$BASE_SHA:api/src/main/resources/META-INF/resources/openapi.yaml" 2>/dev/null; then
+            git show "$BASE_SHA:api/src/main/resources/META-INF/resources/openapi.yaml" > api/build/openapi-previous.yaml
+            # shortcut: normalize the pre-oasdiff baseline, remove after main contains valid response maps.
+            sed -i "s|responses: {\$ref: '#/components/responses/Json'}|responses: {default: {\$ref: '#/components/responses/Json'}}|g" api/build/openapi-previous.yaml
+            sed -i "s|responses: {\$ref: '#/components/responses/Empty'}|responses: {default: {\$ref: '#/components/responses/Empty'}}|g" api/build/openapi-previous.yaml
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Validate OpenAPI contract
+        uses: oasdiff/oasdiff-action/validate@v0.1.17
+        with:
+          spec: api/src/main/resources/META-INF/resources/openapi.yaml
+          fail-on: ERR
+      - name: Check OpenAPI contract compatibility
+        if: steps.openapi-base.outputs.available == 'true'
+        uses: oasdiff/oasdiff-action/breaking@v0.1.17
+        with:
+          base: api/build/openapi-previous.yaml
+          revision: api/src/main/resources/META-INF/resources/openapi.yaml
+          fail-on: WARN
+          review: false
       - name: Demo lint and build
         working-directory: demo
         run: |
