@@ -78,22 +78,22 @@ func runRolesUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Build request body with only the fields that were set
-	reqBody := make(map[string]interface{})
+	// Build request body with only the fields that were set.
+	var reqBody RoleUpdateRequest
 	if displayNameSet {
-		reqBody["displayName"] = updateRoleDisplayName
+		reqBody.DisplayName = &updateRoleDisplayName
 	}
 	if descriptionSet {
-		reqBody["description"] = updateRoleDescription
+		reqBody.Description = &updateRoleDescription
 	}
 	if permissionsSet {
-		reqBody["permissions"] = updateRolePermissions
+		reqBody.Permissions = &updateRolePermissions
 	}
 	if addPermissionsSet {
-		reqBody["addPermissions"] = addRolePermissions
+		reqBody.AddPermissions = addRolePermissions
 	}
 	if removePermissionsSet {
-		reqBody["removePermissions"] = removeRolePermissions
+		reqBody.RemovePermissions = removeRolePermissions
 	}
 
 	resp, err := client.DoJSON(http.MethodPut, "/admin/roles/"+roleID, reqBody)
@@ -121,13 +121,7 @@ func runRolesUpdate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unexpected response: %s", resp.Status)
 	}
 
-	var result struct {
-		ID          string   `json:"id"`
-		DisplayName string   `json:"displayName"`
-		Description string   `json:"description"`
-		Permissions []string `json:"permissions"`
-		UpdatedAt   string   `json:"updatedAt"`
-	}
+	var result Role
 	if err := resp.DecodeJSON(&result); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}

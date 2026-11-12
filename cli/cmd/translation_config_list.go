@@ -52,14 +52,7 @@ func runTranslationConfigList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unexpected response: %s", resp.Status)
 	}
 
-	var versions []struct {
-		ID        string `json:"id"`
-		Version   int    `json:"version"`
-		Active    bool   `json:"active"`
-		CreatedBy string `json:"createdBy"`
-		CreatedAt string `json:"createdAt"`
-		Comment   string `json:"comment"`
-	}
+	var versions []TranslationConfigVersion
 	if err := resp.DecodeJSON(&versions); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}

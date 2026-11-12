@@ -51,13 +51,7 @@ func runRolesList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unexpected response: %s", resp.Status)
 	}
 
-	var roles []struct {
-		ID          string   `json:"id"`
-		DisplayName string   `json:"displayName"`
-		Description string   `json:"description"`
-		Permissions []string `json:"permissions"`
-		UpdatedAt   string   `json:"updatedAt"`
-	}
+	var roles []Role
 	if err := resp.DecodeJSON(&roles); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}

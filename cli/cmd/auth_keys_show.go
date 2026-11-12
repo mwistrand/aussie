@@ -29,19 +29,6 @@ func init() {
 	authKeysShowCmd.Flags().BoolVar(&authKeysShowIncludePublicKey, "include-public-key", false, "Include public key metadata in output")
 }
 
-// signingKeyDetail represents detailed information about a signing key.
-type signingKeyDetail struct {
-	KeyId        string                 `json:"keyId"`
-	Status       string                 `json:"status"`
-	CreatedAt    string                 `json:"createdAt"`
-	ActivatedAt  string                 `json:"activatedAt,omitempty"`
-	DeprecatedAt string                 `json:"deprecatedAt,omitempty"`
-	RetiredAt    string                 `json:"retiredAt,omitempty"`
-	CanSign      bool                   `json:"canSign"`
-	CanVerify    bool                   `json:"canVerify"`
-	PublicKey    map[string]interface{} `json:"publicKey,omitempty"`
-}
-
 func runAuthKeysShow(cmd *cobra.Command, args []string) error {
 	keyId := args[0]
 

@@ -31,16 +31,6 @@ func init() {
 	authKeysListCmd.Flags().StringVar(&authKeysListFormat, "format", "table", "Output format: table or json")
 }
 
-// signingKey represents a signing key returned by the API.
-type signingKey struct {
-	KeyId        string `json:"keyId"`
-	Status       string `json:"status"`
-	CreatedAt    string `json:"createdAt"`
-	ActivatedAt  string `json:"activatedAt,omitempty"`
-	DeprecatedAt string `json:"deprecatedAt,omitempty"`
-	RetiredAt    string `json:"retiredAt,omitempty"`
-}
-
 func runAuthKeysList(cmd *cobra.Command, args []string) error {
 	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {

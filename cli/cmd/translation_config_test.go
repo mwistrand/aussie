@@ -136,10 +136,7 @@ func runTranslationConfigTest(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unexpected response: %s", resp.Status)
 	}
 
-	var result struct {
-		Roles       []string `json:"roles"`
-		Permissions []string `json:"permissions"`
-	}
+	var result TranslationTestResult
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}

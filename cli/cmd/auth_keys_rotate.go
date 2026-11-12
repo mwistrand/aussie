@@ -33,20 +33,6 @@ func init() {
 	authKeysRotateCmd.MarkFlagRequired("reason")
 }
 
-// rotateRequest is the request body for key rotation.
-type rotateRequest struct {
-	Reason string `json:"reason"`
-}
-
-// rotateResponse is the response from a key rotation request.
-type rotateResponse struct {
-	KeyId       string `json:"keyId"`
-	Status      string `json:"status"`
-	CreatedAt   string `json:"createdAt"`
-	ActivatedAt string `json:"activatedAt"`
-	PreviousKey string `json:"previousKeyId,omitempty"`
-}
-
 func runAuthKeysRotate(cmd *cobra.Command, args []string) error {
 	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {
