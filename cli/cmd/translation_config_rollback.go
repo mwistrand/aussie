@@ -54,11 +54,7 @@ func runTranslationConfigRollback(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unexpected response: %s", resp.Status)
 	}
 
-	var version struct {
-		ID      string `json:"id"`
-		Version int    `json:"version"`
-		Comment string `json:"comment"`
-	}
+	var version TranslationConfigVersion
 	if err := resp.DecodeJSON(&version); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}

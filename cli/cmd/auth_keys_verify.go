@@ -27,15 +27,6 @@ func init() {
 	authKeysCmd.AddCommand(authKeysVerifyCmd)
 }
 
-// keyHealthStatus represents the health status of signing keys.
-type keyHealthStatus struct {
-	Enabled              bool   `json:"enabled"`
-	Status               string `json:"status"`
-	ActiveKeyId          string `json:"activeKeyId,omitempty"`
-	VerificationKeyCount int    `json:"verificationKeyCount"`
-	LastCacheRefresh     string `json:"lastCacheRefresh,omitempty"`
-}
-
 func runAuthKeysVerify(cmd *cobra.Command, args []string) error {
 	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {

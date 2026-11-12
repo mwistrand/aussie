@@ -83,14 +83,7 @@ func runKeysCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unexpected response: %s", resp.Status)
 	}
 
-	var result struct {
-		KeyId       string   `json:"keyId"`
-		Key         string   `json:"key"`
-		Name        string   `json:"name"`
-		Permissions []string `json:"permissions"`
-		CreatedBy   string   `json:"createdBy"`
-		ExpiresAt   string   `json:"expiresAt,omitempty"`
-	}
+	var result APIKeyCreateResponse
 	if err := resp.DecodeJSON(&result); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}

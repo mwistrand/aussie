@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"testing"
 )
 
@@ -179,6 +180,31 @@ func TestRolesUpdateCmd_Initialized(t *testing.T) {
 	removePermissionsFlag := rolesUpdateCmd.Flags().Lookup("remove-permissions")
 	if removePermissionsFlag == nil {
 		t.Error("rolesUpdateCmd should have 'remove-permissions' flag")
+	}
+}
+
+func TestRoleUpdateRequest_PreservesExplicitEmptyPermissions(t *testing.T) {
+	emptyPermissions := []string{}
+
+	data, err := json.Marshal(RoleUpdateRequest{Permissions: &emptyPermissions})
+	if err != nil {
+		t.Fatalf("failed to marshal empty permission replacement: %v", err)
+	}
+
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(data, &body); err != nil {
+		t.Fatalf("failed to decode request body: %v", err)
+	}
+	if got := string(body["permissions"]); got != "[]" {
+		t.Fatalf("permissions = %s, want []", got)
+	}
+
+	data, err = json.Marshal(RoleUpdateRequest{})
+	if err != nil {
+		t.Fatalf("failed to marshal empty update: %v", err)
+	}
+	if string(data) != "{}" {
+		t.Fatalf("empty update = %s, want {}", data)
 	}
 }
 

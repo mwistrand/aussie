@@ -46,17 +46,11 @@ func runRolesCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build request body
-	reqBody := map[string]interface{}{
-		"id": createRoleID,
-	}
-	if createRoleDisplayName != "" {
-		reqBody["displayName"] = createRoleDisplayName
-	}
-	if createRoleDescription != "" {
-		reqBody["description"] = createRoleDescription
-	}
-	if len(createRolePermissions) > 0 {
-		reqBody["permissions"] = createRolePermissions
+	reqBody := RoleCreateRequest{
+		ID:          createRoleID,
+		DisplayName: createRoleDisplayName,
+		Description: createRoleDescription,
+		Permissions: createRolePermissions,
 	}
 
 	resp, err := client.DoJSON(http.MethodPost, "/admin/roles", reqBody)
@@ -81,13 +75,7 @@ func runRolesCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unexpected response: %s", resp.Status)
 	}
 
-	var result struct {
-		ID          string   `json:"id"`
-		DisplayName string   `json:"displayName"`
-		Description string   `json:"description"`
-		Permissions []string `json:"permissions"`
-		CreatedAt   string   `json:"createdAt"`
-	}
+	var result Role
 	if err := resp.DecodeJSON(&result); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}

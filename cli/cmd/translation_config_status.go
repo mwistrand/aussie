@@ -30,19 +30,6 @@ func init() {
 	translationConfigCmd.AddCommand(translationConfigStatusCmd)
 }
 
-type translationStatus struct {
-	Enabled         bool        `json:"enabled"`
-	ActiveProvider  string      `json:"activeProvider"`
-	ProviderHealthy bool        `json:"providerHealthy"`
-	Cache           cacheStatus `json:"cache"`
-}
-
-type cacheStatus struct {
-	CurrentSize int64 `json:"currentSize"`
-	MaxSize     int64 `json:"maxSize"`
-	TtlSeconds  int   `json:"ttlSeconds"`
-}
-
 func runTranslationConfigStatus(cmd *cobra.Command, args []string) error {
 	client, err := newAuthenticatedAPIClient(cmd)
 	if err != nil {

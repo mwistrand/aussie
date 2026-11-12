@@ -107,3 +107,132 @@ type ServiceResponse struct {
 	Endpoints         []EndpointConfig     `json:"endpoints"`
 	AccessConfig      *ServiceAccessConfig `json:"accessConfig"`
 }
+
+// Role is the wire representation returned by the role endpoints.
+type Role struct {
+	ID          string   `json:"id"`
+	DisplayName string   `json:"displayName"`
+	Description string   `json:"description"`
+	Permissions []string `json:"permissions"`
+	TeamID      string   `json:"teamId,omitempty"`
+	CreatedAt   string   `json:"createdAt,omitempty"`
+	UpdatedAt   string   `json:"updatedAt,omitempty"`
+	Version     int64    `json:"version,omitempty"`
+}
+
+// RoleCreateRequest is the request body for creating a role.
+type RoleCreateRequest struct {
+	ID          string   `json:"id"`
+	DisplayName string   `json:"displayName,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Permissions []string `json:"permissions,omitempty"`
+}
+
+// RoleUpdateRequest is the request body for updating a role.
+type RoleUpdateRequest struct {
+	DisplayName       *string   `json:"displayName,omitempty"`
+	Description       *string   `json:"description,omitempty"`
+	Permissions       *[]string `json:"permissions,omitempty"`
+	AddPermissions    []string  `json:"addPermissions,omitempty"`
+	RemovePermissions []string  `json:"removePermissions,omitempty"`
+}
+
+// SigningKey is the summary returned by the signing-key list endpoint.
+type SigningKey struct {
+	KeyId        string `json:"keyId"`
+	Status       string `json:"status"`
+	CreatedAt    string `json:"createdAt"`
+	ActivatedAt  string `json:"activatedAt,omitempty"`
+	DeprecatedAt string `json:"deprecatedAt,omitempty"`
+	RetiredAt    string `json:"retiredAt,omitempty"`
+}
+
+// SigningKeyDetail is the detailed signing-key response.
+type SigningKeyDetail struct {
+	SigningKey
+	CanSign   bool           `json:"canSign"`
+	CanVerify bool           `json:"canVerify"`
+	PublicKey map[string]any `json:"publicKey,omitempty"`
+}
+
+// RotateSigningKeyRequest is the request body for signing-key rotation.
+type RotateSigningKeyRequest struct {
+	Reason string `json:"reason"`
+}
+
+// RotateSigningKeyResponse is the response from signing-key rotation.
+type RotateSigningKeyResponse struct {
+	KeyId       string `json:"keyId"`
+	Status      string `json:"status"`
+	CreatedAt   string `json:"createdAt"`
+	ActivatedAt string `json:"activatedAt"`
+	PreviousKey string `json:"previousKeyId,omitempty"`
+}
+
+// SigningKeyHealthStatus is the signing-key health response.
+type SigningKeyHealthStatus struct {
+	Enabled              bool   `json:"enabled"`
+	Status               string `json:"status"`
+	ActiveKeyId          string `json:"activeKeyId,omitempty"`
+	VerificationKeyCount int    `json:"verificationKeyCount"`
+	LastCacheRefresh     string `json:"lastCacheRefresh,omitempty"`
+}
+
+// APIKey is the wire representation returned by API-key list endpoints.
+type APIKey struct {
+	Id          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Permissions []string `json:"permissions"`
+	CreatedBy   string   `json:"createdBy"`
+	CreatedAt   string   `json:"createdAt"`
+	ExpiresAt   string   `json:"expiresAt,omitempty"`
+	Revoked     bool     `json:"revoked"`
+}
+
+// APIKeyCreateResponse is the response from creating an API key.
+type APIKeyCreateResponse struct {
+	KeyId       string   `json:"keyId"`
+	Key         string   `json:"key"`
+	Name        string   `json:"name"`
+	Permissions []string `json:"permissions"`
+	CreatedBy   string   `json:"createdBy"`
+	ExpiresAt   string   `json:"expiresAt,omitempty"`
+}
+
+// TranslationConfigVersion is a translation-config version response.
+type TranslationConfigVersion struct {
+	ID        string `json:"id"`
+	Version   int    `json:"version"`
+	Active    bool   `json:"active"`
+	CreatedBy string `json:"createdBy,omitempty"`
+	CreatedAt string `json:"createdAt,omitempty"`
+	Comment   string `json:"comment,omitempty"`
+}
+
+// TranslationStatus is the translation service status response.
+type TranslationStatus struct {
+	Enabled         bool                   `json:"enabled"`
+	ActiveProvider  string                 `json:"activeProvider"`
+	ProviderHealthy bool                   `json:"providerHealthy"`
+	Cache           TranslationCacheStatus `json:"cache"`
+}
+
+// TranslationCacheStatus is translation cache status.
+type TranslationCacheStatus struct {
+	CurrentSize int64 `json:"currentSize"`
+	MaxSize     int64 `json:"maxSize"`
+	TtlSeconds  int   `json:"ttlSeconds"`
+}
+
+// TranslationConfigValidation is a translation-config validation response.
+type TranslationConfigValidation struct {
+	Valid  bool     `json:"valid"`
+	Errors []string `json:"errors"`
+}
+
+// TranslationTestResult is the response from testing translation.
+type TranslationTestResult struct {
+	Roles       []string `json:"roles"`
+	Permissions []string `json:"permissions"`
+}
