@@ -87,20 +87,14 @@ func runLockoutStatus(cmd *cobra.Command, args []string) error {
 
 	switch resp.StatusCode {
 	case http.StatusOK:
+		var result LockoutStatus
+		if err := resp.DecodeJSON(&result); err != nil {
+			return fmt.Errorf("failed to parse response: %w", err)
+		}
 		if lockoutStatusFormat == "json" {
-			// Pretty print JSON
-			var result interface{}
-			if err := resp.DecodeJSON(&result); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
 			output, _ := json.MarshalIndent(result, "", "  ")
 			fmt.Println(string(output))
 		} else {
-			// Parse and format as table
-			var result map[string]interface{}
-			if err := resp.DecodeJSON(&result); err != nil {
-				return fmt.Errorf("failed to parse response: %w", err)
-			}
 			printLockoutStatus(result, identifierType, identifierValue)
 		}
 		return nil
@@ -115,28 +109,24 @@ func runLockoutStatus(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func printLockoutStatus(result map[string]interface{}, identifierType, identifierValue string) {
-	lockedOut := result["lockedOut"].(bool)
-	failedAttempts := int(result["failedAttempts"].(float64))
-	maxAttempts := int(result["maxAttempts"].(float64))
-
+func printLockoutStatus(result LockoutStatus, identifierType, identifierValue string) {
 	fmt.Printf("%s:             %s\n", identifierType, identifierValue)
 
-	if lockedOut {
+	if result.LockedOut {
 		fmt.Printf("Status:          LOCKED OUT\n")
-		fmt.Printf("Failed Attempts: %d\n", failedAttempts)
+		fmt.Printf("Failed Attempts: %d\n", result.FailedAttempts)
 
-		if lockoutStarted, ok := result["lockoutStarted"].(string); ok {
-			fmt.Printf("Lockout Started: %s\n", lockoutStarted)
+		if result.LockoutStarted != "" {
+			fmt.Printf("Lockout Started: %s\n", result.LockoutStarted)
 		}
-		if lockoutExpires, ok := result["lockoutExpires"].(string); ok {
-			fmt.Printf("Lockout Expires: %s\n", lockoutExpires)
+		if result.LockoutExpires != "" {
+			fmt.Printf("Lockout Expires: %s\n", result.LockoutExpires)
 		}
-		if lockoutCount, ok := result["lockoutCount"].(float64); ok {
-			fmt.Printf("Lockout Count:   %d\n", int(lockoutCount))
+		if result.LockoutCount > 0 {
+			fmt.Printf("Lockout Count:   %d\n", result.LockoutCount)
 		}
 	} else {
 		fmt.Printf("Status:          OK\n")
-		fmt.Printf("Failed Attempts: %d / %d\n", failedAttempts, maxAttempts)
+		fmt.Printf("Failed Attempts: %d / %d\n", result.FailedAttempts, result.MaxAttempts)
 	}
 }

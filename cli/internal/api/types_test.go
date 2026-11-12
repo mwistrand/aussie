@@ -54,6 +54,66 @@ func TestAPIKeyCreateRequestOmitsUnsetTTL(t *testing.T) {
 	}
 }
 
+func TestTokenRevocationWireTypesRoundTrip(t *testing.T) {
+	var response TokenRevocationList
+	if err := json.Unmarshal([]byte(`{"revokedTokens":["jti-1"],"count":1,"limit":50}`), &response); err != nil {
+		t.Fatalf("decode token revocation list: %v", err)
+	}
+	if len(response.RevokedTokens) != 1 || response.RevokedTokens[0] != "jti-1" {
+		t.Fatalf("unexpected token revocation list: %#v", response)
+	}
+
+	request, err := json.Marshal(RevokeByTokenRequest{Token: "jwt", Reason: "incident"})
+	if err != nil {
+		t.Fatalf("encode revoke request: %v", err)
+	}
+	if string(request) != `{"token":"jwt","reason":"incident"}` {
+		t.Fatalf("unexpected revoke request: %s", request)
+	}
+}
+
+func TestLockoutWireTypesRoundTrip(t *testing.T) {
+	var response LockoutStatus
+	if err := json.Unmarshal([]byte(`{"type":"user","value":"alice","key":"user:alice","lockedOut":true,"failedAttempts":5,"maxAttempts":5,"lockoutStarted":"2026-01-01T00:00:00Z","lockoutExpires":"2026-01-01T01:00:00Z","lockoutCount":2,"checkedAt":"2026-01-01T00:00:01Z"}`), &response); err != nil {
+		t.Fatalf("decode lockout status: %v", err)
+	}
+	if !response.LockedOut || response.FailedAttempts != 5 || response.LockoutCount != 2 {
+		t.Fatalf("unexpected lockout status: %#v", response)
+	}
+
+	encoded, err := json.Marshal(ClearAllLockoutsRequest{Force: true, Reason: "incident"})
+	if err != nil {
+		t.Fatalf("encode lockout request: %v", err)
+	}
+	if string(encoded) != `{"force":true,"reason":"incident"}` {
+		t.Fatalf("unexpected lockout request: %s", encoded)
+	}
+}
+
+func TestTokenInspectionPreservesNullClaims(t *testing.T) {
+	fixture := []byte(`{"jti":null,"subject":null,"issuer":null,"audience":null,"issuedAt":null,"expiresAt":null,"notBefore":null}`)
+
+	var inspection TokenInspection
+	if err := json.Unmarshal(fixture, &inspection); err != nil {
+		t.Fatalf("decode token inspection: %v", err)
+	}
+	encoded, err := json.Marshal(inspection)
+	if err != nil {
+		t.Fatalf("encode token inspection: %v", err)
+	}
+
+	var want, got any
+	if err := json.Unmarshal(fixture, &want); err != nil {
+		t.Fatalf("decode expected inspection: %v", err)
+	}
+	if err := json.Unmarshal(encoded, &got); err != nil {
+		t.Fatalf("decode encoded inspection: %v", err)
+	}
+	if !bytes.Equal(mustJSON(t, want), mustJSON(t, got)) {
+		t.Fatalf("null claims were not preserved: %s", encoded)
+	}
+}
+
 func mustJSON(t *testing.T, value any) []byte {
 	t.Helper()
 	data, err := json.Marshal(value)
