@@ -4,6 +4,10 @@ This appendix documents every configuration property in the Aussie API Gateway. 
 
 Properties are grouped by the same functional boundaries used in the codebase. Where a property has security implications, those implications are called out explicitly.
 
+The generated property inventory, including source, type, default, environment
+variable, and sensitivity metadata, is maintained in
+[appendix-b-configuration-inventory.md](appendix-b-configuration-inventory.md).
+
 All durations use ISO-8601 format (e.g., `PT30S` for 30 seconds, `PT1H` for 1 hour, `P7D` for 7 days). Quarkus validates duration formats at startup; malformed values prevent the application from starting.
 
 ## 1. Gateway Core
