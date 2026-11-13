@@ -875,8 +875,6 @@ These failure semantics are security decisions. Rate limiting and token revocati
 | `aussie.telemetry.sampling.default-rate` | `double` | `1.0` | `AUSSIE_TELEMETRY_SAMPLING_DEFAULT_RATE` | Default sampling rate. 1.0 = all traced, 0.0 = none traced. |
 | `aussie.telemetry.sampling.minimum-rate` | `double` | `0.0` | `AUSSIE_TELEMETRY_SAMPLING_MINIMUM_RATE` | Platform floor. Service configs cannot go below this. |
 | `aussie.telemetry.sampling.maximum-rate` | `double` | `1.0` | `AUSSIE_TELEMETRY_SAMPLING_MAXIMUM_RATE` | Platform ceiling. Service configs cannot exceed this. |
-| `aussie.telemetry.sampling.cache.redis-enabled` | `boolean` | `true` | `AUSSIE_TELEMETRY_SAMPLING_CACHE_REDIS_ENABLED` | Enable Redis caching for sampling configs. |
-| `aussie.telemetry.sampling.cache.redis-ttl` | `Duration` | `PT5M` | `AUSSIE_TELEMETRY_SAMPLING_CACHE_REDIS_TTL` | Redis cache TTL for sampling configs. |
 | `aussie.telemetry.sampling.lookup.timeout` | `Duration` | `PT5S` | `AUSSIE_TELEMETRY_SAMPLING_LOOKUP_TIMEOUT` | Timeout for synchronous sampling config lookups. |
 
 ### 20.4 Metrics

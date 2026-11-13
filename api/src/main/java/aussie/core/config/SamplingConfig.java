@@ -87,44 +87,9 @@ public interface SamplingConfig {
     double maximumRate();
 
     /**
-     * Redis cache configuration for sampling configs.
-     */
-    CacheConfig cache();
-
-    /**
      * Lookup configuration for sampling config resolution.
      */
     LookupConfig lookup();
-
-    /**
-     * Cache configuration for sampling configs.
-     */
-    interface CacheConfig {
-
-        /**
-         * Enable Redis caching for sampling configurations.
-         *
-         * <p>When enabled, sampling configurations are cached in Redis
-         * for cross-instance consistency with a longer TTL than the
-         * local in-memory cache.
-         *
-         * @return true to use Redis caching (default: true)
-         */
-        @WithDefault("true")
-        boolean redisEnabled();
-
-        /**
-         * TTL for Redis-cached sampling configurations.
-         *
-         * <p>Should be longer than the local cache TTL to reduce
-         * Cassandra lookups while still providing reasonable freshness.
-         *
-         * @return Redis cache TTL in ISO-8601 duration format (default: PT5M)
-         */
-        @WithName("redis-ttl")
-        @WithDefault("PT5M")
-        java.time.Duration redisTtl();
-    }
 
     /**
      * Lookup configuration for sampling config resolution.

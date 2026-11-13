@@ -23,7 +23,6 @@ class SamplingResolverInitializerTest {
     private SamplingResolver resolver;
     private SamplingConfig config;
     private SamplingConfig.LookupConfig lookupConfig;
-    private SamplingConfig.CacheConfig cacheConfig;
     private SamplingResolverInitializer initializer;
 
     @BeforeEach
@@ -31,13 +30,9 @@ class SamplingResolverInitializerTest {
         resolver = mock(SamplingResolver.class);
         config = mock(SamplingConfig.class);
         lookupConfig = mock(SamplingConfig.LookupConfig.class);
-        cacheConfig = mock(SamplingConfig.CacheConfig.class);
 
         when(config.lookup()).thenReturn(lookupConfig);
-        when(config.cache()).thenReturn(cacheConfig);
         when(lookupConfig.timeout()).thenReturn(Duration.ofSeconds(5));
-        when(cacheConfig.redisEnabled()).thenReturn(false);
-        when(cacheConfig.redisTtl()).thenReturn(Duration.ofMinutes(5));
 
         // Valid defaults
         when(config.enabled()).thenReturn(true);

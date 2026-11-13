@@ -62,7 +62,7 @@ public interface LocalCacheConfig {
      *
      * <p>Controls how long service sampling configurations are cached
      * before re-checking persistent storage. This is the local in-memory
-     * cache TTL; Redis cache TTL is configured separately.
+     * cache TTL.
      *
      * @return TTL duration (default: 30 seconds)
      */
