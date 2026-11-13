@@ -320,12 +320,10 @@ Token providers are configured as a named map. Each provider entry supports:
 |----------|------|---------|---------------------|-------------|
 | `.issuer` | `String` | _(required)_ | `AUSSIE_AUTH_ROUTE_AUTH_PROVIDERS_<NAME>_ISSUER` | Expected issuer claim (`iss`). |
 | `.jwks-uri` | `String` | _(required)_ | `AUSSIE_AUTH_ROUTE_AUTH_PROVIDERS_<NAME>_JWKS_URI` | JWKS endpoint URI for key retrieval. |
-| `.discovery-uri` | `Optional<String>` | _(not set)_ | `AUSSIE_AUTH_ROUTE_AUTH_PROVIDERS_<NAME>_DISCOVERY_URI` | Deprecated compatibility value available to custom token-validator providers; built-in validation requires the explicit JWKS URI. |
 | `.audiences` | `Set<String>` | _(empty)_ | `AUSSIE_AUTH_ROUTE_AUTH_PROVIDERS_<NAME>_AUDIENCES` | Allowed audience claim values. |
-| `.key-refresh-interval` | `Duration` | `PT1H` | `AUSSIE_AUTH_ROUTE_AUTH_PROVIDERS_<NAME>_KEY_REFRESH_INTERVAL` | Deprecated compatibility hint available to custom token-validator providers; built-in JWKS caching uses the global resiliency setting. |
 | `.claims-mapping` | `Map<String, String>` | _(empty)_ | _(complex)_ | Claims mapping from external to internal names. |
 
-JWKS refresh is controlled centrally by `aussie.resiliency.jwks.cache-ttl` for built-in validation. The deprecated provider-specific value remains available only for custom token-validator compatibility.
+JWKS refresh is controlled centrally by `aussie.resiliency.jwks.cache-ttl`; there is no provider-specific refresh setting.
 
 ### 7.3 JWS Token Issuance
 

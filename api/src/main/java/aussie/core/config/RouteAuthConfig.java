@@ -60,15 +60,6 @@ public interface RouteAuthConfig {
         String jwksUri();
 
         /**
-         * Legacy OIDC discovery endpoint retained for custom token-validator compatibility.
-         *
-         * @deprecated built-in validation requires an explicit JWKS URI; custom validators may still consume it
-         */
-        @Deprecated
-        @WithName("discovery-uri")
-        Optional<String> discoveryUri();
-
-        /**
          * Allowed audience claim values.
          */
         @WithDefault("")
@@ -84,16 +75,6 @@ public interface RouteAuthConfig {
         @WithName("allowed-algorithms")
         @WithDefault("RS256,RS384,RS512,ES256,ES384,ES512,EdDSA")
         Set<String> allowedAlgorithms();
-
-        /**
-         * Legacy provider-specific JWKS refresh hint retained for custom token-validator compatibility.
-         *
-         * @deprecated built-in JWKS caching uses the global resiliency configuration
-         */
-        @Deprecated
-        @WithName("key-refresh-interval")
-        @WithDefault("PT1H")
-        Duration keyRefreshInterval();
 
         /**
          * Claims mapping (external name -> internal name).

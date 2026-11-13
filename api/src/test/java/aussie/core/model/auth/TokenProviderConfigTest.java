@@ -4,9 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.net.URI;
-import java.time.Duration;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import org.junit.jupiter.api.DisplayName;
@@ -27,15 +25,7 @@ class TokenProviderConfigTest {
         void shouldThrowOnNullId() {
             assertThrows(
                     IllegalArgumentException.class,
-                    () -> new TokenProviderConfig(
-                            null,
-                            "issuer",
-                            JWKS_URI,
-                            Optional.empty(),
-                            Set.of(),
-                            Set.of("RS256"),
-                            Duration.ofHours(1),
-                            Map.of()));
+                    () -> new TokenProviderConfig(null, "issuer", JWKS_URI, Set.of(), Set.of("RS256"), Map.of()));
         }
 
         @Test
@@ -43,15 +33,7 @@ class TokenProviderConfigTest {
         void shouldThrowOnBlankIssuer() {
             assertThrows(
                     IllegalArgumentException.class,
-                    () -> new TokenProviderConfig(
-                            "id",
-                            "  ",
-                            JWKS_URI,
-                            Optional.empty(),
-                            Set.of(),
-                            Set.of("RS256"),
-                            Duration.ofHours(1),
-                            Map.of()));
+                    () -> new TokenProviderConfig("id", "  ", JWKS_URI, Set.of(), Set.of("RS256"), Map.of()));
         }
 
         @Test
@@ -59,15 +41,7 @@ class TokenProviderConfigTest {
         void shouldThrowOnNullJwksUri() {
             assertThrows(
                     IllegalArgumentException.class,
-                    () -> new TokenProviderConfig(
-                            "id",
-                            "issuer",
-                            null,
-                            Optional.empty(),
-                            Set.of(),
-                            Set.of("RS256"),
-                            Duration.ofHours(1),
-                            Map.of()));
+                    () -> new TokenProviderConfig("id", "issuer", null, Set.of(), Set.of("RS256"), Map.of()));
         }
     }
 
@@ -78,11 +52,9 @@ class TokenProviderConfigTest {
         @Test
         @DisplayName("Should default null optional fields to sensible values")
         void shouldDefaultNullFields() {
-            var config = new TokenProviderConfig("id", "issuer", JWKS_URI, null, null, null, null, null);
+            var config = new TokenProviderConfig("id", "issuer", JWKS_URI, null, null, null);
 
-            assertEquals(Optional.empty(), config.discoveryUri());
             assertEquals(Set.of(), config.audiences());
-            assertEquals(Duration.ofHours(1), config.keyRefreshInterval());
             assertEquals(Map.of(), config.claimsMapping());
             // Default algorithm whitelist is the asymmetric set; HS* is excluded by default.
             assertEquals(
@@ -97,20 +69,15 @@ class TokenProviderConfigTest {
         @Test
         @DisplayName("Should build config with all optional fields")
         void shouldBuildWithAllFields() {
-            var discoveryUri = URI.create("https://example.com/.well-known/openid-configuration");
             var config = TokenProviderConfig.builder("auth0", "https://auth0.example.com", JWKS_URI)
-                    .discoveryUri(discoveryUri)
                     .audiences(Set.of("api"))
                     .allowedAlgorithms(Set.of("RS256"))
-                    .keyRefreshInterval(Duration.ofMinutes(30))
                     .claimsMapping(Map.of("sub", "userId"))
                     .build();
 
             assertEquals("auth0", config.id());
-            assertEquals(Optional.of(discoveryUri), config.discoveryUri());
             assertEquals(Set.of("api"), config.audiences());
             assertEquals(Set.of("RS256"), config.allowedAlgorithms());
-            assertEquals(Duration.ofMinutes(30), config.keyRefreshInterval());
             assertEquals(Map.of("sub", "userId"), config.claimsMapping());
         }
     }

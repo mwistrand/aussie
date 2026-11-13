@@ -81,10 +81,8 @@ public class TokenValidationService {
             }
 
             var providerConfig = TokenProviderConfig.builder(providerId, props.issuer(), URI.create(props.jwksUri()))
-                    .discoveryUri(props.discoveryUri().map(URI::create).orElse(null))
                     .audiences(props.audiences())
                     .allowedAlgorithms(props.allowedAlgorithms())
-                    .keyRefreshInterval(props.keyRefreshInterval())
                     .claimsMapping(props.claimsMapping())
                     .build();
 
