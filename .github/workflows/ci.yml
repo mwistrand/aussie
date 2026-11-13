@@ -63,6 +63,9 @@ jobs:
           cache: npm
           cache-dependency-path: demo/package-lock.json
 
+      - name: Check configuration contract
+        run: python3 tools/config_contract.py
+
       - name: Java format and tests
         working-directory: api
         run: ./gradlew --dependency-verification=strict spotlessCheck check --rerun-tasks

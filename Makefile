@@ -1,6 +1,6 @@
 COMPOSE=docker compose
 
-.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage reset demo-deps e2e e2e-soak e2e-logs
+.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage config-contract reset demo-deps e2e e2e-soak e2e-logs
 
 SOAK_RUNS ?= 3
 
@@ -50,6 +50,9 @@ test:
 	cd api && ./gradlew test
 	@echo "Running CLI tests..."
 	cd cli && go test ./...
+
+config-contract:
+	python3 tools/config_contract.py
 
 # Generate coverage reports for API (JaCoCo) and CLI (Go)
 coverage:
