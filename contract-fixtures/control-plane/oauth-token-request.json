@@ -1,0 +1,5 @@
+{
+  "code": "authorization-code",
+  "state": "oidc-state",
+  "code_verifier": "pkce-verifier"
+}

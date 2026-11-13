@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "service.config.read": {
+      "anyOfPermissions": ["platform.read"]
+    }
+  }
+}

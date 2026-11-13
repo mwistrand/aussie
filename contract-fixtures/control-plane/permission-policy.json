@@ -1,0 +1,10 @@
+{
+  "permissionPolicy": {
+    "permissions": {
+      "service.config.read": {
+        "anyOfPermissions": ["platform.read"]
+      }
+    }
+  },
+  "version": 1
+}

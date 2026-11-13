@@ -1,0 +1,11 @@
+{
+  "config": {
+    "version": 1,
+    "sources": [{"name": "roles", "claim": "roles", "type": "array"}],
+    "transforms": [],
+    "mappings": {"roleToPermissions": {"admin": ["service.config.read"]}, "directPermissions": {}},
+    "defaults": {"denyIfNoMatch": true, "includeUnmapped": false}
+  },
+  "comment": "contract fixture",
+  "activate": true
+}

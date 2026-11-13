@@ -1,0 +1,5 @@
+{
+  "name": "automation",
+  "description": "CI automation key",
+  "permissions": ["admin:read"]
+}

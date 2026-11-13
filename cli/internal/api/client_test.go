@@ -73,6 +73,34 @@ func TestClientRejectsUnsupportedControlPlaneVersion(t *testing.T) {
 	}
 }
 
+func TestClientAcceptsOldestSupportedServerWithoutResponseVersionHeader(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get(controlPlaneVersionHeader); got != supportedControlPlaneVersion {
+			t.Errorf("control-plane version = %q, want %q", got, supportedControlPlaneVersion)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"contractVersion":"v1","supportedContractVersions":["v1"],"openApi":"/openapi.yaml","futureField":"ignored"}`))
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := client.DoJSON(http.MethodGet, "/admin/capabilities", nil)
+	if err != nil {
+		t.Fatalf("oldest supported server was rejected: %v", err)
+	}
+
+	var capabilities Capabilities
+	if err := response.DecodeJSON(&capabilities); err != nil {
+		t.Fatal(err)
+	}
+	if capabilities.ContractVersion != supportedControlPlaneVersion {
+		t.Fatalf("contract version = %q, want %q", capabilities.ContractVersion, supportedControlPlaneVersion)
+	}
+}
+
 func TestClientRejectsInvalidPaths(t *testing.T) {
 	client, err := New("http://localhost", "")
 	if err != nil {

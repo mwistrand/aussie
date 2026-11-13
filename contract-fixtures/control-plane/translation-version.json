@@ -1,0 +1,15 @@
+{
+  "id": "translation-1",
+  "version": 1,
+  "config": {
+    "version": 1,
+    "sources": [{"name": "roles", "claim": "roles", "type": "array"}],
+    "transforms": [],
+    "mappings": {"roleToPermissions": {"admin": ["service.config.read"]}, "directPermissions": {}},
+    "defaults": {"denyIfNoMatch": true, "includeUnmapped": false}
+  },
+  "active": true,
+  "createdBy": "contract-user",
+  "createdAt": "2026-01-01T00:00:00Z",
+  "comment": "contract fixture"
+}

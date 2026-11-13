@@ -1,0 +1,9 @@
+{
+  "jti": "contract-jti",
+  "subject": "contract-user",
+  "issuer": "https://idp.example.com",
+  "audience": "aussie",
+  "issuedAt": "2026-01-01T00:00:00Z",
+  "expiresAt": "2026-01-01T01:00:00Z",
+  "notBefore": null
+}

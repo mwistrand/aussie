@@ -166,6 +166,12 @@ paths:
       security: [{bearerAuth: []}]
       requestBody: {$ref: '#/components/requestBodies/Json'}
       responses: {default: {$ref: '#/components/responses/Empty'}}
+  /admin/tokens:
+    get:
+      tags: [tokens]
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/Limit'}]
+      responses: {default: {$ref: '#/components/responses/Json'}}
   /admin/tokens/revoke:
     post:
       tags: [tokens]
@@ -318,7 +324,7 @@ paths:
     post:
       tags: [authentication]
       security: []
-      requestBody: {$ref: '#/components/requestBodies/Json'}
+      requestBody: {$ref: '#/components/requestBodies/OidcTokenExchange'}
       responses: {default: {$ref: '#/components/responses/Json'}}
   /auth/session:
     get:
@@ -371,6 +377,20 @@ components:
       content:
         application/json:
           schema: {type: object, additionalProperties: true}
+    OidcTokenExchange:
+      required: true
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: true}
+        application/x-www-form-urlencoded:
+          schema:
+            type: object
+            required: [code, code_verifier, state]
+            properties:
+              code: {type: string}
+              code_verifier: {type: string, minLength: 43, maxLength: 128}
+              state: {type: string}
+              redirect_uri: {type: string, format: uri}
   responses:
     Json:
       description: JSON response; resource-specific fields are additive within v1.
