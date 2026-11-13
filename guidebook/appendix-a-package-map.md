@@ -140,7 +140,7 @@ Pure domain objects. Records, sealed interfaces, enums, value types. No framewor
 | `BucketState` | Record holding current token count and last refill timestamp for a bucket. |
 | `EffectiveRateLimit` | Record combining resolved requests-per-window, window duration, and burst capacity. |
 | `EndpointRateLimitConfig` | Record for per-endpoint rate limit overrides registered by service teams. |
-| `RateLimitAlgorithm` | Enum: `BUCKET`, `FIXED_WINDOW`, `SLIDING_WINDOW`. |
+| `RateLimitAlgorithm` | Enum: `BUCKET`. |
 | `RateLimitAlgorithmHandler` | Interface for pluggable algorithm implementations. |
 | `RateLimitDecision` | Record indicating allowed/denied with remaining tokens and reset time. |
 | `RateLimitKey` | Record composing the rate limit bucket key from source identifier, service, and endpoint. |

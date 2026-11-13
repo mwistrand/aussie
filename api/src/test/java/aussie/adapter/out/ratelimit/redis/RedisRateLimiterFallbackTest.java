@@ -22,8 +22,6 @@ import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
 
 import aussie.adapter.out.ratelimit.memory.InMemoryRateLimiter;
 import aussie.core.config.RateLimitingConfig.RateLimitFallbackBehavior;
@@ -45,23 +43,6 @@ class RedisRateLimiterFallbackTest {
     private ReactiveRedisDataSource redisDataSource;
     private Metrics metrics;
     private RateLimiter localFallback;
-
-    @ParameterizedTest(name = "{0}")
-    @EnumSource(
-            value = RateLimitAlgorithm.class,
-            names = {"FIXED_WINDOW", "SLIDING_WINDOW"})
-    @DisplayName("rejects algorithms without Redis semantics")
-    void rejectsUnsupportedAlgorithms(RateLimitAlgorithm algorithm) {
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> new RedisRateLimiter(
-                        mock(ReactiveRedisDataSource.class),
-                        true,
-                        algorithm,
-                        null,
-                        RateLimitFallbackBehavior.DENY,
-                        null));
-    }
 
     @Test
     @DisplayName("closes the fallback when limiter construction fails")

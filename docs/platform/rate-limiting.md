@@ -25,10 +25,9 @@ Rate limiting protects the Aussie API Gateway from abuse and ensures fair resour
 | Algorithm | Best For | Behavior |
 |-----------|----------|----------|
 | `BUCKET` | General use | Allows controlled bursts, smooth refill |
-| `FIXED_WINDOW` | Not implemented | Gateway startup is rejected |
-| `SLIDING_WINDOW` | Not implemented | Gateway startup is rejected |
 
-Unsupported algorithms fail startup; they never fall back to token-bucket semantics.
+`BUCKET` is the only supported algorithm. Add another algorithm only with matching
+in-memory and Redis semantics.
 
 ### Setting the Platform Maximum
 

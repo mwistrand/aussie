@@ -1,7 +1,6 @@
 package aussie.core.service.ratelimit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -37,18 +36,6 @@ class AlgorithmRegistryTest {
             assertEquals(RateLimitAlgorithm.BUCKET, handler.algorithm());
             assertTrue(handler instanceof BucketAlgorithm);
         }
-
-        @Test
-        @DisplayName("should reject unavailable algorithms")
-        void shouldRejectUnavailableAlgorithms() {
-            assertThrows(IllegalArgumentException.class, () -> registry.getHandler(RateLimitAlgorithm.FIXED_WINDOW));
-        }
-
-        @Test
-        @DisplayName("should reject unavailable sliding window")
-        void shouldRejectUnavailableSlidingWindow() {
-            assertThrows(IllegalArgumentException.class, () -> registry.getHandler(RateLimitAlgorithm.SLIDING_WINDOW));
-        }
     }
 
     @Nested
@@ -59,18 +46,6 @@ class AlgorithmRegistryTest {
         @DisplayName("should report BUCKET as available")
         void shouldReportBucketAsAvailable() {
             assertTrue(registry.isAvailable(RateLimitAlgorithm.BUCKET));
-        }
-
-        @Test
-        @DisplayName("should report FIXED_WINDOW as not available")
-        void shouldReportFixedWindowAsNotAvailable() {
-            assertFalse(registry.isAvailable(RateLimitAlgorithm.FIXED_WINDOW));
-        }
-
-        @Test
-        @DisplayName("should report SLIDING_WINDOW as not available")
-        void shouldReportSlidingWindowAsNotAvailable() {
-            assertFalse(registry.isAvailable(RateLimitAlgorithm.SLIDING_WINDOW));
         }
     }
 

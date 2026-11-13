@@ -22,11 +22,6 @@ import aussie.core.model.ratelimit.RateLimitAlgorithmHandler;
  *   <li>{@link RateLimitAlgorithm#BUCKET} - Token bucket (default)</li>
  * </ul>
  *
- * <p>Future algorithms (not yet implemented):
- * <ul>
- *   <li>{@link RateLimitAlgorithm#FIXED_WINDOW} - Fixed time windows</li>
- *   <li>{@link RateLimitAlgorithm#SLIDING_WINDOW} - Sliding window</li>
- * </ul>
  */
 @ApplicationScoped
 public class AlgorithmRegistry {
@@ -44,8 +39,6 @@ public class AlgorithmRegistry {
         this.defaultHandler = BucketAlgorithm.getInstance();
 
         registerHandler(BucketAlgorithm.getInstance());
-        // Future: registerHandler(FixedWindowAlgorithm.getInstance());
-        // Future: registerHandler(SlidingWindowAlgorithm.getInstance());
 
         LOG.infov("Initialized algorithm registry with {0} handler(s)", handlers.size());
     }

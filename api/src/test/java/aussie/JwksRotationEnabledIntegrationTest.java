@@ -43,7 +43,6 @@ class JwksRotationEnabledIntegrationTest {
         public Map<String, String> getConfigOverrides() {
             return Map.of(
                     "aussie.auth.key-rotation.enabled", "true",
-                    "aussie.auth.key-rotation.storage", "config",
                     "aussie.auth.key-rotation.key-size", "2048");
         }
     }

@@ -1,7 +1,6 @@
 package aussie.core.config;
 
 import java.time.Duration;
-import java.util.Optional;
 
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
@@ -100,31 +99,4 @@ public interface KeyRotationConfig {
     @WithName("key-size")
     @WithDefault("2048")
     int keySize();
-
-    /**
-     * Key storage backend type.
-     *
-     * <p>Options: config, vault, database.
-     * Default uses configuration-based key management.
-     */
-    @WithDefault("config")
-    String storage();
-
-    /**
-     * Vault-specific configuration (when storage=vault).
-     */
-    VaultConfig vault();
-
-    interface VaultConfig {
-        /**
-         * Path in Vault where signing keys are stored.
-         */
-        @WithDefault("secret/aussie/signing-keys")
-        String path();
-
-        /**
-         * Optional namespace for Vault Enterprise.
-         */
-        Optional<String> namespace();
-    }
 }

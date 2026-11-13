@@ -127,12 +127,10 @@ aussie.auth.key-rotation.schedule=0 0 0 1 */3 ?
 aussie.auth.key-rotation.grace-period=PT24H
 aussie.auth.key-rotation.deprecation-period=P7D
 aussie.auth.key-rotation.retention-period=P30D
-aussie.auth.key-rotation.storage=vault
 ```
 
-The built-in `config` repository is process-local and is rejected for rotation outside
-dev/test. Install a durable `SigningKeyRepository` implementation whose activation
-operation is a distributed compare-and-set. See [Signing Keys and Token Profile](signing-keys.md).
+Install a durable `SigningKeyRepository` implementation whose activation operation is
+a distributed compare-and-set. See [Signing Keys and Token Profile](signing-keys.md).
 
 ### Manual Rotation (Static Signing Key)
 

@@ -12,20 +12,20 @@ import java.util.Set;
  * @param id                  unique identifier for this provider (e.g., "auth0", "okta")
  * @param issuer              expected iss claim value
  * @param jwksUri             JWKS endpoint for key retrieval
- * @param discoveryUri        optional OIDC discovery endpoint
+ * @param discoveryUri        legacy optional OIDC discovery endpoint for custom validators
  * @param audiences           allowed aud claim values
  * @param allowedAlgorithms   allowed JWS {@code alg} header values
- * @param keyRefreshInterval  how often to refresh JWKS (default 1 hour)
+ * @param keyRefreshInterval  legacy provider-specific JWKS refresh hint for custom validators
  * @param claimsMapping       map external claim names to internal claim names
  */
 public record TokenProviderConfig(
         String id,
         String issuer,
         URI jwksUri,
-        Optional<URI> discoveryUri,
+        @Deprecated Optional<URI> discoveryUri,
         Set<String> audiences,
         Set<String> allowedAlgorithms,
-        Duration keyRefreshInterval,
+        @Deprecated Duration keyRefreshInterval,
         Map<String, String> claimsMapping) {
 
     private static final Set<String> DEFAULT_ALGORITHMS =
@@ -81,6 +81,8 @@ public record TokenProviderConfig(
             this.jwksUri = jwksUri;
         }
 
+        /** @deprecated retained for custom token-validator compatibility */
+        @Deprecated
         public Builder discoveryUri(URI discoveryUri) {
             this.discoveryUri = discoveryUri;
             return this;
@@ -96,6 +98,8 @@ public record TokenProviderConfig(
             return this;
         }
 
+        /** @deprecated retained for custom token-validator compatibility */
+        @Deprecated
         public Builder keyRefreshInterval(Duration interval) {
             this.keyRefreshInterval = interval;
             return this;
