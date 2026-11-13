@@ -67,10 +67,8 @@ class TokenValidationLogRedactionTest {
         when(config.providers()).thenReturn(Map.of("provider", providerProperties));
         when(providerProperties.issuer()).thenReturn(issuer);
         when(providerProperties.jwksUri()).thenReturn("https://issuer.example/jwks");
-        when(providerProperties.discoveryUri()).thenReturn(java.util.Optional.empty());
         when(providerProperties.audiences()).thenReturn(java.util.Set.of("audience"));
         when(providerProperties.allowedAlgorithms()).thenReturn(java.util.Set.of("RS256"));
-        when(providerProperties.keyRefreshInterval()).thenReturn(Duration.ofMinutes(5));
         when(providerProperties.claimsMapping()).thenReturn(Map.of());
         when(validatorInstances.stream()).thenReturn(Stream.of(provider));
         when(provider.isAvailable()).thenReturn(true);
