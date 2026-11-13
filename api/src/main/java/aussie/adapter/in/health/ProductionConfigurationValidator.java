@@ -1,6 +1,7 @@
 package aussie.adapter.in.health;
 
 import java.net.URI;
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -305,15 +306,41 @@ public class ProductionConfigurationValidator {
     }
 
     private boolean enabled(String key, boolean defaultValue) {
-        return value(key).map(Boolean::parseBoolean).orElse(defaultValue);
+        return value(key)
+                .map(raw -> {
+                    if ("true".equalsIgnoreCase(raw)) {
+                        return true;
+                    }
+                    if ("false".equalsIgnoreCase(raw)) {
+                        return false;
+                    }
+                    throw invalid(key + " must be true or false");
+                })
+                .orElse(defaultValue);
     }
 
     private int integer(String key, int defaultValue) {
-        return value(key).map(Integer::parseInt).orElse(defaultValue);
+        return value(key)
+                .map(raw -> {
+                    try {
+                        return Integer.parseInt(raw);
+                    } catch (NumberFormatException e) {
+                        throw invalid(key + " must be an integer");
+                    }
+                })
+                .orElse(defaultValue);
     }
 
     private Duration duration(String key, Duration defaultValue) {
-        return value(key).map(Duration::parse).orElse(defaultValue);
+        return value(key)
+                .map(raw -> {
+                    try {
+                        return Duration.parse(raw);
+                    } catch (DateTimeException e) {
+                        throw invalid(key + " must be an ISO-8601 duration");
+                    }
+                })
+                .orElse(defaultValue);
     }
 
     private List<String> csv(String key) {
