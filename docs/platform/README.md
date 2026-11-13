@@ -1200,7 +1200,7 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `AUSSIE_RATE_LIMITING_ENABLED` | `true` | Enable rate limiting |
-| `AUSSIE_RATE_LIMITING_ALGORITHM` | `BUCKET` | Algorithm: `BUCKET`, `FIXED_WINDOW`, `SLIDING_WINDOW` |
+| `AUSSIE_RATE_LIMITING_ALGORITHM` | `BUCKET` | Algorithm: `BUCKET` |
 | `AUSSIE_RATE_LIMITING_PLATFORM_MAX_REQUESTS_PER_WINDOW` | `Long.MAX_VALUE` | Maximum rate limit ceiling for service configs |
 | `AUSSIE_RATE_LIMITING_PLATFORM_MAX_WINDOW_SECONDS` | `Long.MAX_VALUE` | Maximum window duration for service configs |
 | `AUSSIE_RATE_LIMITING_DEFAULT_REQUESTS_PER_WINDOW` | `100` | Default requests per window |
@@ -1377,7 +1377,10 @@ This health check always reports UP since configuration is validated at startup.
 | `AUSSIE_AUTH_KEY_ROTATION_KEY_SIZE` | `2048` | RSA key size in bits |
 | `AUSSIE_AUTH_KEY_ROTATION_CACHE_REFRESH_INTERVAL` | `PT5M` | Interval to refresh key cache |
 | `AUSSIE_AUTH_KEY_ROTATION_CLEANUP_INTERVAL` | `PT1H` | Interval to clean up expired keys |
-| `AUSSIE_AUTH_KEY_ROTATION_STORAGE` | `config` | Key storage backend: `config`, `vault` |
+
+Signing-key storage is selected by CDI. Register a durable `SigningKeyRepository`
+implementation, typically as a CDI `@Alternative`, for production rotation; there
+is no storage-selector environment variable.
 
 ### Translation Config Storage
 

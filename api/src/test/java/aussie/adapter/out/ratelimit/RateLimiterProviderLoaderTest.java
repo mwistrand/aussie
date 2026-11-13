@@ -153,16 +153,6 @@ class RateLimiterProviderLoaderTest {
             final var error = assertThrows(IllegalStateException.class, loader::produceRateLimiter);
             assertEquals("Redis unavailable", error.getCause().getMessage());
         }
-
-        @Test
-        @DisplayName("should reject unsupported algorithms at startup")
-        void shouldRejectUnsupportedAlgorithm() {
-            when(config.enabled()).thenReturn(true);
-            when(config.algorithm()).thenReturn(RateLimitAlgorithm.FIXED_WINDOW);
-            when(algorithmRegistry.isAvailable(RateLimitAlgorithm.FIXED_WINDOW)).thenReturn(false);
-
-            assertThrows(IllegalStateException.class, () -> createLoader().produceRateLimiter());
-        }
     }
 
     @Nested

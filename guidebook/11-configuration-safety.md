@@ -501,7 +501,7 @@ The platform documentation (`docs/platform/README.md`, lines 865-1010) provides 
 | Variable                                           | Default  | Description                                          |
 |----------------------------------------------------|----------|------------------------------------------------------|
 | AUSSIE_RATE_LIMITING_ENABLED                       | true     | Enable rate limiting                                 |
-| AUSSIE_RATE_LIMITING_ALGORITHM                     | BUCKET   | Algorithm: BUCKET, FIXED_WINDOW, SLIDING_WINDOW      |
+| AUSSIE_RATE_LIMITING_ALGORITHM                     | BUCKET   | Algorithm: BUCKET                                     |
 | AUSSIE_RATE_LIMITING_DEFAULT_REQUESTS_PER_WINDOW   | 100      | Default requests per window                          |
 | AUSSIE_RATE_LIMITING_WINDOW_SECONDS                | 60       | Window duration in seconds                           |
 ```
@@ -533,7 +533,7 @@ The config interfaces themselves document the environment variable mapping. The 
  * <h2>Environment Variables</h2>
  * <ul>
  *   <li>{@code AUSSIE_RATE_LIMITING_ENABLED} - Enable/disable rate limiting</li>
- *   <li>{@code AUSSIE_RATE_LIMITING_ALGORITHM} - Algorithm: BUCKET, FIXED_WINDOW, SLIDING_WINDOW</li>
+ *   <li>{@code AUSSIE_RATE_LIMITING_ALGORITHM} - Algorithm: BUCKET</li>
  *   <li>{@code AUSSIE_RATE_LIMITING_PLATFORM_MAX_REQUESTS_PER_WINDOW} - Maximum ceiling</li>
  * </ul>
  */

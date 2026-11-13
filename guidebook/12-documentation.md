@@ -36,8 +36,6 @@ Consider rate limiting. The platform team documentation in `docs/platform/rate-l
 | Algorithm | Best For | Behavior |
 |-----------|----------|----------|
 | `BUCKET` | General use | Allows controlled bursts, smooth refill |
-| `FIXED_WINDOW` | Strict limits | Hard cutoff at window boundary |
-| `SLIDING_WINDOW` | Smooth limits | More even distribution |
 ```
 
 ```

@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -136,10 +137,11 @@ class TokenValidationServiceTest {
             var providerProps = mock(RouteAuthConfig.TokenProviderProperties.class);
             when(providerProps.issuer()).thenReturn("https://issuer.example.com");
             when(providerProps.jwksUri()).thenReturn("https://issuer.example.com/.well-known/jwks.json");
-            when(providerProps.discoveryUri()).thenReturn(Optional.empty());
+            when(providerProps.discoveryUri())
+                    .thenReturn(Optional.of("https://issuer.example.com/.well-known/openid-configuration"));
             when(providerProps.audiences()).thenReturn(Set.of("aussie-gateway"));
             when(providerProps.allowedAlgorithms()).thenReturn(Set.of("RS256"));
-            when(providerProps.keyRefreshInterval()).thenReturn(Duration.ofHours(1));
+            when(providerProps.keyRefreshInterval()).thenReturn(Duration.ofMinutes(7));
             when(providerProps.claimsMapping()).thenReturn(Map.of());
             when(config.providers()).thenReturn(Map.of("provider1", providerProps));
 
@@ -157,6 +159,12 @@ class TokenValidationServiceTest {
 
             assertInstanceOf(TokenValidationResult.Valid.class, result);
             assertEquals("user-1", ((TokenValidationResult.Valid) result).subject());
+            var providerConfig = org.mockito.ArgumentCaptor.forClass(TokenProviderConfig.class);
+            verify(validator).validate(eq("valid-token"), providerConfig.capture());
+            assertEquals(
+                    Optional.of("https://issuer.example.com/.well-known/openid-configuration"),
+                    providerConfig.getValue().discoveryUri().map(Object::toString));
+            assertEquals(Duration.ofMinutes(7), providerConfig.getValue().keyRefreshInterval());
         }
 
         @Test

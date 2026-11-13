@@ -2,15 +2,13 @@
 
 Rate limiting in a shared API gateway is deceptively difficult. The individual algorithms are well-understood. Any senior engineer can describe a token bucket. The hard parts are everything around the algorithm: how you identify the client, how you prevent service teams from shooting themselves in the foot, how you handle the impedance mismatch between HTTP and WebSocket traffic, and how you make it all work across multiple gateway instances without blocking threads. This chapter traces those decisions through the Aussie codebase.
 
-## 1. The Strategy Pattern: Three Algorithms, One Interface
+## 1. The Strategy Pattern: One Algorithm, One Interface
 
-Aussie defines three rate limiting algorithms as an enum at `api/src/main/java/aussie/core/model/ratelimit/RateLimitAlgorithm.java`:
+Aussie defines the supported rate limiting algorithm as an enum at `api/src/main/java/aussie/core/model/ratelimit/RateLimitAlgorithm.java`:
 
 ```java
 public enum RateLimitAlgorithm {
-    BUCKET,
-    FIXED_WINDOW,
-    SLIDING_WINDOW
+    BUCKET
 }
 ```
 
@@ -63,7 +61,7 @@ public RateLimitAlgorithmHandler getHandler(RateLimitAlgorithm algorithm) {
 }
 ```
 
-Currently only `BucketAlgorithm` is registered. Selecting `FIXED_WINDOW` or `SLIDING_WINDOW` fails gateway startup until a handler and matching backend implementation exist. Adding an algorithm means implementing `RateLimitAlgorithmHandler`, adding any required `RateLimitState` implementation, registering the handler, and implementing equivalent Redis semantics.
+`BucketAlgorithm` is the supported implementation. New algorithms should be added only with a handler, state model where needed, and equivalent Redis semantics.
 
 Rejecting an unavailable algorithm is deliberate: falling back to token bucket could enforce materially different quotas than the platform team configured.
 
