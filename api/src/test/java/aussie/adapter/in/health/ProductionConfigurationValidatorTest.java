@@ -1,6 +1,7 @@
 package aussie.adapter.in.health;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -134,6 +135,44 @@ class ProductionConfigurationValidatorTest {
         configuration.put("aussie.resiliency.dns.max-concurrent-lookups", "0");
 
         assertThrows(IllegalStateException.class, () -> validator(configuration).validate(LaunchMode.NORMAL));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"aussie.auth.dangerous-noop", "aussie.rate-limiting.enabled"})
+    void rejectsMalformedBooleanValues(String property) {
+        final var configuration = safeConfiguration();
+        configuration.put(property, "maybe");
+
+        final var error = assertThrows(
+                IllegalStateException.class, () -> validator(configuration).validate(LaunchMode.NORMAL));
+
+        assertEquals("Invalid production configuration: " + property + " must be true or false", error.getMessage());
+    }
+
+    @Test
+    void rejectsMalformedIntegerValues() {
+        final var configuration = safeConfiguration();
+        configuration.put("aussie.resiliency.http.max-connections", "many");
+
+        final var error = assertThrows(
+                IllegalStateException.class, () -> validator(configuration).validate(LaunchMode.NORMAL));
+
+        assertEquals(
+                "Invalid production configuration: aussie.resiliency.http.max-connections must be an integer",
+                error.getMessage());
+    }
+
+    @Test
+    void rejectsMalformedDurationValues() {
+        final var configuration = safeConfiguration();
+        configuration.put("aussie.resiliency.http.request-timeout", "soon");
+
+        final var error = assertThrows(
+                IllegalStateException.class, () -> validator(configuration).validate(LaunchMode.NORMAL));
+
+        assertEquals(
+                "Invalid production configuration: aussie.resiliency.http.request-timeout must be an ISO-8601 duration",
+                error.getMessage());
     }
 
     @Test
