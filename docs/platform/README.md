@@ -1313,8 +1313,6 @@ This health check always reports UP since configuration is validated at startup.
 | `AUSSIE_TELEMETRY_SAMPLING_DEFAULT_RATE` | `1.0` | Default sampling rate |
 | `AUSSIE_TELEMETRY_SAMPLING_MINIMUM_RATE` | `0.0` | Minimum sampling rate (floor) |
 | `AUSSIE_TELEMETRY_SAMPLING_MAXIMUM_RATE` | `1.0` | Maximum sampling rate (ceiling) |
-| `AUSSIE_TELEMETRY_SAMPLING_CACHE_REDIS_ENABLED` | `true` | Enable Redis cache for sampling configs |
-| `AUSSIE_TELEMETRY_SAMPLING_CACHE_REDIS_TTL` | `PT5M` | Sampling config Redis cache TTL |
 | `AUSSIE_TELEMETRY_SAMPLING_LOOKUP_TIMEOUT` | `PT5S` | Sampling config lookup timeout |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | OpenTelemetry exporter endpoint |
 

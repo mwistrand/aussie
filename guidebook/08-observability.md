@@ -655,17 +655,7 @@ public interface SamplingConfig {
     @WithDefault("1.0")
     double maximumRate();
 
-    CacheConfig cache();
     LookupConfig lookup();
-
-    interface CacheConfig {
-        @WithDefault("true")
-        boolean redisEnabled();
-
-        @WithName("redis-ttl")
-        @WithDefault("PT5M")
-        java.time.Duration redisTtl();
-    }
 }
 ```
 
@@ -801,26 +791,9 @@ private EffectiveSamplingRate resolveRate(
 
 The `EffectiveSamplingRate` record carries the source (`PLATFORM`, `SERVICE`, or `ENDPOINT`) alongside the rate, which is invaluable for debugging why a particular service is being sampled at a particular rate.
 
-### Multi-Instance Consistency via Redis Cache
+### Multi-Instance Consistency
 
-The `SamplingConfig.CacheConfig` enables Redis caching for sampling configurations:
-
-```java
-// api/src/main/java/aussie/core/config/SamplingConfig.java (lines 102-127)
-
-interface CacheConfig {
-    @WithDefault("true")
-    boolean redisEnabled();
-
-    @WithName("redis-ttl")
-    @WithDefault("PT5M")
-    java.time.Duration redisTtl();
-}
-```
-
-When multiple gateway instances are running, a sampling rate change needs to propagate to all instances. The local in-memory cache uses a shorter TTL (configured via `LocalCacheConfig`), while the Redis cache uses a 5-minute TTL. When a local cache entry expires, the next lookup checks Redis (fast) before falling back to Cassandra (slow). This gives eventual consistency across instances with a propagation delay bounded by the local cache TTL.
-
-The `SamplingResolver` also exposes `invalidateCache(String serviceId)` (line 295) for immediate local invalidation when a service registration is updated on the same instance. This provides instant consistency for local changes while TTL-based expiration handles cross-instance propagation.
+Sampling configurations use a bounded local in-memory cache. When an entry expires, the resolver reads the current value from the configured sampling provider, with the local TTL controlling the maximum staleness on each instance. Configure that TTL with `aussie.cache.local.sampling-config-ttl`.
 
 ### What a Senior Might Do Instead
 

@@ -19,8 +19,6 @@ The sampling hierarchy allows configuration at three levels:
 | `AUSSIE_TELEMETRY_SAMPLING_DEFAULT_RATE` | Default sampling rate (0.0-1.0) | `1.0` |
 | `AUSSIE_TELEMETRY_SAMPLING_MINIMUM_RATE` | Platform minimum (floor) | `0.0` |
 | `AUSSIE_TELEMETRY_SAMPLING_MAXIMUM_RATE` | Platform maximum (ceiling) | `1.0` |
-| `AUSSIE_TELEMETRY_SAMPLING_CACHE_REDIS_ENABLED` | Enable Redis cache for sampling configs | `true` |
-| `AUSSIE_TELEMETRY_SAMPLING_CACHE_REDIS_TTL` | Redis cache TTL for sampling configs | `PT5M` |
 | `AUSSIE_TELEMETRY_SAMPLING_LOOKUP_TIMEOUT` | Timeout for sampling config lookups | `PT5S` |
 
 ### Application Properties
