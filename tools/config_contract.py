@@ -262,6 +262,29 @@ def explicit_properties() -> list[Property]:
     return properties
 
 
+def scheduled_properties() -> list[Property]:
+    """Find application settings consumed by Quarkus scheduler placeholders."""
+    properties: list[Property] = []
+    for path in sorted(JAVA_ROOT.rglob("*.java")):
+        source = strip_comments(path.read_text())
+        for annotation in re.finditer(r"@Scheduled\s*\((.*?)\)", source, re.DOTALL):
+            body = annotation.group(1)
+            for match in re.finditer(
+                r"\$\{(aussie\.[A-Za-z0-9_.-]+):([^}]*)\}", body
+            ):
+                value_type = "cron" if re.search(r"\bcron\s*=", body[: match.start()]) else "Duration"
+                properties.append(
+                    Property(
+                        match.group(1),
+                        value_type,
+                        match.group(2),
+                        str(path.relative_to(ROOT)),
+                        4,
+                    )
+                )
+    return properties
+
+
 def application_properties() -> set[str]:
     names: set[str] = set()
     for path in sorted(APPLICATION_RESOURCES.glob("application*.properties")):
@@ -281,7 +304,7 @@ def documented_properties() -> set[str]:
 
 def collect() -> list[Property]:
     by_name: dict[str, Property] = {}
-    for item in mapping_properties() + explicit_properties():
+    for item in mapping_properties() + explicit_properties() + scheduled_properties():
         existing = by_name.get(item.name)
         if existing is None or item.quality > existing.quality or (
             item.quality == existing.quality
