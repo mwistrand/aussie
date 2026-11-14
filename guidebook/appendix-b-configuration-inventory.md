@@ -25,15 +25,12 @@ The inventory is derived from `@ConfigMapping`, `@ConfigProperty`, and explicit 
 | `aussie.auth.key-rotation.retention-period` | `Duration` | P30D | `AUSSIE_AUTH_KEY_ROTATION_RETENTION_PERIOD` | no | `api/src/main/java/aussie/core/config/KeyRotationConfig.java` |
 | `aussie.auth.key-rotation.schedule` | `cron` | 0 0 0 1 */3 ? | `AUSSIE_AUTH_KEY_ROTATION_SCHEDULE` | no | `api/src/main/java/aussie/core/service/auth/KeyRotationService.java` |
 | `aussie.auth.oidc.public-endpoints-enabled` | `boolean` | false | `AUSSIE_AUTH_OIDC_PUBLIC_ENDPOINTS_ENABLED` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |
-| `aussie.auth.oidc.token-exchange.audiences` | `Optional<Set<String>>` | _(not set)_ | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_AUDIENCES` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |
 | `aussie.auth.oidc.token-exchange.authorization-endpoint` | `Optional<String>` | _(not set)_ | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_AUTHORIZATION_ENDPOINT` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |
 | `aussie.auth.oidc.token-exchange.client-auth-method` | `String` | client_secret_basic | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_CLIENT_AUTH_METHOD` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |
 | `aussie.auth.oidc.token-exchange.client-id` | `Optional<String>` | _(not set)_ | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_CLIENT_ID` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |
 | `aussie.auth.oidc.token-exchange.client-secret` | `Optional<String>` | _(not set)_ | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_CLIENT_SECRET` | yes | `api/src/main/java/aussie/core/config/OidcConfig.java` |
 | `aussie.auth.oidc.token-exchange.create-session` | `boolean` | true | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_CREATE_SESSION` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |
 | `aussie.auth.oidc.token-exchange.enabled` | `boolean` | false | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_ENABLED` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |
-| `aussie.auth.oidc.token-exchange.issuer` | `Optional<String>` | _(not set)_ | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_ISSUER` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |
-| `aussie.auth.oidc.token-exchange.jwks-uri` | `Optional<String>` | _(not set)_ | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_JWKS_URI` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |
 | `aussie.auth.oidc.token-exchange.provider` | `String` | default | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_PROVIDER` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |
 | `aussie.auth.oidc.token-exchange.provider-id` | `Optional<String>` | _(not set)_ | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_PROVIDER_ID` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |
 | `aussie.auth.oidc.token-exchange.redirect-uris` | `Optional<Set<String>>` | _(not set)_ | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_REDIRECT_URIS` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |
