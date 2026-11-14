@@ -16,14 +16,14 @@ The inventory is derived from `@ConfigMapping`, `@ConfigProperty`, and explicit 
 | `aussie.auth.encryption.key` | `Optional<String>` | _(not set)_ | `AUSSIE_AUTH_ENCRYPTION_KEY` | yes | `api/src/main/java/aussie/core/service/auth/ApiKeyEncryptionService.java` |
 | `aussie.auth.encryption.key-id` | `String` | v1 | `AUSSIE_AUTH_ENCRYPTION_KEY_ID` | no | `api/src/main/java/aussie/core/service/auth/ApiKeyEncryptionService.java` |
 | `aussie.auth.encryption.plaintext-reads-expires-at` | `Optional<Instant>` | _(not set)_ | `AUSSIE_AUTH_ENCRYPTION_PLAINTEXT_READS_EXPIRES_AT` | no | `api/src/main/java/aussie/core/service/auth/ApiKeyEncryptionService.java` |
-| `aussie.auth.key-rotation.cache-refresh-interval` | `Duration` | PT5M | `AUSSIE_AUTH_KEY_ROTATION_CACHE_REFRESH_INTERVAL` | no | `api/src/main/java/aussie/core/config/KeyRotationConfig.java` |
-| `aussie.auth.key-rotation.cleanup-interval` | `Duration` | PT1H | `AUSSIE_AUTH_KEY_ROTATION_CLEANUP_INTERVAL` | no | `api/src/main/java/aussie/core/config/KeyRotationConfig.java` |
+| `aussie.auth.key-rotation.cache-refresh-interval` | `Duration` | PT5M | `AUSSIE_AUTH_KEY_ROTATION_CACHE_REFRESH_INTERVAL` | no | `api/src/main/java/aussie/core/service/auth/SigningKeyRegistry.java` |
+| `aussie.auth.key-rotation.cleanup-interval` | `Duration` | PT1H | `AUSSIE_AUTH_KEY_ROTATION_CLEANUP_INTERVAL` | no | `api/src/main/java/aussie/core/service/auth/KeyRotationService.java` |
 | `aussie.auth.key-rotation.deprecation-period` | `Duration` | P7D | `AUSSIE_AUTH_KEY_ROTATION_DEPRECATION_PERIOD` | no | `api/src/main/java/aussie/core/config/KeyRotationConfig.java` |
 | `aussie.auth.key-rotation.enabled` | `boolean` | false | `AUSSIE_AUTH_KEY_ROTATION_ENABLED` | no | `api/src/main/java/aussie/core/config/KeyRotationConfig.java` |
 | `aussie.auth.key-rotation.grace-period` | `Duration` | PT24H | `AUSSIE_AUTH_KEY_ROTATION_GRACE_PERIOD` | no | `api/src/main/java/aussie/core/config/KeyRotationConfig.java` |
 | `aussie.auth.key-rotation.key-size` | `int` | 2048 | `AUSSIE_AUTH_KEY_ROTATION_KEY_SIZE` | no | `api/src/main/java/aussie/core/config/KeyRotationConfig.java` |
 | `aussie.auth.key-rotation.retention-period` | `Duration` | P30D | `AUSSIE_AUTH_KEY_ROTATION_RETENTION_PERIOD` | no | `api/src/main/java/aussie/core/config/KeyRotationConfig.java` |
-| `aussie.auth.key-rotation.schedule` | `String` | 0 0 0 1 */3 ? | `AUSSIE_AUTH_KEY_ROTATION_SCHEDULE` | no | `api/src/main/java/aussie/core/config/KeyRotationConfig.java` |
+| `aussie.auth.key-rotation.schedule` | `cron` | 0 0 0 1 */3 ? | `AUSSIE_AUTH_KEY_ROTATION_SCHEDULE` | no | `api/src/main/java/aussie/core/service/auth/KeyRotationService.java` |
 | `aussie.auth.oidc.public-endpoints-enabled` | `boolean` | false | `AUSSIE_AUTH_OIDC_PUBLIC_ENDPOINTS_ENABLED` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |
 | `aussie.auth.oidc.token-exchange.audiences` | `Optional<Set<String>>` | _(not set)_ | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_AUDIENCES` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |
 | `aussie.auth.oidc.token-exchange.authorization-endpoint` | `Optional<String>` | _(not set)_ | `AUSSIE_AUTH_OIDC_TOKEN_EXCHANGE_AUTHORIZATION_ENDPOINT` | no | `api/src/main/java/aussie/core/config/OidcConfig.java` |

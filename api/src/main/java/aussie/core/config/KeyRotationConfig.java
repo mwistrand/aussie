@@ -34,8 +34,8 @@ public interface KeyRotationConfig {
     /**
      * Cron schedule for automatic key rotation.
      *
-     * <p>Default: Quarterly rotation (first day of every third month at midnight).
-     * Format follows Quartz cron syntax.
+     * <p>The scheduler consumes this value through its configuration placeholder;
+     * the accessor keeps SmallRye's strict mapping validation complete.
      */
     @WithDefault("0 0 0 1 */3 ?")
     String schedule();
@@ -53,8 +53,8 @@ public interface KeyRotationConfig {
     /**
      * How often to run the retired key cleanup job.
      *
-     * <p>Default: 1 hour. This job removes keys that have been retired
-     * for longer than the retention period.
+     * <p>The scheduler consumes this value through its configuration placeholder;
+     * the accessor keeps SmallRye's strict mapping validation complete.
      */
     @WithName("cleanup-interval")
     @WithDefault("PT1H")

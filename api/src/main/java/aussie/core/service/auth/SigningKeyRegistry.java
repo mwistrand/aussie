@@ -296,7 +296,7 @@ public class SigningKeyRegistry {
     }
 
     @Scheduled(
-            every = "${aussie.auth.key-rotation.cache-refresh-interval:5m}",
+            every = "${aussie.auth.key-rotation.cache-refresh-interval:PT5M}",
             concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     Uni<Void> refreshRotatingCache() {
         return config.enabled() ? refreshCache() : Uni.createFrom().voidItem();

@@ -120,7 +120,7 @@ public class KeyRotationService {
      * </ul>
      */
     @Scheduled(
-            every = "${aussie.auth.key-rotation.cleanup-interval:1h}",
+            every = "${aussie.auth.key-rotation.cleanup-interval:PT1H}",
             concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     public Uni<Void> processKeyLifecycle() {
         if (!config.enabled()) {

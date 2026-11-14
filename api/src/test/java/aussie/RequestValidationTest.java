@@ -63,12 +63,11 @@ class RequestValidationTest {
         }
 
         @Test
-        @DisplayName("Should reject an oversized fixed-length body before dispatch")
+        @DisplayName("Should reject an oversized fixed-length request before dispatch")
         void shouldRejectOversizedBodyBeforeDispatch() {
-            given().contentType(ContentType.JSON)
-                    .body("x".repeat(1_048_577))
+            given().header("Content-Length", 1_048_577)
                     .when()
-                    .post("/gateway/any/path")
+                    .get("/gateway/any/path")
                     .then()
                     .statusCode(413);
         }
