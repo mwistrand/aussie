@@ -52,6 +52,7 @@ test:
 	cd cli && go test ./...
 
 config-contract:
+	python3 tools/config_contract_test.py
 	python3 tools/config_contract.py
 
 # Generate coverage reports for API (JaCoCo) and CLI (Go)

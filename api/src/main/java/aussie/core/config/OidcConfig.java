@@ -153,34 +153,6 @@ public interface OidcConfig {
         Duration timeout();
 
         /**
-         * Expected issuer claim for token validation.
-         *
-         * <p>If set, ID tokens must have this issuer claim.
-         *
-         * @return Expected issuer
-         */
-        Optional<String> issuer();
-
-        /**
-         * JWKS URI for token validation.
-         *
-         * <p>URL to fetch signing keys for ID token validation.
-         *
-         * @return JWKS endpoint URL
-         */
-        @WithName("jwks-uri")
-        Optional<String> jwksUri();
-
-        /**
-         * Expected audience claims for token validation.
-         *
-         * <p>ID tokens must include one of these audiences.
-         *
-         * @return Allowed audiences
-         */
-        Optional<Set<String>> audiences();
-
-        /**
          * Refresh token configuration.
          */
         @WithName("refresh-token")

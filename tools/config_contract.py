@@ -33,6 +33,11 @@ class Property:
     default: str | None
     source: str
     quality: int = 0
+    config_type: str | None = None
+    declaring_type: str | None = None
+    parent_type: str | None = None
+    parent_method: str | None = None
+    accessor_chain: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -151,7 +156,13 @@ def mapping_properties() -> list[Property]:
             if root_interface is None:
                 continue
 
-            def visit(item: Interface, prefix: str) -> None:
+            def visit(
+                item: Interface,
+                prefix: str,
+                accessor_chain: tuple[str, ...],
+                parent_type: str | None = None,
+                parent_method: str | None = None,
+            ) -> None:
                 visit_key = (item.path, item.name, prefix)
                 if visit_key in visited:
                     return
@@ -168,7 +179,10 @@ def mapping_properties() -> list[Property]:
                         if nested is not None:
                             property_name += ".*"
                     if nested is not None:
-                        visit(nested, property_name)
+                        nested_chain = (*accessor_chain, method)
+                        if map_value is not None and resolve_interface(map_value.group(1), item, by_file, by_name) is nested:
+                            nested_chain += ("*",)
+                        visit(nested, property_name, nested_chain, item.name, method)
                         continue
                     default_match = re.search(r'@WithDefault\s*\(\s*"([^"]*)"', annotations)
                     properties.append(
@@ -178,10 +192,15 @@ def mapping_properties() -> list[Property]:
                             default_match.group(1) if default_match else None,
                             str(item.path.relative_to(ROOT)),
                             3,
+                            config_type=root_interface.name,
+                            declaring_type=item.name,
+                            parent_type=parent_type,
+                            parent_method=parent_method,
+                            accessor_chain=(*accessor_chain, method),
                         )
                     )
 
-            visit(root_interface, root.group(1))
+            visit(root_interface, root.group(1), ())
     return properties
 
 
@@ -298,6 +317,25 @@ def application_properties() -> set[str]:
     return names
 
 
+def active_property_references(lines: list[str]) -> set[str]:
+    references: set[str] = set()
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith(("#", "!")) or "=" not in line:
+            continue
+        value = line.split("=", 1)[1]
+        for match in re.finditer(r"\$\{(aussie\.[A-Za-z0-9_.-]+)(?::[^}]*)?\}", value):
+            references.add(match.group(1))
+    return references
+
+
+def application_property_references() -> set[str]:
+    references: set[str] = set()
+    for path in sorted(APPLICATION_RESOURCES.glob("application*.properties")):
+        references.update(active_property_references(path.read_text().splitlines()))
+    return references
+
+
 def documented_properties() -> set[str]:
     return set(re.findall(r"`((?:aussie|quarkus)\.[A-Za-z0-9_.-]+)", REFERENCE.read_text()))
 
@@ -357,9 +395,152 @@ def render(properties: list[Property]) -> str:
     return "\n".join(lines)
 
 
+# shortcut: static source evidence cannot prove behavior; add a focused test for conditional effects.
+def has_runtime_consumer(
+    item: Property,
+    java_sources: dict[Path, str],
+    property_references: set[str],
+    type_parents: dict[str, set[str]],
+) -> bool:
+    source_path = ROOT / item.source
+    if any(
+        item.name in source or item.name.endswith(".*") and item.name[:-2] in source
+        for source in java_sources.values()
+    ):
+        return True
+
+    if any(matches(item.name, reference) for reference in property_references):
+        return True
+
+    leaf = item.name.rsplit(".", 1)[-1].removesuffix("*")
+    if item.name in DYNAMIC_PROPERTIES and any(
+        re.search(r'"' + re.escape(leaf) + r'"', source) for source in java_sources.values()
+    ):
+        return True
+    if item.config_type is None or item.declaring_type is None or not item.accessor_chain:
+        return False
+    method_chain = [
+        re.sub(r"-([a-z])", lambda match: match.group(1).upper(), method)
+        for method in item.accessor_chain
+        if method != "*"
+    ]
+
+    def type_names(type_name: str) -> str:
+        return r"(?:" + re.escape(type_name) + r"|\b" + re.escape(type_name.rsplit(".", 1)[-1]) + r")"
+
+    def receivers(source: str, type_name: str) -> list[str]:
+        type_pattern = type_names(type_name)
+        names = re.findall(r"\b" + type_pattern + r"\s+(\w+)\b", source)
+        names.extend(
+            name + r"\s*\.\s*get\s*\(\s*\)"
+            for name in re.findall(r"\bInstance\s*<\s*" + type_pattern + r"\s*>\s+(\w+)\b", source)
+        )
+        names.extend(
+            name + r"\s*\(\s*\)"
+            for name in re.findall(r"\b" + type_pattern + r"\s+(\w+)\s*\(", source)
+        )
+        return names
+
+    def compatible_types(type_name: str) -> set[str]:
+        compatible = {type_name.rsplit(".", 1)[-1]}
+        pending = list(compatible)
+        while pending:
+            current = pending.pop()
+            for parent in type_parents.get(current, set()):
+                if parent not in compatible:
+                    compatible.add(parent)
+                    pending.append(parent)
+        return compatible
+
+    def matches_chain(source: str, receiver: str, chain: list[str]) -> bool:
+        expression = r"\b" + receiver
+        for method in chain:
+            expression += r"\s*\.\s*" + re.escape(method) + r"\s*\(\s*\)"
+        return re.search(expression, source) is not None
+
+    def aliases_from(source: str, receiver: str, chain: list[str]) -> list[str]:
+        expression = r"\b" + receiver
+        for method in chain:
+            expression += r"\s*\.\s*" + re.escape(method) + r"\s*\(\s*\)"
+        assignment = (
+            r"\b(?:final\s+)?(?:var|[A-Za-z_][\w.<>,?\[\]]*\s+)"
+            r"(\w+)\s*=\s*[^;]*"
+            + expression
+        )
+        return re.findall(assignment, source)
+
+    def has_leaf_access(source: str, receiver: str, prefix: list[str], leaf_method: str) -> bool:
+        return any(
+            matches_chain(source, alias, [leaf_method])
+            for alias in aliases_from(source, receiver, prefix)
+        )
+
+    def has_accessor_access(
+        source: str, receiver: str, chain: list[str], seen: set[tuple[str, tuple[str, ...]]] | None = None
+    ) -> bool:
+        seen = set() if seen is None else seen
+        key = (receiver, tuple(chain))
+        if key in seen:
+            return False
+        seen.add(key)
+        if matches_chain(source, receiver, chain):
+            return True
+        for alias in aliases_from(source, receiver, []):
+            if has_accessor_access(source, alias, chain, seen):
+                return True
+        for split in range(1, len(chain)):
+            for alias in aliases_from(source, receiver, chain[:split]):
+                if has_accessor_access(source, alias, chain[split:], seen):
+                    return True
+        return False
+
+    def has_map_leaf_access(source: str, leaf_method: str) -> bool:
+        values = re.findall(r"\b(?:var|[A-Za-z_][\w.<>,?\[\]]*\s+)(\w+)\s*=\s*\w+\.getValue\s*\(\s*\)", source)
+        return any(matches_chain(source, value, [leaf_method]) for value in values)
+
+    for path, source in java_sources.items():
+        if path == source_path:
+            continue
+        for receiver in receivers(source, item.config_type):
+            if "*" in item.accessor_chain:
+                prefix = method_chain[: item.accessor_chain.index("*")]
+                if matches_chain(source, receiver, prefix) and re.search(
+                    r"\.\s*" + re.escape(method_chain[-1]) + r"\s*\(", source
+                ):
+                    if has_leaf_access(source, receiver, prefix, method_chain[-1]) or has_map_leaf_access(
+                        source, method_chain[-1]
+                    ):
+                        return True
+            elif has_accessor_access(source, receiver, method_chain):
+                return True
+        if item.parent_type is not None and item.parent_method is not None:
+            for receiver in receivers(source, item.parent_type):
+                if has_leaf_access(source, receiver, [item.parent_method], method_chain[-1]):
+                    return True
+        for declaring_type in compatible_types(item.declaring_type):
+            for receiver in receivers(source, declaring_type):
+                if "*" in item.accessor_chain:
+                    if has_leaf_access(source, receiver, [], method_chain[-1]):
+                        return True
+                elif has_accessor_access(source, receiver, [method_chain[-1]]):
+                    return True
+    return False
+
+
 def check(properties: list[Property]) -> list[str]:
     patterns = [item.name for item in properties]
     errors: list[str] = []
+    java_sources = {path: strip_comments(path.read_text()) for path in JAVA_ROOT.rglob("*.java")}
+    property_references = application_property_references()
+    type_parents: dict[str, set[str]] = {}
+    for source in java_sources.values():
+        for declaration in re.finditer(
+            r"\b(?:interface|class)\s+(\w+)\s+(?:extends|implements)\s+([^\{\n]+)\{", source
+        ):
+            type_parents[declaration.group(1)] = {
+                parent.rsplit(".", 1)[-1]
+                for parent in re.findall(r"\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\b", declaration.group(2))
+            }
     for name in sorted(application_properties()):
         if not any(matches(pattern, name) for pattern in patterns):
             errors.append(f"application.properties contains undeclared property: {name}")
@@ -370,6 +551,9 @@ def check(properties: list[Property]) -> list[str]:
             continue
         if not any(matches(pattern, name) or pattern.startswith(name) for pattern in patterns):
             errors.append(f"configuration reference contains unknown property: {name}")
+    for item in properties:
+        if not has_runtime_consumer(item, java_sources, property_references, type_parents):
+            errors.append(f"accepted configuration property has no runtime consumer: {item.name}")
     expected = render(properties)
     if not INVENTORY.exists():
         errors.append(f"generated inventory is missing: {INVENTORY.relative_to(ROOT)}")
