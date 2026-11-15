@@ -3,6 +3,7 @@ package aussie.adapter.out.storage.cassandra;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.time.format.DateTimeParseException;
+import java.util.HashSet;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
@@ -10,10 +11,12 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import com.datastax.oss.driver.api.core.ConsistencyLevel;
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.datastax.oss.driver.api.core.CqlSessionBuilder;
 import com.datastax.oss.driver.api.core.config.DefaultDriverOption;
 import com.datastax.oss.driver.api.core.config.DriverConfigLoader;
+import com.datastax.oss.driver.api.core.cql.SimpleStatement;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
@@ -80,9 +83,11 @@ public class CassandraStorageProvider implements StorageRepositoryProvider, Auto
         String keyspace = config.getOrDefault("aussie.storage.cassandra.keyspace", "aussie");
         boolean runMigrations =
                 Boolean.parseBoolean(config.getOrDefault("aussie.storage.cassandra.run-migrations", "false"));
+        boolean createKeyspace =
+                Boolean.parseBoolean(config.getOrDefault("aussie.storage.cassandra.create-keyspace", "false"));
 
         if (runMigrations) {
-            runMigrations(config, keyspace);
+            runMigrations(config, keyspace, createKeyspace);
         }
 
         final var acquiredSession = buildSession(config);
@@ -99,7 +104,7 @@ public class CassandraStorageProvider implements StorageRepositoryProvider, Auto
         }
     }
 
-    private void runMigrations(StorageAdapterConfig config, String keyspace) {
+    private void runMigrations(StorageAdapterConfig config, String keyspace, boolean createKeyspace) {
         final var context = Vertx.currentContext();
         if (context != null && context.isEventLoopContext()) {
             throw new StorageProviderException("Cassandra migrations cannot run on a Vert.x event loop");
@@ -108,7 +113,9 @@ public class CassandraStorageProvider implements StorageRepositoryProvider, Auto
         final var timeout = migrationTimeout(config);
         LOG.infov("Running Cassandra migrations with timeout {0}...", timeout);
         runMigration(
-                () -> runMigrationsSynchronously(config, keyspace), timeout, Infrastructure.getDefaultWorkerPool());
+                () -> runMigrationsSynchronously(config, keyspace, createKeyspace),
+                timeout,
+                Infrastructure.getDefaultWorkerPool());
         LOG.info("Cassandra migrations completed");
     }
 
@@ -133,12 +140,13 @@ public class CassandraStorageProvider implements StorageRepositoryProvider, Auto
         }
     }
 
-    private void runMigrationsSynchronously(StorageAdapterConfig config, String keyspace) {
-        // First, connect without keyspace to run keyspace creation migration
-        try (CqlSession noKeyspaceSession = buildSessionWithoutKeyspace(config)) {
-            // Run V1 (keyspace creation) with session without keyspace
-            var keyspaceMigrationRunner = new CassandraMigrationRunner(noKeyspaceSession, keyspace);
-            keyspaceMigrationRunner.runKeyspaceMigration();
+    private void runMigrationsSynchronously(StorageAdapterConfig config, String keyspace, boolean createKeyspace) {
+        if (createKeyspace) {
+            // Explicitly opt-in for local development; production must supply the keyspace topology.
+            try (CqlSession noKeyspaceSession = buildSessionWithoutKeyspace(config)) {
+                var keyspaceMigrationRunner = new CassandraMigrationRunner(noKeyspaceSession, keyspace);
+                keyspaceMigrationRunner.runKeyspaceMigration();
+            }
         }
 
         CassandraMigrationRunner.checkInterrupted();
@@ -171,17 +179,80 @@ public class CassandraStorageProvider implements StorageRepositoryProvider, Auto
 
             Executor executor = getContextExecutor();
             long start = System.currentTimeMillis();
+            final var consistency = consistencyLevel(config);
             return Uni.createFrom()
-                    .completionStage(() -> session.executeAsync("SELECT release_version FROM system.local")
+                    .completionStage(() -> session.executeAsync(
+                                    SimpleStatement.builder("SELECT release_version FROM system.local")
+                                            .setConsistencyLevel(consistency)
+                                            .build())
                             .toCompletableFuture())
                     .emitOn(executor)
-                    .map(rs -> {
+                    .chain(ignored -> validateProductionTopology(config, consistency))
+                    .map(ignored -> {
                         long latency = System.currentTimeMillis() - start;
                         return StorageHealth.healthy("cassandra", latency);
                     })
                     .onFailure()
                     .recoverWithItem(e -> StorageHealth.unhealthy("cassandra", e.getMessage()));
         });
+    }
+
+    private Uni<Void> validateProductionTopology(StorageAdapterConfig config, ConsistencyLevel consistency) {
+        if (!Boolean.parseBoolean(config.getOrDefault("aussie.production-configuration-validation.enabled", "true"))) {
+            return Uni.createFrom().voidItem();
+        }
+
+        final var keyspace = config.getOrDefault("aussie.storage.cassandra.keyspace", "aussie");
+        final var datacenter = config.getOrDefault("aussie.storage.cassandra.datacenter", "datacenter1");
+        final var topology = SimpleStatement.builder(
+                        "SELECT replication FROM system_schema.keyspaces WHERE keyspace_name = ?")
+                .addPositionalValue(keyspace)
+                .setConsistencyLevel(consistency)
+                .build();
+        return Uni.createFrom()
+                .completionStage(() -> session.executeAsync(topology).toCompletableFuture())
+                .chain(result -> {
+                    final var rows = result.currentPage().iterator();
+                    final var row = rows.hasNext() ? rows.next() : null;
+                    if (row == null) {
+                        return Uni.createFrom()
+                                .failure(new IllegalStateException("Cassandra keyspace does not exist: " + keyspace));
+                    }
+                    try {
+                        CassandraTopologyValidator.validate(
+                                row.getMap("replication", String.class, String.class), datacenter);
+                    } catch (RuntimeException e) {
+                        return Uni.createFrom().failure(e);
+                    }
+                    return validateSchema(result, keyspace, consistency);
+                });
+    }
+
+    private Uni<Void> validateSchema(
+            com.datastax.oss.driver.api.core.cql.AsyncResultSet ignored,
+            String keyspace,
+            ConsistencyLevel consistency) {
+        final var schema = SimpleStatement.builder("SELECT version, status FROM " + keyspace + ".schema_migrations")
+                .setConsistencyLevel(consistency)
+                .build();
+        return Uni.createFrom()
+                .completionStage(() -> session.executeAsync(schema).toCompletableFuture())
+                .map(result -> {
+                    final var expected = CassandraMigrationRunner.expectedSchemaVersion();
+                    final var completed = new HashSet<Integer>();
+                    for (final var row : result.currentPage()) {
+                        if ("COMPLETED".equals(row.getString("status"))) {
+                            completed.add(row.getInt("version"));
+                        }
+                    }
+                    for (var version = 2; version <= expected; version++) {
+                        if (!completed.contains(version)) {
+                            throw new IllegalStateException(
+                                    "Cassandra schema is missing completed migration V" + version);
+                        }
+                    }
+                    return (Void) null;
+                });
     }
 
     private CqlSession buildSession(StorageAdapterConfig config) {
@@ -197,10 +268,12 @@ public class CassandraStorageProvider implements StorageRepositoryProvider, Auto
         String datacenter = config.getOrDefault("aussie.storage.cassandra.datacenter", "datacenter1");
         String queryTimeoutStr = config.getOrDefault("aussie.resiliency.cassandra.query-timeout", "PT5S");
         Duration queryTimeout = Duration.parse(queryTimeoutStr);
+        final var consistency = consistencyLevel(config);
 
         // Configure driver with request timeout
         DriverConfigLoader configLoader = DriverConfigLoader.programmaticBuilder()
                 .withDuration(DefaultDriverOption.REQUEST_TIMEOUT, queryTimeout)
+                .withString(DefaultDriverOption.REQUEST_CONSISTENCY, consistency.name())
                 .build();
 
         CqlSessionBuilder builder =
@@ -230,6 +303,15 @@ public class CassandraStorageProvider implements StorageRepositoryProvider, Auto
             return builder.build();
         } catch (Exception e) {
             throw new StorageProviderException("Failed to connect to Cassandra", e);
+        }
+    }
+
+    private ConsistencyLevel consistencyLevel(StorageAdapterConfig config) {
+        final var configured = config.getOrDefault("aussie.storage.cassandra.consistency-level", "LOCAL_QUORUM");
+        try {
+            return CassandraTopologyValidator.consistencyLevel(configured);
+        } catch (IllegalArgumentException e) {
+            throw new StorageProviderException("Invalid Cassandra consistency level: " + configured, e);
         }
     }
 

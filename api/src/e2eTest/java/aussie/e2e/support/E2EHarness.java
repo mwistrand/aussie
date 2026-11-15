@@ -204,6 +204,7 @@ public final class E2EHarness {
                 // steps that actually exercise route-auth flip this on per-test.
                 .withEnv("AUSSIE_AUTH_ROUTE_AUTH_ENABLED", "false")
                 .withEnv("CASSANDRA_RUN_MIGRATIONS", "true")
+                .withEnv("CASSANDRA_CREATE_KEYSPACE", "true")
                 .waitingFor(
                         Wait.forHttp("/q/health/ready").forStatusCode(200).withStartupTimeout(Duration.ofMinutes(2)))
                 .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger(logName)));

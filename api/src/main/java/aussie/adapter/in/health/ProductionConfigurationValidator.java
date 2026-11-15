@@ -56,6 +56,7 @@ public class ProductionConfigurationValidator {
         requireProvider("aussie.auth.storage.provider");
         requireProvider("aussie.auth.roles.storage.provider");
         requireProvider("aussie.translation-config.storage.provider");
+        validateCassandra();
 
         if (enabled("aussie.session.enabled", true)) {
             requireProvider("aussie.session.storage.provider");
@@ -92,6 +93,22 @@ public class ProductionConfigurationValidator {
         final var provider = value(key);
         if (provider.isEmpty() || provider.get().equalsIgnoreCase("memory")) {
             throw invalid(key + " must explicitly select a durable provider");
+        }
+    }
+
+    private void validateCassandra() {
+        if (!value("aussie.storage.repository.provider")
+                .filter("cassandra"::equalsIgnoreCase)
+                .isPresent()) {
+            return;
+        }
+        if (enabled("aussie.storage.cassandra.create-keyspace", false)) {
+            throw invalid("aussie.storage.cassandra.create-keyspace is forbidden in production");
+        }
+        if (!value("aussie.storage.cassandra.consistency-level")
+                .orElse("LOCAL_QUORUM")
+                .equalsIgnoreCase("LOCAL_QUORUM")) {
+            throw invalid("aussie.storage.cassandra.consistency-level must be LOCAL_QUORUM");
         }
     }
 

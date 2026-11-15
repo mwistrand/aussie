@@ -2,6 +2,11 @@
 
 This guide is for platform teams deploying and operating the Aussie API Gateway.
 
+## Production deployment
+
+See [Production deployment reference](production-deployment.md) and the
+repository-owned [Kubernetes base](../../deploy/kubernetes/).
+
 ## Table of Contents
 - [Setup](#setup)
 - [Authentication Configuration](#authentication-configuration)

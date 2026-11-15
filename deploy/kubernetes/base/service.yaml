@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: aussie
+spec:
+  selector:
+    app.kubernetes.io/name: aussie
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  type: ClusterIP

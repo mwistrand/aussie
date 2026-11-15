@@ -136,7 +136,7 @@ The inventory is derived from `@ConfigMapping`, `@ConfigProperty`, and explicit 
 | `aussie.gateway.security.public-default-visibility-enabled` | `boolean` | false | `AUSSIE_GATEWAY_SECURITY_PUBLIC_DEFAULT_VISIBILITY_ENABLED` | no | `api/src/main/java/aussie/adapter/out/http/SecurityConfig.java` |
 | `aussie.gateway.trusted-proxy.enabled` | `boolean` | false | `AUSSIE_GATEWAY_TRUSTED_PROXY_ENABLED` | no | `api/src/main/java/aussie/core/config/TrustedProxyConfig.java` |
 | `aussie.gateway.trusted-proxy.proxies` | `Optional<List<String>>` | _(not set)_ | `AUSSIE_GATEWAY_TRUSTED_PROXY_PROXIES` | no | `api/src/main/java/aussie/core/config/TrustedProxyConfig.java` |
-| `aussie.production-configuration-validation.enabled` | `boolean` | _(not set)_ | `AUSSIE_PRODUCTION_CONFIGURATION_VALIDATION_ENABLED` | no | `api/src/main/java/aussie/adapter/in/health/ProductionConfigurationValidator.java` |
+| `aussie.production-configuration-validation.enabled` | `boolean` | true | `AUSSIE_PRODUCTION_CONFIGURATION_VALIDATION_ENABLED` | no | `api/src/main/java/aussie/adapter/out/storage/cassandra/CassandraStorageProvider.java` |
 | `aussie.rate-limiting.algorithm` | `RateLimitAlgorithm` | BUCKET | `AUSSIE_RATE_LIMITING_ALGORITHM` | no | `api/src/main/java/aussie/core/config/RateLimitingConfig.java` |
 | `aussie.rate-limiting.burst-capacity` | `long` | 100 | `AUSSIE_RATE_LIMITING_BURST_CAPACITY` | no | `api/src/main/java/aussie/core/config/RateLimitingConfig.java` |
 | `aussie.rate-limiting.default-requests-per-window` | `long` | 100 | `AUSSIE_RATE_LIMITING_DEFAULT_REQUESTS_PER_WINDOW` | no | `api/src/main/java/aussie/core/config/RateLimitingConfig.java` |
@@ -205,7 +205,9 @@ The inventory is derived from `@ConfigMapping`, `@ConfigProperty`, and explicit 
 | `aussie.storage.cache.enabled` | `boolean` | false | `AUSSIE_STORAGE_CACHE_ENABLED` | no | `api/src/main/java/aussie/adapter/out/storage/StorageProviderLoader.java` |
 | `aussie.storage.cache.provider` | `Optional<String>` | _(not set)_ | `AUSSIE_STORAGE_CACHE_PROVIDER` | no | `api/src/main/java/aussie/adapter/out/storage/StorageProviderLoader.java` |
 | `aussie.storage.cache.ttl` | `Duration` | _(not set)_ | `AUSSIE_STORAGE_CACHE_TTL` | no | `api/src/main/java/aussie/adapter/out/storage/redis/RedisCacheProvider.java` |
+| `aussie.storage.cassandra.consistency-level` | `String` | LOCAL_QUORUM | `AUSSIE_STORAGE_CASSANDRA_CONSISTENCY_LEVEL` | no | `api/src/main/java/aussie/adapter/out/storage/cassandra/CassandraSessionRegistry.java` |
 | `aussie.storage.cassandra.contact-points` | `String` | localhost:9042 | `AUSSIE_STORAGE_CASSANDRA_CONTACT_POINTS` | no | `api/src/main/java/aussie/adapter/out/storage/cassandra/CassandraStorageProvider.java` |
+| `aussie.storage.cassandra.create-keyspace` | `boolean` | false | `AUSSIE_STORAGE_CASSANDRA_CREATE_KEYSPACE` | no | `api/src/main/java/aussie/adapter/out/storage/cassandra/CassandraStorageProvider.java` |
 | `aussie.storage.cassandra.datacenter` | `String` | datacenter1 | `AUSSIE_STORAGE_CASSANDRA_DATACENTER` | no | `api/src/main/java/aussie/adapter/out/storage/cassandra/CassandraStorageProvider.java` |
 | `aussie.storage.cassandra.keyspace` | `String` | aussie | `AUSSIE_STORAGE_CASSANDRA_KEYSPACE` | no | `api/src/main/java/aussie/adapter/out/storage/cassandra/CassandraStorageProvider.java` |
 | `aussie.storage.cassandra.password` | `String` | _(not set)_ | `AUSSIE_STORAGE_CASSANDRA_PASSWORD` | yes | `api/src/main/java/aussie/adapter/out/storage/cassandra/CassandraStorageProvider.java` |
