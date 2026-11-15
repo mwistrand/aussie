@@ -32,7 +32,7 @@ final class ObservabilityE2ETest {
     void packagedMetricsRulesAndAlertDeliveryAreConnected() throws Exception {
         var deliveries = new AtomicInteger();
         var deliveryBody = new AtomicReference<String>();
-        var receiver = HttpServer.create(new InetSocketAddress(9099), 0);
+        var receiver = HttpServer.create(new InetSocketAddress(0), 0);
         receiver.createContext("/alerts", exchange -> {
             deliveryBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             deliveries.incrementAndGet();
@@ -43,7 +43,7 @@ final class ObservabilityE2ETest {
 
         try {
             var harness = E2EHarness.start();
-            harness.startObservabilityStack();
+            harness.startObservabilityStack(receiver.getAddress().getPort());
             var context = SuiteContext.get();
 
             awaitQuery(harness.prometheusBaseUri(), "up{job=\"aussie\"}");

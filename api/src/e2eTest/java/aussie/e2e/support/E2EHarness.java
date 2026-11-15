@@ -14,6 +14,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,9 +65,9 @@ public final class E2EHarness {
     private final GenericContainer<?> demo;
     private final GenericContainer<?> api;
     private final GenericContainer<?> replica;
-    private final GenericContainer<?> alertmanager;
+    private GenericContainer<?> alertmanager;
     private final GenericContainer<?> prometheus;
-    private final Path alertmanagerConfig;
+    private Path alertmanagerConfig;
     private String replicaLogs = "";
 
     private E2EHarness() {
@@ -134,18 +135,8 @@ public final class E2EHarness {
 
         this.api = apiContainer(apiImage, translationConfig, "api", "e2e.api");
         this.replica = apiContainer(apiImage, translationConfig, "api-replica", "e2e.api.replica");
-        this.alertmanagerConfig = createE2eAlertmanagerConfig(apiProjectDir);
-        this.alertmanager = new GenericContainer<>(DockerImageName.parse("prom/alertmanager:v0.26.0"))
-                .withNetwork(network)
-                .withNetworkAliases("alertmanager")
-                .withExposedPorts(9093)
-                .withFileSystemBind(
-                        alertmanagerConfig.toAbsolutePath().toString(),
-                        "/etc/alertmanager/alertmanager.yml",
-                        BindMode.READ_ONLY)
-                .withCommand("--config.file=/etc/alertmanager/alertmanager.yml", "--storage.path=/alertmanager")
-                .waitingFor(Wait.forHttp("/-/ready").forStatusCode(200))
-                .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("e2e.alertmanager")));
+        this.alertmanagerConfig = null;
+        this.alertmanager = null;
         this.prometheus = new GenericContainer<>(DockerImageName.parse("prom/prometheus:v2.48.0"))
                 .withNetwork(network)
                 .withNetworkAliases("prometheus")
@@ -255,7 +246,12 @@ public final class E2EHarness {
         runQuietly(failures, "api-replica", h.replica::stop);
         runQuietly(failures, "api", h.api::stop);
         runQuietly(failures, "prometheus", h.prometheus::stop);
-        runQuietly(failures, "alertmanager", h.alertmanager::stop);
+        if (h.alertmanager != null) {
+            runQuietly(failures, "alertmanager", h.alertmanager::stop);
+        }
+        if (h.alertmanagerConfig != null) {
+            runQuietly(failures, "alertmanager config", h::deleteAlertmanagerConfig);
+        }
         runQuietly(failures, "demo", h.demo::stop);
         runQuietly(failures, "redis", h.redis::stop);
         runQuietly(failures, "cassandra", h.cassandra::stop);
@@ -294,11 +290,23 @@ public final class E2EHarness {
         return URI.create("http://" + demo.getHost() + ":" + demo.getMappedPort(3000));
     }
 
-    public synchronized void startObservabilityStack() {
+    public synchronized void startObservabilityStack(int webhookPort) {
         if (prometheus.isRunning()) {
             return;
         }
-        Testcontainers.exposeHostPorts(9099);
+        this.alertmanagerConfig = createE2eAlertmanagerConfig(resolveApiProjectDir(), webhookPort);
+        this.alertmanager = new GenericContainer<>(DockerImageName.parse("prom/alertmanager:v0.26.0"))
+                .withNetwork(network)
+                .withNetworkAliases("alertmanager")
+                .withExposedPorts(9093)
+                .withFileSystemBind(
+                        alertmanagerConfig.toAbsolutePath().toString(),
+                        "/etc/alertmanager/alertmanager.yml",
+                        BindMode.READ_ONLY)
+                .withCommand("--config.file=/etc/alertmanager/alertmanager.yml", "--storage.path=/alertmanager")
+                .waitingFor(Wait.forHttp("/-/ready").forStatusCode(200))
+                .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("e2e.alertmanager")));
+        Testcontainers.exposeHostPorts(webhookPort);
         alertmanager.start();
         prometheus.start();
     }
@@ -377,11 +385,21 @@ public final class E2EHarness {
         Files.writeString(outDir.resolve("api.log"), api.getLogs());
         Files.writeString(outDir.resolve("api-replica.log"), replica.isRunning() ? replica.getLogs() : replicaLogs);
         Files.writeString(outDir.resolve("prometheus.log"), prometheus.isRunning() ? prometheus.getLogs() : "");
-        Files.writeString(outDir.resolve("alertmanager.log"), alertmanager.isRunning() ? alertmanager.getLogs() : "");
+        Files.writeString(
+                outDir.resolve("alertmanager.log"),
+                alertmanager != null && alertmanager.isRunning() ? alertmanager.getLogs() : "");
         Files.writeString(outDir.resolve("demo.log"), demo.getLogs());
         Files.writeString(outDir.resolve("redis.log"), redis.getLogs());
         Files.writeString(outDir.resolve("cassandra.log"), cassandra.getLogs());
         LOG.info("E2EHarness: container logs written to {}", outDir);
+    }
+
+    private void deleteAlertmanagerConfig() {
+        try {
+            Files.deleteIfExists(alertmanagerConfig);
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not delete the E2E Alertmanager configuration", e);
+        }
     }
 
     private static void clearNextDevState(Path nextDevDir) {
@@ -401,10 +419,11 @@ public final class E2EHarness {
         }
     }
 
-    private static Path createE2eAlertmanagerConfig(Path apiProjectDir) {
+    private static Path createE2eAlertmanagerConfig(Path apiProjectDir, int webhookPort) {
         try {
-            var path = apiProjectDir.resolve("build/e2e-alertmanager.yml");
-            Files.createDirectories(path.getParent());
+            var directory = apiProjectDir.resolve("build");
+            Files.createDirectories(directory);
+            var path = directory.resolve("e2e-alertmanager-" + UUID.randomUUID() + ".yml");
             Files.writeString(path, """
                     global: {}
                     route:
@@ -416,8 +435,8 @@ public final class E2EHarness {
                     receivers:
                       - name: e2e-webhook
                         webhook_configs:
-                          - url: 'http://host.testcontainers.internal:9099/alerts'
-                    """);
+                          - url: 'http://host.testcontainers.internal:%d/alerts'
+                    """.formatted(webhookPort));
             return path;
         } catch (IOException e) {
             throw new IllegalStateException("Could not create the E2E Alertmanager configuration", e);
