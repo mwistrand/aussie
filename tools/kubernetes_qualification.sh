@@ -68,6 +68,7 @@ metadata:
     app: cassandra
 spec:
   clusterIP: None
+  publishNotReadyAddresses: true
   selector:
     app: cassandra
   ports:
@@ -102,6 +103,8 @@ spec:
           env:
             - name: CASSANDRA_CLUSTER_NAME
               value: aussie-qualification
+            - name: CASSANDRA_SEEDS
+              value: cassandra-0.cassandra
             - name: CASSANDRA_DC
               value: datacenter1
             - name: CASSANDRA_RACK
@@ -167,6 +170,9 @@ YAML
 context="--context kind-$cluster"
 kubectl $context -n "$namespace" rollout status statefulset/cassandra --timeout=15m
 kubectl $context -n "$namespace" rollout status deployment/redis --timeout=5m
+
+kubectl $context -n "$namespace" exec cassandra-0 -- nodetool status \
+  | awk '/^UN / { nodes++ } END { if (nodes != 3) exit 1 }'
 
 kubectl $context -n "$namespace" run cassandra-admin \
   --image=cassandra:4.1.4 --restart=Never --rm -i --command -- \
