@@ -69,6 +69,14 @@ AUSSIE_QUALIFICATION_IMAGE=ghcr.io/mwistrand/aussie@sha256:<64-hex-digest> \
   make deployment-qualification
 ```
 
+Before the dependency fault checks, the harness runs a 30-second open-loop
+readiness load at 10 requests per second. Every request must succeed and the
+default p95 must remain at or below one second. Tune the evidence run explicitly
+with `AUSSIE_QUALIFICATION_LOAD_SECONDS`,
+`AUSSIE_QUALIFICATION_LOAD_INTERVAL_SECONDS`, and
+`AUSSIE_QUALIFICATION_LOAD_P95_MAX_SECONDS`; the output reports total requests,
+errors, p95, and p99 latency.
+
 Set `AUSSIE_QUALIFICATION_KEEP_CLUSTER=true` to retain the cluster for
 inspection after a run. This is a release qualification check, not a substitute
 for a provider-specific Cassandra backup/restore or network-policy test.

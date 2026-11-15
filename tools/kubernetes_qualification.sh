@@ -6,6 +6,23 @@ set -euo pipefail
 
 : "${AUSSIE_QUALIFICATION_IMAGE:?set AUSSIE_QUALIFICATION_IMAGE to a full @sha256 image reference}"
 
+load_seconds="${AUSSIE_QUALIFICATION_LOAD_SECONDS:-30}"
+load_interval="${AUSSIE_QUALIFICATION_LOAD_INTERVAL_SECONDS:-0.1}"
+load_p95_max="${AUSSIE_QUALIFICATION_LOAD_P95_MAX_SECONDS:-1}"
+
+case "$load_seconds" in
+  ''|*[!0-9]*) echo "AUSSIE_QUALIFICATION_LOAD_SECONDS must be a positive integer" >&2; exit 1 ;;
+esac
+case "$load_interval" in
+  ''|*[!0-9.]*|.*|*.*.*) echo "AUSSIE_QUALIFICATION_LOAD_INTERVAL_SECONDS must be a positive decimal" >&2; exit 1 ;;
+esac
+case "$load_p95_max" in
+  ''|*[!0-9.]*|.*|*.*.*) echo "AUSSIE_QUALIFICATION_LOAD_P95_MAX_SECONDS must be a positive decimal" >&2; exit 1 ;;
+esac
+test "$load_seconds" -gt 0
+awk -v value="$load_interval" 'BEGIN { exit !(value > 0) }'
+awk -v value="$load_p95_max" 'BEGIN { exit !(value > 0) }'
+
 if [[ ! "$AUSSIE_QUALIFICATION_IMAGE" =~ ^[A-Za-z0-9./:_-]+@sha256:[0-9a-f]{64}$ ]]; then
   echo "AUSSIE_QUALIFICATION_IMAGE must be a full image@sha256:<64 hex> reference" >&2
   exit 1
@@ -241,6 +258,72 @@ wait_for_first_probe() {
 }
 
 wait_for_first_probe
+
+kubectl $context -n "$namespace" run qualification-load \
+  --image=curlimages/curl:8.10.1 --restart=Never --attach=false \
+  --env="LOAD_SECONDS=$load_seconds" \
+  --env="LOAD_INTERVAL_SECONDS=$load_interval" \
+  --env="LOAD_P95_MAX_SECONDS=$load_p95_max" \
+  --command -- sh -ec '
+    : > /tmp/results
+    pids=""
+    deadline=$(( $(date +%s) + LOAD_SECONDS ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+      (
+        if result="$(curl --max-time 5 --silent --show-error --output /dev/null \
+          --write-out "%{http_code} %{time_total}" http://aussie:8080/q/health/ready 2>/dev/null)"; then
+          :
+        else
+          result="000 0"
+        fi
+        printf "%s\n" "$result" >> /tmp/results
+      ) &
+      pids="$pids $!"
+      sleep "$LOAD_INTERVAL_SECONDS"
+    done
+    for pid in $pids; do
+      wait "$pid" || true
+    done
+
+    set -- $(awk "
+      { total++ }
+      \$1 == 200 { success++ }
+      END { print total + 0, success + 0, (total - success) + 0 }
+    " /tmp/results)
+    total="$1"
+    success="$2"
+    failed="$3"
+    p95="$(awk "\$1 == 200 {print \$2}" /tmp/results | sort -n | \
+      awk -v n="$success" "NR == int((n * 95 + 99) / 100) {print; found=1} END {if (!found) print 0}")"
+    p99="$(awk "\$1 == 200 {print \$2}" /tmp/results | sort -n | \
+      awk -v n="$success" "NR == int((n * 99 + 99) / 100) {print; found=1} END {if (!found) print 0}")"
+    printf "Sustained readiness load: total=%s success=%s failed=%s p95=%ss p99=%ss\n" \
+      "$total" "$success" "$failed" "$p95" "$p99"
+    test "$total" -gt 0
+    test "$failed" -eq 0
+    awk -v actual="$p95" -v maximum="$LOAD_P95_MAX_SECONDS" "BEGIN { exit !(actual <= maximum) }"
+  '
+
+# Allow the pod up to two minutes to start, its configured load duration, and
+# five seconds for the final in-flight curl requests to finish.
+load_wait_seconds=$((load_seconds + 125))
+for _ in $(seq 1 "$load_wait_seconds"); do
+  phase="$(kubectl $context -n "$namespace" get pod qualification-load \
+    -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+  case "$phase" in
+    Succeeded) kubectl $context -n "$namespace" logs qualification-load; break ;;
+    Failed)
+      kubectl $context -n "$namespace" logs qualification-load 2>/dev/null || true
+      echo "sustained readiness load failed" >&2
+      exit 1
+      ;;
+  esac
+  sleep 1
+done
+
+load_phase="$(kubectl $context -n "$namespace" get pod qualification-load \
+  -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+test "$load_phase" = Succeeded
 
 wait_for_gateway_ready() {
   for _ in $(seq 1 120); do
