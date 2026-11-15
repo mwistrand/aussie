@@ -52,3 +52,7 @@ cli/aussie
 # Coverage artifacts
 cli/coverage.out
 cli/coverage.html
+
+# Python caches and compiled bytecode
+__pycache__/
+*.py[cod]
