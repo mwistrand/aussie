@@ -197,7 +197,11 @@ kubectl $context -n "$namespace" run qualification-traffic \
       exit 1
     fi
     touch /tmp/first-success
-    for i in $(seq 1 30); do
+    while [ ! -f /tmp/strict ]; do
+      curl --fail --silent http://aussie:8080/q/health/ready >/dev/null || true
+      sleep 1
+    done
+    for i in $(seq 1 120); do
       if ! curl --fail --silent http://aussie:8080/q/health/ready >/dev/null; then
         exit 1
       fi
@@ -228,13 +232,45 @@ wait_for_first_probe() {
 }
 
 wait_for_first_probe
+
+wait_for_gateway_ready() {
+  for _ in $(seq 1 120); do
+    if kubectl $context -n "$namespace" exec qualification-traffic -- \
+      sh -ec 'curl --fail --silent http://aussie:8080/q/health/ready >/dev/null' 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "timed out waiting for gateway readiness" >&2
+  return 1
+}
+
+wait_for_gateway_unready() {
+  for _ in $(seq 1 120); do
+    if ! kubectl $context -n "$namespace" exec qualification-traffic -- \
+      sh -ec 'curl --fail --silent http://aussie:8080/q/health/ready >/dev/null' 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "gateway remained ready after Redis loss" >&2
+  return 1
+}
+
+kubectl $context -n "$namespace" scale deployment/redis --replicas=0
+wait_for_gateway_unready
+kubectl $context -n "$namespace" scale deployment/redis --replicas=1
+kubectl $context -n "$namespace" rollout status deployment/redis --timeout=5m
+wait_for_gateway_ready
+kubectl $context -n "$namespace" exec qualification-traffic -- touch /tmp/strict
+
 victim="$(kubectl $context -n "$namespace" get pods -l app.kubernetes.io/name=aussie \
   -o jsonpath='{.items[0].metadata.name}')"
 test -n "$victim"
 kubectl $context -n "$namespace" delete pod "$victim" --wait=false
 
 wait_for_traffic() {
-  for _ in $(seq 1 120); do
+  for _ in $(seq 1 180); do
     phase="$(kubectl $context -n "$namespace" get pod qualification-traffic \
       -o jsonpath='{.status.phase}' 2>/dev/null || true)"
     case "$phase" in
@@ -252,4 +288,4 @@ kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=5m
 ready_replicas="$(kubectl $context -n "$namespace" get deployment aussie -o jsonpath='{.status.readyReplicas}')"
 test "$ready_replicas" = 3
 
-echo "Kubernetes qualification passed: three-worker kind cluster, production readiness, and pod-loss traffic recovery"
+echo "Kubernetes qualification passed: three-worker kind cluster, production readiness, Redis recovery, and pod-loss traffic recovery"
