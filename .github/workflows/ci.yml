@@ -65,6 +65,10 @@ jobs:
 
       - name: Check configuration contract
         run: python3 tools/config_contract.py
+      - name: Check Kubernetes deployment contract
+        run: |
+          python3 tools/kubernetes_contract_test.py
+          python3 tools/kubernetes_contract.py
 
       - name: Java format and tests
         working-directory: api

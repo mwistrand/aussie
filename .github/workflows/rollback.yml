@@ -28,7 +28,7 @@ on:
       container:
         description: Container name in the Deployment
         required: true
-        default: api
+        default: aussie
         type: string
       base_url:
         description: Public base URL used for post-rollout checks
