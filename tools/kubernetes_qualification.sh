@@ -100,6 +100,15 @@ spec:
       containers:
         - name: cassandra
           image: cassandra:4.1.4
+          command: ["sh", "-ec"]
+          args:
+            - |
+              gosu cassandra sh -ec '
+                cassandra -f &
+                child=$!
+                echo "$child" > /tmp/cassandra.pid
+                wait "$child"
+              '
           env:
             - name: CASSANDRA_CLUSTER_NAME
               value: aussie-qualification
@@ -253,7 +262,7 @@ wait_for_gateway_unready() {
     fi
     sleep 1
   done
-  echo "gateway remained ready after Redis loss" >&2
+  echo "gateway remained ready after dependency loss" >&2
   return 1
 }
 
@@ -261,6 +270,19 @@ kubectl $context -n "$namespace" scale deployment/redis --replicas=0
 wait_for_gateway_unready
 kubectl $context -n "$namespace" scale deployment/redis --replicas=1
 kubectl $context -n "$namespace" rollout status deployment/redis --timeout=5m
+wait_for_gateway_ready
+
+# Cassandra is a required production dependency. Pause the signalable
+# Cassandra child process so existing driver connections fail, preserving data.
+for pod in cassandra-0 cassandra-1 cassandra-2; do
+  kubectl $context -n "$namespace" exec "$pod" -- \
+    sh -ec 'kill -STOP "$(cat /tmp/cassandra.pid)"'
+done
+wait_for_gateway_unready
+for pod in cassandra-0 cassandra-1 cassandra-2; do
+  kubectl $context -n "$namespace" exec "$pod" -- \
+    sh -ec 'kill -CONT "$(cat /tmp/cassandra.pid)"'
+done
 wait_for_gateway_ready
 kubectl $context -n "$namespace" exec qualification-traffic -- touch /tmp/strict
 
@@ -288,4 +310,4 @@ kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=5m
 ready_replicas="$(kubectl $context -n "$namespace" get deployment aussie -o jsonpath='{.status.readyReplicas}')"
 test "$ready_replicas" = 3
 
-echo "Kubernetes qualification passed: three-worker kind cluster, production readiness, Redis recovery, and pod-loss traffic recovery"
+echo "Kubernetes qualification passed: three-worker kind cluster, production readiness, Redis/Cassandra recovery, and pod-loss traffic recovery"
