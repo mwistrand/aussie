@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aussie
+spec:
+  replicas: 3
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aussie
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aussie
+    spec:
+      serviceAccountName: aussie
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: aussie
+      containers:
+        - name: aussie
+          # Replace the digest with the signed release digest before applying.
+          image: ghcr.io/mwistrand/aussie@sha256:REPLACE_WITH_SIGNED_RELEASE_DIGEST
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: aussie
+          env:
+            - name: CASSANDRA_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: aussie-production-secrets
+                  key: CASSANDRA_USERNAME
+            - name: CASSANDRA_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aussie-production-secrets
+                  key: CASSANDRA_PASSWORD
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aussie-production-secrets
+                  key: REDIS_PASSWORD
+            - name: AUTH_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aussie-production-secrets
+                  key: AUTH_ENCRYPTION_KEY
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2
+              memory: 2Gi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          lifecycle:
+            preStop:
+              exec:
+                # Start Quarkus' HTTP/WebSocket drain before kubelet's final TERM.
+                command: ["/bin/sh", "-c", "kill -TERM 1; sleep 35"]
+          startupProbe:
+            httpGet:
+              path: /q/health/started
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+      volumes:
+        - name: tmp
+          emptyDir: {}

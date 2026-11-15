@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aussie-external-dependencies
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aussie
+  policyTypes: [Egress]
+  egress:
+    # Replace these TEST-NET blocks with exact managed-service CIDRs.
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.10/32
+      ports:
+        - protocol: TCP
+          port: 9042
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.11/32
+      ports:
+        - protocol: TCP
+          port: 6379

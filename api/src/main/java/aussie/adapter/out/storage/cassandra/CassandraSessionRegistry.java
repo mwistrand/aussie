@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.datastax.oss.driver.api.core.ConsistencyLevel;
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.datastax.oss.driver.api.core.config.DefaultDriverOption;
 import com.datastax.oss.driver.api.core.config.DriverConfigLoader;
@@ -47,6 +48,7 @@ final class CassandraSessionRegistry {
     private static CqlSession buildSession(SessionKey key) {
         final var configLoader = DriverConfigLoader.programmaticBuilder()
                 .withDuration(DefaultDriverOption.REQUEST_TIMEOUT, key.queryTimeout)
+                .withString(DefaultDriverOption.REQUEST_CONSISTENCY, key.consistency.name())
                 .build();
         final var builder = CqlSession.builder()
                 .withLocalDatacenter(key.datacenter)
@@ -73,7 +75,8 @@ final class CassandraSessionRegistry {
             String keyspace,
             String username,
             String password,
-            Duration queryTimeout) {
+            Duration queryTimeout,
+            ConsistencyLevel consistency) {
 
         static SessionKey from(StorageAdapterConfig config, boolean authNamespace) {
             final var prefix = authNamespace ? "aussie.auth.storage.cassandra." : "aussie.storage.cassandra.";
@@ -90,7 +93,15 @@ final class CassandraSessionRegistry {
             }
             final var timeout = Duration.parse(
                     config.get("aussie.resiliency.cassandra.query-timeout").orElse("PT5S"));
-            return new SessionKey(contactPoints, datacenter, keyspace, username, password, timeout);
+            final var configuredConsistency =
+                    config.get("aussie.storage.cassandra.consistency-level").orElse("LOCAL_QUORUM");
+            final ConsistencyLevel consistency;
+            try {
+                consistency = CassandraTopologyValidator.consistencyLevel(configuredConsistency);
+            } catch (IllegalArgumentException e) {
+                throw new StorageProviderException("Invalid Cassandra consistency level: " + configuredConsistency, e);
+            }
+            return new SessionKey(contactPoints, datacenter, keyspace, username, password, timeout, consistency);
         }
 
         private static String value(StorageAdapterConfig config, String primary, String fallback, String defaultValue) {

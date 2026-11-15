@@ -78,6 +78,22 @@ class ProductionConfigurationValidatorTest {
         assertThrows(IllegalStateException.class, () -> validator(configuration).validate(LaunchMode.NORMAL));
     }
 
+    @Test
+    void rejectsImplicitCassandraKeyspaceCreation() {
+        final var configuration = safeConfiguration();
+        configuration.put("aussie.storage.cassandra.create-keyspace", "true");
+
+        assertThrows(IllegalStateException.class, () -> validator(configuration).validate(LaunchMode.NORMAL));
+    }
+
+    @Test
+    void rejectsWeakCassandraConsistency() {
+        final var configuration = safeConfiguration();
+        configuration.put("aussie.storage.cassandra.consistency-level", "ONE");
+
+        assertThrows(IllegalStateException.class, () -> validator(configuration).validate(LaunchMode.NORMAL));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"aussie.session.cookie.secure", "aussie.session.cookie.http-only"})
     void rejectsInsecureSessionCookies(String property) {

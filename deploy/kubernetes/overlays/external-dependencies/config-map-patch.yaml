@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aussie
+data:
+  # Documentation-only TEST-NET addresses; replace with the provider CIDRs and
+  # host:port values before applying this overlay.
+  CASSANDRA_CONTACT_POINTS: 192.0.2.10:9042
+  REDIS_HOSTS: redis://192.0.2.11:6379

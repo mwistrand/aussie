@@ -48,6 +48,21 @@ public class CassandraMigrationRunner {
         this.keyspace = validateKeyspace(keyspace);
     }
 
+    static int expectedSchemaVersion() {
+        try {
+            final var runner = new CassandraMigrationRunner(null, "aussie");
+            return runner.readManifest().stream()
+                    .map(ManifestEntry::filename)
+                    .map(MIGRATION_PATTERN::matcher)
+                    .filter(Matcher::matches)
+                    .mapToInt(match -> Integer.parseInt(match.group(1)))
+                    .max()
+                    .orElseThrow(() -> new IllegalStateException("No Cassandra migrations found"));
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read Cassandra migration manifest", e);
+        }
+    }
+
     /** Creates the configured keyspace without depending on a keyspace-bound session. */
     public void runKeyspaceMigration() {
         try {
