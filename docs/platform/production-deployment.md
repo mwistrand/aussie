@@ -58,9 +58,9 @@ kubectl get pods -l app.kubernetes.io/name=aussie
 ```
 
 The repository also includes an opt-in disposable qualification. It creates a
-three-worker kind cluster, provisions three Cassandra nodes and Redis, applies
-the rendered base, waits for production readiness, and removes one gateway
-pod while readiness traffic runs:
+three-worker kind cluster, forms a three-member Cassandra cluster, provisions
+Redis, applies the rendered base, waits for production readiness, and removes
+one gateway pod while readiness traffic runs:
 
 ```sh
 AUSSIE_QUALIFICATION_IMAGE=ghcr.io/mwistrand/aussie@sha256:<64-hex-digest> \
