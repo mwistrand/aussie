@@ -57,6 +57,20 @@ kubectl rollout status deployment/aussie
 kubectl get pods -l app.kubernetes.io/name=aussie
 ```
 
+The repository also includes an opt-in disposable qualification. It creates a
+three-worker kind cluster, provisions three Cassandra nodes and Redis, applies
+the rendered base, waits for production readiness, and removes one gateway
+pod while readiness traffic runs:
+
+```sh
+AUSSIE_QUALIFICATION_IMAGE=ghcr.io/mwistrand/aussie@sha256:<64-hex-digest> \
+  make deployment-qualification
+```
+
+Set `AUSSIE_QUALIFICATION_KEEP_CLUSTER=true` to retain the cluster for
+inspection after a run. This is a release qualification check, not a substitute
+for a provider-specific Cassandra backup/restore or network-policy test.
+
 The Deployment uses three replicas, a PDB, topology-independent rolling update
 limits, non-root/read-only containers, bounded resources, and health probes.
 Quarkus begins HTTP/WebSocket drain on SIGTERM and waits for the configured
