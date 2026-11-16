@@ -4,12 +4,98 @@ set -euo pipefail
 # Disposable qualification for the repository-owned Kubernetes deployment.
 # The image must be a released digest; this is intentionally not a build path.
 
-: "${AUSSIE_QUALIFICATION_IMAGE:?set AUSSIE_QUALIFICATION_IMAGE to a full @sha256 image reference}"
-
+qualification_image="${AUSSIE_QUALIFICATION_IMAGE:-not provided}"
 load_seconds="${AUSSIE_QUALIFICATION_LOAD_SECONDS:-30}"
 load_interval="${AUSSIE_QUALIFICATION_LOAD_INTERVAL_SECONDS:-0.1}"
 load_p95_max="${AUSSIE_QUALIFICATION_LOAD_P95_MAX_SECONDS:-1}"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+report_file="${AUSSIE_QUALIFICATION_REPORT:-$repo_root/api/build/qualification/kubernetes-qualification-$(date -u +%Y%m%dT%H%M%SZ)-$$.md}"
 
+qualification_stage="initialization"
+qualification_status="failed"
+load_output="not run"
+redis_recovery="not run"
+cassandra_recovery="not run"
+pod_recovery="not run"
+cluster=""
+namespace="aussie-qualification"
+keep_cluster="${AUSSIE_QUALIFICATION_KEEP_CLUSTER:-false}"
+
+write_report() {
+  local exit_status="$1"
+  local report_parent
+  report_parent="$(dirname "$report_file")"
+  if [[ "$exit_status" -eq 0 ]]; then
+    qualification_status="passed"
+  fi
+  if ! mkdir -p "$report_parent"; then
+    echo "Unable to create qualification report directory: $report_parent" >&2
+    return 1
+  fi
+  if ! {
+    echo "# Kubernetes qualification report"
+    echo
+    echo "- Result: $qualification_status"
+    echo "- Generated (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "- Git commit: $(git -C "$repo_root" rev-parse HEAD 2>/dev/null || echo unknown)"
+    echo "- Released image: $qualification_image"
+    echo "- Qualification stage: $qualification_stage"
+    echo "- Cluster: ${cluster:-not created}"
+    echo "- Namespace: $namespace"
+    echo "- Production profile: prod"
+    echo "- Cassandra image: cassandra:4.1.4"
+    echo "- Redis image: redis:7.2.5-alpine"
+    echo "- Load image: curlimages/curl:8.10.1"
+    echo "- Load duration: ${load_seconds}s"
+    echo "- Load interval: ${load_interval}s"
+    echo "- Load p95 limit: ${load_p95_max}s"
+    echo "- Redis recovery: $redis_recovery"
+    echo "- Cassandra recovery: $cassandra_recovery"
+    echo "- Gateway pod-loss recovery: $pod_recovery"
+    echo
+    echo "## Sustained readiness load"
+    echo
+    echo '```text'
+    echo "$load_output"
+    echo '```'
+  } > "$report_file"; then
+    echo "Unable to write qualification report: $report_file" >&2
+    return 1
+  fi
+  echo "Qualification report: $report_file"
+}
+
+cleanup() {
+  local status=$?
+  local report_status=0
+  [[ "$redis_recovery" == "running" ]] && redis_recovery="failed"
+  [[ "$cassandra_recovery" == "running" ]] && cassandra_recovery="failed"
+  [[ "$pod_recovery" == "running" ]] && pod_recovery="failed"
+  if write_report "$status"; then
+    :
+  else
+    report_status=$?
+  fi
+  if [[ "$status" -ne 0 && -n "$cluster" ]] && command -v kubectl >/dev/null 2>&1; then
+    kubectl --context "kind-$cluster" -n "$namespace" get pods -o wide 2>/dev/null || true
+    kubectl --context "kind-$cluster" -n "$namespace" get events --sort-by=.lastTimestamp 2>/dev/null || true
+  fi
+  if [[ -n "$cluster" && "$keep_cluster" != "true" ]] && command -v kind >/dev/null 2>&1; then
+    kind delete cluster --name "$cluster" >/dev/null 2>&1 || true
+  elif [[ -n "$cluster" && "$keep_cluster" == "true" ]]; then
+    echo "Keeping kind cluster $cluster (context kind-$cluster)"
+  fi
+  if [[ "$status" -eq 0 && "$report_status" -ne 0 ]]; then
+    status="$report_status"
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+
+if [[ -z "${AUSSIE_QUALIFICATION_IMAGE:-}" ]]; then
+  echo "set AUSSIE_QUALIFICATION_IMAGE to a full @sha256 image reference" >&2
+  exit 1
+fi
 case "$load_seconds" in
   ''|*[!0-9]*) echo "AUSSIE_QUALIFICATION_LOAD_SECONDS must be a positive integer" >&2; exit 1 ;;
 esac
@@ -23,38 +109,20 @@ test "$load_seconds" -gt 0
 awk -v value="$load_interval" 'BEGIN { exit !(value > 0) }'
 awk -v value="$load_p95_max" 'BEGIN { exit !(value > 0) }'
 
-if [[ ! "$AUSSIE_QUALIFICATION_IMAGE" =~ ^[A-Za-z0-9./:_-]+@sha256:[0-9a-f]{64}$ ]]; then
+if [[ ! "$qualification_image" =~ ^[A-Za-z0-9./:_-]+@sha256:[0-9a-f]{64}$ ]]; then
   echo "AUSSIE_QUALIFICATION_IMAGE must be a full image@sha256:<64 hex> reference" >&2
   exit 1
 fi
 
 for command in docker kind kubectl openssl; do
-  command -v "$command" >/dev/null || {
+  command -v "$command" >/dev/null 2>&1 || {
     echo "$command is required for Kubernetes qualification" >&2
     exit 1
   }
 done
 
 cluster="aussie-qualification-$$"
-namespace="aussie-qualification"
-keep_cluster="${AUSSIE_QUALIFICATION_KEEP_CLUSTER:-false}"
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
-cleanup() {
-  status=$?
-  if [[ "$status" -ne 0 ]]; then
-    kubectl --context "kind-$cluster" -n "$namespace" get pods -o wide 2>/dev/null || true
-    kubectl --context "kind-$cluster" -n "$namespace" get events --sort-by=.lastTimestamp 2>/dev/null || true
-  fi
-  if [[ "$keep_cluster" != "true" ]]; then
-    kind delete cluster --name "$cluster" >/dev/null 2>&1 || true
-  else
-    echo "Keeping kind cluster $cluster (context kind-$cluster)"
-  fi
-  exit "$status"
-}
-trap cleanup EXIT
-
+qualification_stage="creating kind cluster"
 kind create cluster --name "$cluster" --config="$repo_root/tools/kind-qualification.yaml"
 
 kubectl --context "kind-$cluster" create namespace "$namespace"
@@ -197,6 +265,7 @@ context="--context kind-$cluster"
 kubectl $context -n "$namespace" rollout status statefulset/cassandra --timeout=15m
 kubectl $context -n "$namespace" rollout status deployment/redis --timeout=5m
 
+qualification_stage="checking Cassandra cluster"
 kubectl $context -n "$namespace" exec cassandra-0 -- nodetool status \
   | awk '/^UN / { nodes++ } END { if (nodes != 3) exit 1 }'
 
@@ -214,6 +283,7 @@ kubectl kustomize "$repo_root/deploy/kubernetes" \
       -e 's|CASSANDRA_RUN_MIGRATIONS: "false"|CASSANDRA_RUN_MIGRATIONS: "true"|g' \
   | kubectl $context -n "$namespace" apply -f -
 
+qualification_stage="waiting for gateway readiness"
 kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=15m
 
 kubectl $context -n "$namespace" run qualification-traffic \
@@ -259,6 +329,7 @@ wait_for_first_probe() {
 
 wait_for_first_probe
 
+qualification_stage="sustained readiness load"
 kubectl $context -n "$namespace" run qualification-load \
   --image=curlimages/curl:8.10.1 --restart=Never --attach=false \
   --env="LOAD_SECONDS=$load_seconds" \
@@ -311,9 +382,10 @@ for _ in $(seq 1 "$load_wait_seconds"); do
   phase="$(kubectl $context -n "$namespace" get pod qualification-load \
     -o jsonpath='{.status.phase}' 2>/dev/null || true)"
   case "$phase" in
-    Succeeded) kubectl $context -n "$namespace" logs qualification-load; break ;;
+    Succeeded) break ;;
     Failed)
-      kubectl $context -n "$namespace" logs qualification-load 2>/dev/null || true
+      load_output="$(kubectl $context -n "$namespace" logs qualification-load 2>/dev/null || true)"
+      printf '%s\n' "$load_output"
       echo "sustained readiness load failed" >&2
       exit 1
       ;;
@@ -323,7 +395,15 @@ done
 
 load_phase="$(kubectl $context -n "$namespace" get pod qualification-load \
   -o jsonpath='{.status.phase}' 2>/dev/null || true)"
-test "$load_phase" = Succeeded
+if [[ "$load_phase" != "Succeeded" ]]; then
+  load_output="$(kubectl $context -n "$namespace" logs qualification-load 2>/dev/null || true)"
+  printf '%s\n' "$load_output"
+  echo "sustained readiness load did not complete successfully" >&2
+  exit 1
+fi
+load_output="$(kubectl $context -n "$namespace" logs qualification-load)"
+printf '%s\n' "$load_output"
+qualification_stage="dependency recovery checks"
 
 wait_for_gateway_ready() {
   for _ in $(seq 1 120); do
@@ -349,14 +429,19 @@ wait_for_gateway_unready() {
   return 1
 }
 
+qualification_stage="Redis recovery"
+redis_recovery="running"
 kubectl $context -n "$namespace" scale deployment/redis --replicas=0
 wait_for_gateway_unready
 kubectl $context -n "$namespace" scale deployment/redis --replicas=1
 kubectl $context -n "$namespace" rollout status deployment/redis --timeout=5m
 wait_for_gateway_ready
+redis_recovery="passed"
 
 # Cassandra is a required production dependency. Pause the signalable
 # Cassandra child process so existing driver connections fail, preserving data.
+qualification_stage="Cassandra recovery"
+cassandra_recovery="running"
 for pod in cassandra-0 cassandra-1 cassandra-2; do
   kubectl $context -n "$namespace" exec "$pod" -- \
     sh -ec 'kill -STOP "$(cat /tmp/cassandra.pid)"'
@@ -367,8 +452,11 @@ for pod in cassandra-0 cassandra-1 cassandra-2; do
     sh -ec 'kill -CONT "$(cat /tmp/cassandra.pid)"'
 done
 wait_for_gateway_ready
+cassandra_recovery="passed"
 kubectl $context -n "$namespace" exec qualification-traffic -- touch /tmp/strict
 
+qualification_stage="gateway pod-loss recovery"
+pod_recovery="running"
 victim="$(kubectl $context -n "$namespace" get pods -l app.kubernetes.io/name=aussie \
   -o jsonpath='{.items[0].metadata.name}')"
 test -n "$victim"
@@ -392,5 +480,7 @@ wait_for_traffic
 kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=5m
 ready_replicas="$(kubectl $context -n "$namespace" get deployment aussie -o jsonpath='{.status.readyReplicas}')"
 test "$ready_replicas" = 3
+pod_recovery="passed"
+qualification_stage="completed"
 
 echo "Kubernetes qualification passed: three-worker kind cluster, production readiness, Redis/Cassandra recovery, and pod-loss traffic recovery"

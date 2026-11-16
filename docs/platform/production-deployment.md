@@ -69,6 +69,13 @@ AUSSIE_QUALIFICATION_IMAGE=ghcr.io/mwistrand/aussie@sha256:<64-hex-digest> \
   make deployment-qualification
 ```
 
+Each run writes a Markdown report to
+`api/build/qualification/kubernetes-qualification-<UTC timestamp>-<pid>.md`. Set
+`AUSSIE_QUALIFICATION_REPORT` to choose another path. The report records the
+released image digest, source commit, production profile, dependency images,
+load threshold/result, and recovery checks so qualification evidence stays
+tied to the artifact that was tested.
+
 Before the dependency fault checks, the harness runs a 30-second open-loop
 readiness load at 10 requests per second. Every request must succeed and the
 default p95 must remain at or below one second. Tune the evidence run explicitly
