@@ -26,8 +26,8 @@ dependencies {
     implementation 'io.smallrye.reactive:smallrye-mutiny-vertx-web-client'
 
     // Cassandra driver (standalone)
-    implementation 'org.apache.cassandra:java-driver-core:4.19.3'
-    implementation 'org.apache.cassandra:java-driver-query-builder:4.19.3'
+    implementation 'org.apache.cassandra:java-driver-core:4.19.4'
+    implementation 'org.apache.cassandra:java-driver-query-builder:4.19.4'
 
     // Redis support (Quarkus extension)
     implementation 'io.quarkus:quarkus-redis-client'
@@ -55,22 +55,24 @@ dependencies {
     implementation 'io.quarkus:quarkus-hibernate-validator'
 
     // JWT/JOSE library for token validation and issuance
-    implementation 'org.bitbucket.b_c:jose4j:0.9.6'
+    implementation 'org.bitbucket.b_c:jose4j'
 
     // High-performance caching with TTL support
-    implementation 'com.github.ben-manes.caffeine:caffeine:3.2.3'
+    implementation 'com.github.ben-manes.caffeine:caffeine'
 
     // Guava for BloomFilter (token revocation)
-    implementation 'com.google.guava:guava:33.5.0-jre'
+    implementation 'com.google.guava:guava:33.8.0-jre'
 
     testImplementation 'io.quarkus:quarkus-junit5'
     testImplementation 'io.rest-assured:rest-assured'
-    testImplementation 'org.wiremock:wiremock:3.13.1'
-    testImplementation 'com.tngtech.archunit:archunit-junit5:1.4.1'
-    testImplementation 'org.mockito:mockito-core:5.20.0'
-    testImplementation 'org.mockito:mockito-junit-jupiter:5.20.0'
-    testImplementation 'org.testcontainers:testcontainers:2.0.2'
-    testImplementation 'org.testcontainers:testcontainers-junit-jupiter:2.0.2'
+    testImplementation platform('org.eclipse.jetty:jetty-bom:12.0.36')
+    testImplementation 'org.wiremock:wiremock-jetty12:3.13.2'
+    testImplementation 'com.github.jknack:handlebars:4.5.2'
+    testImplementation 'com.tngtech.archunit:archunit-junit5:1.5.1'
+    testImplementation 'org.mockito:mockito-core'
+    testImplementation 'org.mockito:mockito-junit-jupiter'
+    testImplementation 'org.testcontainers:testcontainers:2.0.5'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter:2.0.5'
     testImplementation 'org.awaitility:awaitility:4.3.0'
 }
 
@@ -94,17 +96,37 @@ configurations {
     e2eTestRuntimeOnly.extendsFrom runtimeOnly
 }
 
+configurations.configureEach {
+    // Quarkus 3.40.1.2 pins the vulnerable 1.62 API; keep the OTel core modules aligned.
+    resolutionStrategy.force(
+            'com.google.guava:guava:33.8.0-jre',
+            'io.opentelemetry:opentelemetry-api:1.67.0',
+            'io.opentelemetry:opentelemetry-api-incubator:1.67.0-alpha',
+            'io.opentelemetry:opentelemetry-common:1.67.0',
+            'io.opentelemetry:opentelemetry-context:1.67.0',
+            'io.opentelemetry:opentelemetry-exporter-common:1.67.0',
+            'io.opentelemetry:opentelemetry-exporter-otlp:1.67.0',
+            'io.opentelemetry:opentelemetry-exporter-otlp-common:1.67.0',
+            'io.opentelemetry:opentelemetry-sdk:1.67.0',
+            'io.opentelemetry:opentelemetry-sdk-common:1.67.0',
+            'io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:1.67.0',
+            'io.opentelemetry:opentelemetry-sdk-extension-autoconfigure-spi:1.67.0',
+            'io.opentelemetry:opentelemetry-sdk-logs:1.67.0',
+            'io.opentelemetry:opentelemetry-sdk-metrics:1.67.0',
+            'io.opentelemetry:opentelemetry-sdk-trace:1.67.0')
+}
+
 dependencies {
     e2eTestImplementation 'org.junit.jupiter:junit-jupiter:5.13.4'
     e2eTestImplementation 'org.junit.platform:junit-platform-launcher:1.13.4'
     e2eTestImplementation 'io.rest-assured:rest-assured:5.5.6'
-    e2eTestImplementation 'org.testcontainers:testcontainers:2.0.2'
-    e2eTestImplementation 'org.testcontainers:testcontainers-cassandra:2.0.2'
-    e2eTestImplementation 'org.testcontainers:testcontainers-junit-jupiter:2.0.2'
+    e2eTestImplementation 'org.testcontainers:testcontainers:2.0.5'
+    e2eTestImplementation 'org.testcontainers:testcontainers-cassandra:2.0.5'
+    e2eTestImplementation 'org.testcontainers:testcontainers-junit-jupiter:2.0.5'
     e2eTestImplementation 'org.awaitility:awaitility:4.3.0'
-    e2eTestImplementation 'org.assertj:assertj-core:3.27.6'
-    e2eTestImplementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
-    e2eTestImplementation 'org.slf4j:slf4j-simple:2.0.17'
+    e2eTestImplementation 'org.assertj:assertj-core:3.27.7'
+    e2eTestImplementation 'com.fasterxml.jackson.core:jackson-databind'
+    e2eTestImplementation 'org.slf4j:slf4j-simple:2.0.20'
 }
 
 test {
@@ -189,7 +211,7 @@ jmh {
 }
 
 dependencies {
-    jmhImplementation 'org.mockito:mockito-core:5.20.0'
+    jmhImplementation 'org.mockito:mockito-core'
 }
 
 tasks.named('jmhJar') {
