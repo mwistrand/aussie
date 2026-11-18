@@ -539,8 +539,8 @@ class JwksCacheServiceTest {
         @Test
         @DisplayName("should record metrics on fetch timeout")
         void shouldRecordMetricsOnTimeout() {
-            // Use a very short timeout config
-            when(jwksConfig.fetchTimeout()).thenReturn(Duration.ofMillis(1));
+            // Leave enough time for the mocked HTTP chain to be subscribed before timing out.
+            when(jwksConfig.fetchTimeout()).thenReturn(Duration.ofMillis(100));
 
             service = new JwksCacheService(
                     outboundClient, resiliencyConfig, new SimpleMeterRegistry(), metrics, addressResolver);
