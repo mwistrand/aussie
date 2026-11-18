@@ -12,17 +12,19 @@ ROOT = Path(__file__).resolve().parents[1]
 RELEASE_INPUTS = (
     ROOT / "api/src/main/docker/Dockerfile.jvm",
     ROOT / ".github/workflows/ci.yml",
+    ROOT / ".github/workflows/security.yml",
 )
 SYNTAX = re.compile(r"^\s*#\s*syntax\s*=\s*(?P<image>[^\s]+)", re.IGNORECASE)
 FROM = re.compile(r"^\s*FROM\s+(?P<image>[^\s]+)", re.IGNORECASE)
 SERVICE_IMAGE = re.compile(r"^\s+image:\s+(?P<image>[^\s#]+)")
+SCANNER_IMAGE = re.compile(r"^\s+TRIVY_IMAGE:\s+(?P<image>[^\s#]+)")
 DIGEST = re.compile(r"@sha256:[0-9a-f]{64}$")
 
 
 def mutable_image_refs(paths: tuple[Path, ...] = RELEASE_INPUTS) -> list[str]:
     violations = []
     for path in paths:
-        patterns = (SYNTAX, FROM) if path.name.startswith("Dockerfile") else (SERVICE_IMAGE,)
+        patterns = (SYNTAX, FROM) if path.name.startswith("Dockerfile") else (SERVICE_IMAGE, SCANNER_IMAGE)
         for line_number, line in enumerate(path.read_text().splitlines(), 1):
             match = next((pattern.match(line) for pattern in patterns if pattern.match(line)), None)
             if match is not None and not DIGEST.search(match.group("image")):

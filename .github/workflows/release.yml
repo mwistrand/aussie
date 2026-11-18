@@ -13,8 +13,14 @@ jobs:
     permissions:
       contents: read
 
-  image:
+  security:
     needs: checks
+    uses: ./.github/workflows/security.yml
+    permissions:
+      contents: read
+
+  image:
+    needs: [checks, security]
     runs-on: ubuntu-latest
     environment: production-release
     permissions:

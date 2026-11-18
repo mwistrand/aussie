@@ -45,3 +45,12 @@ class ContainerContractTest(unittest.TestCase):
                 container_contract.mutable_image_refs((workflow,)),
                 [f"{workflow}:3: redis:7"],
             )
+
+    def test_mutable_scanner_image_is_rejected(self):
+        with TemporaryDirectory() as directory:
+            workflow = Path(directory) / "security.yml"
+            workflow.write_text("env:\n  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy:latest\n")
+            self.assertEqual(
+                container_contract.mutable_image_refs((workflow,)),
+                [f"{workflow}:2: ghcr.io/aquasecurity/trivy:latest"],
+            )

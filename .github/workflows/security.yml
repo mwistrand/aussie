@@ -1,0 +1,58 @@
+name: Security
+
+on:
+  schedule:
+    - cron: '20 3 * * 1'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  vulnerability-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      SCAN_IMAGE: aussie-security-scan:${{ github.sha }}
+      TRIVY_IMAGE: ghcr.io/aquasecurity/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check immutable container inputs
+        run: python3 tools/container_contract.py
+
+      - name: Validate vulnerability exceptions
+        run: |
+          mkdir -p "$RUNNER_TEMP/vulnerability-policy"
+          python3 tools/vulnerability_exceptions_test.py
+          python3 tools/vulnerability_exceptions.py \
+            --source-ignorefile "$RUNNER_TEMP/vulnerability-policy/source.ignore" \
+            --image-ignorefile "$RUNNER_TEMP/vulnerability-policy/image.ignore"
+
+      - name: Build release image
+        run: docker build --tag "$SCAN_IMAGE" --file api/src/main/docker/Dockerfile.jvm api
+
+      - name: Scan source dependencies
+        run: >-
+          docker run --rm
+          --volume "$GITHUB_WORKSPACE:/src:ro"
+          --volume "$RUNNER_TEMP/vulnerability-policy:/policy:ro"
+          "$TRIVY_IMAGE" fs
+          --scanners vuln
+          --severity HIGH,CRITICAL
+          --ignorefile /policy/source.ignore
+          --exit-code 1 /src
+
+      - name: Export release image
+        run: docker save "$SCAN_IMAGE" --output "$RUNNER_TEMP/aussie-image.tar"
+
+      - name: Scan release image
+        run: >-
+          docker run --rm
+          --volume "$RUNNER_TEMP:/scan:ro"
+          --volume "$RUNNER_TEMP/vulnerability-policy:/policy:ro"
+          "$TRIVY_IMAGE" image --input /scan/aussie-image.tar
+          --severity HIGH,CRITICAL
+          --ignorefile /policy/image.ignore
+          --exit-code 1
