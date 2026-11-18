@@ -1,6 +1,6 @@
 COMPOSE=docker compose
 
-.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage config-contract deployment-contract deployment-qualification reset demo-deps e2e e2e-soak e2e-logs
+.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage config-contract deployment-contract deployment-qualification workflow-contract reset demo-deps e2e e2e-soak e2e-logs
 
 SOAK_RUNS ?= 3
 
@@ -58,6 +58,10 @@ config-contract:
 deployment-contract:
 	python3 tools/kubernetes_contract_test.py
 	python3 tools/kubernetes_contract.py
+
+workflow-contract:
+	python3 tools/workflow_contract_test.py
+	python3 tools/workflow_contract.py
 
 # Disposable three-node kind qualification. Requires AUSSIE_QUALIFICATION_IMAGE.
 deployment-qualification:

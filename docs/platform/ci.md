@@ -4,6 +4,8 @@ Every pull request runs the Java, CLI, and demo checks in `.github/workflows/ci.
 It also renders both repository-owned Kubernetes overlays and checks their
 security, rollout, secret, probe, disruption, and dependency-egress contract;
 run the same check locally with `make deployment-contract`.
+All third-party GitHub Actions are pinned to full commit SHAs; the workflow
+contract check rejects mutable tags. Run it locally with `make workflow-contract`.
 The Java job provisions pinned Redis and Cassandra service containers, so tests
 that discover those providers never depend on developer-local ports. The packaged-
 artifact E2E job runs on pushes to `main` because it builds and starts multiple
