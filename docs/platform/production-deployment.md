@@ -69,6 +69,10 @@ AUSSIE_QUALIFICATION_IMAGE=ghcr.io/mwistrand/aussie@sha256:<64-hex-digest> \
   make deployment-qualification
 ```
 
+The qualification requires `cosign`, Docker, kind, kubectl, and openssl. Before
+creating the cluster it verifies that the supplied digest was signed by this
+repository's tag-based release workflow.
+
 Each run writes a Markdown report to
 `api/build/qualification/kubernetes-qualification-<UTC timestamp>-<pid>.md`. Set
 `AUSSIE_QUALIFICATION_REPORT` to choose another path. The report records the

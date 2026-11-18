@@ -114,12 +114,17 @@ if [[ ! "$qualification_image" =~ ^[A-Za-z0-9./:_-]+@sha256:[0-9a-f]{64}$ ]]; th
   exit 1
 fi
 
-for command in docker kind kubectl openssl; do
+for command in cosign docker kind kubectl openssl; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "$command is required for Kubernetes qualification" >&2
     exit 1
   }
 done
+
+cosign verify \
+  --certificate-identity-regexp '^https://github.com/mwistrand/aussie/.github/workflows/release.yml@refs/tags/.+$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "$qualification_image" >/dev/null
 
 cluster="aussie-qualification-$$"
 qualification_stage="creating kind cluster"
