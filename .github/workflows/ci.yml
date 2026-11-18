@@ -21,7 +21,7 @@ jobs:
       AUSSIE_TEST_REDIS_URL: redis://127.0.0.1:6379
     services:
       cassandra:
-        image: cassandra:4.1.4
+        image: cassandra:4.1.4@sha256:ff549dfa84dddd83e426d6e13d2d18a3aa00dd3c7fcff5c2529e6d6fda6b7207 # cassandra:4.1.4
         env:
           CASSANDRA_CLUSTER_NAME: aussie-ci
           CASSANDRA_DC: datacenter1
@@ -36,7 +36,7 @@ jobs:
           --health-retries 20
           --health-start-period 60s
       redis:
-        image: redis:7.2.5-alpine
+        image: redis:7.2.5-alpine@sha256:6aaf3f5e6bc8a592fbfe2cccf19eb36d27c39d12dab4f4b01556b7449e7b1f44 # redis:7.2.5-alpine
         ports:
           - 6379:6379
         options: >-
@@ -71,6 +71,8 @@ jobs:
           python3 tools/kubernetes_contract.py
       - name: Check immutable workflow actions
         run: python3 tools/workflow_contract.py
+      - name: Check immutable container inputs
+        run: python3 tools/container_contract.py
       - name: Reject local Maven resolution
         run: test -z "$(rg -n 'mavenLocal[[:space:]]*[({]' api --glob '*.gradle*')"
 

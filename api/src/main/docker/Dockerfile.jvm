@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.4
+# syntax=docker/dockerfile:1.4@sha256:9ba7531bd80fb0a858632727cf7a112fbfd19b17e94c4e84ced81e24ef1a0dbc
 ####
 # Multi-stage Dockerfile for building and running the Quarkus application in JVM mode.
 #
@@ -17,7 +17,7 @@
 ###
 
 # ---- Builder stage ----
-FROM gradle:9-jdk25 AS builder
+FROM gradle:9-jdk25@sha256:7d4e63b32991e679b183645680ff81762b6f1ef137850d8c2750b362eb994d08 AS builder
 
 WORKDIR /workspace
 
@@ -36,7 +36,7 @@ RUN --mount=type=cache,target=/home/gradle/.gradle \
     ./gradlew clean spotlessCheck build -x test
 
 # ---- Runtime stage ----
-FROM eclipse-temurin:25-jre
+FROM eclipse-temurin:25-jre@sha256:a640968ae55027b322cedd5f8228b01a84baff0b9e9360e47601c6a111ba1699
 
 ENV LANGUAGE='en_US:en'
 
