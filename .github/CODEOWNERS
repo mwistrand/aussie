@@ -3,4 +3,5 @@
 /api/src/main/java/aussie/adapter/in/websocket/ @mwistrand
 /api/src/main/java/aussie/adapter/out/storage/ @mwistrand
 /.github/ @mwistrand
+/security/vulnerability-exceptions.json @mwistrand
 /Dockerfile* @mwistrand

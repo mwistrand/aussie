@@ -8,6 +8,11 @@ All third-party GitHub Actions are pinned to full commit SHAs; the workflow
 contract check rejects mutable tags. Run it locally with `make workflow-contract`.
 The release JVM builder/runtime bases and CI service images are pinned to
 digests too; run `make container-contract` to reject mutable release inputs.
+Pull requests run dependency review, while the scheduled `Security` workflow
+scans source dependencies and the built JVM image. Release publishing calls
+that same workflow before pushing an image; see
+[Vulnerability management](vulnerability-management.md) for thresholds and
+time-limited exceptions.
 The Java job provisions pinned Redis and Cassandra service containers, so tests
 that discover those providers never depend on developer-local ports. The packaged-
 artifact E2E job runs on pushes to `main` because it builds and starts multiple

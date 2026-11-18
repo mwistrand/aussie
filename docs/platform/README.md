@@ -6,6 +6,8 @@ This guide is for platform teams deploying and operating the Aussie API Gateway.
 
 See [Production deployment reference](production-deployment.md) and the
 repository-owned [Kubernetes base](../../deploy/kubernetes/).
+Security gates and exception handling are documented in
+[Vulnerability management](vulnerability-management.md).
 
 ## Table of Contents
 - [Setup](#setup)
@@ -31,6 +33,7 @@ repository-owned [Kubernetes base](../../deploy/kubernetes/).
 - [JMH Microbenchmarks](jmh-benchmarks.md)
 - [End-to-End Test Suite](e2e-tests.md)
 - [Dependency Failure Matrix](dependency-failure-matrix.md)
+- [Vulnerability Management](vulnerability-management.md)
 - [Service Permission Policies](#service-permission-policies)
 - [Service Configuration Pub/Sub](#service-configuration-pubsub)
 - [Environment Variables Reference](#environment-variables-reference)
