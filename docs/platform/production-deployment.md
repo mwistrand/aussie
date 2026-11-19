@@ -96,5 +96,9 @@ The Deployment uses three replicas, a PDB, topology-independent rolling update
 limits, non-root/read-only containers, bounded resources, and health probes.
 Quarkus begins HTTP/WebSocket drain on SIGTERM and waits for the configured
 30-second WebSocket drain inside the 45-second pod grace period. Test the
-release-specific ingress, Cassandra/Redis failover, backup restore, and rollback
-before treating the base as a production certification.
+release-specific ingress, Cassandra/Redis failover, backup restore, and
+previous-image rollback before treating the base as a production certification.
+The disposable qualification also runs a Kubernetes rollback to the previous
+ReplicaSet after its rolling restart and keeps strict readiness traffic running
+through both transitions; the protected hosted rollback workflow remains the
+evidence for switching between released image versions.
