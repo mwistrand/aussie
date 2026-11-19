@@ -126,16 +126,45 @@ class KubernetesContractTest(unittest.TestCase):
             validate_network_policy(policy)
 
     def test_tracing_must_be_enabled_in_the_production_config(self):
-        config_map = {
-            "data": {
-                "AUSSIE_TELEMETRY_ENABLED": "true",
-                "AUSSIE_TELEMETRY_TRACING_ENABLED": "false",
-                "OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4317",
-            }
-        }
+        config_map = {"data": self.production_config()}
+        config_map["data"]["AUSSIE_TELEMETRY_TRACING_ENABLED"] = "false"
 
         with self.assertRaises(AssertionError):
             validate_config_map(config_map)
+
+    def test_production_keyspace_creation_is_rejected(self):
+        config_map = {"data": self.production_config()}
+        config_map["data"]["CASSANDRA_CREATE_KEYSPACE"] = "true"
+
+        with self.assertRaises(AssertionError):
+            validate_config_map(config_map)
+
+    def production_config(self):
+        return {
+            "QUARKUS_PROFILE": "prod",
+            "AUSSIE_PRODUCTION_CONFIGURATION_VALIDATION_ENABLED": "true",
+            "AUSSIE_STORAGE_REPOSITORY_PROVIDER": "cassandra",
+            "AUSSIE_AUTH_STORAGE_PROVIDER": "cassandra",
+            "AUSSIE_AUTH_ROLES_STORAGE_PROVIDER": "cassandra",
+            "AUSSIE_TRANSLATION_CONFIG_STORAGE_PROVIDER": "cassandra",
+            "AUSSIE_SESSION_STORAGE_PROVIDER": "redis",
+            "AUSSIE_SESSION_ENABLED": "true",
+            "AUSSIE_AUTH_PKCE_STORAGE_PROVIDER": "redis",
+            "AUSSIE_AUTH_PKCE_ENABLED": "true",
+            "AUSSIE_STORAGE_CACHE_PROVIDER": "redis",
+            "AUSSIE_STORAGE_CACHE_ENABLED": "true",
+            "AUSSIE_RATE_LIMITING_ENABLED": "true",
+            "AUSSIE_RATE_LIMITING_REDIS_ENABLED": "true",
+            "AUSSIE_RATE_LIMITING_FALLBACK_BEHAVIOR": "DENY",
+            "AUSSIE_STORAGE_CASSANDRA_CONSISTENCY_LEVEL": "LOCAL_QUORUM",
+            "CASSANDRA_RUN_MIGRATIONS": "false",
+            "CASSANDRA_CREATE_KEYSPACE": "false",
+            "AUSSIE_TELEMETRY_METRICS_ENABLED": "true",
+            "AUSSIE_TELEMETRY_SECURITY_ENABLED": "true",
+            "AUSSIE_TELEMETRY_ENABLED": "true",
+            "AUSSIE_TELEMETRY_TRACING_ENABLED": "true",
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4317",
+        }
 
     def test_probe_path_change_is_rejected(self):
         deployment = parse_yaml_documents(DEPLOYMENT)[0]
@@ -144,6 +173,15 @@ class KubernetesContractTest(unittest.TestCase):
 
         with self.assertRaises(AssertionError):
             validate_deployment(broken)
+
+    def test_container_env_cannot_override_protected_production_settings(self):
+        deployment = parse_yaml_documents(DEPLOYMENT)[0]
+        deployment["spec"]["template"]["spec"]["containers"][0]["env"].append(
+            {"name": "CASSANDRA_RUN_MIGRATIONS", "value": "true"}
+        )
+
+        with self.assertRaises(AssertionError):
+            validate_deployment(deployment)
 
     def test_rollback_default_is_read_from_container_input(self):
         workflow = """      container:
