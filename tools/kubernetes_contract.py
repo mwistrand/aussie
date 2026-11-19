@@ -207,9 +207,16 @@ def validate_network_policy(policy: dict[str, Any]) -> None:
     }
     require_equal(
         actual_ports,
-        {(53, "UDP"), (53, "TCP"), (9042, "TCP"), (6379, "TCP")},
-        "in-cluster dependency ports",
+        {(53, "UDP"), (53, "TCP"), (9042, "TCP"), (6379, "TCP"), (4317, "TCP")},
+        "in-cluster dependency and telemetry ports",
     )
+
+
+def validate_config_map(config_map: dict[str, Any]) -> None:
+    data = config_map["data"]
+    require_equal(data["AUSSIE_TELEMETRY_ENABLED"], "true", "production telemetry master switch")
+    require_equal(data["AUSSIE_TELEMETRY_TRACING_ENABLED"], "true", "production tracing switch")
+    require_match(data["OTEL_EXPORTER_OTLP_ENDPOINT"], r"https?://.+:4317", "OTLP collector endpoint")
 
 
 def validate_rendered_contract(text: str, external: bool = False) -> None:
@@ -224,6 +231,7 @@ def validate_rendered_contract(text: str, external: bool = False) -> None:
     }
     for kind, name in required.items():
         resource(documents, kind, name)
+    validate_config_map(resource(documents, "ConfigMap", "aussie"))
     validate_deployment(resource(documents, "Deployment", "aussie"))
     validate_network_policy(resource(documents, "NetworkPolicy", "aussie"))
     require_equal(
@@ -251,6 +259,11 @@ def validate_rendered_contract(text: str, external: bool = False) -> None:
             blocks["192.0.2.11/32"],
             [{"protocol": "TCP", "port": 6379}],
             "external Redis egress",
+        )
+        require_equal(
+            blocks["192.0.2.12/32"],
+            [{"protocol": "TCP", "port": 4317}],
+            "external telemetry egress",
         )
 
 

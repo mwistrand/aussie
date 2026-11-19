@@ -45,5 +45,12 @@ spec:
       ports:
         - protocol: TCP
           port: 6379
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              aussie.network/telemetry: "true"
+      ports:
+        - protocol: TCP
+          port: 4317
     # Dynamic upstreams need an environment-specific allow rule. Keep the base
     # closed so a service registration cannot create an unreviewed egress path.
