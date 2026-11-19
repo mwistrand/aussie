@@ -14,9 +14,11 @@ report_file="${AUSSIE_QUALIFICATION_REPORT:-$repo_root/api/build/qualification/k
 qualification_stage="initialization"
 qualification_status="failed"
 load_output="not run"
+rolling_traffic_output="not run"
 redis_recovery="not run"
 cassandra_recovery="not run"
 pod_recovery="not run"
+rolling_deployment="not run"
 cluster=""
 namespace="aussie-qualification"
 keep_cluster="${AUSSIE_QUALIFICATION_KEEP_CLUSTER:-false}"
@@ -52,11 +54,18 @@ write_report() {
     echo "- Redis recovery: $redis_recovery"
     echo "- Cassandra recovery: $cassandra_recovery"
     echo "- Gateway pod-loss recovery: $pod_recovery"
+    echo "- Gateway rolling deployment: $rolling_deployment"
     echo
     echo "## Sustained readiness load"
     echo
     echo '```text'
     echo "$load_output"
+    echo '```'
+    echo
+    echo "## Rolling deployment readiness traffic"
+    echo
+    echo '```text'
+    echo "$rolling_traffic_output"
     echo '```'
   } > "$report_file"; then
     echo "Unable to write qualification report: $report_file" >&2
@@ -71,6 +80,7 @@ cleanup() {
   [[ "$redis_recovery" == "running" ]] && redis_recovery="failed"
   [[ "$cassandra_recovery" == "running" ]] && cassandra_recovery="failed"
   [[ "$pod_recovery" == "running" ]] && pod_recovery="failed"
+  [[ "$rolling_deployment" == "running" ]] && rolling_deployment="failed"
   if write_report "$status"; then
     :
   else
@@ -408,8 +418,52 @@ if [[ "$load_phase" != "Succeeded" ]]; then
 fi
 load_output="$(kubectl $context -n "$namespace" logs qualification-load)"
 printf '%s\n' "$load_output"
-qualification_stage="dependency recovery checks"
 
+qualification_stage="rolling deployment"
+rolling_deployment="running"
+
+wait_for_rolling_traffic_monitor() {
+  for _ in $(seq 1 120); do
+    phase="$(kubectl $context -n "$namespace" get pod qualification-rolling-traffic \
+      -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+    case "$phase" in
+      Running) return 0 ;;
+      Failed|Succeeded)
+        kubectl $context -n "$namespace" logs qualification-rolling-traffic 2>/dev/null || true
+        echo "rolling deployment traffic monitor ended before the restart" >&2
+        return 1
+        ;;
+    esac
+    sleep 1
+  done
+  echo "timed out waiting for the rolling deployment traffic monitor" >&2
+  return 1
+}
+
+kubectl $context -n "$namespace" run qualification-rolling-traffic \
+  --image=curlimages/curl:8.10.1 --restart=Never --attach=false \
+  --command -- sh -ec '
+    : > /tmp/results
+    while [ ! -f /tmp/stop ]; do
+      if curl --fail --silent --output /dev/null --max-time 5 \
+        http://aussie:8080/q/health/ready; then
+        printf "success\\n" >> /tmp/results
+      else
+        printf "failure\\n" >> /tmp/results
+      fi
+      sleep 1
+    done
+    set -- $(awk "{ total++; if (\$1 == \"failure\") failed++ } END { print total + 0, failed + 0 }" /tmp/results)
+    total="$1"
+    failed="$2"
+    printf "Rolling restart readiness traffic: total=%s failed=%s\\n" "$total" "$failed"
+    test "$total" -gt 0
+    test "$failed" -eq 0
+  '
+wait_for_rolling_traffic_monitor
+
+kubectl $context -n "$namespace" rollout restart deployment/aussie
+kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=15m
 wait_for_gateway_ready() {
   for _ in $(seq 1 120); do
     if kubectl $context -n "$namespace" exec qualification-traffic -- \
@@ -421,6 +475,33 @@ wait_for_gateway_ready() {
   echo "timed out waiting for gateway readiness" >&2
   return 1
 }
+wait_for_gateway_ready
+kubectl $context -n "$namespace" exec qualification-rolling-traffic -- touch /tmp/stop
+for _ in $(seq 1 120); do
+  rolling_traffic_phase="$(kubectl $context -n "$namespace" get pod qualification-rolling-traffic \
+    -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+  case "$rolling_traffic_phase" in
+    Succeeded) break ;;
+    Failed)
+      rolling_traffic_output="$(kubectl $context -n "$namespace" logs qualification-rolling-traffic 2>/dev/null || true)"
+      printf '%s\n' "$rolling_traffic_output"
+      echo "rolling deployment readiness traffic failed" >&2
+      exit 1
+      ;;
+  esac
+  sleep 1
+done
+if [[ "$rolling_traffic_phase" != "Succeeded" ]]; then
+  rolling_traffic_output="$(kubectl $context -n "$namespace" logs qualification-rolling-traffic 2>/dev/null || true)"
+  printf '%s\n' "$rolling_traffic_output"
+  echo "rolling deployment readiness traffic did not complete" >&2
+  exit 1
+fi
+rolling_traffic_output="$(kubectl $context -n "$namespace" logs qualification-rolling-traffic)"
+printf '%s\n' "$rolling_traffic_output"
+rolling_deployment="passed"
+
+qualification_stage="dependency recovery checks"
 
 wait_for_gateway_unready() {
   for _ in $(seq 1 120); do
