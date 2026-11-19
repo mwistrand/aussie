@@ -49,6 +49,11 @@ The uploaded `*.evidence.json` manifest is the release handoff. Verify its
 `digest` against the registry image and its `sbom_sha256` against the uploaded
 CycloneDX file before deployment.
 
+The release workflow then runs the repository-owned Kubernetes qualification
+against that exact signed image digest. The release is not complete unless the
+qualification job passes; its Markdown report is uploaded as the release
+qualification artifact alongside the evidence manifest.
+
 Verify a CLI archive before installation with:
 
 ```sh

@@ -139,9 +139,15 @@ cosign verify \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   "$qualification_image" >/dev/null
 
+# kind nodes use their own containerd and cannot see the runner's Docker login.
+# Pull with the runner credentials, then load the exact digest into every node.
+qualification_stage="pulling signed image"
+docker pull "$qualification_image" >/dev/null
+
 cluster="aussie-qualification-$$"
 qualification_stage="creating kind cluster"
 kind create cluster --name "$cluster" --config="$repo_root/tools/kind-qualification.yaml"
+kind load docker-image "$qualification_image" --name "$cluster"
 
 kubectl --context "kind-$cluster" create namespace "$namespace"
 kubectl --context "kind-$cluster" label namespace "$namespace" \
