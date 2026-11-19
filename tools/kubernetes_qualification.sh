@@ -309,15 +309,25 @@ kubectl $context -n "$namespace" run cassandra-admin \
   --image=cassandra:4.1.4 --restart=Never --rm -i --command -- \
   cqlsh cassandra -e "CREATE KEYSPACE aussie WITH replication = {'class': 'NetworkTopologyStrategy', 'datacenter1': 2};"
 
-# Render exactly the repository base, changing only the disposable image and
-# dependency endpoints needed by this cluster.
-kubectl kustomize "$repo_root/deploy/kubernetes" \
-  | sed \
-      -e "s|ghcr.io/mwistrand/aussie@sha256:REPLACE_WITH_SIGNED_RELEASE_DIGEST|$AUSSIE_QUALIFICATION_IMAGE|g" \
-      -e 's|cassandra.example.internal:9042|cassandra:9042|g' \
-      -e 's|redis.example.internal:6379|redis:6379|g' \
-      -e 's|CASSANDRA_RUN_MIGRATIONS: "false"|CASSANDRA_RUN_MIGRATIONS: "true"|g' \
+render_qualification_manifests() {
+  kubectl kustomize "$repo_root/deploy/kubernetes" \
+    | sed \
+        -e "s|ghcr.io/mwistrand/aussie@sha256:REPLACE_WITH_SIGNED_RELEASE_DIGEST|$AUSSIE_QUALIFICATION_IMAGE|g" \
+        -e 's|cassandra.example.internal:9042|cassandra:9042|g' \
+        -e 's|redis.example.internal:6379|redis:6379|g'
+}
+
+# Bootstrap the operator-created keyspace through the reviewed migration path,
+# then restore the exact production manifest before qualification begins.
+qualification_stage="running schema migration bootstrap"
+render_qualification_manifests \
+  | sed -e 's|CASSANDRA_RUN_MIGRATIONS: "false"|CASSANDRA_RUN_MIGRATIONS: "true"|g' \
   | kubectl $context -n "$namespace" apply -f -
+kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=15m
+
+qualification_stage="applying steady-state production configuration"
+render_qualification_manifests | kubectl $context -n "$namespace" apply -f -
+kubectl $context -n "$namespace" rollout restart deployment/aussie
 
 qualification_stage="waiting for gateway readiness"
 kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=15m
