@@ -37,11 +37,18 @@ Create the external secret named `aussie-production-secrets` with
 `CASSANDRA_USERNAME`, `CASSANDRA_PASSWORD`, `REDIS_PASSWORD`, and
 `AUTH_ENCRYPTION_KEY`. Keep it out of ConfigMaps, manifests, command lines, and
 logs. The base NetworkPolicy permits the standard Kubernetes DNS pods and
-in-cluster Cassandra/Redis only when their namespaces carry
-`aussie.network/cassandra=true` and `aussie.network/redis=true`, respectively.
+in-cluster Cassandra, Redis, and OTLP gRPC telemetry only when their namespaces
+carry `aussie.network/cassandra=true`, `aussie.network/redis=true`, and
+`aussie.network/telemetry=true`, respectively. The base points
+`OTEL_EXPORTER_OTLP_ENDPOINT` at a documentation-only collector hostname;
+replace it with the collector service or use the external-dependencies overlay.
+Production tracing is included in the released image and enabled by default;
+set `AUSSIE_TELEMETRY_TRACING_ENABLED=false` in an environment overlay only
+when the collector is intentionally disabled.
 For managed Cassandra or Redis outside the cluster, use the
 `deploy/kubernetes/overlays/external-dependencies` overlay, replacing its
-documentation-only IP blocks with the provider endpoint CIDRs. A namespace
+documentation-only IP blocks with the provider endpoint CIDRs. The overlay
+also includes a documentation-only telemetry address on TCP 4317. A namespace
 selector cannot authorize external IPs. Add environment-specific egress rules
 for approved dynamic upstream networks; they cannot be safely represented by a
 single universal NetworkPolicy.

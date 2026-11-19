@@ -979,7 +979,7 @@ Dev profile uses tighter thresholds to catch blocking operations early. Producti
 | `quarkus.application.name` | `aussie-gateway` | `QUARKUS_APPLICATION_NAME` | Service name for telemetry. |
 | `quarkus.otel.service.name` | `${quarkus.application.name}` | `QUARKUS_OTEL_SERVICE_NAME` | OTel service name. |
 | `quarkus.otel.resource.attributes` | `deployment.environment=${AUSSIE_ENV:development}` | `AUSSIE_ENV` | OTel resource attributes. |
-| `quarkus.otel.traces.enabled` | `${aussie.telemetry.tracing.enabled}` | _(links to telemetry)_ | Controlled by Aussie telemetry config. |
+| `quarkus.otel.traces.enabled` | `true` in `%prod` | _(build-time)_ | Includes tracing instrumentation in the released image; the runtime Aussie tracing switch controls application tracing behavior and attributes. |
 | `quarkus.otel.exporter.otlp.traces.endpoint` | `http://localhost:4317` | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint. |
 | `quarkus.otel.exporter.otlp.traces.protocol` | `grpc` | `QUARKUS_OTEL_EXPORTER_OTLP_TRACES_PROTOCOL` | OTLP protocol. |
 | `quarkus.otel.traces.sampler` | `parentbased_traceidratio` | `QUARKUS_OTEL_TRACES_SAMPLER` | Sampling strategy. |

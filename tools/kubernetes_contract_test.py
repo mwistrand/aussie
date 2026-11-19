@@ -4,6 +4,7 @@ import unittest
 from kubernetes_contract import (
     parse_yaml_documents,
     rollback_container_default,
+    validate_config_map,
     validate_deployment,
     validate_network_policy,
 )
@@ -123,6 +124,18 @@ class KubernetesContractTest(unittest.TestCase):
 
         with self.assertRaises(AssertionError):
             validate_network_policy(policy)
+
+    def test_tracing_must_be_enabled_in_the_production_config(self):
+        config_map = {
+            "data": {
+                "AUSSIE_TELEMETRY_ENABLED": "true",
+                "AUSSIE_TELEMETRY_TRACING_ENABLED": "false",
+                "OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4317",
+            }
+        }
+
+        with self.assertRaises(AssertionError):
+            validate_config_map(config_map)
 
     def test_probe_path_change_is_rejected(self):
         deployment = parse_yaml_documents(DEPLOYMENT)[0]

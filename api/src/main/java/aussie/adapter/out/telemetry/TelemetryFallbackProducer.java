@@ -11,6 +11,7 @@ import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.propagation.TextMapPropagator;
 import io.quarkus.arc.DefaultBean;
+import io.quarkus.arc.properties.UnlessBuildProperty;
 
 /**
  * Provides fallback/default telemetry beans when the real ones aren't available.
@@ -43,6 +44,7 @@ public class TelemetryFallbackProducer {
     @Singleton
     @DefaultBean
     @Default
+    @UnlessBuildProperty(name = "quarkus.otel.traces.enabled", stringValue = "true", enableIfMissing = true)
     public Tracer tracer() {
         return OpenTelemetry.noop().getTracer("aussie-noop");
     }
