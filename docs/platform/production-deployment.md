@@ -85,12 +85,17 @@ load threshold/result, and recovery checks so qualification evidence stays
 tied to the artifact that was tested.
 
 Before the dependency fault checks, the harness runs a 30-second open-loop
-readiness load at 10 requests per second. Every request must succeed and the
-default p95 must remain at or below one second. Tune the evidence run explicitly
+operational-endpoint profile at 10 requests per second. It cycles through
+`/q/health/ready`, `/q/health/live`, and `/q/metrics`; every request must
+succeed and the default p95 for each endpoint must remain at or below one
+second. The report also records JVM heap/direct-memory and GC, process/system,
+Vert.x event-loop, and application bulkhead metrics available from `/q/metrics`
+after the load. Tune the evidence run explicitly
 with `AUSSIE_QUALIFICATION_LOAD_SECONDS`,
 `AUSSIE_QUALIFICATION_LOAD_INTERVAL_SECONDS`, and
-`AUSSIE_QUALIFICATION_LOAD_P95_MAX_SECONDS`; the output reports total requests,
-errors, p95, and p99 latency.
+`AUSSIE_QUALIFICATION_LOAD_P95_MAX_SECONDS`; the output reports per-endpoint
+request totals, errors, p95, and p99 latency. Redis and Cassandra recovery
+durations are recorded from dependency loss through restored gateway readiness.
 
 Set `AUSSIE_QUALIFICATION_KEEP_CLUSTER=true` to retain the cluster for
 inspection after a run. This is a release qualification check, not a substitute
