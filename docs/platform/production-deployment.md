@@ -31,6 +31,36 @@ configured local datacenter aligned with the keyspace topology. Take a snapshot
 before destructive schema work. Cassandra migrations are forward-only; rollback
 requires a compatible application image or a new forward-fix migration.
 
+## Dependency versions and data protection
+
+The repository qualifies the production reference with Cassandra `4.1.4` and
+Redis `7.2.5` (see `tools/kubernetes_qualification.sh`). These are the tested
+reference versions, not a promise that every managed-service version is
+compatible. Validate provider upgrades with the same topology, migration, and
+failure checks before rollout. Redis sessions, PKCE state, caches, rate-limit
+buckets, and in-flight propagation state are not a substitute for Cassandra
+backups; plan for their loss during a Redis restore and require users to
+reauthenticate where necessary.
+
+The platform owner is responsible for backup and restore execution:
+
+1. Take Cassandra snapshots (or provider-equivalent backups) on a schedule
+   that meets the service's data-loss budget, and test restoring into a separate
+   cluster before using it for recovery.
+2. Restore Cassandra with `NetworkTopologyStrategy`, the intended datacenter
+   names, and a replication factor of at least two before starting Aussie.
+3. Run the migration validation and a read-only smoke test against the restored
+   cluster; do not use an image rollback as a schema rollback.
+4. Use the Redis provider's durable backup feature only for data whose recovery
+   matters operationally (for example, audit/idempotency continuity); transient
+   session and cache state may be rebuilt.
+
+This repository does not define an organization-wide SLA. A deployment is not
+release-ready until its owner records explicit RPO/RTO targets for Cassandra and
+Redis, the backup interval and retention, and the tested restore time. The
+disposable qualification measures dependency recovery and gateway readiness;
+it does not prove those provider-specific backup/restore targets.
+
 ## Secrets and rollout
 
 Create the external secret named `aussie-production-secrets` with
