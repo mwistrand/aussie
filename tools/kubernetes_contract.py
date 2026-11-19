@@ -13,6 +13,30 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 ROLLBACK = ROOT / ".github/workflows/rollback.yml"
+PROTECTED_PRODUCTION_SETTINGS = {
+    "QUARKUS_PROFILE": "prod",
+    "AUSSIE_PRODUCTION_CONFIGURATION_VALIDATION_ENABLED": "true",
+    "AUSSIE_STORAGE_REPOSITORY_PROVIDER": "cassandra",
+    "AUSSIE_AUTH_STORAGE_PROVIDER": "cassandra",
+    "AUSSIE_AUTH_ROLES_STORAGE_PROVIDER": "cassandra",
+    "AUSSIE_TRANSLATION_CONFIG_STORAGE_PROVIDER": "cassandra",
+    "AUSSIE_SESSION_STORAGE_PROVIDER": "redis",
+    "AUSSIE_SESSION_ENABLED": "true",
+    "AUSSIE_AUTH_PKCE_STORAGE_PROVIDER": "redis",
+    "AUSSIE_AUTH_PKCE_ENABLED": "true",
+    "AUSSIE_STORAGE_CACHE_PROVIDER": "redis",
+    "AUSSIE_STORAGE_CACHE_ENABLED": "true",
+    "AUSSIE_RATE_LIMITING_ENABLED": "true",
+    "AUSSIE_RATE_LIMITING_REDIS_ENABLED": "true",
+    "AUSSIE_RATE_LIMITING_FALLBACK_BEHAVIOR": "DENY",
+    "AUSSIE_STORAGE_CASSANDRA_CONSISTENCY_LEVEL": "LOCAL_QUORUM",
+    "CASSANDRA_RUN_MIGRATIONS": "false",
+    "CASSANDRA_CREATE_KEYSPACE": "false",
+    "AUSSIE_TELEMETRY_METRICS_ENABLED": "true",
+    "AUSSIE_TELEMETRY_SECURITY_ENABLED": "true",
+    "AUSSIE_TELEMETRY_ENABLED": "true",
+    "AUSSIE_TELEMETRY_TRACING_ENABLED": "true",
+}
 
 
 def parse_scalar(value: str) -> Any:
@@ -166,6 +190,13 @@ def validate_deployment(deployment: dict[str, Any]) -> None:
     )
     if container is None:
         raise AssertionError("gateway container is missing")
+    overrides = {
+        item.get("name")
+        for item in container.get("env", [])
+        if item.get("name") in PROTECTED_PRODUCTION_SETTINGS
+    }
+    if overrides:
+        raise AssertionError(f"container env overrides protected production settings: {sorted(overrides)}")
     require_match(container["image"], r".+@sha256:.+", "digest-pinned gateway image")
     require_equal(container["securityContext"]["allowPrivilegeEscalation"], False, "privilege escalation")
     require_equal(container["securityContext"]["readOnlyRootFilesystem"], True, "read-only root filesystem")
@@ -214,8 +245,8 @@ def validate_network_policy(policy: dict[str, Any]) -> None:
 
 def validate_config_map(config_map: dict[str, Any]) -> None:
     data = config_map["data"]
-    require_equal(data["AUSSIE_TELEMETRY_ENABLED"], "true", "production telemetry master switch")
-    require_equal(data["AUSSIE_TELEMETRY_TRACING_ENABLED"], "true", "production tracing switch")
+    for key, expected in PROTECTED_PRODUCTION_SETTINGS.items():
+        require_equal(data.get(key), expected, f"production setting {key}")
     require_match(data["OTEL_EXPORTER_OTLP_ENDPOINT"], r"https?://.+:4317", "OTLP collector endpoint")
 
 
