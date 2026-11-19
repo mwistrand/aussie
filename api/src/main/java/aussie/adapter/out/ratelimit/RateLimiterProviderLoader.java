@@ -16,7 +16,6 @@ import aussie.adapter.out.ratelimit.redis.RedisRateLimiterProvider;
 import aussie.core.config.RateLimitingConfig;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
-import aussie.core.service.ratelimit.AlgorithmRegistry;
 import aussie.spi.RateLimiterProvider;
 
 /**
@@ -37,18 +36,15 @@ public class RateLimiterProviderLoader {
     private static final Logger LOG = Logger.getLogger(RateLimiterProviderLoader.class);
 
     private final RateLimitingConfig config;
-    private final AlgorithmRegistry algorithmRegistry;
     private final Instance<ReactiveRedisDataSource> redisDataSource;
     private final Instance<Metrics> metricsInstance;
 
     @Inject
     public RateLimiterProviderLoader(
             RateLimitingConfig config,
-            AlgorithmRegistry algorithmRegistry,
             Instance<ReactiveRedisDataSource> redisDataSource,
             Instance<Metrics> metricsInstance) {
         this.config = config;
-        this.algorithmRegistry = algorithmRegistry;
         this.redisDataSource = redisDataSource;
         this.metricsInstance = metricsInstance;
     }
@@ -66,14 +62,10 @@ public class RateLimiterProviderLoader {
             return NoOpRateLimiter.getInstance();
         }
 
-        if (!algorithmRegistry.isAvailable(config.algorithm())) {
-            throw new IllegalStateException("Unsupported rate-limit algorithm: " + config.algorithm());
-        }
-
         final var rateLimiter = createRateLimiter();
         LOG.infov(
-                "Rate limiting enabled with algorithm={0}, defaultLimit={1}/{2}s",
-                config.algorithm(), config.defaultRequestsPerWindow(), config.windowSeconds());
+                "Rate limiting enabled with defaultLimit={0}/{1}s",
+                config.defaultRequestsPerWindow(), config.windowSeconds());
 
         return rateLimiter;
     }
@@ -120,20 +112,13 @@ public class RateLimiterProviderLoader {
                             ? createInMemoryProvider().createRateLimiter()
                             : null;
             return Optional.of(RedisRateLimiterProvider.configured(
-                    ds,
-                    config.enabled(),
-                    true,
-                    config.algorithm(),
-                    fallback,
-                    config.fallback().behavior(),
-                    metrics));
+                    ds, config.enabled(), true, fallback, config.fallback().behavior(), metrics));
         } catch (Exception e) {
             throw new IllegalStateException("Failed to initialize Redis rate limiter", e);
         }
     }
 
     private RateLimiterProvider createInMemoryProvider() {
-        return InMemoryRateLimiterProvider.configured(
-                algorithmRegistry, config.algorithm(), config.enabled(), config.windowSeconds());
+        return InMemoryRateLimiterProvider.configured(config.enabled(), config.windowSeconds());
     }
 }

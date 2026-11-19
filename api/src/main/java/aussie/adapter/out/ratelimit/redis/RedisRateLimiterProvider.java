@@ -3,7 +3,6 @@ package aussie.adapter.out.ratelimit.redis;
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 
 import aussie.core.config.RateLimitingConfig.RateLimitFallbackBehavior;
-import aussie.core.model.ratelimit.RateLimitAlgorithm;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
 import aussie.spi.RateLimiterProvider;
@@ -28,7 +27,6 @@ public final class RedisRateLimiterProvider implements RateLimiterProvider {
     private final ReactiveRedisDataSource redisDataSource;
     private final boolean enabled;
     private final boolean redisConfigured;
-    private final RateLimitAlgorithm algorithm;
     private final RateLimiter fallback;
     private final RateLimitFallbackBehavior fallbackBehavior;
     private final Metrics metrics;
@@ -39,7 +37,6 @@ public final class RedisRateLimiterProvider implements RateLimiterProvider {
      * @param redisDataSource the Redis data source
      * @param enabled whether rate limiting is enabled
      * @param redisConfigured whether Redis is configured for rate limiting
-     * @param algorithm the configured rate-limit algorithm
      * @param fallback the fallback limiter used when Redis is unreachable
      *                 (may be null; in that case the behavior collapses to DENY)
      * @param fallbackBehavior the resolved fallback behavior
@@ -49,14 +46,12 @@ public final class RedisRateLimiterProvider implements RateLimiterProvider {
             ReactiveRedisDataSource redisDataSource,
             boolean enabled,
             boolean redisConfigured,
-            RateLimitAlgorithm algorithm,
             RateLimiter fallback,
             RateLimitFallbackBehavior fallbackBehavior,
             Metrics metrics) {
         this.redisDataSource = redisDataSource;
         this.enabled = enabled;
         this.redisConfigured = redisConfigured;
-        this.algorithm = algorithm;
         this.fallback = fallback;
         this.fallbackBehavior = fallbackBehavior;
         this.metrics = metrics;
@@ -72,7 +67,6 @@ public final class RedisRateLimiterProvider implements RateLimiterProvider {
         this.redisDataSource = null;
         this.enabled = true;
         this.redisConfigured = false;
-        this.algorithm = RateLimitAlgorithm.BUCKET;
         this.fallback = null;
         this.fallbackBehavior = RateLimitFallbackBehavior.DENY;
         this.metrics = null;
@@ -100,7 +94,7 @@ public final class RedisRateLimiterProvider implements RateLimiterProvider {
                     "Provider not configured. Use RateLimiterProviderLoader for proper initialization.");
         }
         try {
-            return new RedisRateLimiter(redisDataSource, enabled, algorithm, fallback, fallbackBehavior, metrics);
+            return new RedisRateLimiter(redisDataSource, enabled, fallback, fallbackBehavior, metrics);
         } catch (RuntimeException | Error error) {
             if (fallback != null) {
                 try {
@@ -120,11 +114,10 @@ public final class RedisRateLimiterProvider implements RateLimiterProvider {
             ReactiveRedisDataSource redisDataSource,
             boolean enabled,
             boolean redisConfigured,
-            RateLimitAlgorithm algorithm,
             RateLimiter fallback,
             RateLimitFallbackBehavior fallbackBehavior,
             Metrics metrics) {
         return new RedisRateLimiterProvider(
-                redisDataSource, enabled, redisConfigured, algorithm, fallback, fallbackBehavior, metrics);
+                redisDataSource, enabled, redisConfigured, fallback, fallbackBehavior, metrics);
     }
 }

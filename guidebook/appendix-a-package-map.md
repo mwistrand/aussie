@@ -383,7 +383,6 @@ Domain services implementing inbound ports and composing outbound ports. All are
 
 | Class | Description |
 |---|---|
-| `AlgorithmRegistry` | Maps `RateLimitAlgorithm` enum values to their handler implementations. |
 | `MessageRateLimitHandler` | Functional interface for WebSocket message-level rate limit callbacks. |
 | `RateLimitResolver` | Resolves the `EffectiveRateLimit` for a request by merging platform defaults with service and endpoint overrides. Enforces platform ceiling. |
 | `WebSocketRateLimitService` | Rate limiting for WebSocket connection establishment and per-connection message throughput. |

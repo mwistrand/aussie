@@ -1,8 +1,6 @@
 package aussie.adapter.out.ratelimit.memory;
 
-import aussie.core.model.ratelimit.RateLimitAlgorithm;
 import aussie.core.port.out.RateLimiter;
-import aussie.core.service.ratelimit.AlgorithmRegistry;
 import aussie.spi.RateLimiterProvider;
 
 /**
@@ -19,23 +17,16 @@ public final class InMemoryRateLimiterProvider implements RateLimiterProvider {
     private static final String NAME = "memory";
     private static final long DEFAULT_WINDOW_SECONDS = 60;
 
-    private final AlgorithmRegistry algorithmRegistry;
-    private final RateLimitAlgorithm algorithm;
     private final boolean enabled;
     private final long windowSeconds;
 
     /**
      * Create a new in-memory provider with configuration.
      *
-     * @param algorithmRegistry the algorithm registry
-     * @param algorithm the algorithm to use
      * @param enabled whether rate limiting is enabled
      * @param windowSeconds the rate limit window duration in seconds
      */
-    public InMemoryRateLimiterProvider(
-            AlgorithmRegistry algorithmRegistry, RateLimitAlgorithm algorithm, boolean enabled, long windowSeconds) {
-        this.algorithmRegistry = algorithmRegistry;
-        this.algorithm = algorithm;
+    public InMemoryRateLimiterProvider(boolean enabled, long windowSeconds) {
         this.enabled = enabled;
         this.windowSeconds = windowSeconds;
     }
@@ -47,8 +38,6 @@ public final class InMemoryRateLimiterProvider implements RateLimiterProvider {
      * separately via the loader.
      */
     public InMemoryRateLimiterProvider() {
-        this.algorithmRegistry = null;
-        this.algorithm = RateLimitAlgorithm.BUCKET;
         this.enabled = true;
         this.windowSeconds = DEFAULT_WINDOW_SECONDS;
     }
@@ -71,24 +60,17 @@ public final class InMemoryRateLimiterProvider implements RateLimiterProvider {
 
     @Override
     public RateLimiter createRateLimiter() {
-        if (algorithmRegistry == null) {
-            throw new IllegalStateException(
-                    "Provider not configured. Use RateLimiterProviderLoader for proper initialization.");
-        }
-        return new InMemoryRateLimiter(algorithmRegistry, algorithm, enabled, windowSeconds);
+        return new InMemoryRateLimiter(enabled, windowSeconds);
     }
 
     /**
      * Create a configured provider instance.
      *
-     * @param algorithmRegistry the algorithm registry
-     * @param algorithm the algorithm to use
      * @param enabled whether rate limiting is enabled
      * @param windowSeconds the rate limit window duration in seconds
      * @return the configured provider
      */
-    public static InMemoryRateLimiterProvider configured(
-            AlgorithmRegistry algorithmRegistry, RateLimitAlgorithm algorithm, boolean enabled, long windowSeconds) {
-        return new InMemoryRateLimiterProvider(algorithmRegistry, algorithm, enabled, windowSeconds);
+    public static InMemoryRateLimiterProvider configured(boolean enabled, long windowSeconds) {
+        return new InMemoryRateLimiterProvider(enabled, windowSeconds);
     }
 }

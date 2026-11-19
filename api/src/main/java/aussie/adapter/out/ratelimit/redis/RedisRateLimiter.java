@@ -2,7 +2,6 @@ package aussie.adapter.out.ratelimit.redis;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
@@ -14,7 +13,6 @@ import org.jboss.logging.Logger;
 import aussie.core.config.RateLimitingConfig.RateLimitFallbackBehavior;
 import aussie.core.model.ratelimit.BucketState;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
-import aussie.core.model.ratelimit.RateLimitAlgorithm;
 import aussie.core.model.ratelimit.RateLimitDecision;
 import aussie.core.model.ratelimit.RateLimitKey;
 import aussie.core.port.out.Metrics;
@@ -138,14 +136,13 @@ public final class RedisRateLimiter implements RateLimiter {
     private final ReactiveRedisDataSource redisDataSource;
     private final ReactiveKeyCommands<String> keyCommands;
     private final boolean enabled;
-    private final RateLimitAlgorithm algorithm;
     private final RateLimiter fallback;
     private final RateLimitFallbackBehavior fallbackBehavior;
     private final Metrics metrics;
     private final AtomicBoolean fallbackClosed = new AtomicBoolean();
 
     public RedisRateLimiter(ReactiveRedisDataSource redisDataSource, boolean enabled) {
-        this(redisDataSource, enabled, RateLimitAlgorithm.BUCKET, null, RateLimitFallbackBehavior.DENY, null);
+        this(redisDataSource, enabled, null, RateLimitFallbackBehavior.DENY, null);
     }
 
     public RedisRateLimiter(
@@ -154,24 +151,9 @@ public final class RedisRateLimiter implements RateLimiter {
             RateLimiter fallback,
             RateLimitFallbackBehavior fallbackBehavior,
             Metrics metrics) {
-        this(redisDataSource, enabled, RateLimitAlgorithm.BUCKET, fallback, fallbackBehavior, metrics);
-    }
-
-    public RedisRateLimiter(
-            ReactiveRedisDataSource redisDataSource,
-            boolean enabled,
-            RateLimitAlgorithm algorithm,
-            RateLimiter fallback,
-            RateLimitFallbackBehavior fallbackBehavior,
-            Metrics metrics) {
-        final var resolvedAlgorithm = Objects.requireNonNull(algorithm, "algorithm must not be null");
-        if (resolvedAlgorithm != RateLimitAlgorithm.BUCKET) {
-            throw new IllegalArgumentException("Unsupported Redis rate-limit algorithm: " + resolvedAlgorithm);
-        }
         this.redisDataSource = redisDataSource;
         this.keyCommands = redisDataSource.key(String.class);
         this.enabled = enabled;
-        this.algorithm = resolvedAlgorithm;
         this.fallback = fallback;
         this.fallbackBehavior = fallbackBehavior == null ? RateLimitFallbackBehavior.DENY : fallbackBehavior;
         this.metrics = metrics;
@@ -339,7 +321,7 @@ public final class RedisRateLimiter implements RateLimiter {
     }
 
     private String cacheKey(RateLimitKey key) {
-        return key.toCacheKey() + ":v1:" + algorithm.name().toLowerCase(java.util.Locale.ROOT);
+        return key.toCacheKey() + ":v1:bucket";
     }
 
     private void validateLimit(EffectiveRateLimit limit) {

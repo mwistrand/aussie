@@ -425,8 +425,6 @@ The in-memory implementation at `api/src/main/java/aussie/adapter/out/ratelimit/
 public final class InMemoryRateLimiter implements RateLimiter {
 
     private final ConcurrentMap<String, TimestampedState> states;
-    private final AlgorithmRegistry algorithmRegistry;
-    private final RateLimitAlgorithm algorithm;
     private final boolean enabled;
     private final long windowMillis;
     private final LongSupplier clock;

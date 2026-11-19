@@ -11,7 +11,6 @@ Rate limiting protects the Aussie API Gateway from abuse and ensures fair resour
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `AUSSIE_RATE_LIMITING_ENABLED` | Enable/disable rate limiting | `true` |
-| `AUSSIE_RATE_LIMITING_ALGORITHM` | Algorithm (`BUCKET`; other values are rejected until implemented) | `BUCKET` |
 | `AUSSIE_RATE_LIMITING_PLATFORM_MAX_REQUESTS_PER_WINDOW` | Maximum rate limit ceiling | `Long.MAX_VALUE` |
 | `AUSSIE_RATE_LIMITING_PLATFORM_MAX_WINDOW_SECONDS` | Maximum window duration in seconds | `Long.MAX_VALUE` |
 | `AUSSIE_RATE_LIMITING_DEFAULT_REQUESTS_PER_WINDOW` | Default for unconfigured services | `100` |

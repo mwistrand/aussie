@@ -1,8 +1,8 @@
-# Chapter 4: Rate Limiting (Algorithm Selection, Network Identity, and Platform Guardrails)
+# Chapter 4: Rate Limiting (Token Bucket, Network Identity, and Platform Guardrails)
 
 Rate limiting in a shared API gateway is deceptively difficult. The individual algorithms are well-understood. Any senior engineer can describe a token bucket. The hard parts are everything around the algorithm: how you identify the client, how you prevent service teams from shooting themselves in the foot, how you handle the impedance mismatch between HTTP and WebSocket traffic, and how you make it all work across multiple gateway instances without blocking threads. This chapter traces those decisions through the Aussie codebase.
 
-## 1. The Strategy Pattern: One Algorithm, One Interface
+## 1. One Supported Algorithm
 
 Aussie defines the supported rate limiting algorithm as an enum at `api/src/main/java/aussie/core/model/ratelimit/RateLimitAlgorithm.java`:
 
@@ -48,22 +48,7 @@ default RateLimitDecision getStatus(
 }
 ```
 
-The `AlgorithmRegistry` (line 32 of `api/src/main/java/aussie/core/service/ratelimit/AlgorithmRegistry.java`) stores handlers in an `EnumMap` and rejects unavailable algorithms rather than silently changing their semantics:
-
-```java
-public RateLimitAlgorithmHandler getHandler(RateLimitAlgorithm algorithm) {
-    final var handler = handlers.get(algorithm);
-    if (handler == null) {
-        throw new IllegalArgumentException(
-            "Unsupported rate-limit algorithm: " + algorithm);
-    }
-    return handler;
-}
-```
-
-`BucketAlgorithm` is the supported implementation. New algorithms should be added only with a handler, state model where needed, and equivalent Redis semantics.
-
-Rejecting an unavailable algorithm is deliberate: falling back to token bucket could enforce materially different quotas than the platform team configured.
+`BucketAlgorithm` is the only implementation and is called directly by the in-memory limiter. The configuration surface does not pretend to select an algorithm that does not exist. Add a new algorithm only with a handler, state model where needed, equivalent Redis semantics, and an explicit selection contract.
 
 ## 2. Token Bucket Internals: How the Algorithm Actually Works
 
