@@ -137,7 +137,6 @@ The inventory is derived from `@ConfigMapping`, `@ConfigProperty`, and explicit 
 | `aussie.gateway.trusted-proxy.enabled` | `boolean` | false | `AUSSIE_GATEWAY_TRUSTED_PROXY_ENABLED` | no | `api/src/main/java/aussie/core/config/TrustedProxyConfig.java` |
 | `aussie.gateway.trusted-proxy.proxies` | `Optional<List<String>>` | _(not set)_ | `AUSSIE_GATEWAY_TRUSTED_PROXY_PROXIES` | no | `api/src/main/java/aussie/core/config/TrustedProxyConfig.java` |
 | `aussie.production-configuration-validation.enabled` | `boolean` | true | `AUSSIE_PRODUCTION_CONFIGURATION_VALIDATION_ENABLED` | no | `api/src/main/java/aussie/adapter/out/storage/cassandra/CassandraStorageProvider.java` |
-| `aussie.rate-limiting.algorithm` | `RateLimitAlgorithm` | BUCKET | `AUSSIE_RATE_LIMITING_ALGORITHM` | no | `api/src/main/java/aussie/core/config/RateLimitingConfig.java` |
 | `aussie.rate-limiting.burst-capacity` | `long` | 100 | `AUSSIE_RATE_LIMITING_BURST_CAPACITY` | no | `api/src/main/java/aussie/core/config/RateLimitingConfig.java` |
 | `aussie.rate-limiting.default-requests-per-window` | `long` | 100 | `AUSSIE_RATE_LIMITING_DEFAULT_REQUESTS_PER_WINDOW` | no | `api/src/main/java/aussie/core/config/RateLimitingConfig.java` |
 | `aussie.rate-limiting.enabled` | `boolean` | true | `AUSSIE_RATE_LIMITING_ENABLED` | no | `api/src/main/java/aussie/core/config/RateLimitingConfig.java` |

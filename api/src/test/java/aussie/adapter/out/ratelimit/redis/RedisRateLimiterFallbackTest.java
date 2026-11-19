@@ -26,12 +26,10 @@ import org.junit.jupiter.api.Test;
 import aussie.adapter.out.ratelimit.memory.InMemoryRateLimiter;
 import aussie.core.config.RateLimitingConfig.RateLimitFallbackBehavior;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
-import aussie.core.model.ratelimit.RateLimitAlgorithm;
 import aussie.core.model.ratelimit.RateLimitDecision;
 import aussie.core.model.ratelimit.RateLimitKey;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
-import aussie.core.service.ratelimit.AlgorithmRegistry;
 
 @DisplayName("RedisRateLimiter fallback behavior")
 class RedisRateLimiterFallbackTest {
@@ -54,13 +52,7 @@ class RedisRateLimiterFallbackTest {
         when(dataSource.key(String.class)).thenThrow(failure);
         doThrow(closeFailure).when(fallback).close();
         final var provider = RedisRateLimiterProvider.configured(
-                dataSource,
-                true,
-                true,
-                RateLimitAlgorithm.BUCKET,
-                fallback,
-                RateLimitFallbackBehavior.LOCAL_BUCKET,
-                null);
+                dataSource, true, true, fallback, RateLimitFallbackBehavior.LOCAL_BUCKET, null);
 
         final var thrown = assertThrows(IllegalStateException.class, provider::createRateLimiter);
 
@@ -114,7 +106,7 @@ class RedisRateLimiterFallbackTest {
         @Test
         @DisplayName("keeps outage protection to one immediate request")
         void doesNotReplayDistributedBurst() {
-            localFallback = new InMemoryRateLimiter(new AlgorithmRegistry(), RateLimitAlgorithm.BUCKET, true, 1);
+            localFallback = new InMemoryRateLimiter(true, 1);
             try (final var limiter = newLimiter(RateLimitFallbackBehavior.LOCAL_BUCKET, localFallback)) {
 
                 final var first = limiter.checkAndConsume(KEY, new EffectiveRateLimit(100, 60, 100))

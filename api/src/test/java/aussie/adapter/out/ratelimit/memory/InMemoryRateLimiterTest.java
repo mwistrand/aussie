@@ -20,9 +20,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import aussie.core.model.ratelimit.EffectiveRateLimit;
-import aussie.core.model.ratelimit.RateLimitAlgorithm;
 import aussie.core.model.ratelimit.RateLimitKey;
-import aussie.core.service.ratelimit.AlgorithmRegistry;
 
 @DisplayName("InMemoryRateLimiter")
 class InMemoryRateLimiterTest {
@@ -30,12 +28,10 @@ class InMemoryRateLimiterTest {
     private static final long WINDOW_SECONDS = 60;
 
     private InMemoryRateLimiter rateLimiter;
-    private AlgorithmRegistry algorithmRegistry;
 
     @BeforeEach
     void setUp() {
-        algorithmRegistry = new AlgorithmRegistry();
-        rateLimiter = new InMemoryRateLimiter(algorithmRegistry, RateLimitAlgorithm.BUCKET, true, WINDOW_SECONDS);
+        rateLimiter = new InMemoryRateLimiter(true, WINDOW_SECONDS);
     }
 
     @AfterEach
@@ -125,8 +121,7 @@ class InMemoryRateLimiterTest {
         @Test
         @DisplayName("should always allow when disabled")
         void shouldAlwaysAllowWhenDisabled() {
-            var disabledLimiter =
-                    new InMemoryRateLimiter(algorithmRegistry, RateLimitAlgorithm.BUCKET, false, WINDOW_SECONDS);
+            var disabledLimiter = new InMemoryRateLimiter(false, WINDOW_SECONDS);
             try {
                 var key = RateLimitKey.http("client-1", "service-1", "/api");
                 var limit = new EffectiveRateLimit(1, 60, 1);
@@ -144,10 +139,8 @@ class InMemoryRateLimiterTest {
         @Test
         @DisplayName("isEnabled should return correct state")
         void isEnabledShouldReturnCorrectState() {
-            var enabledLimiter =
-                    new InMemoryRateLimiter(algorithmRegistry, RateLimitAlgorithm.BUCKET, true, WINDOW_SECONDS);
-            var disabledLimiter =
-                    new InMemoryRateLimiter(algorithmRegistry, RateLimitAlgorithm.BUCKET, false, WINDOW_SECONDS);
+            var enabledLimiter = new InMemoryRateLimiter(true, WINDOW_SECONDS);
+            var disabledLimiter = new InMemoryRateLimiter(false, WINDOW_SECONDS);
             try {
                 assertTrue(enabledLimiter.isEnabled());
                 assertFalse(disabledLimiter.isEnabled());
@@ -422,8 +415,7 @@ class InMemoryRateLimiterTest {
         @DisplayName("should remove entries older than 2x window")
         void shouldRemoveStaleEntries() {
             final var now = new AtomicLong(System.currentTimeMillis());
-            var limiter = new InMemoryRateLimiter(
-                    algorithmRegistry, RateLimitAlgorithm.BUCKET, true, WINDOW_SECONDS, now::get);
+            var limiter = new InMemoryRateLimiter(true, WINDOW_SECONDS, now::get);
             try {
                 var key = RateLimitKey.http("client", "service", "/api");
                 var limit = new EffectiveRateLimit(100, 60, 10);
@@ -445,8 +437,7 @@ class InMemoryRateLimiterTest {
         @DisplayName("should preserve entries within 2x window")
         void shouldPreserveFreshEntries() {
             final var now = new AtomicLong(System.currentTimeMillis());
-            var limiter = new InMemoryRateLimiter(
-                    algorithmRegistry, RateLimitAlgorithm.BUCKET, true, WINDOW_SECONDS, now::get);
+            var limiter = new InMemoryRateLimiter(true, WINDOW_SECONDS, now::get);
             try {
                 var key = RateLimitKey.http("client", "service", "/api");
                 var limit = new EffectiveRateLimit(100, 60, 10);
@@ -467,8 +458,7 @@ class InMemoryRateLimiterTest {
         @DisplayName("should only remove stale entries, keeping fresh ones")
         void shouldOnlyRemoveStaleEntries() {
             final var now = new AtomicLong(System.currentTimeMillis());
-            var limiter = new InMemoryRateLimiter(
-                    algorithmRegistry, RateLimitAlgorithm.BUCKET, true, WINDOW_SECONDS, now::get);
+            var limiter = new InMemoryRateLimiter(true, WINDOW_SECONDS, now::get);
             try {
                 var limit = new EffectiveRateLimit(100, 60, 10);
 
@@ -511,7 +501,7 @@ class InMemoryRateLimiterTest {
         @Test
         @DisplayName("should shutdown cleanup executor gracefully")
         void shouldShutdownCleanupExecutor() {
-            var limiter = new InMemoryRateLimiter(algorithmRegistry, RateLimitAlgorithm.BUCKET, true, WINDOW_SECONDS);
+            var limiter = new InMemoryRateLimiter(true, WINDOW_SECONDS);
             limiter.shutdown();
 
             // Can still use the limiter after shutdown (just no cleanup)

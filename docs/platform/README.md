@@ -1208,7 +1208,6 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `AUSSIE_RATE_LIMITING_ENABLED` | `true` | Enable rate limiting |
-| `AUSSIE_RATE_LIMITING_ALGORITHM` | `BUCKET` | Algorithm: `BUCKET` |
 | `AUSSIE_RATE_LIMITING_PLATFORM_MAX_REQUESTS_PER_WINDOW` | `Long.MAX_VALUE` | Maximum rate limit ceiling for service configs |
 | `AUSSIE_RATE_LIMITING_PLATFORM_MAX_WINDOW_SECONDS` | `Long.MAX_VALUE` | Maximum window duration for service configs |
 | `AUSSIE_RATE_LIMITING_DEFAULT_REQUESTS_PER_WINDOW` | `100` | Default requests per window |

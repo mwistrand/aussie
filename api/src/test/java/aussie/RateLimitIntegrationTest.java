@@ -35,7 +35,6 @@ class RateLimitIntegrationTest {
             var overrides = new HashMap<String, String>();
             overrides.put("aussie.rate-limiting.enabled", "true");
             overrides.put("aussie.rate-limiting.redis.enabled", "false");
-            overrides.put("aussie.rate-limiting.algorithm", "BUCKET");
             overrides.put("aussie.rate-limiting.default-requests-per-window", String.valueOf(BURST_CAPACITY));
             overrides.put("aussie.rate-limiting.window-seconds", "60");
             overrides.put("aussie.rate-limiting.burst-capacity", String.valueOf(BURST_CAPACITY));

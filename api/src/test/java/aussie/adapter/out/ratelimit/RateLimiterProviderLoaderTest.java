@@ -11,7 +11,6 @@ import jakarta.enterprise.inject.Instance;
 
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -23,10 +22,8 @@ import aussie.adapter.out.ratelimit.memory.InMemoryRateLimiter;
 import aussie.adapter.out.ratelimit.redis.RedisRateLimiter;
 import aussie.core.config.RateLimitingConfig;
 import aussie.core.config.RateLimitingConfig.RateLimitFallbackBehavior;
-import aussie.core.model.ratelimit.RateLimitAlgorithm;
 import aussie.core.port.out.Metrics;
 import aussie.core.port.out.RateLimiter;
-import aussie.core.service.ratelimit.AlgorithmRegistry;
 
 @DisplayName("RateLimiterProviderLoader")
 @ExtendWith(MockitoExtension.class)
@@ -34,9 +31,6 @@ class RateLimiterProviderLoaderTest {
 
     @Mock
     private RateLimitingConfig config;
-
-    @Mock
-    private AlgorithmRegistry algorithmRegistry;
 
     @Mock
     private Instance<ReactiveRedisDataSource> redisDataSource;
@@ -52,13 +46,6 @@ class RateLimiterProviderLoaderTest {
 
     private RateLimiter producedLimiter;
 
-    @BeforeEach
-    void setUp() {
-        org.mockito.Mockito.lenient()
-                .when(algorithmRegistry.isAvailable(org.mockito.ArgumentMatchers.any()))
-                .thenReturn(true);
-    }
-
     @AfterEach
     void tearDown() {
         if (producedLimiter != null) {
@@ -67,7 +54,7 @@ class RateLimiterProviderLoaderTest {
     }
 
     private RateLimiterProviderLoader createLoader() {
-        return new RateLimiterProviderLoader(config, algorithmRegistry, redisDataSource, metricsInstance);
+        return new RateLimiterProviderLoader(config, redisDataSource, metricsInstance);
     }
 
     private void stubFallback(RateLimitFallbackBehavior behavior) {
@@ -97,7 +84,6 @@ class RateLimiterProviderLoaderTest {
             when(config.enabled()).thenReturn(true);
             when(config.redis()).thenReturn(redisConfig);
             when(redisConfig.enabled()).thenReturn(false);
-            when(config.algorithm()).thenReturn(RateLimitAlgorithm.BUCKET);
             when(config.defaultRequestsPerWindow()).thenReturn(100L);
             when(config.windowSeconds()).thenReturn(60L);
 
@@ -114,8 +100,6 @@ class RateLimiterProviderLoaderTest {
             when(config.redis()).thenReturn(redisConfig);
             when(redisConfig.enabled()).thenReturn(true);
             when(redisDataSource.isResolvable()).thenReturn(false);
-            when(config.algorithm()).thenReturn(RateLimitAlgorithm.BUCKET);
-
             final var loader = createLoader();
             assertThrows(IllegalStateException.class, loader::produceRateLimiter);
         }
@@ -128,7 +112,6 @@ class RateLimiterProviderLoaderTest {
             when(redisConfig.enabled()).thenReturn(true);
             when(redisDataSource.isResolvable()).thenReturn(true);
             when(redisDataSource.get()).thenReturn(mock(ReactiveRedisDataSource.class));
-            when(config.algorithm()).thenReturn(RateLimitAlgorithm.BUCKET);
             when(config.defaultRequestsPerWindow()).thenReturn(100L);
             when(config.windowSeconds()).thenReturn(60L);
             stubFallback(RateLimitFallbackBehavior.LOCAL_BUCKET);
@@ -147,8 +130,6 @@ class RateLimiterProviderLoaderTest {
             when(redisConfig.enabled()).thenReturn(true);
             when(redisDataSource.isResolvable()).thenReturn(true);
             when(redisDataSource.get()).thenThrow(new RuntimeException("Redis unavailable"));
-            when(config.algorithm()).thenReturn(RateLimitAlgorithm.BUCKET);
-
             final var loader = createLoader();
             final var error = assertThrows(IllegalStateException.class, loader::produceRateLimiter);
             assertEquals("Redis unavailable", error.getCause().getMessage());

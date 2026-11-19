@@ -2,9 +2,7 @@ package aussie.adapter.out.ratelimit.memory;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -12,9 +10,6 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import aussie.core.model.ratelimit.RateLimitAlgorithm;
-import aussie.core.service.ratelimit.AlgorithmRegistry;
 
 @DisplayName("InMemoryRateLimiterProvider")
 @ExtendWith(MockitoExtension.class)
@@ -73,20 +68,20 @@ class InMemoryRateLimiterProviderTest {
     class CreateRateLimiterTests {
 
         @Test
-        @DisplayName("should throw IllegalStateException with default constructor")
-        void shouldThrowWithDefaultConstructor() {
+        @DisplayName("should create a limiter with the default constructor")
+        void shouldCreateWithDefaultConstructor() {
             final var provider = new InMemoryRateLimiterProvider();
 
-            final var exception = assertThrows(IllegalStateException.class, provider::createRateLimiter);
+            final var limiter = provider.createRateLimiter();
+            createdLimiter = (InMemoryRateLimiter) limiter;
 
-            assertTrue(exception.getMessage().contains("not configured"));
+            assertInstanceOf(InMemoryRateLimiter.class, limiter);
         }
 
         @Test
         @DisplayName("should create InMemoryRateLimiter with configured constructor")
         void shouldCreateWithConfiguredConstructor() {
-            final var registry = mock(AlgorithmRegistry.class);
-            final var provider = new InMemoryRateLimiterProvider(registry, RateLimitAlgorithm.BUCKET, true, 60);
+            final var provider = new InMemoryRateLimiterProvider(true, 60);
 
             final var limiter = provider.createRateLimiter();
             createdLimiter = (InMemoryRateLimiter) limiter;
@@ -102,8 +97,7 @@ class InMemoryRateLimiterProviderTest {
         @Test
         @DisplayName("should create a configured provider via factory method")
         void shouldCreateConfiguredProvider() {
-            final var registry = mock(AlgorithmRegistry.class);
-            final var provider = InMemoryRateLimiterProvider.configured(registry, RateLimitAlgorithm.BUCKET, true, 120);
+            final var provider = InMemoryRateLimiterProvider.configured(true, 120);
 
             assertEquals(0, provider.priority());
             assertEquals("memory", provider.name());

@@ -10,13 +10,12 @@ import java.util.function.LongSupplier;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
+import aussie.core.model.ratelimit.BucketAlgorithm;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
-import aussie.core.model.ratelimit.RateLimitAlgorithm;
 import aussie.core.model.ratelimit.RateLimitDecision;
 import aussie.core.model.ratelimit.RateLimitKey;
 import aussie.core.model.ratelimit.RateLimitState;
 import aussie.core.port.out.RateLimiter;
-import aussie.core.service.ratelimit.AlgorithmRegistry;
 
 /**
  * In-memory rate limiter implementation.
@@ -42,8 +41,6 @@ public final class InMemoryRateLimiter implements RateLimiter {
     private static final long CLEANUP_INTERVAL_SECONDS = 60;
 
     private final ConcurrentMap<String, TimestampedState> states;
-    private final AlgorithmRegistry algorithmRegistry;
-    private final RateLimitAlgorithm algorithm;
     private final boolean enabled;
     private final long windowMillis;
     private final LongSupplier clock;
@@ -52,34 +49,22 @@ public final class InMemoryRateLimiter implements RateLimiter {
     /**
      * Create a new in-memory rate limiter.
      *
-     * @param algorithmRegistry the algorithm registry
-     * @param algorithm         the algorithm to use
      * @param enabled           whether rate limiting is enabled
      * @param windowSeconds     the rate limit window duration in seconds
      */
-    public InMemoryRateLimiter(
-            AlgorithmRegistry algorithmRegistry, RateLimitAlgorithm algorithm, boolean enabled, long windowSeconds) {
-        this(algorithmRegistry, algorithm, enabled, windowSeconds, System::currentTimeMillis);
+    public InMemoryRateLimiter(boolean enabled, long windowSeconds) {
+        this(enabled, windowSeconds, System::currentTimeMillis);
     }
 
     /**
      * Create a new in-memory rate limiter with a custom clock.
      *
-     * @param algorithmRegistry the algorithm registry
-     * @param algorithm         the algorithm to use
      * @param enabled           whether rate limiting is enabled
      * @param windowSeconds     the rate limit window duration in seconds
      * @param clock             supplies the current time in epoch milliseconds
      */
-    InMemoryRateLimiter(
-            AlgorithmRegistry algorithmRegistry,
-            RateLimitAlgorithm algorithm,
-            boolean enabled,
-            long windowSeconds,
-            LongSupplier clock) {
+    InMemoryRateLimiter(boolean enabled, long windowSeconds, LongSupplier clock) {
         this.states = new ConcurrentHashMap<>();
-        this.algorithmRegistry = algorithmRegistry;
-        this.algorithm = algorithm;
         this.enabled = enabled;
         this.windowMillis = windowSeconds * 1000;
         this.clock = clock;
@@ -101,7 +86,7 @@ public final class InMemoryRateLimiter implements RateLimiter {
         }
 
         final var cacheKey = key.toCacheKey();
-        final var handler = algorithmRegistry.getHandler(algorithm);
+        final var handler = BucketAlgorithm.getInstance();
         final var nowMillis = clock.getAsLong();
 
         final var decision = computeDecision(cacheKey, handler, limit, nowMillis);
@@ -115,7 +100,7 @@ public final class InMemoryRateLimiter implements RateLimiter {
         }
 
         final var cacheKey = key.toCacheKey();
-        final var handler = algorithmRegistry.getHandler(algorithm);
+        final var handler = BucketAlgorithm.getInstance();
         final var nowMillis = clock.getAsLong();
         final var wrapper = states.get(cacheKey);
         final var currentState = wrapper != null ? wrapper.state() : null;

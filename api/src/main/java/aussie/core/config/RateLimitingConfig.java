@@ -3,20 +3,17 @@ package aussie.core.config;
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
 
-import aussie.core.model.ratelimit.RateLimitAlgorithm;
-
 /**
  * Configuration mapping for rate limiting.
  *
  * <p>Configuration prefix: {@code aussie.rate-limiting}
  *
  * <p>Platform teams configure rate limiting via environment variables.
- * Service teams cannot override the algorithm or platform maximum.
+ * Service teams cannot override the platform maximum.
  *
  * <h2>Environment Variables</h2>
  * <ul>
  *   <li>{@code AUSSIE_RATE_LIMITING_ENABLED} - Enable/disable rate limiting</li>
- *   <li>{@code AUSSIE_RATE_LIMITING_ALGORITHM} - Algorithm (currently BUCKET)</li>
  *   <li>{@code AUSSIE_RATE_LIMITING_PLATFORM_MAX_REQUESTS_PER_WINDOW} - Maximum ceiling</li>
  *   <li>{@code AUSSIE_RATE_LIMITING_PLATFORM_MAX_WINDOW_SECONDS} - Maximum window duration</li>
  * </ul>
@@ -31,17 +28,6 @@ public interface RateLimitingConfig {
      */
     @WithDefault("true")
     boolean enabled();
-
-    /**
-     * Rate limiting algorithm.
-     *
-     * <p><b>Platform teams only.</b> Set via environment variable.
-     * Service teams cannot override this setting.
-     *
-     * @return the algorithm (default: BUCKET)
-     */
-    @WithDefault("BUCKET")
-    RateLimitAlgorithm algorithm();
 
     /**
      * Platform-wide maximum requests per window.

@@ -566,7 +566,6 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | Property | Type | Default | Env Variable | Description |
 |----------|------|---------|--------------|-------------|
 | `aussie.rate-limiting.enabled` | `boolean` | `true` | `AUSSIE_RATE_LIMITING_ENABLED` | Master toggle for rate limiting. |
-| `aussie.rate-limiting.algorithm` | `RateLimitAlgorithm` | `BUCKET` | `AUSSIE_RATE_LIMITING_ALGORITHM` | Algorithm. Only `BUCKET` is implemented; other enum values fail startup. **Platform teams only.** |
 | `aussie.rate-limiting.platform-max-requests-per-window` | `long` | `9223372036854775807` (`Long.MAX_VALUE`) | `AUSSIE_RATE_LIMITING_PLATFORM_MAX_REQUESTS_PER_WINDOW` | Platform-wide ceiling. Service/endpoint limits are capped to this value. **Platform teams only.** |
 | `aussie.rate-limiting.default-requests-per-window` | `long` | `100` | `AUSSIE_RATE_LIMITING_DEFAULT_REQUESTS_PER_WINDOW` | Default requests per window for services without explicit configuration. |
 | `aussie.rate-limiting.window-seconds` | `long` | `60` | `AUSSIE_RATE_LIMITING_WINDOW_SECONDS` | Default time window in seconds. |
