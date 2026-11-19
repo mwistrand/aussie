@@ -14,9 +14,12 @@ report_file="${AUSSIE_QUALIFICATION_REPORT:-$repo_root/api/build/qualification/k
 qualification_stage="initialization"
 qualification_status="failed"
 load_output="not run"
+resource_output="not collected"
 rolling_traffic_output="not run"
 redis_recovery="not run"
+redis_recovery_seconds="not measured"
 cassandra_recovery="not run"
+cassandra_recovery_seconds="not measured"
 pod_recovery="not run"
 rolling_deployment="not run"
 rollback_deployment="not run"
@@ -52,8 +55,11 @@ write_report() {
     echo "- Load duration: ${load_seconds}s"
     echo "- Load interval: ${load_interval}s"
     echo "- Load p95 limit: ${load_p95_max}s"
+    echo "- Load endpoints: /q/health/ready, /q/health/live, /q/metrics"
     echo "- Redis recovery: $redis_recovery"
+    echo "- Redis recovery time: $redis_recovery_seconds"
     echo "- Cassandra recovery: $cassandra_recovery"
+    echo "- Cassandra recovery time: $cassandra_recovery_seconds"
     echo "- Gateway pod-loss recovery: $pod_recovery"
     echo "- Gateway rolling deployment: $rolling_deployment"
     echo "- Gateway rollback: $rollback_deployment"
@@ -62,6 +68,12 @@ write_report() {
     echo
     echo '```text'
     echo "$load_output"
+    echo '```'
+    echo
+    echo "## Runtime resource snapshot"
+    echo
+    echo '```text'
+    echo "$resource_output"
     echo '```'
     echo
     echo "## Rolling deployment and rollback readiness traffic"
@@ -362,41 +374,73 @@ kubectl $context -n "$namespace" run qualification-load \
   --command -- sh -ec '
     : > /tmp/results
     pids=""
+    request_number=0
     deadline=$(( $(date +%s) + LOAD_SECONDS ))
     while [ "$(date +%s)" -lt "$deadline" ]; do
+      case $((request_number % 3)) in
+        0) path="/q/health/ready" ;;
+        1) path="/q/health/live" ;;
+        2) path="/q/metrics" ;;
+      esac
       (
         if result="$(curl --max-time 5 --silent --show-error --output /dev/null \
-          --write-out "%{http_code} %{time_total}" http://aussie:8080/q/health/ready 2>/dev/null)"; then
+          --write-out "%{http_code} %{time_total}" "http://aussie:8080$path" 2>/dev/null)"; then
           :
         else
           result="000 0"
         fi
-        printf "%s\n" "$result" >> /tmp/results
+        printf "%s %s\n" "$path" "$result" >> /tmp/results
       ) &
       pids="$pids $!"
+      request_number=$((request_number + 1))
       sleep "$LOAD_INTERVAL_SECONDS"
     done
     for pid in $pids; do
       wait "$pid" || true
     done
 
-    set -- $(awk "
-      { total++ }
-      \$1 == 200 { success++ }
-      END { print total + 0, success + 0, (total - success) + 0 }
-    " /tmp/results)
-    total="$1"
-    success="$2"
-    failed="$3"
-    p95="$(awk "\$1 == 200 {print \$2}" /tmp/results | sort -n | \
-      awk -v n="$success" "NR == int((n * 95 + 99) / 100) {print; found=1} END {if (!found) print 0}")"
-    p99="$(awk "\$1 == 200 {print \$2}" /tmp/results | sort -n | \
-      awk -v n="$success" "NR == int((n * 99 + 99) / 100) {print; found=1} END {if (!found) print 0}")"
-    printf "Sustained readiness load: total=%s success=%s failed=%s p95=%ss p99=%ss\n" \
-      "$total" "$success" "$failed" "$p95" "$p99"
-    test "$total" -gt 0
-    test "$failed" -eq 0
-    awk -v actual="$p95" -v maximum="$LOAD_P95_MAX_SECONDS" "BEGIN { exit !(actual <= maximum) }"
+    for path in /q/health/ready /q/health/live /q/metrics; do
+      set -- $(awk -v path="$path" "
+        \$1 == path { total++; if (\$2 == 200) success++ }
+        END { print total + 0, success + 0, (total - success) + 0 }
+      " /tmp/results)
+      total="$1"
+      success="$2"
+      failed="$3"
+      p95="$(awk -v path="$path" "\$1 == path && \$2 == 200 {print \$3}" /tmp/results | sort -n | \
+        awk -v n="$success" "NR == int((n * 95 + 99) / 100) {print; found=1} END {if (!found) print 0}")"
+      p99="$(awk -v path="$path" "\$1 == path && \$2 == 200 {print \$3}" /tmp/results | sort -n | \
+        awk -v n="$success" "NR == int((n * 99 + 99) / 100) {print; found=1} END {if (!found) print 0}")"
+      printf "Endpoint %s: total=%s success=%s failed=%s p95=%ss p99=%ss\n" \
+        "$path" "$total" "$success" "$failed" "$p95" "$p99"
+      test "$total" -gt 0
+      test "$failed" -eq 0
+      awk -v actual="$p95" -v maximum="$LOAD_P95_MAX_SECONDS" "BEGIN { exit !(actual <= maximum) }"
+    done
+
+    printf "Runtime resource snapshot:\n"
+    metrics="$(curl --fail --silent --max-time 5 http://aussie:8080/q/metrics)"
+    resource_metrics="$(printf "%s\n" "$metrics" | awk "
+      /^#/ { next }
+      {
+        metric = \$0
+        sub(/\\{.*/, \"\", metric)
+        sub(/[[:space:]].*/, \"\", metric)
+        if (metric ~ /^(jvm_memory_used_bytes|jvm_memory_max_bytes|jvm_buffer_memory_used_bytes|jvm_gc_pause_seconds|jvm_threads_live_threads|process_cpu_usage|system_cpu_usage|netty_eventexecutor_tasks_pending|netty_eventexecutor_workers|aussie_bulkhead_)/) {
+          sample = \$0
+          sub(/[[:space:]]+[^[:space:]]+$/, \"\", sample)
+          print sample \" value=\" \$NF
+        }
+        if (metric ~ /^netty_eventexecutor_(tasks_pending|workers)$/) {
+          event_loop_metrics++
+        }
+      }
+      END { if (event_loop_metrics == 0) exit 1 }
+    ")" || {
+      echo "required netty event-loop metrics are missing from /q/metrics" >&2
+      exit 1
+    }
+    printf "%s\n" "$resource_metrics"
   '
 
 # Allow the pod up to two minutes to start, its configured load duration, and
@@ -426,6 +470,7 @@ if [[ "$load_phase" != "Succeeded" ]]; then
   exit 1
 fi
 load_output="$(kubectl $context -n "$namespace" logs qualification-load)"
+resource_output="$(printf '%s\n' "$load_output" | sed -n '/^Runtime resource snapshot:/,$p')"
 printf '%s\n' "$load_output"
 
 qualification_stage="rolling deployment"
@@ -534,17 +579,20 @@ wait_for_gateway_unready() {
 
 qualification_stage="Redis recovery"
 redis_recovery="running"
+recovery_started_at="$(date +%s)"
 kubectl $context -n "$namespace" scale deployment/redis --replicas=0
 wait_for_gateway_unready
 kubectl $context -n "$namespace" scale deployment/redis --replicas=1
 kubectl $context -n "$namespace" rollout status deployment/redis --timeout=5m
 wait_for_gateway_ready
+redis_recovery_seconds="$(( $(date +%s) - recovery_started_at ))s"
 redis_recovery="passed"
 
 # Cassandra is a required production dependency. Pause the signalable
 # Cassandra child process so existing driver connections fail, preserving data.
 qualification_stage="Cassandra recovery"
 cassandra_recovery="running"
+recovery_started_at="$(date +%s)"
 for pod in cassandra-0 cassandra-1 cassandra-2; do
   kubectl $context -n "$namespace" exec "$pod" -- \
     sh -ec 'kill -STOP "$(cat /tmp/cassandra.pid)"'
@@ -555,6 +603,7 @@ for pod in cassandra-0 cassandra-1 cassandra-2; do
     sh -ec 'kill -CONT "$(cat /tmp/cassandra.pid)"'
 done
 wait_for_gateway_ready
+cassandra_recovery_seconds="$(( $(date +%s) - recovery_started_at ))s"
 cassandra_recovery="passed"
 kubectl $context -n "$namespace" exec qualification-traffic -- touch /tmp/strict
 
