@@ -45,6 +45,7 @@ nb-configuration.xml
 
 # CLI output
 cli/aussie
+cli/cli
 
 # Graft Review Cache
 .graft/

@@ -13,12 +13,17 @@ The successful job publishes the JVM image to GHCR, emits BuildKit provenance
 and an SBOM, signs the image with keyless Cosign, attaches a CycloneDX SBOM
 attestation, verifies both signatures, and uploads an evidence manifest with the
 image digest, SBOM checksum, compatibility note, and rollback instructions.
+It also tests and cross-builds the CLI for Linux and macOS on amd64 and arm64,
+plus Windows amd64. Each archive has a SHA-256 checksum, a keyless Cosign blob
+signature, and GitHub build provenance; the CLI dependency SBOM is uploaded
+with the release artifacts. The workflow creates or updates the matching
+GitHub Release and attaches these files as durable release assets.
 
 Verify a published image with:
 
 ```sh
 cosign verify ghcr.io/mwistrand/aussie:vX.Y.Z \\
-  --certificate-identity-regexp 'https://github.com/mwistrand/aussie/.github/workflows/release.yml@refs/tags/vX.Y.Z' \\
+  --certificate-identity 'https://github.com/mwistrand/aussie/.github/workflows/release.yml@refs/tags/vX.Y.Z' \\
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
@@ -43,3 +48,15 @@ closed.
 The uploaded `*.evidence.json` manifest is the release handoff. Verify its
 `digest` against the registry image and its `sbom_sha256` against the uploaded
 CycloneDX file before deployment.
+
+Verify a CLI archive before installation with:
+
+```sh
+sha256sum --check aussie-vX.Y.Z.sha256
+cosign verify-blob \
+  --signature aussie-vX.Y.Z-linux-amd64.tar.gz.sig \
+  --certificate aussie-vX.Y.Z-linux-amd64.tar.gz.pem \
+  --certificate-identity 'https://github.com/mwistrand/aussie/.github/workflows/release.yml@refs/tags/vX.Y.Z' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  aussie-vX.Y.Z-linux-amd64.tar.gz
+```

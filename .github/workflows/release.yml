@@ -19,8 +19,133 @@ jobs:
     permissions:
       contents: read
 
-  image:
+  cli:
     needs: [checks, security]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: cli/go.mod
+          cache: true
+
+      - name: Test CLI
+        working-directory: cli
+        run: go test -race ./...
+
+      - name: Build CLI release archives
+        working-directory: cli
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p ../dist
+          build_date="$(git show -s --format=%cI "$RELEASE_COMMIT")"
+          while IFS=' ' read -r goos goarch archive; do
+            name="aussie-${RELEASE_VERSION}-${goos}-${goarch}"
+            binary="$name/aussie"
+            [ "$goos" = windows ] && binary="$name/aussie.exe"
+            rm -rf "$name"
+            mkdir -p "$name"
+            GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
+              go build -trimpath -buildvcs=false \
+              -ldflags "-s -w -X github.com/aussie/cli/cmd.Version=$RELEASE_VERSION -X github.com/aussie/cli/cmd.GitCommit=$RELEASE_COMMIT -X github.com/aussie/cli/cmd.BuildDate=$build_date" \
+              -o "$binary" .
+            if [ "$archive" = zip ]; then
+              zip -q -r "../dist/$name.zip" "$name"
+            else
+              tar -czf "../dist/$name.tar.gz" "$name"
+            fi
+            rm -rf "$name"
+          done <<'TARGETS'
+          linux amd64 tar
+          linux arm64 tar
+          darwin amd64 tar
+          darwin arm64 tar
+          windows amd64 zip
+          TARGETS
+          (cd ../dist && sha256sum *.tar.gz *.zip > "aussie-${RELEASE_VERSION}.sha256")
+
+      - name: Generate CLI SBOM
+        uses: anchore/sbom-action@f325610c9f50a54015d37c8d16cb3b0e2c8f4de0 # v0.18.0
+        with:
+          path: cli
+          format: cyclonedx-json
+          output-file: aussie-cli-${{ github.ref_name }}.cdx.json
+          upload-artifact: false
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+
+      - name: Sign and verify CLI archives
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          for asset in dist/*.tar.gz dist/*.zip; do
+            cosign sign-blob --yes \
+              --output-signature "$asset.sig" \
+              --output-certificate "$asset.pem" \
+              "$asset"
+            cosign verify-blob \
+              --signature "$asset.sig" \
+              --certificate "$asset.pem" \
+              --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${RELEASE_VERSION}" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "$asset"
+          done
+
+      - name: Attest CLI build provenance
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1.4.4
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+
+      - name: Publish CLI assets to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_VERSION" >/dev/null 2>&1; then
+            gh release create "$RELEASE_VERSION" \
+              --verify-tag \
+              --title "$RELEASE_VERSION" \
+              --generate-notes
+          fi
+          gh release upload "$RELEASE_VERSION" \
+            dist/*.tar.gz \
+            dist/*.zip \
+            dist/*.sig \
+            dist/*.pem \
+            dist/*.sha256 \
+            "aussie-cli-${RELEASE_VERSION}.cdx.json" \
+            --clobber
+
+      - name: Archive CLI release artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: aussie-${{ github.ref_name }}-cli
+          if-no-files-found: error
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sig
+            dist/*.pem
+            dist/*.sha256
+            aussie-cli-${{ github.ref_name }}.cdx.json
+
+  image:
+    needs: [checks, security, cli]
     runs-on: ubuntu-latest
     environment: production-release
     permissions:
@@ -79,7 +204,7 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: >-
           cosign verify
-          --certificate-identity-regexp
+          --certificate-identity
           "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}"
           --certificate-oidc-issuer https://token.actions.githubusercontent.com
           "${IMAGE}@${DIGEST}"
@@ -99,7 +224,7 @@ jobs:
         run: >-
           cosign verify-attestation
           --type cyclonedx
-          --certificate-identity-regexp
+          --certificate-identity
           "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}"
           --certificate-oidc-issuer https://token.actions.githubusercontent.com
           "${IMAGE}@${DIGEST}"
