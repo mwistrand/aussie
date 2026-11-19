@@ -71,7 +71,11 @@ AUSSIE_QUALIFICATION_IMAGE=ghcr.io/mwistrand/aussie@sha256:<64-hex-digest> \
 
 The qualification requires `cosign`, Docker, kind, kubectl, and openssl. Before
 creating the cluster it verifies that the supplied digest was signed by this
-repository's tag-based release workflow.
+repository's tag-based release workflow, pulls it with the runner's Docker
+credentials, and loads it into the kind nodes. This is required because kind
+nodes use their own containerd and cannot use the runner's Docker login
+directly. For a local private image, authenticate Docker to its registry before
+running the qualification.
 
 Each run writes a Markdown report to
 `api/build/qualification/kubernetes-qualification-<UTC timestamp>-<pid>.md`. Set
