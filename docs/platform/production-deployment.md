@@ -94,7 +94,7 @@ after the load. Tune the evidence run explicitly
 with `AUSSIE_QUALIFICATION_LOAD_SECONDS`,
 `AUSSIE_QUALIFICATION_LOAD_INTERVAL_SECONDS`, and
 `AUSSIE_QUALIFICATION_LOAD_P95_MAX_SECONDS`; the output reports per-endpoint
-request totals, errors, p95, and p99 latency. Redis and Cassandra recovery
+request totals, errors, and p50/p95/p99 latency. Redis and Cassandra recovery
 durations are recorded from dependency loss through restored gateway readiness.
 
 Set `AUSSIE_QUALIFICATION_KEEP_CLUSTER=true` to retain the cluster for

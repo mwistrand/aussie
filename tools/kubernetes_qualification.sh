@@ -407,12 +407,14 @@ kubectl $context -n "$namespace" run qualification-load \
       total="$1"
       success="$2"
       failed="$3"
+      p50="$(awk -v path="$path" "\$1 == path && \$2 == 200 {print \$3}" /tmp/results | sort -n | \
+        awk -v n="$success" "NR == int((n * 50 + 99) / 100) {print; found=1} END {if (!found) print 0}")"
       p95="$(awk -v path="$path" "\$1 == path && \$2 == 200 {print \$3}" /tmp/results | sort -n | \
         awk -v n="$success" "NR == int((n * 95 + 99) / 100) {print; found=1} END {if (!found) print 0}")"
       p99="$(awk -v path="$path" "\$1 == path && \$2 == 200 {print \$3}" /tmp/results | sort -n | \
         awk -v n="$success" "NR == int((n * 99 + 99) / 100) {print; found=1} END {if (!found) print 0}")"
-      printf "Endpoint %s: total=%s success=%s failed=%s p95=%ss p99=%ss\n" \
-        "$path" "$total" "$success" "$failed" "$p95" "$p99"
+      printf "Endpoint %s: total=%s success=%s failed=%s p50=%ss p95=%ss p99=%ss\n" \
+        "$path" "$total" "$success" "$failed" "$p50" "$p95" "$p99"
       test "$total" -gt 0
       test "$failed" -eq 0
       awk -v actual="$p95" -v maximum="$LOAD_P95_MAX_SECONDS" "BEGIN { exit !(actual <= maximum) }"
