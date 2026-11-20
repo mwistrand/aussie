@@ -133,6 +133,22 @@ class AdminResourceUnitTest {
         }
 
         @Test
+        @DisplayName("Should mark a committed registration as propagation pending")
+        void shouldMarkCommittedRegistrationAsPropagationPending() {
+            when(securityConfig.allowPrivateUpstreams()).thenReturn(true);
+            var registration = createServiceRegistration("pending-service");
+            mockIdentity(createIdentityWithPermissions(Set.of("service.config.create")));
+            when(serviceRegistry.register(any(ServiceRegistration.class), any()))
+                    .thenReturn(Uni.createFrom().item(RegistrationResult.committed(registration)));
+
+            var response = resource.registerService(createRequest("pending-service"))
+                    .await()
+                    .atMost(Duration.ofSeconds(5));
+
+            assertEquals("pending", response.getHeaderString("X-Aussie-Propagation-State"));
+        }
+
+        @Test
         @DisplayName("Should replay an idempotent registration without repeating the write")
         void shouldReplayIdempotentRegistration() {
             when(securityConfig.allowPrivateUpstreams()).thenReturn(true);
@@ -338,6 +354,20 @@ class AdminResourceUnitTest {
             var response = resource.unregisterService("test-service").await().atMost(Duration.ofSeconds(5));
 
             assertEquals(Response.Status.NO_CONTENT.getStatusCode(), response.getStatus());
+        }
+
+        @Test
+        @DisplayName("Should mark a committed unregistration as propagation pending")
+        void shouldMarkCommittedUnregistrationAsPropagationPending() {
+            var identity = createIdentityWithPermissions(Set.of("service.config.delete"));
+            mockIdentity(identity);
+            when(serviceRegistry.unregisterAuthorized(eq("pending-service"), any()))
+                    .thenReturn(Uni.createFrom()
+                            .item(RegistrationResult.committed(createServiceRegistration("pending-service"))));
+
+            var response = resource.unregisterService("pending-service").await().atMost(Duration.ofSeconds(5));
+
+            assertEquals("pending", response.getHeaderString("X-Aussie-Propagation-State"));
         }
 
         @Test
