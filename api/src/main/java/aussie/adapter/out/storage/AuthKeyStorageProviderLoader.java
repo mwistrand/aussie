@@ -15,6 +15,7 @@ import io.quarkus.runtime.Startup;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.out.ProviderSelection;
 import aussie.adapter.out.storage.redis.RedisAuthKeyCacheProvider;
 import aussie.core.port.out.ApiKeyRepository;
 import aussie.core.port.out.AuthKeyCache;

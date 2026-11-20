@@ -1,4 +1,4 @@
-package aussie.adapter.out.storage;
+package aussie.adapter.out;
 
 import java.util.Comparator;
 import java.util.List;
@@ -8,11 +8,11 @@ import java.util.function.ToIntFunction;
 
 import aussie.spi.StorageProviderException;
 
-final class ProviderSelection {
+public final class ProviderSelection {
 
     private ProviderSelection() {}
 
-    static <T> T select(
+    public static <T> T select(
             List<? extends T> providers,
             String configured,
             String type,

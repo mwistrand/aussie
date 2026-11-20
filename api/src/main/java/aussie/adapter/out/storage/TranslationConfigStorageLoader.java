@@ -17,6 +17,7 @@ import io.quarkus.runtime.Startup;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.out.ProviderSelection;
 import aussie.adapter.out.storage.redis.RedisTranslationConfigCacheProvider;
 import aussie.core.port.out.StorageHealthIndicator;
 import aussie.core.port.out.TranslationConfigCache;
