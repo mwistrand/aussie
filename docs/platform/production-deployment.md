@@ -149,6 +149,12 @@ Set `AUSSIE_QUALIFICATION_KEEP_CLUSTER=true` to retain the cluster for
 inspection after a run. This is a release qualification check, not a substitute
 for a provider-specific Cassandra backup/restore or network-policy test.
 
+The WebSocket qualification opens 32 concurrent long-lived connections through
+the routed service, holds them for 30 seconds, and requires every connection to
+open and close cleanly. Set `AUSSIE_QUALIFICATION_WEBSOCKET_CONNECTIONS` and
+`AUSSIE_QUALIFICATION_WEBSOCKET_HOLD_SECONDS` to change those bounds; the
+values are recorded in the qualification report.
+
 The Deployment uses three replicas, a PDB, topology-independent rolling update
 limits, non-root/read-only containers, bounded resources, and health probes.
 Quarkus begins HTTP/WebSocket drain on SIGTERM and waits for the configured
