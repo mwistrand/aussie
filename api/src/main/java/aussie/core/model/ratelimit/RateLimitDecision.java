@@ -23,7 +23,7 @@ public record RateLimitDecision(
         Instant resetAt,
         long retryAfterSeconds,
         int requestCount,
-        RateLimitState newState) {
+        BucketState newState) {
 
     /**
      * Create an "allowed" decision with default values.
@@ -48,12 +48,7 @@ public record RateLimitDecision(
      * @return an allowed decision
      */
     public static RateLimitDecision allow(
-            long remaining,
-            long limit,
-            long windowSeconds,
-            Instant resetAt,
-            int requestCount,
-            RateLimitState newState) {
+            long remaining, long limit, long windowSeconds, Instant resetAt, int requestCount, BucketState newState) {
         return new RateLimitDecision(true, remaining, limit, windowSeconds, resetAt, 0, requestCount, newState);
     }
 
@@ -74,7 +69,7 @@ public record RateLimitDecision(
             Instant resetAt,
             long retryAfterSeconds,
             int requestCount,
-            RateLimitState newState) {
+            BucketState newState) {
         return new RateLimitDecision(
                 false, 0, limit, windowSeconds, resetAt, retryAfterSeconds, requestCount, newState);
     }

@@ -12,7 +12,7 @@ package aussie.core.model.ratelimit;
  * @param tokens the current number of tokens in the bucket
  * @param lastRefillMillis the timestamp of the last refill operation (epoch millis)
  */
-public record BucketState(long tokens, long lastRefillMillis) implements RateLimitState {
+public record BucketState(long tokens, long lastRefillMillis) {
 
     /**
      * Create a bucket state with validation.
@@ -73,15 +73,5 @@ public record BucketState(long tokens, long lastRefillMillis) implements RateLim
         final var elapsedMillis = nowMillis - lastRefillMillis;
         final var elapsedSeconds = elapsedMillis / 1000.0;
         return (long) (elapsedSeconds * refillRatePerSecond);
-    }
-
-    @Override
-    public long remaining() {
-        return tokens;
-    }
-
-    @Override
-    public long timestampMillis() {
-        return lastRefillMillis;
     }
 }

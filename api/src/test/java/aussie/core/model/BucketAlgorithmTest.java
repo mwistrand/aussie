@@ -10,7 +10,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import aussie.core.model.ratelimit.*;
+import aussie.core.model.ratelimit.BucketAlgorithm;
+import aussie.core.model.ratelimit.BucketState;
+import aussie.core.model.ratelimit.EffectiveRateLimit;
 
 @DisplayName("BucketAlgorithm")
 class BucketAlgorithmTest {
@@ -20,25 +22,6 @@ class BucketAlgorithmTest {
     @BeforeEach
     void setUp() {
         algorithm = BucketAlgorithm.getInstance();
-    }
-
-    @Nested
-    @DisplayName("Algorithm identification")
-    class AlgorithmIdentificationTests {
-
-        @Test
-        @DisplayName("should return BUCKET algorithm type")
-        void shouldReturnBucketAlgorithmType() {
-            assertEquals(RateLimitAlgorithm.BUCKET, algorithm.algorithm());
-        }
-
-        @Test
-        @DisplayName("should return singleton instance")
-        void shouldReturnSingletonInstance() {
-            var instance1 = BucketAlgorithm.getInstance();
-            var instance2 = BucketAlgorithm.getInstance();
-            assertTrue(instance1 == instance2, "Should return same instance");
-        }
     }
 
     @Nested
@@ -54,10 +37,8 @@ class BucketAlgorithmTest {
             var state = algorithm.createInitialState(limit, nowMillis);
 
             assertNotNull(state);
-            assertTrue(state instanceof BucketState);
-            var bucketState = (BucketState) state;
-            assertEquals(50, bucketState.tokens(), "Should have burst capacity tokens");
-            assertEquals(nowMillis, bucketState.lastRefillMillis());
+            assertEquals(50, state.tokens(), "Should have burst capacity tokens");
+            assertEquals(nowMillis, state.lastRefillMillis());
         }
     }
 
@@ -363,7 +344,7 @@ class BucketAlgorithmTest {
             for (int i = 0; i < 5; i++) {
                 var decision = algorithm.checkAndConsume(current, limit, nowMillis);
                 assertTrue(decision.allowed(), "Request " + (i + 1) + " should be allowed");
-                current = (BucketState) decision.newState();
+                current = decision.newState();
             }
 
             // 6th request should be rejected

@@ -23,7 +23,7 @@ import java.time.Instant;
  *   <li>{@code burstCapacity} → maximum bucket capacity</li>
  * </ul>
  */
-public final class BucketAlgorithm implements RateLimitAlgorithmHandler {
+public final class BucketAlgorithm {
 
     private static final BucketAlgorithm INSTANCE = new BucketAlgorithm();
 
@@ -38,13 +38,7 @@ public final class BucketAlgorithm implements RateLimitAlgorithmHandler {
         return INSTANCE;
     }
 
-    @Override
-    public RateLimitAlgorithm algorithm() {
-        return RateLimitAlgorithm.BUCKET;
-    }
-
-    @Override
-    public RateLimitDecision checkAndConsume(RateLimitState currentState, EffectiveRateLimit limit, long nowMillis) {
+    public RateLimitDecision checkAndConsume(BucketState currentState, EffectiveRateLimit limit, long nowMillis) {
 
         final var state = resolveState(currentState, limit, nowMillis);
         final var refilled = refillTokens(state, limit, nowMillis);
@@ -55,25 +49,38 @@ public final class BucketAlgorithm implements RateLimitAlgorithmHandler {
         return createRejectedResult(refilled, limit, nowMillis);
     }
 
-    @Override
-    public RateLimitState createInitialState(EffectiveRateLimit limit, long nowMillis) {
+    public BucketState createInitialState(EffectiveRateLimit limit, long nowMillis) {
         return new BucketState(limit.burstCapacity(), nowMillis);
     }
 
-    @Override
-    public RateLimitDecision computeStatus(RateLimitState currentState, EffectiveRateLimit limit, long nowMillis) {
+    public RateLimitDecision computeStatus(BucketState currentState, EffectiveRateLimit limit, long nowMillis) {
 
-        final var state = (BucketState) currentState;
+        final var state = currentState;
         final var refilled = refillTokens(state, limit, nowMillis);
         return createStatusResult(refilled, limit, nowMillis);
     }
 
-    private BucketState resolveState(RateLimitState currentState, EffectiveRateLimit limit, long nowMillis) {
+    public RateLimitDecision getStatus(BucketState currentState, EffectiveRateLimit limit, long nowMillis) {
+        if (currentState == null) {
+            final var initialState = createInitialState(limit, nowMillis);
+            final var resetAt = computeResetTime(nowMillis, limit.windowSeconds());
+            return RateLimitDecision.allow(
+                    initialState.tokens(),
+                    limit.requestsPerWindow(),
+                    limit.windowSeconds(),
+                    resetAt,
+                    (int) (limit.requestsPerWindow() - initialState.tokens()),
+                    initialState);
+        }
+        return computeStatus(currentState, limit, nowMillis);
+    }
+
+    private BucketState resolveState(BucketState currentState, EffectiveRateLimit limit, long nowMillis) {
 
         if (currentState == null) {
-            return (BucketState) createInitialState(limit, nowMillis);
+            return createInitialState(limit, nowMillis);
         }
-        return (BucketState) currentState;
+        return currentState;
     }
 
     private BucketState refillTokens(BucketState state, EffectiveRateLimit limit, long nowMillis) {
@@ -126,7 +133,6 @@ public final class BucketAlgorithm implements RateLimitAlgorithmHandler {
         return Math.max(1, (long) Math.ceil(secondsUntilToken));
     }
 
-    @Override
     public Instant computeResetTime(long nowMillis, long windowSeconds) {
         // For bucket algorithm, reset time is when bucket would be full again
         // This is an approximation based on window boundaries
