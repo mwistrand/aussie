@@ -123,13 +123,17 @@ released image digest, source commit, production profile, dependency images,
 load threshold/result, and recovery checks so qualification evidence stays
 tied to the artifact that was tested.
 
-Before the dependency fault checks, the harness runs a 30-second open-loop
-operational-endpoint profile at 10 requests per second. It cycles through
-`/q/health/ready`, `/q/health/live`, and `/q/metrics`; every request must
-succeed and the default p95 for each endpoint must remain at or below one
-second. The report also records JVM heap/direct-memory and GC, process/system,
-Vert.x event-loop, and application bulkhead metrics available from `/q/metrics`
-after the load. Tune the evidence run explicitly
+Before the dependency fault checks, the harness registers a disposable public
+HTTP service through the real control-plane API and runs a 30-second open-loop
+profile at 10 requests per second. It cycles through `/q/health/ready`,
+`/q/health/live`, `/q/metrics`, and `/qualification-upstream/health`; every
+request must succeed and the default p95 for each endpoint must remain at or
+below one second. The report also records JVM heap/direct-memory and GC,
+process/system, Vert.x event-loop, and application bulkhead metrics available
+from `/q/metrics` after the load. Before collecting those results, the harness
+waits until the routed endpoint succeeds directly on all three gateway pods,
+so an accepted mutation with pending propagation cannot create false load
+failures. Tune the evidence run explicitly
 with `AUSSIE_QUALIFICATION_LOAD_SECONDS`,
 `AUSSIE_QUALIFICATION_LOAD_INTERVAL_SECONDS`, and
 `AUSSIE_QUALIFICATION_LOAD_P95_MAX_SECONDS`; the output reports per-endpoint
