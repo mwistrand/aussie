@@ -8,6 +8,8 @@ qualification_image="${AUSSIE_QUALIFICATION_IMAGE:-not provided}"
 load_seconds="${AUSSIE_QUALIFICATION_LOAD_SECONDS:-30}"
 load_interval="${AUSSIE_QUALIFICATION_LOAD_INTERVAL_SECONDS:-0.1}"
 load_p95_max="${AUSSIE_QUALIFICATION_LOAD_P95_MAX_SECONDS:-1}"
+websocket_capacity_connections="${AUSSIE_QUALIFICATION_WEBSOCKET_CONNECTIONS:-32}"
+websocket_capacity_hold_seconds="${AUSSIE_QUALIFICATION_WEBSOCKET_HOLD_SECONDS:-30}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 report_file="${AUSSIE_QUALIFICATION_REPORT:-$repo_root/api/build/qualification/kubernetes-qualification-$(date -u +%Y%m%dT%H%M%SZ)-$$.md}"
 
@@ -29,6 +31,8 @@ rolling_deployment="not run"
 rollback_deployment="not run"
 route_convergence="not run"
 websocket_probe="not run"
+websocket_capacity="not run"
+websocket_capacity_output="not run"
 websocket_drain="not run"
 cluster=""
 namespace="aussie-qualification"
@@ -74,6 +78,9 @@ write_report() {
     echo "- Gateway rollback: $rollback_deployment"
     echo "- Routed HTTP convergence: $route_convergence"
     echo "- WebSocket handshake: $websocket_probe"
+    echo "- WebSocket capacity: $websocket_capacity"
+    echo "- WebSocket capacity connections: $websocket_capacity_connections"
+    echo "- WebSocket capacity hold: ${websocket_capacity_hold_seconds}s"
     echo "- WebSocket drain: $websocket_drain"
     echo
     echo "## Sustained operational and routed HTTP load"
@@ -93,6 +100,12 @@ write_report() {
     echo '```text'
     echo "$rolling_traffic_output"
     echo '```'
+    echo
+    echo "## WebSocket capacity"
+    echo
+    echo '```text'
+    echo "$websocket_capacity_output"
+    echo '```'
   } > "$report_file"; then
     echo "Unable to write qualification report: $report_file" >&2
     return 1
@@ -109,6 +122,7 @@ cleanup() {
   [[ "$node_drain" == "running" ]] && node_drain="failed"
   [[ "$rolling_deployment" == "running" ]] && rolling_deployment="failed"
   [[ "$rollback_deployment" == "running" ]] && rollback_deployment="failed"
+  [[ "$websocket_capacity" == "running" ]] && websocket_capacity="failed"
   if [[ -n "$drain_pid" ]]; then
     kill "$drain_pid" >/dev/null 2>&1 || true
     wait "$drain_pid" >/dev/null 2>&1 || true
@@ -156,6 +170,14 @@ esac
 test "$load_seconds" -gt 0
 awk -v value="$load_interval" 'BEGIN { exit !(value > 0) }'
 awk -v value="$load_p95_max" 'BEGIN { exit !(value > 0) }'
+case "$websocket_capacity_connections" in
+  ''|*[!0-9]*) echo "AUSSIE_QUALIFICATION_WEBSOCKET_CONNECTIONS must be a positive integer" >&2; exit 1 ;;
+esac
+case "$websocket_capacity_hold_seconds" in
+  ''|*[!0-9]*) echo "AUSSIE_QUALIFICATION_WEBSOCKET_HOLD_SECONDS must be a positive integer" >&2; exit 1 ;;
+esac
+test "$websocket_capacity_connections" -gt 1
+test "$websocket_capacity_hold_seconds" -gt 0
 
 if [[ ! "$qualification_image" =~ ^[A-Za-z0-9./:_-]+@sha256:[0-9a-f]{64}$ ]]; then
   echo "AUSSIE_QUALIFICATION_IMAGE must be a full image@sha256:<64 hex> reference" >&2
@@ -572,6 +594,47 @@ kubectl $context -n "$namespace" wait --for=jsonpath='{.status.phase}'=Succeeded
   pod/qualification-websocket --timeout=2m
 websocket_probe="passed"
 kubectl $context -n "$namespace" delete pod qualification-websocket --wait=true
+
+qualification_stage="checking WebSocket capacity"
+websocket_capacity="running"
+kubectl $context -n "$namespace" apply -f - <<YAML
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qualification-websocket-capacity
+spec:
+  restartPolicy: Never
+  containers:
+    - name: probe
+      image: node:24-alpine
+      env:
+        - name: GATEWAY_WEBSOCKET_URL
+          value: ws://aussie:8080/qualification-upstream/ws/echo
+        - name: CONNECTION_COUNT
+          value: "$websocket_capacity_connections"
+        - name: HOLD_SECONDS
+          value: "$websocket_capacity_hold_seconds"
+      command: ["node", "/app/websocket-probe.js"]
+      volumeMounts:
+        - name: source
+          mountPath: /app
+          readOnly: true
+  volumes:
+    - name: source
+      configMap:
+        name: qualification-upstream
+YAML
+websocket_capacity_wait_seconds=$((websocket_capacity_hold_seconds + 60))
+if ! kubectl $context -n "$namespace" wait --for=jsonpath='{.status.phase}'=Succeeded \
+  pod/qualification-websocket-capacity --timeout="${websocket_capacity_wait_seconds}s"; then
+  websocket_capacity_output="$(kubectl $context -n "$namespace" logs qualification-websocket-capacity 2>/dev/null || true)"
+  printf '%s\n' "$websocket_capacity_output"
+  echo "WebSocket capacity probe failed" >&2
+  exit 1
+fi
+websocket_capacity_output="$(kubectl $context -n "$namespace" logs qualification-websocket-capacity)"
+websocket_capacity="passed"
+kubectl $context -n "$namespace" delete pod qualification-websocket-capacity --wait=true
 
 qualification_stage="checking WebSocket drain"
 websocket_drain="running"
