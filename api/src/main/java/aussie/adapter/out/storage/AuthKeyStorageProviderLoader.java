@@ -1,7 +1,6 @@
 package aussie.adapter.out.storage;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.ServiceLoader;
@@ -195,48 +194,18 @@ public class AuthKeyStorageProviderLoader {
     }
 
     private <T> T selectProvider(List<? extends T> providers, String configured, String type) {
-        if (configured != null && !configured.isBlank()) {
-            return providers.stream()
-                    .filter(p -> getName(p).equals(configured))
-                    .findFirst()
-                    .orElseThrow(() -> new StorageProviderException("Configured " + type + " provider not found: "
-                            + configured + ". Available: "
-                            + providers.stream().map(this::getName).toList()));
-        }
-
-        return providers.stream()
-                .filter(this::isAvailable)
-                .max(Comparator.comparingInt(this::getPriority))
-                .orElseThrow(() -> new StorageProviderException("No available " + type + " providers"));
-    }
-
-    private String getName(Object provider) {
-        if (provider instanceof AuthKeyStorageProvider p) {
-            return p.name();
-        }
-        if (provider instanceof AuthKeyCacheProvider p) {
-            return p.name();
-        }
-        throw new IllegalArgumentException("Unknown provider type: " + provider.getClass());
-    }
-
-    private boolean isAvailable(Object provider) {
-        if (provider instanceof AuthKeyStorageProvider p) {
-            return p.isAvailable();
-        }
-        if (provider instanceof AuthKeyCacheProvider p) {
-            return p.isAvailable();
-        }
-        return false;
-    }
-
-    private int getPriority(Object provider) {
-        if (provider instanceof AuthKeyStorageProvider p) {
-            return p.priority();
-        }
-        if (provider instanceof AuthKeyCacheProvider p) {
-            return p.priority();
-        }
-        return 0;
+        return ProviderSelection.select(
+                providers,
+                configured,
+                type,
+                provider -> provider instanceof AuthKeyStorageProvider p
+                        ? p.name()
+                        : ((AuthKeyCacheProvider) provider).name(),
+                provider -> provider instanceof AuthKeyStorageProvider p
+                        ? p.priority()
+                        : ((AuthKeyCacheProvider) provider).priority(),
+                provider -> provider instanceof AuthKeyStorageProvider p
+                        ? p.isAvailable()
+                        : ((AuthKeyCacheProvider) provider).isAvailable());
     }
 }

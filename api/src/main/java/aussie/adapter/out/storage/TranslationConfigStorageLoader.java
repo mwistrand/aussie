@@ -2,7 +2,6 @@ package aussie.adapter.out.storage;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.ServiceLoader;
@@ -213,52 +212,18 @@ public class TranslationConfigStorageLoader {
     }
 
     private <T> T selectProvider(List<? extends T> providers, String configured, String type) {
-        // Explicit configuration takes precedence
-        if (configured != null && !configured.isBlank()) {
-            return providers.stream()
-                    .filter(p -> getName(p).equals(configured))
-                    .findFirst()
-                    .orElseThrow(() -> new StorageProviderException(
-                            "Configured translation config " + type + " provider not found: "
-                                    + configured + ". Available: "
-                                    + providers.stream().map(this::getName).toList()));
-        }
-
-        // Otherwise, select by priority from available providers
-        return providers.stream()
-                .filter(this::isAvailable)
-                .max(Comparator.comparingInt(this::getPriority))
-                .orElseThrow(
-                        () -> new StorageProviderException("No available translation config " + type + " providers"));
-    }
-
-    private String getName(Object provider) {
-        if (provider instanceof TranslationConfigStorageProvider p) {
-            return p.name();
-        }
-        if (provider instanceof TranslationConfigCacheProvider p) {
-            return p.name();
-        }
-        throw new IllegalArgumentException("Unknown provider type: " + provider.getClass());
-    }
-
-    private boolean isAvailable(Object provider) {
-        if (provider instanceof TranslationConfigStorageProvider p) {
-            return p.isAvailable();
-        }
-        if (provider instanceof TranslationConfigCacheProvider p) {
-            return p.isAvailable();
-        }
-        return false;
-    }
-
-    private int getPriority(Object provider) {
-        if (provider instanceof TranslationConfigStorageProvider p) {
-            return p.priority();
-        }
-        if (provider instanceof TranslationConfigCacheProvider p) {
-            return p.priority();
-        }
-        return 0;
+        return ProviderSelection.select(
+                providers,
+                configured,
+                "translation config " + type,
+                provider -> provider instanceof TranslationConfigStorageProvider p
+                        ? p.name()
+                        : ((TranslationConfigCacheProvider) provider).name(),
+                provider -> provider instanceof TranslationConfigStorageProvider p
+                        ? p.priority()
+                        : ((TranslationConfigCacheProvider) provider).priority(),
+                provider -> provider instanceof TranslationConfigStorageProvider p
+                        ? p.isAvailable()
+                        : ((TranslationConfigCacheProvider) provider).isAvailable());
     }
 }

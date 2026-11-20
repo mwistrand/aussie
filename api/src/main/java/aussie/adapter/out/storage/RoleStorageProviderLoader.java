@@ -1,7 +1,6 @@
 package aussie.adapter.out.storage;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.ServiceLoader;
@@ -103,18 +102,12 @@ public class RoleStorageProviderLoader {
     }
 
     private RoleStorageProvider selectProvider(List<RoleStorageProvider> providers, String configured) {
-        if (configured != null && !configured.isBlank()) {
-            return providers.stream()
-                    .filter(p -> p.name().equals(configured))
-                    .findFirst()
-                    .orElseThrow(() -> new StorageProviderException("Configured role storage provider not found: "
-                            + configured + ". Available: "
-                            + providers.stream().map(RoleStorageProvider::name).toList()));
-        }
-
-        return providers.stream()
-                .filter(RoleStorageProvider::isAvailable)
-                .max(Comparator.comparingInt(RoleStorageProvider::priority))
-                .orElseThrow(() -> new StorageProviderException("No available role storage providers"));
+        return ProviderSelection.select(
+                providers,
+                configured,
+                "role storage",
+                RoleStorageProvider::name,
+                RoleStorageProvider::priority,
+                RoleStorageProvider::isAvailable);
     }
 }
