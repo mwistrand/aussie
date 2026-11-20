@@ -29,6 +29,7 @@ rolling_deployment="not run"
 rollback_deployment="not run"
 route_convergence="not run"
 websocket_probe="not run"
+websocket_drain="not run"
 cluster=""
 namespace="aussie-qualification"
 keep_cluster="${AUSSIE_QUALIFICATION_KEEP_CLUSTER:-false}"
@@ -73,6 +74,7 @@ write_report() {
     echo "- Gateway rollback: $rollback_deployment"
     echo "- Routed HTTP convergence: $route_convergence"
     echo "- WebSocket handshake: $websocket_probe"
+    echo "- WebSocket drain: $websocket_drain"
     echo
     echo "## Sustained operational and routed HTTP load"
     echo
@@ -571,6 +573,81 @@ kubectl $context -n "$namespace" wait --for=jsonpath='{.status.phase}'=Succeeded
 websocket_probe="passed"
 kubectl $context -n "$namespace" delete pod qualification-websocket --wait=true
 
+qualification_stage="checking WebSocket drain"
+websocket_drain="running"
+websocket_drain_pod="$(kubectl $context -n "$namespace" get pods \
+  -l app.kubernetes.io/name=aussie -o jsonpath='{.items[0].metadata.name}')"
+websocket_drain_ip="$(kubectl $context -n "$namespace" get pod "$websocket_drain_pod" \
+  -o jsonpath='{.status.podIP}')"
+test -n "$websocket_drain_pod"
+test -n "$websocket_drain_ip"
+kubectl $context -n "$namespace" apply -f - <<YAML
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qualification-websocket-drain
+spec:
+  restartPolicy: Never
+  containers:
+    - name: probe
+      image: node:24-alpine
+      env:
+        - name: GATEWAY_WEBSOCKET_URL
+          value: ws://$websocket_drain_ip:8080/qualification-upstream/ws/echo
+        - name: EXPECTED_CLOSE_CODE
+          value: "1001"
+        - name: CLOSE_AFTER_OPEN
+          value: "false"
+      command: ["node", "/app/websocket-probe.js"]
+      volumeMounts:
+        - name: source
+          mountPath: /app
+          readOnly: true
+  volumes:
+    - name: source
+      configMap:
+        name: qualification-upstream
+YAML
+kubectl $context -n "$namespace" wait --for=jsonpath='{.status.phase}'=Running \
+  pod/qualification-websocket-drain --timeout=2m
+for _ in $(seq 1 120); do
+  if kubectl $context -n "$namespace" logs qualification-websocket-drain 2>/dev/null \
+    | grep -q 'WebSocket handshake passed'; then
+    break
+  fi
+  sleep 1
+done
+if ! kubectl $context -n "$namespace" logs qualification-websocket-drain 2>/dev/null \
+  | grep -q 'WebSocket handshake passed'; then
+  echo "WebSocket drain probe did not establish a connection" >&2
+  exit 1
+fi
+# Start the bound when termination begins, not when the socket was opened.
+websocket_drain_deadline="$(( $(date +%s) + 40 ))"
+kubectl $context -n "$namespace" delete pod "$websocket_drain_pod" --wait=false
+while [[ "$(date +%s)" -le "$websocket_drain_deadline" ]]; do
+  websocket_drain_phase="$(kubectl $context -n "$namespace" get pod qualification-websocket-drain \
+    -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+  case "$websocket_drain_phase" in
+    Succeeded)
+      websocket_drain="passed"
+      break
+      ;;
+    Failed)
+      kubectl $context -n "$namespace" logs qualification-websocket-drain 2>/dev/null || true
+      echo "WebSocket drain probe failed" >&2
+      exit 1
+      ;;
+  esac
+  sleep 1
+done
+if [[ "$websocket_drain" != "passed" ]]; then
+  kubectl $context -n "$namespace" logs qualification-websocket-drain 2>/dev/null || true
+  echo "WebSocket drain exceeded the 40-second termination bound" >&2
+  exit 1
+fi
+kubectl $context -n "$namespace" delete pod qualification-websocket-drain --wait=true
+
 qualification_stage="sustained readiness load"
 kubectl $context -n "$namespace" run qualification-load \
   --image=curlimages/curl:8.10.1 --restart=Never --attach=false \
@@ -934,4 +1011,4 @@ test "$ready_replicas" = 3
 pod_recovery="passed"
 qualification_stage="completed"
 
-echo "Kubernetes qualification passed: four-worker kind cluster, production readiness, HTTP/WebSocket routing, PDB/node-drain validation, Redis/Cassandra recovery, and pod-loss traffic recovery"
+echo "Kubernetes qualification passed: four-worker kind cluster, production readiness, HTTP/WebSocket routing and drain, PDB/node-drain validation, Redis/Cassandra recovery, and pod-loss traffic recovery"
