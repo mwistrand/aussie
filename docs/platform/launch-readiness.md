@@ -14,16 +14,16 @@ deployment, qualification, and release-hardening evidence is complete.
 - [x] Request limits cover transport framing and application parsing. See
   `api/src/test/java/aussie/RequestValidationTest.java` and the transport
   validation tests.
-- [ ] Control-plane mutation responses distinguish durable commit from
-  propagation failure at the API boundary. The lower-level
+- [x] Control-plane mutation responses distinguish durable commit from
+  propagation failure at the API boundary. The REST adapter tests assert the
+  `X-Aussie-Propagation-State: pending` marker for committed registration and
+  deletion responses; lower-level commit/replay coverage remains in
   `api/src/test/java/aussie/core/service/ServiceRegistryTest.java` and
-  `api/src/test/java/aussie/adapter/in/rest/RedisAdminMutationStoreTest.java`
-  cover internal pending state and replay behavior, but an API-level failure
-  test still needs to assert the pending response distinction.
-- [ ] CLI authentication configuration is origin-bound and cannot be selected
-  from a project configuration file. `cli/internal/config/config_test.go`
-  currently proves that local `.aussierc` values can override global
-  authentication settings; the trust-boundary fix is still required.
+  `api/src/test/java/aussie/adapter/in/rest/RedisAdminMutationStoreTest.java`.
+- [x] CLI authentication configuration is origin-bound and cannot be selected
+  from a project configuration file. See the origin-isolation and credential
+  migration coverage in `cli/internal/config/config_test.go` and
+  `cli/cmd/auth_login_security_test.go`.
 - [x] Sensitive identifiers and operator-controlled reasons are redacted or
   pseudonymized in normal telemetry. See the telemetry redaction tests.
 - [x] Outbound DNS resolution is isolated from shared request workers. See
