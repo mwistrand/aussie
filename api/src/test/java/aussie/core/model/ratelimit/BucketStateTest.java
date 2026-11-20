@@ -130,27 +130,6 @@ class BucketStateTest {
     }
 
     @Nested
-    @DisplayName("RateLimitState interface")
-    class RateLimitStateInterface {
-
-        @Test
-        @DisplayName("remaining should return tokens")
-        void remainingShouldReturnTokens() {
-            var state = new BucketState(42, 1000L);
-
-            assertEquals(42, state.remaining());
-        }
-
-        @Test
-        @DisplayName("timestampMillis should return lastRefillMillis")
-        void timestampMillisShouldReturnLastRefillMillis() {
-            var state = new BucketState(10, 5000L);
-
-            assertEquals(5000L, state.timestampMillis());
-        }
-    }
-
-    @Nested
     @DisplayName("initial factory method")
     class InitialFactory {
 

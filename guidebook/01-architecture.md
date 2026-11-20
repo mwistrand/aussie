@@ -472,7 +472,9 @@ Another approach is to throw exceptions for error cases. This is simpler in the 
 
 Sealed interfaces produce many small record classes. `GatewayResult` alone defines eight inner records. This increases the surface area of the type system. For simple two-state results (`ValidationResult`), the overhead of a sealed interface over a boolean return is real. The codebase accepts this cost for the sake of consistency: every operation result uses the same pattern, making the codebase predictable.
 
-The `RateLimitState` sealed interface (`permits BucketState`) currently has only one permitted implementation. This is forward-looking design; it anticipates sliding window or fixed window implementations. If those never materialize, the sealed interface adds indirection without benefit.
+Rate limiting currently uses the concrete `BucketState` record and
+`BucketAlgorithm`; a second algorithm should add an explicit state and
+selection contract rather than keeping speculative indirection alive.
 
 ## 5. Immutable Records: ServiceRegistration as a Rich Domain Model
 

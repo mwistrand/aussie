@@ -4,51 +4,15 @@ Rate limiting in a shared API gateway is deceptively difficult. The individual a
 
 ## 1. One Supported Algorithm
 
-Aussie defines the supported rate limiting algorithm as an enum at `api/src/main/java/aussie/core/model/ratelimit/RateLimitAlgorithm.java`:
+Aussie currently supports one rate-limiting algorithm: the token bucket. The
+in-memory limiter calls the singleton `BucketAlgorithm` directly; Redis keeps
+the equivalent atomic state transition in Lua. There is no algorithm-selection
+registry or pluggable handler until a second algorithm is actually needed.
 
-```java
-public enum RateLimitAlgorithm {
-    BUCKET
-}
-```
-
-Each algorithm implements the `RateLimitAlgorithmHandler` interface (line 16 of `api/src/main/java/aussie/core/model/ratelimit/RateLimitAlgorithmHandler.java`):
-
-```java
-public interface RateLimitAlgorithmHandler {
-
-    RateLimitAlgorithm algorithm();
-
-    RateLimitDecision checkAndConsume(
-        RateLimitState currentState, EffectiveRateLimit limit, long nowMillis);
-
-    RateLimitState createInitialState(EffectiveRateLimit limit, long nowMillis);
-
-    RateLimitDecision computeStatus(
-        RateLimitState currentState, EffectiveRateLimit limit, long nowMillis);
-}
-```
-
-Three things to notice about this interface.
-
-First, **state is passed in and returned, not mutated**. The handler receives `RateLimitState`, computes a decision, and returns the new state inside `RateLimitDecision.newState()`. The handler itself is stateless. This is what makes the same algorithm work for both the in-memory store (which manages state in a `ConcurrentHashMap`) and the Redis store (which manages state in Lua scripts). The algorithm does not care where state lives.
-
-Second, **the clock is explicit**. Every method takes `long nowMillis` rather than calling `System.currentTimeMillis()` internally. This makes the algorithms deterministic and testable. You can simulate time progression in unit tests without touching thread sleeps or mocking static methods.
-
-Third, **`computeStatus` is separate from `checkAndConsume`**. The former reads without consuming; the latter reads, decides, and consumes atomically. This separation exists because response headers need to report current status on every request, not just on rate-limited requests. A `getStatus` default method on the interface (line 52) handles the null-state case:
-
-```java
-default RateLimitDecision getStatus(
-        RateLimitState currentState, EffectiveRateLimit limit, long nowMillis) {
-    if (currentState == null) {
-        final var initialState = createInitialState(limit, nowMillis);
-        return createAllowedDecision(initialState, limit, nowMillis);
-    }
-    return computeStatus(currentState, limit, nowMillis);
-}
-```
-
-`BucketAlgorithm` is the only implementation and is called directly by the in-memory limiter. The configuration surface does not pretend to select an algorithm that does not exist. Add a new algorithm only with a handler, state model where needed, equivalent Redis semantics, and an explicit selection contract.
+State is passed in and returned, not mutated. The clock is explicit, so tests
+can simulate time without sleeps. `computeStatus` reads without consuming,
+while `checkAndConsume` reads, decides, and consumes atomically. `getStatus`
+handles a missing bucket by reporting a full initial bucket.
 
 ## 2. Token Bucket Internals: How the Algorithm Actually Works
 
@@ -59,7 +23,7 @@ The token bucket is implemented across two files: `BucketState` for the state re
 `BucketState` at `api/src/main/java/aussie/core/model/ratelimit/BucketState.java` (line 15) is a Java record:
 
 ```java
-public record BucketState(long tokens, long lastRefillMillis) implements RateLimitState {
+public record BucketState(long tokens, long lastRefillMillis) {
 ```
 
 Two fields. `tokens` is the current count of available tokens. `lastRefillMillis` is the epoch millisecond timestamp of the last time tokens were added. That is the entire state. The record is immutable: every mutation returns a new instance.
@@ -91,9 +55,8 @@ The cast to `long` truncates fractional tokens. This is deliberate: you cannot u
 The `checkAndConsume` method in `BucketAlgorithm` (line 47 of `api/src/main/java/aussie/core/model/ratelimit/BucketAlgorithm.java`) ties it together:
 
 ```java
-@Override
 public RateLimitDecision checkAndConsume(
-        RateLimitState currentState, EffectiveRateLimit limit, long nowMillis) {
+        BucketState currentState, EffectiveRateLimit limit, long nowMillis) {
 
     final var state = resolveState(currentState, limit, nowMillis);
     final var refilled = refillTokens(state, limit, nowMillis);
@@ -358,7 +321,7 @@ The `checkAndConsume` method (line 98) uses `ConcurrentHashMap.compute` for atom
 ```java
 private RateLimitDecision computeDecision(
         String cacheKey,
-        RateLimitAlgorithmHandler handler,
+        BucketAlgorithm handler,
         EffectiveRateLimit limit,
         long nowMillis) {
 
@@ -380,7 +343,7 @@ The `compute` lambda is executed atomically with respect to the key: no other th
 Each state is wrapped in a `TimestampedState` record (line 221) that tracks the last access time independently of the algorithm's internal timestamps:
 
 ```java
-record TimestampedState(RateLimitState state, long lastAccessMillis) {}
+record TimestampedState(BucketState state, long lastAccessMillis) {}
 ```
 
 ### Stale Entry Cleanup

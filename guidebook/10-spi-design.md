@@ -442,7 +442,7 @@ Notable design decisions:
 ```java
 private RateLimitDecision computeDecision(
         String cacheKey,
-        RateLimitAlgorithmHandler handler,
+        BucketAlgorithm handler,
         EffectiveRateLimit limit,
         long nowMillis) {
 

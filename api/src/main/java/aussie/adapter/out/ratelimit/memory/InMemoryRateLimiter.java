@@ -11,10 +11,10 @@ import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 
 import aussie.core.model.ratelimit.BucketAlgorithm;
+import aussie.core.model.ratelimit.BucketState;
 import aussie.core.model.ratelimit.EffectiveRateLimit;
 import aussie.core.model.ratelimit.RateLimitDecision;
 import aussie.core.model.ratelimit.RateLimitKey;
-import aussie.core.model.ratelimit.RateLimitState;
 import aussie.core.port.out.RateLimiter;
 
 /**
@@ -188,10 +188,7 @@ public final class InMemoryRateLimiter implements RateLimiter {
     }
 
     private RateLimitDecision computeDecision(
-            String cacheKey,
-            aussie.core.model.ratelimit.RateLimitAlgorithmHandler handler,
-            EffectiveRateLimit limit,
-            long nowMillis) {
+            String cacheKey, BucketAlgorithm handler, EffectiveRateLimit limit, long nowMillis) {
 
         final var result = new RateLimitDecision[1];
 
@@ -208,5 +205,5 @@ public final class InMemoryRateLimiter implements RateLimiter {
     /**
      * Wraps rate limit state with a last-access timestamp for stale entry detection.
      */
-    record TimestampedState(RateLimitState state, long lastAccessMillis) {}
+    record TimestampedState(BucketState state, long lastAccessMillis) {}
 }

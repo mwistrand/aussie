@@ -136,16 +136,13 @@ Pure domain objects. Records, sealed interfaces, enums, value types. No framewor
 
 | Class | Description |
 |---|---|
-| `BucketAlgorithm` | Token bucket algorithm handler implementing `RateLimitAlgorithmHandler`. |
+| `BucketAlgorithm` | Token bucket algorithm implementation. |
 | `BucketState` | Record holding current token count and last refill timestamp for a bucket. |
 | `EffectiveRateLimit` | Record combining resolved requests-per-window, window duration, and burst capacity. |
 | `EndpointRateLimitConfig` | Record for per-endpoint rate limit overrides registered by service teams. |
-| `RateLimitAlgorithm` | Enum: `BUCKET`. |
-| `RateLimitAlgorithmHandler` | Interface for pluggable algorithm implementations. |
 | `RateLimitDecision` | Record indicating allowed/denied with remaining tokens and reset time. |
 | `RateLimitKey` | Record composing the rate limit bucket key from source identifier, service, and endpoint. |
 | `RateLimitKeyType` | Enum: `IP`, `API_KEY`, `SERVICE`, `ENDPOINT`, `WEBSOCKET_CONNECTION`, `WEBSOCKET_MESSAGE`. |
-| `RateLimitState` | Record for serialized rate limit state in distributed backends. |
 | `ServiceRateLimitConfig` | Record for service-level rate limit configuration. |
 | `ServiceWebSocketRateLimitConfig` | Record for per-service WebSocket rate limit configuration. |
 
@@ -824,7 +821,7 @@ JAX-RS server filters that intercept requests before they reach resource classes
 | `core/model/auth` | 27 |
 | `core/model/common` | 8 |
 | `core/model/gateway` | 5 |
-| `core/model/ratelimit` | 12 |
+| `core/model/ratelimit` | 9 |
 | `core/model/routing` | 6 |
 | `core/model/sampling` | 3 |
 | `core/model/service` | 3 |
