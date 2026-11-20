@@ -27,6 +27,7 @@ drain_pid=""
 drain_log=""
 rolling_deployment="not run"
 rollback_deployment="not run"
+route_convergence="not run"
 cluster=""
 namespace="aussie-qualification"
 keep_cluster="${AUSSIE_QUALIFICATION_KEEP_CLUSTER:-false}"
@@ -59,7 +60,7 @@ write_report() {
     echo "- Load duration: ${load_seconds}s"
     echo "- Load interval: ${load_interval}s"
     echo "- Load p95 limit: ${load_p95_max}s"
-    echo "- Load endpoints: /q/health/ready, /q/health/live, /q/metrics"
+    echo "- Load endpoints: /q/health/ready, /q/health/live, /q/metrics, /qualification-upstream/health"
     echo "- Redis recovery: $redis_recovery"
     echo "- Redis recovery time: $redis_recovery_seconds"
     echo "- Cassandra recovery: $cassandra_recovery"
@@ -69,8 +70,9 @@ write_report() {
     echo "- Drained node: $drained_node"
     echo "- Gateway rolling deployment: $rolling_deployment"
     echo "- Gateway rollback: $rollback_deployment"
+    echo "- Routed HTTP convergence: $route_convergence"
     echo
-    echo "## Sustained readiness load"
+    echo "## Sustained operational and routed HTTP load"
     echo
     echo '```text'
     echo "$load_output"
@@ -184,6 +186,71 @@ kubectl --context "kind-$cluster" label namespace "$namespace" \
   aussie.network/cassandra=true \
   aussie.network/redis=true
 
+kubectl --context "kind-$cluster" -n "$namespace" create configmap qualification-upstream \
+  --from-file=server.js="$repo_root/tools/qualification_upstream.js"
+kubectl --context "kind-$cluster" -n "$namespace" apply -f - <<'YAML'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qualification-upstream
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qualification-upstream
+  template:
+    metadata:
+      labels:
+        app: qualification-upstream
+    spec:
+      containers:
+        - name: upstream
+          image: node:24-alpine
+          command: ["node", "/app/server.js"]
+          ports:
+            - name: http
+              containerPort: 3000
+          volumeMounts:
+            - name: source
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: source
+          configMap:
+            name: qualification-upstream
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qualification-upstream
+spec:
+  selector:
+    app: qualification-upstream
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: qualification-upstream-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aussie
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: qualification-upstream
+      ports:
+        - protocol: TCP
+          port: 3000
+YAML
+kubectl --context "kind-$cluster" -n "$namespace" rollout status deployment/qualification-upstream --timeout=5m
+
 zone=0
 while IFS= read -r node; do
   kubectl --context "kind-$cluster" label node "$node" \
@@ -195,7 +262,8 @@ kubectl --context "kind-$cluster" -n "$namespace" create secret generic aussie-p
   --from-literal=CASSANDRA_USERNAME= \
   --from-literal=CASSANDRA_PASSWORD= \
   --from-literal=REDIS_PASSWORD= \
-  --from-literal=AUTH_ENCRYPTION_KEY="$(openssl rand -base64 32)"
+  --from-literal=AUTH_ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+  --from-literal=AUSSIE_BOOTSTRAP_KEY="aussie_v1_$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
 
 kubectl --context "kind-$cluster" -n "$namespace" apply -f - <<'YAML'
 apiVersion: v1
@@ -344,10 +412,58 @@ kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=15m
 
 qualification_stage="applying steady-state production configuration"
 render_qualification_manifests | kubectl $context -n "$namespace" apply -f -
+kubectl $context -n "$namespace" patch configmap aussie --type=merge --patch-file=/dev/stdin <<'JSON'
+{"data":{"AUSSIE_GATEWAY_SECURITY_ALLOW_PRIVATE_UPSTREAMS":"true","AUSSIE_GATEWAY_SECURITY_ALLOWED_UPSTREAM_HOSTS":"qualification-upstream"}}
+JSON
+kubectl $context -n "$namespace" patch deployment aussie --type=strategic --patch-file=/dev/stdin <<'YAML'
+spec:
+  template:
+    spec:
+      containers:
+        - name: aussie
+          env:
+            - name: AUSSIE_BOOTSTRAP_ENABLED
+              value: "true"
+            - name: AUSSIE_BOOTSTRAP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aussie-production-secrets
+                  key: AUSSIE_BOOTSTRAP_KEY
+YAML
 kubectl $context -n "$namespace" rollout restart deployment/aussie
 
 qualification_stage="waiting for gateway readiness"
 kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=15m
+
+qualification_stage="registering routed qualification service"
+kubectl $context -n "$namespace" apply -f - <<'YAML'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qualification-admin
+spec:
+  restartPolicy: Never
+  containers:
+    - name: curl
+      image: curlimages/curl:8.10.1
+      env:
+        - name: BOOTSTRAP_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aussie-production-secrets
+              key: AUSSIE_BOOTSTRAP_KEY
+      command: ["sh", "-ec"]
+      args:
+        - >-
+          curl --fail --silent --show-error --max-time 10
+          -H "Authorization: Bearer $BOOTSTRAP_KEY"
+          -H "Content-Type: application/json"
+          --data '{"version":1,"serviceId":"qualification-upstream","baseUrl":"http://qualification-upstream:3000","routePrefix":"/qualification-upstream","defaultVisibility":"PUBLIC","defaultAuthRequired":false,"endpoints":[{"path":"/health","methods":["GET"],"visibility":"PUBLIC","authRequired":false}]}'
+          http://aussie:8080/admin/services
+YAML
+kubectl $context -n "$namespace" wait --for=jsonpath='{.status.phase}'=Succeeded \
+  pod/qualification-admin --timeout=2m
+kubectl $context -n "$namespace" delete pod qualification-admin --wait=true
 
 kubectl $context -n "$namespace" run qualification-traffic \
   --image=curlimages/curl:8.10.1 --restart=Never --attach=false --command -- \
@@ -392,6 +508,36 @@ wait_for_first_probe() {
 
 wait_for_first_probe
 
+qualification_stage="waiting for route convergence"
+route_convergence="running"
+for _ in $(seq 1 120); do
+  gateway_ips="$(kubectl $context -n "$namespace" get pods \
+    -l app.kubernetes.io/name=aussie \
+    -o jsonpath='{range .items[?(@.status.phase=="Running")]}{.status.podIP}{"\n"}{end}' \
+    2>/dev/null || true)"
+  gateway_ip_args=()
+  while IFS= read -r gateway_ip; do
+    [[ -n "$gateway_ip" ]] && gateway_ip_args+=("$gateway_ip")
+  done <<< "$gateway_ips"
+  gateway_count="${#gateway_ip_args[@]}"
+  if [[ "$gateway_count" == "3" ]] && kubectl $context -n "$namespace" exec qualification-traffic -- \
+    sh -ec '
+      for gateway_ip do
+        curl --fail --silent --show-error --max-time 5 \
+          "http://${gateway_ip}:8080/qualification-upstream/health" >/dev/null
+      done
+    ' -- "${gateway_ip_args[@]}"; then
+    route_convergence="passed"
+    break
+  fi
+  sleep 1
+done
+if [[ "$route_convergence" != "passed" ]]; then
+  route_convergence="failed"
+  echo "timed out waiting for the routed service on all gateway replicas" >&2
+  exit 1
+fi
+
 qualification_stage="sustained readiness load"
 kubectl $context -n "$namespace" run qualification-load \
   --image=curlimages/curl:8.10.1 --restart=Never --attach=false \
@@ -404,10 +550,11 @@ kubectl $context -n "$namespace" run qualification-load \
     request_number=0
     deadline=$(( $(date +%s) + LOAD_SECONDS ))
     while [ "$(date +%s)" -lt "$deadline" ]; do
-      case $((request_number % 3)) in
+      case $((request_number % 4)) in
         0) path="/q/health/ready" ;;
         1) path="/q/health/live" ;;
         2) path="/q/metrics" ;;
+        3) path="/qualification-upstream/health" ;;
       esac
       (
         if result="$(curl --max-time 5 --silent --show-error --output /dev/null \
@@ -426,7 +573,7 @@ kubectl $context -n "$namespace" run qualification-load \
       wait "$pid" || true
     done
 
-    for path in /q/health/ready /q/health/live /q/metrics; do
+    for path in /q/health/ready /q/health/live /q/metrics /qualification-upstream/health; do
       set -- $(awk -v path="$path" "
         \$1 == path { total++; if (\$2 == 200) success++ }
         END { print total + 0, success + 0, (total - success) + 0 }
