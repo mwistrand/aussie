@@ -21,6 +21,10 @@ redis_recovery_seconds="not measured"
 cassandra_recovery="not run"
 cassandra_recovery_seconds="not measured"
 pod_recovery="not run"
+node_drain="not run"
+drained_node="not selected"
+drain_pid=""
+drain_log=""
 rolling_deployment="not run"
 rollback_deployment="not run"
 cluster=""
@@ -61,6 +65,8 @@ write_report() {
     echo "- Cassandra recovery: $cassandra_recovery"
     echo "- Cassandra recovery time: $cassandra_recovery_seconds"
     echo "- Gateway pod-loss recovery: $pod_recovery"
+    echo "- Node drain: $node_drain"
+    echo "- Drained node: $drained_node"
     echo "- Gateway rolling deployment: $rolling_deployment"
     echo "- Gateway rollback: $rollback_deployment"
     echo
@@ -76,7 +82,7 @@ write_report() {
     echo "$resource_output"
     echo '```'
     echo
-    echo "## Rolling deployment and rollback readiness traffic"
+    echo "## Rolling deployment, rollback, and node-drain readiness traffic"
     echo
     echo '```text'
     echo "$rolling_traffic_output"
@@ -94,8 +100,13 @@ cleanup() {
   [[ "$redis_recovery" == "running" ]] && redis_recovery="failed"
   [[ "$cassandra_recovery" == "running" ]] && cassandra_recovery="failed"
   [[ "$pod_recovery" == "running" ]] && pod_recovery="failed"
+  [[ "$node_drain" == "running" ]] && node_drain="failed"
   [[ "$rolling_deployment" == "running" ]] && rolling_deployment="failed"
   [[ "$rollback_deployment" == "running" ]] && rollback_deployment="failed"
+  if [[ -n "$drain_pid" ]]; then
+    kill "$drain_pid" >/dev/null 2>&1 || true
+    wait "$drain_pid" >/dev/null 2>&1 || true
+  fi
   if write_report "$status"; then
     :
   else
@@ -104,6 +115,12 @@ cleanup() {
   if [[ "$status" -ne 0 && -n "$cluster" ]] && command -v kubectl >/dev/null 2>&1; then
     kubectl --context "kind-$cluster" -n "$namespace" get pods -o wide 2>/dev/null || true
     kubectl --context "kind-$cluster" -n "$namespace" get events --sort-by=.lastTimestamp 2>/dev/null || true
+  fi
+  if [[ -n "$cluster" && "$drained_node" != "not selected" ]] && command -v kubectl >/dev/null 2>&1; then
+    if ! kubectl --context "kind-$cluster" uncordon "$drained_node" >/dev/null 2>&1; then
+      echo "WARNING: unable to uncordon retained node $drained_node" >&2
+      echo "Retry with: kubectl --context kind-$cluster uncordon $drained_node" >&2
+    fi
   fi
   if [[ -n "$cluster" && "$keep_cluster" != "true" ]] && command -v kind >/dev/null 2>&1; then
     kind delete cluster --name "$cluster" >/dev/null 2>&1 || true
@@ -522,7 +539,7 @@ kubectl $context -n "$namespace" run qualification-rolling-traffic \
     set -- $(awk "{ total++; if (\$1 == \"failure\") failed++ } END { print total + 0, failed + 0 }" /tmp/results)
     total="$1"
     failed="$2"
-    printf "Rolling deployment and rollback readiness traffic: total=%s failed=%s\\n" "$total" "$failed"
+    printf "Rolling deployment, rollback, and node-drain readiness traffic: total=%s failed=%s\\n" "$total" "$failed"
     test "$total" -gt 0
     test "$failed" -eq 0
   '
@@ -550,6 +567,97 @@ kubectl $context -n "$namespace" rollout undo deployment/aussie
 kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=15m
 wait_for_gateway_ready
 
+rollback_deployment="passed"
+
+qualification_stage="node drain"
+node_drain="running"
+gateway_node=""
+gateway_pod=""
+while IFS= read -r node; do
+  gateway_count="$(kubectl $context -n "$namespace" get pods \
+    -l app.kubernetes.io/name=aussie --field-selector "spec.nodeName=$node" \
+    --no-headers 2>/dev/null | awk 'END { print NR + 0 }')"
+  if [[ "$gateway_count" == "1" ]]; then
+    gateway_node="$node"
+    gateway_pod="$(kubectl $context -n "$namespace" get pods \
+      -l app.kubernetes.io/name=aussie --field-selector "spec.nodeName=$node" \
+      -o jsonpath='{.items[0].metadata.name}')"
+    break
+  fi
+done < <(kubectl $context get nodes -o name | sed 's#^node/##')
+
+if [[ -z "$gateway_node" ]]; then
+  echo "unable to find a node with exactly one gateway pod for PDB validation" >&2
+  exit 1
+fi
+drained_node="$gateway_node"
+second_gateway_pod=""
+while IFS= read -r pod; do
+  if [[ "$pod" != "$gateway_pod" ]]; then
+    second_gateway_pod="$pod"
+    break
+  fi
+done < <(kubectl $context -n "$namespace" get pods -l app.kubernetes.io/name=aussie \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+if [[ -z "$second_gateway_pod" ]]; then
+  echo "unable to find a second gateway pod for PDB validation" >&2
+  exit 1
+fi
+
+# Only gateway pods are selected, so Redis, Cassandra, and traffic probes stay
+# on the cordoned node while this stage isolates gateway eviction behavior.
+drain_log="/tmp/aussie-kubernetes-drain-$$.log"
+kubectl $context drain "$gateway_node" \
+  --pod-selector='app.kubernetes.io/name=aussie' \
+  --ignore-daemonsets --delete-emptydir-data --timeout=10m \
+  >"$drain_log" 2>&1 &
+drain_pid=$!
+
+# Wait until the first eviction consumes the PDB budget, then prove a second
+# eviction is rejected before the replacement can become ready.
+first_eviction_seen="false"
+for _ in $(seq 1 120); do
+  disruptions_allowed="$(kubectl $context -n "$namespace" get pdb aussie \
+    -o jsonpath='{.status.disruptionsAllowed}' 2>/dev/null || true)"
+  if [[ "$disruptions_allowed" == "0" ]]; then
+    first_eviction_seen="true"
+    break
+  fi
+  if ! kill -0 "$drain_pid" 2>/dev/null; then
+    break
+  fi
+  sleep 1
+done
+if [[ "$first_eviction_seen" != "true" ]]; then
+  echo "the first gateway eviction did not consume the PDB budget" >&2
+  cat "$drain_log" >&2 || true
+  exit 1
+fi
+
+if second_eviction_output="$(kubectl $context -n "$namespace" create eviction "$second_gateway_pod" 2>&1)"; then
+  echo "PDB accepted a second gateway eviction" >&2
+  printf '%s\n' "$second_eviction_output" >&2
+  exit 1
+fi
+if [[ "${second_eviction_output,,}" != *"disruption budget"* \
+  && "${second_eviction_output,,}" != *"disruptions allowed"* ]]; then
+  echo "second gateway eviction failed for an unexpected reason" >&2
+  printf '%s\n' "$second_eviction_output" >&2
+  exit 1
+fi
+
+if ! wait "$drain_pid"; then
+  cat "$drain_log" >&2 || true
+  exit 1
+fi
+drain_pid=""
+kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=10m
+ready_replicas="$(kubectl $context -n "$namespace" get deployment aussie -o jsonpath='{.status.readyReplicas}')"
+test "$ready_replicas" = 3
+wait_for_gateway_ready
+kubectl $context uncordon "$gateway_node"
+node_drain="passed"
+
 kubectl $context -n "$namespace" exec qualification-rolling-traffic -- touch /tmp/stop
 for _ in $(seq 1 120); do
   rolling_traffic_phase="$(kubectl $context -n "$namespace" get pod qualification-rolling-traffic \
@@ -559,7 +667,7 @@ for _ in $(seq 1 120); do
     Failed)
       rolling_traffic_output="$(kubectl $context -n "$namespace" logs qualification-rolling-traffic 2>/dev/null || true)"
       printf '%s\n' "$rolling_traffic_output"
-      echo "rolling deployment or rollback readiness traffic failed" >&2
+      echo "rolling deployment, rollback, or node-drain readiness traffic failed" >&2
       exit 1
       ;;
   esac
@@ -568,12 +676,11 @@ done
 if [[ "$rolling_traffic_phase" != "Succeeded" ]]; then
   rolling_traffic_output="$(kubectl $context -n "$namespace" logs qualification-rolling-traffic 2>/dev/null || true)"
   printf '%s\n' "$rolling_traffic_output"
-  echo "rolling deployment or rollback readiness traffic did not complete" >&2
+  echo "rolling deployment, rollback, or node-drain readiness traffic did not complete" >&2
   exit 1
 fi
 rolling_traffic_output="$(kubectl $context -n "$namespace" logs qualification-rolling-traffic)"
 printf '%s\n' "$rolling_traffic_output"
-rollback_deployment="passed"
 
 qualification_stage="dependency recovery checks"
 
@@ -647,4 +754,4 @@ test "$ready_replicas" = 3
 pod_recovery="passed"
 qualification_stage="completed"
 
-echo "Kubernetes qualification passed: three-worker kind cluster, production readiness, Redis/Cassandra recovery, and pod-loss traffic recovery"
+echo "Kubernetes qualification passed: four-worker kind cluster, production readiness, PDB/node-drain validation, Redis/Cassandra recovery, and pod-loss traffic recovery"

@@ -95,13 +95,13 @@ kubectl get pods -l app.kubernetes.io/name=aussie
 ```
 
 The repository also includes an opt-in disposable qualification. It creates a
-three-worker kind cluster, forms a three-member Cassandra cluster, provisions
-Redis, runs the reviewed migration path once to bootstrap the operator-created
-keyspace, reapplies the steady-state base with migrations disabled, and then
-waits for production readiness. It performs a rolling gateway restart, scales
-Redis down and pauses the Cassandra processes in turn to prove gateway
-readiness fails closed, restores both dependencies, and removes one gateway pod
-while readiness traffic runs:
+four-worker kind cluster with one spare schedulable zone, forms a three-member
+Cassandra cluster, provisions Redis, runs the reviewed migration path once to
+bootstrap the operator-created keyspace, reapplies the steady-state base with
+migrations disabled, and then waits for production readiness. It performs a
+rolling gateway restart, scales Redis down and pauses the Cassandra processes
+in turn to prove gateway readiness fails closed, restores both dependencies,
+and removes one gateway pod while readiness traffic runs:
 
 ```sh
 AUSSIE_QUALIFICATION_IMAGE=ghcr.io/mwistrand/aussie@sha256:<64-hex-digest> \
@@ -146,7 +146,11 @@ Quarkus begins HTTP/WebSocket drain on SIGTERM and waits for the configured
 30-second WebSocket drain inside the 45-second pod grace period. Test the
 release-specific ingress, Cassandra/Redis failover, backup restore, and
 previous-image rollback before treating the base as a production certification.
-The disposable qualification also runs a Kubernetes rollback to the previous
-ReplicaSet after its rolling restart and keeps strict readiness traffic running
-through both transitions; the protected hosted rollback workflow remains the
-evidence for switching between released image versions.
+The disposable qualification cordons a node that hosts one gateway replica and
+uses the eviction API to prove the PDB rejects a second gateway eviction while
+the replacement is unready. Only gateway pods are selected for this drain, so
+the Cassandra and Redis fixtures remain in place. A strict readiness monitor
+runs through the rolling restart, rollback, and node-drain convergence and
+requires at least one successful request with zero failures. The protected
+hosted rollback workflow remains the evidence for switching between released
+image versions.
