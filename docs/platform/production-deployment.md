@@ -139,6 +139,9 @@ with `AUSSIE_QUALIFICATION_LOAD_SECONDS`,
 `AUSSIE_QUALIFICATION_LOAD_P95_MAX_SECONDS`; the output reports per-endpoint
 request totals, errors, and p50/p95/p99 latency. Redis and Cassandra recovery
 durations are recorded from dependency loss through restored gateway readiness.
+The default recovery bound is 120 seconds for Redis, Cassandra, and gateway
+pod loss; set `AUSSIE_QUALIFICATION_RECOVERY_MAX_SECONDS` to change it. A run
+fails when any measured recovery exceeds that bound.
 The same registered service also exposes a disposable WebSocket endpoint. The
 harness performs a production-profile WebSocket upgrade through the gateway
 before the load, then pins a second long-lived connection to one gateway pod,
