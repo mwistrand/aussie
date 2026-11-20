@@ -231,15 +231,50 @@ def validate_deployment(deployment: dict[str, Any]) -> None:
 def validate_network_policy(policy: dict[str, Any]) -> None:
     spec = policy["spec"]
     require_equal(spec["policyTypes"], ["Ingress", "Egress"], "network policy types")
-    actual_ports = {
-        (entry["port"], entry["protocol"])
-        for rule in spec["egress"]
-        for entry in rule.get("ports", [])
-    }
     require_equal(
-        actual_ports,
-        {(53, "UDP"), (53, "TCP"), (9042, "TCP"), (6379, "TCP"), (4317, "TCP")},
-        "in-cluster dependency and telemetry ports",
+        spec["ingress"],
+        [
+            {
+                "from": [
+                    {"namespaceSelector": {"matchLabels": {"aussie.network/ingress": "true"}}},
+                    {"namespaceSelector": {"matchLabels": {"aussie.network/monitoring": "true"}}},
+                ],
+                "ports": [{"protocol": "TCP", "port": 8080}],
+            }
+        ],
+        "gateway ingress sources",
+    )
+    require_equal(
+        spec["egress"],
+        [
+            {
+                "to": [
+                    {
+                        "namespaceSelector": {
+                            "matchLabels": {"kubernetes.io/metadata.name": "kube-system"}
+                        },
+                        "podSelector": {"matchLabels": {"k8s-app": "kube-dns"}},
+                    }
+                ],
+                "ports": [
+                    {"protocol": "UDP", "port": 53},
+                    {"protocol": "TCP", "port": 53},
+                ],
+            },
+            {
+                "to": [{"namespaceSelector": {"matchLabels": {"aussie.network/cassandra": "true"}}}],
+                "ports": [{"protocol": "TCP", "port": 9042}],
+            },
+            {
+                "to": [{"namespaceSelector": {"matchLabels": {"aussie.network/redis": "true"}}}],
+                "ports": [{"protocol": "TCP", "port": 6379}],
+            },
+            {
+                "to": [{"namespaceSelector": {"matchLabels": {"aussie.network/telemetry": "true"}}}],
+                "ports": [{"protocol": "TCP", "port": 4317}],
+            },
+        ],
+        "gateway egress destinations",
     )
 
 
