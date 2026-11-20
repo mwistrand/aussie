@@ -44,7 +44,7 @@ Security depth means that no single layer is trusted to be sufficient. Every lay
 
 ## The Aussie API Gateway
 
-Aussie is a Quarkus-based API gateway that sits between clients and backend services. It handles routing, authentication, authorization, rate limiting, token management, and observability for the services registered behind it. The codebase is approximately 340 source files and 120 test files, written in Java 21.
+Aussie is a Quarkus-based API gateway that sits between clients and backend services. It handles routing, authentication, authorization, rate limiting, token management, and observability for the services registered behind it. The codebase is approximately 340 source files and 120 test files, written in Java 25.
 
 The gateway supports two routing strategies:
 
