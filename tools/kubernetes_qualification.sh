@@ -8,6 +8,7 @@ qualification_image="${AUSSIE_QUALIFICATION_IMAGE:-not provided}"
 load_seconds="${AUSSIE_QUALIFICATION_LOAD_SECONDS:-30}"
 load_interval="${AUSSIE_QUALIFICATION_LOAD_INTERVAL_SECONDS:-0.1}"
 load_p95_max="${AUSSIE_QUALIFICATION_LOAD_P95_MAX_SECONDS:-1}"
+recovery_max_seconds="${AUSSIE_QUALIFICATION_RECOVERY_MAX_SECONDS:-120}"
 websocket_capacity_connections="${AUSSIE_QUALIFICATION_WEBSOCKET_CONNECTIONS:-32}"
 websocket_capacity_hold_seconds="${AUSSIE_QUALIFICATION_WEBSOCKET_HOLD_SECONDS:-30}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,6 +24,7 @@ redis_recovery_seconds="not measured"
 cassandra_recovery="not run"
 cassandra_recovery_seconds="not measured"
 pod_recovery="not run"
+pod_recovery_seconds="not measured"
 node_drain="not run"
 drained_node="not selected"
 drain_pid=""
@@ -66,12 +68,14 @@ write_report() {
     echo "- Load duration: ${load_seconds}s"
     echo "- Load interval: ${load_interval}s"
     echo "- Load p95 limit: ${load_p95_max}s"
+    echo "- Recovery time limit: ${recovery_max_seconds}s"
     echo "- Load endpoints: /q/health/ready, /q/health/live, /q/metrics, /qualification-upstream/health"
     echo "- Redis recovery: $redis_recovery"
     echo "- Redis recovery time: $redis_recovery_seconds"
     echo "- Cassandra recovery: $cassandra_recovery"
     echo "- Cassandra recovery time: $cassandra_recovery_seconds"
     echo "- Gateway pod-loss recovery: $pod_recovery"
+    echo "- Gateway pod-loss recovery time: $pod_recovery_seconds"
     echo "- Node drain: $node_drain"
     echo "- Drained node: $drained_node"
     echo "- Gateway rolling deployment: $rolling_deployment"
@@ -167,9 +171,13 @@ esac
 case "$load_p95_max" in
   ''|*[!0-9.]*|.*|*.*.*) echo "AUSSIE_QUALIFICATION_LOAD_P95_MAX_SECONDS must be a positive decimal" >&2; exit 1 ;;
 esac
+case "$recovery_max_seconds" in
+  ''|*[!0-9]*) echo "AUSSIE_QUALIFICATION_RECOVERY_MAX_SECONDS must be a positive integer" >&2; exit 1 ;;
+esac
 test "$load_seconds" -gt 0
 awk -v value="$load_interval" 'BEGIN { exit !(value > 0) }'
 awk -v value="$load_p95_max" 'BEGIN { exit !(value > 0) }'
+test "$recovery_max_seconds" -gt 0
 case "$websocket_capacity_connections" in
   ''|*[!0-9]*) echo "AUSSIE_QUALIFICATION_WEBSOCKET_CONNECTIONS must be a positive integer" >&2; exit 1 ;;
 esac
@@ -1024,7 +1032,9 @@ wait_for_gateway_unready
 kubectl $context -n "$namespace" scale deployment/redis --replicas=1
 kubectl $context -n "$namespace" rollout status deployment/redis --timeout=5m
 wait_for_gateway_ready
-redis_recovery_seconds="$(( $(date +%s) - recovery_started_at ))s"
+recovery_elapsed_seconds="$(( $(date +%s) - recovery_started_at ))"
+redis_recovery_seconds="${recovery_elapsed_seconds}s"
+test "$recovery_elapsed_seconds" -le "$recovery_max_seconds"
 redis_recovery="passed"
 
 # Cassandra is a required production dependency. Pause the signalable
@@ -1042,7 +1052,9 @@ for pod in cassandra-0 cassandra-1 cassandra-2; do
     sh -ec 'kill -CONT "$(cat /tmp/cassandra.pid)"'
 done
 wait_for_gateway_ready
-cassandra_recovery_seconds="$(( $(date +%s) - recovery_started_at ))s"
+recovery_elapsed_seconds="$(( $(date +%s) - recovery_started_at ))"
+cassandra_recovery_seconds="${recovery_elapsed_seconds}s"
+test "$recovery_elapsed_seconds" -le "$recovery_max_seconds"
 cassandra_recovery="passed"
 kubectl $context -n "$namespace" exec qualification-traffic -- touch /tmp/strict
 
@@ -1051,7 +1063,34 @@ pod_recovery="running"
 victim="$(kubectl $context -n "$namespace" get pods -l app.kubernetes.io/name=aussie \
   -o jsonpath='{.items[0].metadata.name}')"
 test -n "$victim"
+pod_recovery_started_at="$(date +%s)"
 kubectl $context -n "$namespace" delete pod "$victim" --wait=false
+
+wait_for_gateway_replacement_ready() {
+  while true; do
+    recovery_elapsed_seconds="$(( $(date +%s) - pod_recovery_started_at ))"
+    if [[ "$recovery_elapsed_seconds" -gt "$recovery_max_seconds" ]]; then
+      echo "gateway replacement readiness exceeded ${recovery_max_seconds}s" >&2
+      return 1
+    fi
+    ready_replicas="$(kubectl $context -n "$namespace" get deployment aussie \
+      -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)"
+    # Exclude the deleted pod so a stale readyReplicas value cannot pass the budget.
+    ready_replacement_pods="$(kubectl $context -n "$namespace" get pods \
+      -l app.kubernetes.io/name=aussie \
+      -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}' \
+      2>/dev/null | awk -v victim="$victim" '$1 != victim && $2 == "True" { count++ } END { print count + 0 }' || true)"
+    if [[ "$ready_replicas" == "3" && "$ready_replacement_pods" == "3" ]]; then
+      pod_recovery_seconds="${recovery_elapsed_seconds}s"
+      return 0
+    fi
+    sleep 1
+  done
+}
+
+qualification_stage="waiting for gateway replacement readiness"
+wait_for_gateway_replacement_ready
+pod_recovery="passed"
 
 wait_for_traffic() {
   for _ in $(seq 1 180); do
@@ -1071,7 +1110,6 @@ wait_for_traffic
 kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=5m
 ready_replicas="$(kubectl $context -n "$namespace" get deployment aussie -o jsonpath='{.status.readyReplicas}')"
 test "$ready_replicas" = 3
-pod_recovery="passed"
 qualification_stage="completed"
 
 echo "Kubernetes qualification passed: four-worker kind cluster, production readiness, HTTP/WebSocket routing and drain, PDB/node-drain validation, Redis/Cassandra recovery, and pod-loss traffic recovery"
