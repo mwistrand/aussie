@@ -52,7 +52,7 @@ curl http://localhost:1234/gateway/api/endpoint
 ## Project Structure
 ```
 aussie/
-├── api/          # Quarkus REST API (Java 21)
+├── api/          # Quarkus REST API (Java 25)
 ├── cli/          # Command-line interface (Go)
 ├── demo/         # Demo application (Next.js)
 └── docs/         # Documentation
@@ -63,9 +63,9 @@ aussie/
 ## Development
 
 ### Prerequisites
-- Java 21
-- Go 1.21+ (for CLI)
-- Node.js 18+ (for demo)
+- Java 25
+- Go 1.23+ (for CLI)
+- Node.js 24 (for demo)
 
 ### Building
 

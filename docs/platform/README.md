@@ -8,8 +8,10 @@ See [Production deployment reference](production-deployment.md) and the
 repository-owned [Kubernetes base](../../deploy/kubernetes/).
 Security gates and exception handling are documented in
 [Vulnerability management](vulnerability-management.md).
+The release decision is tracked in the [launch-readiness checklist](launch-readiness.md).
 
 ## Table of Contents
+- [Launch readiness](launch-readiness.md)
 - [Setup](#setup)
 - [Authentication Configuration](#authentication-configuration)
 - [Bootstrap Mode](#bootstrap-mode-first-time-setup)
