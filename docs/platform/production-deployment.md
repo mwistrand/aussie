@@ -148,6 +148,13 @@ before the load, then pins a second long-lived connection to one gateway pod,
 deletes that pod, and requires the graceful WebSocket close (code `1001`) within
 40 seconds. Both results are recorded in the report.
 
+Tracing is explicitly sampled and points at a disposable OTLP TCP endpoint in
+the qualification cluster. The harness confirms that the gateway establishes
+an exporter connection, holds it open, scales that endpoint to zero, and
+requires readiness and routed HTTP traffic to remain healthy before restoring
+it. This checks that telemetry backpressure is isolated from request serving;
+the report records the observed connection, stall check, and duration.
+
 Set `AUSSIE_QUALIFICATION_KEEP_CLUSTER=true` to retain the cluster for
 inspection after a run. This is a release qualification check, not a substitute
 for a provider-specific Cassandra backup/restore or network-policy test.
