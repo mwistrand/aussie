@@ -28,6 +28,7 @@ drain_log=""
 rolling_deployment="not run"
 rollback_deployment="not run"
 route_convergence="not run"
+websocket_probe="not run"
 cluster=""
 namespace="aussie-qualification"
 keep_cluster="${AUSSIE_QUALIFICATION_KEEP_CLUSTER:-false}"
@@ -71,6 +72,7 @@ write_report() {
     echo "- Gateway rolling deployment: $rolling_deployment"
     echo "- Gateway rollback: $rollback_deployment"
     echo "- Routed HTTP convergence: $route_convergence"
+    echo "- WebSocket handshake: $websocket_probe"
     echo
     echo "## Sustained operational and routed HTTP load"
     echo
@@ -187,7 +189,8 @@ kubectl --context "kind-$cluster" label namespace "$namespace" \
   aussie.network/redis=true
 
 kubectl --context "kind-$cluster" -n "$namespace" create configmap qualification-upstream \
-  --from-file=server.js="$repo_root/tools/qualification_upstream.js"
+  --from-file=server.js="$repo_root/tools/qualification_upstream.js" \
+  --from-file=websocket-probe.js="$repo_root/tools/qualification_websocket_probe.js"
 kubectl --context "kind-$cluster" -n "$namespace" apply -f - <<'YAML'
 apiVersion: apps/v1
 kind: Deployment
@@ -458,7 +461,7 @@ spec:
           curl --fail --silent --show-error --max-time 10
           -H "Authorization: Bearer $BOOTSTRAP_KEY"
           -H "Content-Type: application/json"
-          --data '{"version":1,"serviceId":"qualification-upstream","baseUrl":"http://qualification-upstream:3000","routePrefix":"/qualification-upstream","defaultVisibility":"PUBLIC","defaultAuthRequired":false,"endpoints":[{"path":"/health","methods":["GET"],"visibility":"PUBLIC","authRequired":false}]}'
+          --data '{"version":1,"serviceId":"qualification-upstream","baseUrl":"http://qualification-upstream:3000","routePrefix":"/qualification-upstream","defaultVisibility":"PUBLIC","defaultAuthRequired":false,"endpoints":[{"path":"/health","methods":["GET"],"visibility":"PUBLIC","authRequired":false},{"path":"/ws/echo","methods":[],"visibility":"PUBLIC","authRequired":false,"type":"WEBSOCKET"}]}'
           http://aussie:8080/admin/services
 YAML
 kubectl $context -n "$namespace" wait --for=jsonpath='{.status.phase}'=Succeeded \
@@ -537,6 +540,36 @@ if [[ "$route_convergence" != "passed" ]]; then
   echo "timed out waiting for the routed service on all gateway replicas" >&2
   exit 1
 fi
+
+qualification_stage="checking WebSocket route"
+websocket_probe="running"
+kubectl $context -n "$namespace" apply -f - <<'YAML'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: qualification-websocket
+spec:
+  restartPolicy: Never
+  containers:
+    - name: probe
+      image: node:24-alpine
+      env:
+        - name: GATEWAY_WEBSOCKET_URL
+          value: ws://aussie:8080/qualification-upstream/ws/echo
+      command: ["node", "/app/websocket-probe.js"]
+      volumeMounts:
+        - name: source
+          mountPath: /app
+          readOnly: true
+  volumes:
+    - name: source
+      configMap:
+        name: qualification-upstream
+YAML
+kubectl $context -n "$namespace" wait --for=jsonpath='{.status.phase}'=Succeeded \
+  pod/qualification-websocket --timeout=2m
+websocket_probe="passed"
+kubectl $context -n "$namespace" delete pod qualification-websocket --wait=true
 
 qualification_stage="sustained readiness load"
 kubectl $context -n "$namespace" run qualification-load \
@@ -901,4 +934,4 @@ test "$ready_replicas" = 3
 pod_recovery="passed"
 qualification_stage="completed"
 
-echo "Kubernetes qualification passed: four-worker kind cluster, production readiness, PDB/node-drain validation, Redis/Cassandra recovery, and pod-loss traffic recovery"
+echo "Kubernetes qualification passed: four-worker kind cluster, production readiness, HTTP/WebSocket routing, PDB/node-drain validation, Redis/Cassandra recovery, and pod-loss traffic recovery"
