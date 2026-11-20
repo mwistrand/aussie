@@ -90,6 +90,63 @@ spec:
 
 class KubernetesContractTest(unittest.TestCase):
 
+    def network_policy(self):
+        return parse_yaml_documents(
+            """
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: aussie
+spec:
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              aussie.network/ingress: "true"
+        - namespaceSelector:
+            matchLabels:
+              aussie.network/monitoring: "true"
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              aussie.network/cassandra: "true"
+      ports:
+        - protocol: TCP
+          port: 9042
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              aussie.network/redis: "true"
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              aussie.network/telemetry: "true"
+      ports:
+        - protocol: TCP
+          port: 4317
+"""
+        )[0]
+
     def test_exact_replica_count_rejects_near_match(self):
         deployment = parse_yaml_documents(DEPLOYMENT)[0]
         deployment["spec"]["replicas"] = 30
@@ -106,20 +163,16 @@ class KubernetesContractTest(unittest.TestCase):
             validate_deployment(broken)
 
     def test_dependency_port_change_is_rejected(self):
-        policy = {
-            "spec": {
-                "policyTypes": ["Ingress", "Egress"],
-                "egress": [
-                    {
-                        "ports": [
-                            {"port": 53, "protocol": "UDP"},
-                            {"port": 53, "protocol": "TCP"},
-                            {"port": 9042, "protocol": "TCP"},
-                            {"port": 6380, "protocol": "TCP"},
-                        ]
-                    }
-                ],
-            }
+        policy = self.network_policy()
+        policy["spec"]["egress"][2]["ports"][0]["port"] = 6380
+
+        with self.assertRaises(AssertionError):
+            validate_network_policy(policy)
+
+    def test_ingress_source_change_is_rejected(self):
+        policy = self.network_policy()
+        policy["spec"]["ingress"][0]["from"][0] = {
+            "namespaceSelector": {"matchLabels": {"aussie.network/ingress": "false"}}
         }
 
         with self.assertRaises(AssertionError):
