@@ -1,7 +1,6 @@
 package aussie.adapter.out.telemetry;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.ServiceLoader;
@@ -13,6 +12,7 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.out.ProviderSelection;
 import aussie.core.port.out.SamplingConfigRepository;
 import aussie.core.port.out.StorageHealthIndicator;
 import aussie.spi.SamplingConfigProvider;
@@ -100,27 +100,13 @@ public class SamplingConfigProviderLoader {
                 providers.size(),
                 providers.stream().map(SamplingConfigProvider::name).toList());
 
-        provider = selectProvider(providers, configuredProvider.orElse(null));
+        provider = ProviderSelection.select(
+                providers,
+                configuredProvider.orElse(null),
+                "sampling config",
+                SamplingConfigProvider::name,
+                SamplingConfigProvider::priority,
+                SamplingConfigProvider::isAvailable);
         return provider;
-    }
-
-    private SamplingConfigProvider selectProvider(List<SamplingConfigProvider> providers, String configured) {
-        // Explicit configuration takes precedence
-        if (configured != null && !configured.isBlank()) {
-            return providers.stream()
-                    .filter(p -> p.name().equals(configured))
-                    .findFirst()
-                    .orElseThrow(() -> new StorageProviderException(
-                            "Configured sampling config provider not found: " + configured + ". Available: "
-                                    + providers.stream()
-                                            .map(SamplingConfigProvider::name)
-                                            .toList()));
-        }
-
-        // Otherwise, select by priority from available providers
-        return providers.stream()
-                .filter(SamplingConfigProvider::isAvailable)
-                .max(Comparator.comparingInt(SamplingConfigProvider::priority))
-                .orElseThrow(() -> new StorageProviderException("No available sampling config providers"));
     }
 }

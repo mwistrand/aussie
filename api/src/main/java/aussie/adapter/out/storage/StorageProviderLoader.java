@@ -13,6 +13,7 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import aussie.adapter.out.ProviderSelection;
 import aussie.core.port.out.ConfigurationCache;
 import aussie.core.port.out.ServiceRegistrationRepository;
 import aussie.core.port.out.StorageHealthIndicator;
