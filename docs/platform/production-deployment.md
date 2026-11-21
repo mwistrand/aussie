@@ -109,18 +109,30 @@ AUSSIE_QUALIFICATION_IMAGE=ghcr.io/mwistrand/aussie@sha256:<64-hex-digest> \
   make deployment-qualification
 ```
 
-The qualification requires `cosign`, Docker, kind, kubectl, and openssl. Before
+Release mode requires `cosign`, Docker, kind, kubectl, and openssl. Before
 creating the cluster it verifies that the supplied digest was signed by this
 repository's tag-based release workflow, pulls it with the runner's Docker
 credentials, and loads it into the kind nodes. This is required because kind
 nodes use their own containerd and cannot use the runner's Docker login
-directly. For a local private image, authenticate Docker to its registry before
-running the qualification.
+directly. Local mode requires Docker, kind, kubectl, and openssl and builds the
+image from the repository.
+
+Before the first release, use the explicit experimental local-image mode:
+
+```sh
+AUSSIE_QUALIFICATION_ALLOW_UNRELEASED_IMAGE=true \
+  make deployment-qualification
+```
+
+This builds `api/src/main/docker/Dockerfile.jvm`, loads the resulting
+`aussie-qualification:local` image into kind, and records its local image ID
+and source commit. The report is labeled as experimental unreleased evidence;
+it does not satisfy the signed-release launch gate.
 
 Each run writes a Markdown report to
 `api/build/qualification/kubernetes-qualification-<UTC timestamp>-<pid>.md`. Set
 `AUSSIE_QUALIFICATION_REPORT` to choose another path. The report records the
-released image digest, source commit, production profile, dependency images,
+image artifact and ID, source commit, production profile, dependency images,
 load threshold/result, and recovery checks so qualification evidence stays
 tied to the artifact that was tested.
 

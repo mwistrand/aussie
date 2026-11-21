@@ -73,7 +73,8 @@ vulnerability-contract:
 		--source-ignorefile /tmp/aussie-source.ignore \
 		--image-ignorefile /tmp/aussie-image.ignore
 
-# Disposable three-node kind qualification. Requires AUSSIE_QUALIFICATION_IMAGE.
+# Disposable kind qualification. Release mode requires AUSSIE_QUALIFICATION_IMAGE;
+# pre-release testing may opt into the explicitly experimental local image mode.
 deployment-qualification:
 	bash tools/kubernetes_qualification.sh
 
