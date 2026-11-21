@@ -20,6 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.out.ProviderSelection;
 import aussie.core.port.out.ConfigurationCache;
 import aussie.core.port.out.ServiceRegistrationRepository;
 import aussie.core.port.out.StorageHealthIndicator;
@@ -65,17 +66,26 @@ class StorageProviderLoaderTest {
 
     private Object invokeSelectProvider(StorageProviderLoader loader, List<?> providers, String configured, String type)
             throws Exception {
-        final var method =
-                StorageProviderLoader.class.getDeclaredMethod("selectProvider", List.class, String.class, String.class);
-        method.setAccessible(true);
-        try {
-            return method.invoke(loader, providers, configured, type);
-        } catch (java.lang.reflect.InvocationTargetException e) {
-            if (e.getCause() instanceof RuntimeException re) {
-                throw re;
-            }
-            throw e;
+        if ("repository".equals(type)) {
+            @SuppressWarnings("unchecked")
+            final var repositoryProviders = (List<StorageRepositoryProvider>) providers;
+            return ProviderSelection.select(
+                    repositoryProviders,
+                    configured,
+                    type,
+                    StorageRepositoryProvider::name,
+                    StorageRepositoryProvider::priority,
+                    StorageRepositoryProvider::isAvailable);
         }
+        @SuppressWarnings("unchecked")
+        final var cacheProviders = (List<ConfigurationCacheProvider>) providers;
+        return ProviderSelection.select(
+                cacheProviders,
+                configured,
+                type,
+                ConfigurationCacheProvider::name,
+                ConfigurationCacheProvider::priority,
+                ConfigurationCacheProvider::isAvailable);
     }
 
     @Nested

@@ -144,7 +144,13 @@ public class StorageProviderLoader {
                 providers.size(),
                 providers.stream().map(StorageRepositoryProvider::name).toList());
 
-        repositoryProvider = selectProvider(providers, configuredRepositoryProvider.orElse(null), "repository");
+        repositoryProvider = ProviderSelection.select(
+                providers,
+                configuredRepositoryProvider.orElse(null),
+                "repository",
+                StorageRepositoryProvider::name,
+                StorageRepositoryProvider::priority,
+                StorageRepositoryProvider::isAvailable);
 
         return repositoryProvider;
     }
@@ -169,7 +175,13 @@ public class StorageProviderLoader {
                 providers.stream().map(ConfigurationCacheProvider::name).toList());
 
         try {
-            cacheProvider = selectProvider(providers, configuredCacheProvider.orElse(null), "cache");
+            cacheProvider = ProviderSelection.select(
+                    providers,
+                    configuredCacheProvider.orElse(null),
+                    "cache",
+                    ConfigurationCacheProvider::name,
+                    ConfigurationCacheProvider::priority,
+                    ConfigurationCacheProvider::isAvailable);
             cacheProviderResolved = true;
             return Optional.of(cacheProvider);
         } catch (StorageProviderException e) {
@@ -177,21 +189,5 @@ public class StorageProviderLoader {
             cacheProviderResolved = true;
             return Optional.empty();
         }
-    }
-
-    private <T> T selectProvider(List<? extends T> providers, String configured, String type) {
-        return ProviderSelection.select(
-                providers,
-                configured,
-                type,
-                provider -> provider instanceof StorageRepositoryProvider p
-                        ? p.name()
-                        : ((ConfigurationCacheProvider) provider).name(),
-                provider -> provider instanceof StorageRepositoryProvider p
-                        ? p.priority()
-                        : ((ConfigurationCacheProvider) provider).priority(),
-                provider -> provider instanceof StorageRepositoryProvider p
-                        ? p.isAvailable()
-                        : ((ConfigurationCacheProvider) provider).isAvailable());
     }
 }

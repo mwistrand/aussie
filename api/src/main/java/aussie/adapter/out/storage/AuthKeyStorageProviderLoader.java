@@ -153,7 +153,13 @@ public class AuthKeyStorageProviderLoader {
                 providers.size(),
                 providers.stream().map(AuthKeyStorageProvider::name).toList());
 
-        storageProvider = selectProvider(providers, configuredStorageProvider.orElse(null), "storage");
+        storageProvider = ProviderSelection.select(
+                providers,
+                configuredStorageProvider.orElse(null),
+                "storage",
+                AuthKeyStorageProvider::name,
+                AuthKeyStorageProvider::priority,
+                AuthKeyStorageProvider::isAvailable);
 
         return storageProvider;
     }
@@ -178,7 +184,13 @@ public class AuthKeyStorageProviderLoader {
                 providers.stream().map(AuthKeyCacheProvider::name).toList());
 
         try {
-            cacheProvider = selectProvider(providers, configuredCacheProvider.orElse(null), "cache");
+            cacheProvider = ProviderSelection.select(
+                    providers,
+                    configuredCacheProvider.orElse(null),
+                    "cache",
+                    AuthKeyCacheProvider::name,
+                    AuthKeyCacheProvider::priority,
+                    AuthKeyCacheProvider::isAvailable);
 
             // Inject Redis data source if this is the Redis provider
             if (cacheProvider instanceof RedisAuthKeyCacheProvider redisProvider && redisDataSource.isPresent()) {
@@ -192,21 +204,5 @@ public class AuthKeyStorageProviderLoader {
             cacheProviderResolved = true;
             return Optional.empty();
         }
-    }
-
-    private <T> T selectProvider(List<? extends T> providers, String configured, String type) {
-        return ProviderSelection.select(
-                providers,
-                configured,
-                type,
-                provider -> provider instanceof AuthKeyStorageProvider p
-                        ? p.name()
-                        : ((AuthKeyCacheProvider) provider).name(),
-                provider -> provider instanceof AuthKeyStorageProvider p
-                        ? p.priority()
-                        : ((AuthKeyCacheProvider) provider).priority(),
-                provider -> provider instanceof AuthKeyStorageProvider p
-                        ? p.isAvailable()
-                        : ((AuthKeyCacheProvider) provider).isAvailable());
     }
 }
