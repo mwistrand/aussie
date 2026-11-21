@@ -15,6 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -53,7 +54,6 @@ import aussie.core.port.in.WebSocketGatewayUseCase;
 import aussie.core.port.out.OutboundHttpClients;
 import aussie.core.port.out.RevocationEventPublisher;
 import aussie.core.service.auth.JwksFetchException;
-import aussie.core.service.ratelimit.MessageRateLimitHandler;
 import aussie.core.service.ratelimit.WebSocketRateLimitService;
 import aussie.core.util.SafeLogging;
 import aussie.core.util.SecureHash;
@@ -366,8 +366,8 @@ public class WebSocketGateway {
                                                 .toWebSocket()
                                                 .onSuccess(clientWs -> {
                                                     // Create message rate limit handler
-                                                    final var messageHandler = createMessageRateLimitHandler(
-                                                            serviceId, clientId, sessionId);
+                                                    final var messageRateLimit =
+                                                            createMessageRateLimitCheck(serviceId, clientId, sessionId);
 
                                                     final Runnable cleanup = () -> {
                                                         if (activeSessions.remove(sessionId) != null) {
@@ -399,7 +399,7 @@ public class WebSocketGateway {
                                                             auth.token().flatMap(token -> token.identityIssuedAt()
                                                                     .or(() -> instantClaim(token, "iat"))),
                                                             auth.token().map(token -> token.expiresAt()),
-                                                            messageHandler,
+                                                            messageRateLimit,
                                                             cleanup);
                                                     synchronized (activeSessions) {
                                                         if (draining.get()) {
@@ -449,9 +449,10 @@ public class WebSocketGateway {
                         });
     }
 
-    private MessageRateLimitHandler createMessageRateLimitHandler(String serviceId, String clientId, String sessionId) {
+    private Function<Runnable, Uni<Void>> createMessageRateLimitCheck(
+            String serviceId, String clientId, String sessionId) {
         if (!rateLimitService.isMessageRateLimitEnabled()) {
-            return MessageRateLimitHandler.noOp();
+            return WebSocketProxySession::allowMessage;
         }
 
         return onAllowed -> rateLimitService
