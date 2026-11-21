@@ -36,8 +36,12 @@ websocket_probe="not run"
 websocket_capacity="not run"
 websocket_capacity_output="not run"
 websocket_drain="not run"
+telemetry_stall="not run"
+telemetry_stall_seconds="not measured"
+telemetry_connections="not observed"
 cluster=""
 namespace="aussie-qualification"
+telemetry_namespace="aussie-telemetry"
 keep_cluster="${AUSSIE_QUALIFICATION_KEEP_CLUSTER:-false}"
 
 write_report() {
@@ -86,6 +90,9 @@ write_report() {
     echo "- WebSocket capacity connections: $websocket_capacity_connections"
     echo "- WebSocket capacity hold: ${websocket_capacity_hold_seconds}s"
     echo "- WebSocket drain: $websocket_drain"
+    echo "- Telemetry exporter stall: $telemetry_stall"
+    echo "- Telemetry exporter stall check time: $telemetry_stall_seconds"
+    echo "- Telemetry exporter connections observed: $telemetry_connections"
     echo
     echo "## Sustained operational and routed HTTP load"
     echo
@@ -127,6 +134,7 @@ cleanup() {
   [[ "$rolling_deployment" == "running" ]] && rolling_deployment="failed"
   [[ "$rollback_deployment" == "running" ]] && rollback_deployment="failed"
   [[ "$websocket_capacity" == "running" ]] && websocket_capacity="failed"
+  [[ "$telemetry_stall" == "running" ]] && telemetry_stall="failed"
   if [[ -n "$drain_pid" ]]; then
     kill "$drain_pid" >/dev/null 2>&1 || true
     wait "$drain_pid" >/dev/null 2>&1 || true
@@ -219,6 +227,8 @@ kubectl --context "kind-$cluster" label namespace "$namespace" \
   aussie.network/ingress=true \
   aussie.network/cassandra=true \
   aussie.network/redis=true
+kubectl --context "kind-$cluster" create namespace "$telemetry_namespace"
+kubectl --context "kind-$cluster" label namespace "$telemetry_namespace" aussie.network/telemetry=true
 
 kubectl --context "kind-$cluster" -n "$namespace" create configmap qualification-upstream \
   --from-file=server.js="$repo_root/tools/qualification_upstream.js" \
@@ -285,6 +295,62 @@ spec:
           port: 3000
 YAML
 kubectl --context "kind-$cluster" -n "$namespace" rollout status deployment/qualification-upstream --timeout=5m
+
+kubectl --context "kind-$cluster" -n "$telemetry_namespace" create configmap qualification-telemetry \
+  --from-file=server.js="$repo_root/tools/qualification_telemetry_blackhole.js"
+kubectl --context "kind-$cluster" -n "$telemetry_namespace" apply -f - <<'YAML'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+        - name: blackhole
+          image: node:24-alpine
+          command: ["node", "/app/server.js"]
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: status
+              containerPort: 4318
+          readinessProbe:
+            tcpSocket:
+              port: otlp-grpc
+            periodSeconds: 2
+          volumeMounts:
+            - name: source
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: source
+          configMap:
+            name: qualification-telemetry
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+    - name: status
+      port: 4318
+      targetPort: status
+YAML
+kubectl --context "kind-$cluster" -n "$telemetry_namespace" rollout status deployment/otel-collector --timeout=5m
 
 zone=0
 while IFS= read -r node; do
@@ -434,7 +500,8 @@ render_qualification_manifests() {
     | sed \
         -e "s|ghcr.io/mwistrand/aussie@sha256:REPLACE_WITH_SIGNED_RELEASE_DIGEST|$AUSSIE_QUALIFICATION_IMAGE|g" \
         -e 's|cassandra.example.internal:9042|cassandra:9042|g' \
-        -e 's|redis.example.internal:6379|redis:6379|g'
+        -e 's|redis.example.internal:6379|redis:6379|g' \
+        -e 's|otel-collector.example.internal:4317|otel-collector.aussie-telemetry.svc.cluster.local:4317|g'
 }
 
 # Bootstrap the operator-created keyspace through the reviewed migration path,
@@ -448,7 +515,7 @@ kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=15m
 qualification_stage="applying steady-state production configuration"
 render_qualification_manifests | kubectl $context -n "$namespace" apply -f -
 kubectl $context -n "$namespace" patch configmap aussie --type=merge --patch-file=/dev/stdin <<'JSON'
-{"data":{"AUSSIE_GATEWAY_SECURITY_ALLOW_PRIVATE_UPSTREAMS":"true","AUSSIE_GATEWAY_SECURITY_ALLOWED_UPSTREAM_HOSTS":"qualification-upstream"}}
+{"data":{"AUSSIE_GATEWAY_SECURITY_ALLOW_PRIVATE_UPSTREAMS":"true","AUSSIE_GATEWAY_SECURITY_ALLOWED_UPSTREAM_HOSTS":"qualification-upstream","AUSSIE_TELEMETRY_TRACING_SAMPLING_RATE":"1.0"}}
 JSON
 kubectl $context -n "$namespace" patch deployment aussie --type=strategic --patch-file=/dev/stdin <<'YAML'
 spec:
@@ -1056,6 +1123,38 @@ recovery_elapsed_seconds="$(( $(date +%s) - recovery_started_at ))"
 cassandra_recovery_seconds="${recovery_elapsed_seconds}s"
 test "$recovery_elapsed_seconds" -le "$recovery_max_seconds"
 cassandra_recovery="passed"
+
+qualification_stage="telemetry exporter stall"
+telemetry_stall="running"
+telemetry_started_at="$(date +%s)"
+kubectl $context -n "$namespace" exec qualification-traffic -- sh -ec '
+  for _ in $(seq 1 10); do
+    curl --fail --silent --show-error --max-time 10 http://aussie:8080/qualification-upstream/health >/dev/null
+  done
+'
+for _ in $(seq 1 60); do
+  telemetry_connections="$(kubectl $context -n "$namespace" exec qualification-traffic -- \
+    sh -ec 'curl --fail --silent --show-error --max-time 5 http://otel-collector.aussie-telemetry.svc.cluster.local:4318/connections' \
+    2>/dev/null || true)"
+  if [[ "$telemetry_connections" =~ ^[1-9][0-9]*$ ]]; then
+    break
+  fi
+  kubectl $context -n "$namespace" exec qualification-traffic -- \
+    sh -ec 'curl --fail --silent --show-error --max-time 10 http://aussie:8080/qualification-upstream/health >/dev/null'
+  sleep 1
+done
+if ! [[ "$telemetry_connections" =~ ^[1-9][0-9]*$ ]]; then
+  echo "gateway did not establish an OTLP connection to the qualification exporter" >&2
+  exit 1
+fi
+kubectl $context -n "$telemetry_namespace" scale deployment/otel-collector --replicas=0
+sleep 5
+kubectl $context -n "$namespace" exec qualification-traffic -- \
+  sh -ec 'curl --fail --silent --show-error --max-time 10 http://aussie:8080/q/health/ready >/dev/null && curl --fail --silent --show-error --max-time 10 http://aussie:8080/qualification-upstream/health >/dev/null'
+kubectl $context -n "$telemetry_namespace" scale deployment/otel-collector --replicas=1
+kubectl $context -n "$telemetry_namespace" rollout status deployment/otel-collector --timeout=5m
+telemetry_stall_seconds="$(( $(date +%s) - telemetry_started_at ))s"
+telemetry_stall="passed"
 kubectl $context -n "$namespace" exec qualification-traffic -- touch /tmp/strict
 
 qualification_stage="gateway pod-loss recovery"
@@ -1112,4 +1211,4 @@ ready_replicas="$(kubectl $context -n "$namespace" get deployment aussie -o json
 test "$ready_replicas" = 3
 qualification_stage="completed"
 
-echo "Kubernetes qualification passed: four-worker kind cluster, production readiness, HTTP/WebSocket routing and drain, PDB/node-drain validation, Redis/Cassandra recovery, and pod-loss traffic recovery"
+echo "Kubernetes qualification passed: four-worker kind cluster, production readiness, HTTP/WebSocket routing and drain, telemetry exporter stall, PDB/node-drain validation, Redis/Cassandra recovery, and pod-loss traffic recovery"
