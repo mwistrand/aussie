@@ -429,7 +429,7 @@ kubectl --context "kind-$cluster" -n "$telemetry_namespace" rollout status deplo
 
 zone=0
 while IFS= read -r node; do
-  kubectl --context "kind-$cluster" label node "$node" \
+  kubectl --context "kind-$cluster" label "$node" \
     "topology.kubernetes.io/zone=qualification-zone-$zone" --overwrite
   zone=$((zone + 1))
 done < <(kubectl --context "kind-$cluster" get nodes -o name)
@@ -474,7 +474,7 @@ spec:
     spec:
       topologySpreadConstraints:
         - maxSkew: 1
-          topologyKey: topology.kubernetes.io/hostname
+          topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: DoNotSchedule
           labelSelector:
             matchLabels:
@@ -485,12 +485,10 @@ spec:
           command: ["sh", "-ec"]
           args:
             - |
-              gosu cassandra sh -ec '
-                cassandra -f &
-                child=$!
-                echo "$child" > /tmp/cassandra.pid
-                wait "$child"
-              '
+              /usr/local/bin/docker-entrypoint.sh cassandra -f &
+              child=$!
+              echo "$child" > /tmp/cassandra.pid
+              wait "$child"
           env:
             - name: CASSANDRA_CLUSTER_NAME
               value: aussie-qualification
@@ -500,6 +498,20 @@ spec:
               value: datacenter1
             - name: CASSANDRA_RACK
               value: rack1
+            - name: CASSANDRA_LISTEN_ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: CASSANDRA_BROADCAST_ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: CASSANDRA_RPC_ADDRESS
+              value: 0.0.0.0
+            - name: CASSANDRA_BROADCAST_RPC_ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
             - name: HEAP_NEWSIZE
               value: 128M
             - name: MAX_HEAP_SIZE
@@ -563,8 +575,16 @@ kubectl $context -n "$namespace" rollout status statefulset/cassandra --timeout=
 kubectl $context -n "$namespace" rollout status deployment/redis --timeout=5m
 
 qualification_stage="checking Cassandra cluster"
-kubectl $context -n "$namespace" exec cassandra-0 -- nodetool status \
-  | awk '/^UN / { nodes++ } END { if (nodes != 3) exit 1 }'
+cassandra_nodes=0
+for _ in $(seq 1 60); do
+  cassandra_nodes="$(kubectl $context -n "$namespace" exec cassandra-0 -- nodetool status 2>/dev/null \
+    | awk '/^UN / { nodes++ } END { print nodes + 0 }' || true)"
+  if [[ "$cassandra_nodes" == "3" ]]; then
+    break
+  fi
+  sleep 5
+done
+test "$cassandra_nodes" = 3
 
 kubectl $context -n "$namespace" run cassandra-admin \
   --image=cassandra:4.1.4 --restart=Never --rm -i --command -- \
@@ -573,7 +593,7 @@ kubectl $context -n "$namespace" run cassandra-admin \
 render_qualification_manifests() {
   kubectl kustomize "$repo_root/deploy/kubernetes" \
     | sed \
-        -e "s|ghcr.io/mwistrand/aussie@sha256:REPLACE_WITH_SIGNED_RELEASE_DIGEST|$AUSSIE_QUALIFICATION_IMAGE|g" \
+        -e "s|ghcr.io/mwistrand/aussie@sha256:REPLACE_WITH_SIGNED_RELEASE_DIGEST|$qualification_image|g" \
         -e 's|cassandra.example.internal:9042|cassandra:9042|g' \
         -e 's|redis.example.internal:6379|redis:6379|g' \
         -e 's|otel-collector.example.internal:4317|otel-collector.aussie-telemetry.svc.cluster.local:4317|g'
