@@ -1,6 +1,6 @@
 COMPOSE=docker compose
 
-.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage config-contract deployment-contract deployment-qualification workflow-contract container-contract vulnerability-contract reset demo-deps e2e e2e-soak e2e-logs
+.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage config-contract docs-contract deployment-contract deployment-qualification workflow-contract container-contract vulnerability-contract reset demo-deps e2e e2e-soak e2e-logs
 
 SOAK_RUNS ?= 3
 
@@ -54,6 +54,10 @@ test:
 config-contract:
 	python3 tools/config_contract_test.py
 	python3 tools/config_contract.py
+
+docs-contract:
+	python3 tools/docs_contract_test.py
+	python3 tools/docs_contract.py
 
 deployment-contract:
 	python3 tools/kubernetes_contract_test.py

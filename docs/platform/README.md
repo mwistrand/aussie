@@ -9,6 +9,8 @@ repository-owned [Kubernetes base](../../deploy/kubernetes/).
 Security gates and exception handling are documented in
 [Vulnerability management](vulnerability-management.md).
 The release decision is tracked in the [launch-readiness checklist](launch-readiness.md).
+Known deployment and product limits are listed in
+[Known limitations](known-limitations.md).
 
 ## Table of Contents
 - [Launch readiness](launch-readiness.md)
