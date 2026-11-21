@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE_INPUTS = (
     ROOT / "api/src/main/docker/Dockerfile.jvm",
+    ROOT / "api/src/main/docker/Dockerfile.e2e",
     ROOT / ".github/workflows/ci.yml",
     ROOT / ".github/workflows/security.yml",
 )

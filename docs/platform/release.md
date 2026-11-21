@@ -49,6 +49,18 @@ The uploaded `*.evidence.json` manifest is the release handoff. Verify its
 `digest` against the registry image and its `sbom_sha256` against the uploaded
 CycloneDX file before deployment.
 
+## Revocation and rollback
+
+If an image, CLI archive, signing workflow, base image, dependency, or signing
+key is compromised, stop promotion, revoke the affected artifact or key in the
+registry/identity system, and remove the release from distribution. Record the
+affected digest, tag, advisory, and evidence manifest; publish a replacement
+release from a reviewed commit; and rerun signature, SBOM, vulnerability, and
+qualification gates before restoring promotion. Treat a database migration as
+forward-only during this response: restore from the documented backup or ship
+a compatible forward fix instead of rolling the application back across an
+irreversible schema change.
+
 The release workflow then runs the repository-owned Kubernetes qualification
 against that exact signed image digest. The release is not complete unless the
 qualification job passes; its Markdown report is uploaded as the release
