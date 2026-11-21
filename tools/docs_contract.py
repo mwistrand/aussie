@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that Markdown links to repository files still resolve."""
+"""Check that documented repository references and monitoring names stay valid."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from urllib.parse import unquote, urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
+JAVA_SOURCE = ROOT / "api/src/main/java"
+PROMETHEUS = ROOT / "monitoring/prometheus"
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 REFERENCE_DEFINITION = re.compile(r"^[ \t]{0,3}\[[^\]]+\]:[ \t]*(<[^>\n]+>|[^\s]+)")
 FENCE = re.compile(r"^[ ]{0,3}(?P<marker>`{3,}|~{3,})")
@@ -85,13 +87,61 @@ def broken_links(root: Path = ROOT) -> list[str]:
     return violations
 
 
+def declared_metrics(root: Path = ROOT) -> set[str]:
+    """Return the Prometheus series emitted by the Micrometer builders in Java."""
+    java_root = root / JAVA_SOURCE.relative_to(ROOT)
+    metrics: set[str] = set()
+    builder = re.compile(
+        r"\b(Counter|Timer|Gauge)\.builder\(\s*\"([^\"]+)\"(?P<body>.*?)\.register\s*\(",
+        re.DOTALL,
+    )
+    for source in java_root.rglob("*.java"):
+        for kind, name, body in builder.findall(source.read_text()):
+            base = name.replace(".", "_")
+            if kind == "Counter":
+                metrics.add(base if base.endswith("_total") else f"{base}_total")
+                continue
+            if kind == "Gauge":
+                metrics.add(base)
+                continue
+
+            # Prometheus timers always expose count, sum, and max in seconds.
+            seconds = f"{base}_seconds"
+            metrics.update(f"{seconds}_{suffix}" for suffix in ("count", "sum", "max"))
+            if ".publishPercentiles(" in body:
+                # Percentiles are samples of the base timer name with a quantile label.
+                metrics.add(seconds)
+            if ".publishPercentileHistogram(" in body:
+                metrics.add(f"{seconds}_bucket")
+    return metrics
+
+
+def prometheus_metric_violations(root: Path = ROOT) -> list[str]:
+    """Reject alert rules that refer to a custom metric absent from Java."""
+    prometheus_root = root / PROMETHEUS.relative_to(ROOT)
+    available = declared_metrics(root)
+    metric_pattern = re.compile(r"\baussie_[a-z][a-z0-9_]*\b")
+    violations = []
+    for path in sorted(prometheus_root.rglob("*.y*ml")):
+        for line_number, line in enumerate(path.read_text().splitlines(), 1):
+            for metric in sorted(set(metric_pattern.findall(line))):
+                if metric in available:
+                    continue
+                relative = path.relative_to(root)
+                violations.append(f"{relative}:{line_number}: {metric}")
+    return violations
+
+
 def main() -> int:
-    violations = broken_links()
+    violations = [*broken_links(), *prometheus_metric_violations()]
     if violations:
-        print("Broken local Markdown links found:", file=sys.stderr)
+        print("Documentation contract violations found:", file=sys.stderr)
         print("\n".join(violations), file=sys.stderr)
         return 1
-    print(f"Markdown local links are valid ({len(markdown_files())} files checked)")
+    print(
+        f"Documentation contract is valid ({len(markdown_files())} Markdown files, "
+        f"{len(declared_metrics())} metrics checked)"
+    )
     return 0
 
 
