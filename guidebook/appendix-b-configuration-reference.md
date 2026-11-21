@@ -572,6 +572,7 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | `aussie.rate-limiting.burst-capacity` | `long` | `100` | `AUSSIE_RATE_LIMITING_BURST_CAPACITY` | Default burst capacity for token bucket algorithm. |
 | `aussie.rate-limiting.include-headers` | `boolean` | `true` | `AUSSIE_RATE_LIMITING_INCLUDE_HEADERS` | Include `X-RateLimit-*` headers in responses. |
 | `aussie.rate-limiting.redis.enabled` | `boolean` | `false` | `AUSSIE_RATE_LIMITING_REDIS_ENABLED` | Require Redis for distributed rate limiting. A missing provider fails startup. |
+| `aussie.rate-limiting.platform-max-window-seconds` | `long` | `9223372036854775807` (`Long.MAX_VALUE`) | `AUSSIE_RATE_LIMITING_PLATFORM_MAX_WINDOW_SECONDS` | Platform-wide maximum window duration. Service and endpoint windows are capped to this value. **Platform teams only.** |
 | `aussie.rate-limiting.fallback.behavior` | `RateLimitFallbackBehavior` | `DENY` | `AUSSIE_RATE_LIMITING_FALLBACK_BEHAVIOR` | Runtime Redis failure policy: `DENY`, fixed one-request/one-second `LOCAL_BUCKET`, or `ALLOW`. |
 
 ### 14.2 WebSocket Rate Limiting
@@ -604,7 +605,7 @@ The dev profile uses in-memory session storage (no Redis required) and disables 
 | `%dev` | `aussie.rate-limiting.burst-capacity` | `500` |
 | `%prod` | `aussie.rate-limiting.fallback.behavior` | `DENY` |
 
-**Security considerations:** The `algorithm` and `platform-max-requests-per-window` are platform-team-only settings. Service teams can configure per-service and per-endpoint limits through the admin API, but those limits are always capped at `platform-max-requests-per-window`. Disabling rate limiting (`enabled=false`) removes all traffic protection. The Redis backend is required for distributed rate limiting across multiple Aussie instances; in-memory rate limiting is per-instance only.
+**Security considerations:** The platform maximums are platform-team-only settings. Service teams can configure per-service and per-endpoint limits through the admin API, but those limits are always capped by both platform maximums. Disabling rate limiting (`enabled=false`) removes all traffic protection. The Redis backend is required for distributed rate limiting across multiple Aussie instances; in-memory rate limiting is per-instance only.
 
 ## 15. Service Configuration Pub/Sub
 
