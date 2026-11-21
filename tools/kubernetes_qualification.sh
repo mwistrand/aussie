@@ -2,9 +2,12 @@
 set -euo pipefail
 
 # Disposable qualification for the repository-owned Kubernetes deployment.
-# The image must be a released digest; this is intentionally not a build path.
+# Signed release images are required unless the explicit experimental local mode is enabled.
 
+qualification_allow_unreleased_image="${AUSSIE_QUALIFICATION_ALLOW_UNRELEASED_IMAGE:-false}"
 qualification_image="${AUSSIE_QUALIFICATION_IMAGE:-not provided}"
+qualification_artifact="signed release image"
+qualification_image_id="not recorded"
 load_seconds="${AUSSIE_QUALIFICATION_LOAD_SECONDS:-30}"
 load_interval="${AUSSIE_QUALIFICATION_LOAD_INTERVAL_SECONDS:-0.1}"
 load_p95_max="${AUSSIE_QUALIFICATION_LOAD_P95_MAX_SECONDS:-1}"
@@ -56,6 +59,9 @@ write_report() {
   if [[ "$exit_status" -eq 0 ]]; then
     qualification_status="passed"
   fi
+  if [[ "$qualification_allow_unreleased_image" == "true" && "$exit_status" -eq 0 ]]; then
+    qualification_status="passed (experimental unreleased image)"
+  fi
   if ! mkdir -p "$report_parent"; then
     echo "Unable to create qualification report directory: $report_parent" >&2
     return 1
@@ -66,7 +72,9 @@ write_report() {
     echo "- Result: $qualification_status"
     echo "- Generated (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "- Git commit: $(git -C "$repo_root" rev-parse HEAD 2>/dev/null || echo unknown)"
-    echo "- Released image: $qualification_image"
+    echo "- Artifact: $qualification_artifact"
+    echo "- Qualification image: $qualification_image"
+    echo "- Local image ID: $qualification_image_id"
     echo "- Qualification stage: $qualification_stage"
     echo "- Cluster: ${cluster:-not created}"
     echo "- Namespace: $namespace"
@@ -188,7 +196,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ -z "${AUSSIE_QUALIFICATION_IMAGE:-}" ]]; then
+case "$qualification_allow_unreleased_image" in
+  true|false) ;;
+  *) echo "AUSSIE_QUALIFICATION_ALLOW_UNRELEASED_IMAGE must be true or false" >&2; exit 1 ;;
+esac
+if [[ "$qualification_allow_unreleased_image" == "true" ]]; then
+  qualification_artifact="experimental unreleased local image"
+  qualification_image="${AUSSIE_QUALIFICATION_IMAGE:-aussie-qualification:local}"
+  if [[ "$qualification_image" == *@sha256:* ]]; then
+    echo "AUSSIE_QUALIFICATION_IMAGE must be a local image tag in experimental mode" >&2
+    exit 1
+  fi
+elif [[ -z "${AUSSIE_QUALIFICATION_IMAGE:-}" ]]; then
   echo "set AUSSIE_QUALIFICATION_IMAGE to a full @sha256 image reference" >&2
   exit 1
 fi
@@ -217,27 +236,42 @@ esac
 test "$websocket_capacity_connections" -gt 1
 test "$websocket_capacity_hold_seconds" -gt 0
 
-if [[ ! "$qualification_image" =~ ^[A-Za-z0-9./:_-]+@sha256:[0-9a-f]{64}$ ]]; then
+if [[ "$qualification_allow_unreleased_image" == "false" &&
+  ! "$qualification_image" =~ ^[A-Za-z0-9./:_-]+@sha256:[0-9a-f]{64}$ ]]; then
   echo "AUSSIE_QUALIFICATION_IMAGE must be a full image@sha256:<64 hex> reference" >&2
   exit 1
 fi
 
-for command in cosign docker kind kubectl openssl; do
+for command in docker kind kubectl openssl; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "$command is required for Kubernetes qualification" >&2
     exit 1
   }
 done
+if [[ "$qualification_allow_unreleased_image" == "false" ]] && ! command -v cosign >/dev/null 2>&1; then
+  echo "cosign is required for signed release qualification" >&2
+  exit 1
+fi
 
-cosign verify \
-  --certificate-identity-regexp '^https://github.com/mwistrand/aussie/.github/workflows/release.yml@refs/tags/.+$' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  "$qualification_image" >/dev/null
+if [[ "$qualification_allow_unreleased_image" == "true" ]]; then
+  qualification_stage="building experimental local image"
+  docker build \
+    --file "$repo_root/api/src/main/docker/Dockerfile.jvm" \
+    --tag "$qualification_image" \
+    "$repo_root/api"
+  qualification_image_id="$(docker image inspect --format '{{.Id}}' "$qualification_image")"
+else
+  cosign verify \
+    --certificate-identity-regexp '^https://github.com/mwistrand/aussie/.github/workflows/release.yml@refs/tags/.+$' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    "$qualification_image" >/dev/null
 
-# kind nodes use their own containerd and cannot see the runner's Docker login.
-# Pull with the runner credentials, then load the exact digest into every node.
-qualification_stage="pulling signed image"
-docker pull "$qualification_image" >/dev/null
+  # kind nodes use their own containerd and cannot see the runner's Docker login.
+  # Pull with the runner credentials, then load the exact digest into every node.
+  qualification_stage="pulling signed image"
+  docker pull "$qualification_image" >/dev/null
+  qualification_image_id="$(docker image inspect --format '{{.Id}}' "$qualification_image")"
+fi
 
 cluster="aussie-qualification-$$"
 qualification_stage="creating kind cluster"
