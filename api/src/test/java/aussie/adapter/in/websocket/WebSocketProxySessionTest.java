@@ -24,6 +24,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.Context;
@@ -46,7 +47,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import aussie.core.config.WebSocketConfig;
 import aussie.core.model.auth.RevocationEvent;
 import aussie.core.model.session.SessionInvalidatedEvent;
-import aussie.core.service.ratelimit.MessageRateLimitHandler;
 
 @DisplayName("WebSocketProxySession")
 @ExtendWith(MockitoExtension.class)
@@ -122,7 +122,7 @@ class WebSocketProxySessionTest {
                             Optional.empty(),
                             Optional.empty(),
                             Optional.empty(),
-                            MessageRateLimitHandler.noOp(),
+                            WebSocketProxySession::allowMessage,
                             () -> {
                                 closeContext.set(Vertx.currentContext());
                                 closed.countDown();
@@ -176,7 +176,7 @@ class WebSocketProxySessionTest {
                             Optional.empty(),
                             Optional.empty(),
                             Optional.empty(),
-                            MessageRateLimitHandler.noOp(),
+                            WebSocketProxySession::allowMessage,
                             () -> {
                                 closeContext.set(Vertx.currentContext());
                                 closeCount.incrementAndGet();
@@ -236,9 +236,9 @@ class WebSocketProxySessionTest {
         }
 
         @Test
-        @DisplayName("shouldCreateSessionWithMessageRateLimitHandler")
-        void shouldCreateSessionWithMessageRateLimitHandler() {
-            final var handler = MessageRateLimitHandler.noOp();
+        @DisplayName("shouldCreateSessionWithMessageRateLimitCheck")
+        void shouldCreateSessionWithMessageRateLimitCheck() {
+            final Function<Runnable, Uni<Void>> handler = WebSocketProxySession::allowMessage;
             final var session = new WebSocketProxySession(
                     "s1",
                     clientSocket,
@@ -305,7 +305,7 @@ class WebSocketProxySessionTest {
                     Optional.empty(),
                     Optional.empty(),
                     Optional.of(Instant.now().minusSeconds(1)),
-                    MessageRateLimitHandler.noOp(),
+                    WebSocketProxySession::allowMessage,
                     () -> {});
 
             session.start();
@@ -350,7 +350,7 @@ class WebSocketProxySessionTest {
         @Test
         @DisplayName("shouldNotRateLimitBackendMessages")
         void shouldNotRateLimitBackendMessages() {
-            final var failingHandler = (MessageRateLimitHandler)
+            final var failingHandler = (Function<Runnable, Uni<Void>>)
                     onAllowed -> Uni.createFrom().failure(new RuntimeException("rate limited"));
             final var session = new WebSocketProxySession(
                     "s1",
@@ -559,11 +559,8 @@ class WebSocketProxySessionTest {
         @Test
         @DisplayName("shouldIncrementRateLimitedMessagesOnRateLimitFailure")
         void shouldIncrementRateLimitedMessagesOnRateLimitFailure() {
-            final var failingHandler = new MessageRateLimitHandler() {
-                @Override
-                public Uni<Void> checkAndProceed(Runnable onAllowed) {
-                    return Uni.createFrom().failure(new RuntimeException("Rate limit exceeded"));
-                }
+            final Function<Runnable, Uni<Void>> failingHandler = onAllowed -> {
+                return Uni.createFrom().failure(new RuntimeException("Rate limit exceeded"));
             };
 
             final var session = new WebSocketProxySession(
@@ -704,7 +701,7 @@ class WebSocketProxySessionTest {
                     Optional.empty(),
                     Optional.empty(),
                     Optional.empty(),
-                    MessageRateLimitHandler.noOp(),
+                    WebSocketProxySession::allowMessage,
                     closeCount::incrementAndGet);
             final var reason = "unsafe\n" + "🙂".repeat(40);
             final var reasonCaptor = ArgumentCaptor.forClass(String.class);
@@ -830,7 +827,7 @@ class WebSocketProxySessionTest {
                     Optional.of("jti-1"),
                     Optional.of(now.minusSeconds(60)),
                     Optional.of(now.plusSeconds(60)),
-                    MessageRateLimitHandler.noOp(),
+                    WebSocketProxySession::allowMessage,
                     () -> {});
 
             assertTrue(session.shouldCloseFor(new RevocationEvent.JtiRevoked("jti-1", now.plusSeconds(60))));
@@ -852,7 +849,7 @@ class WebSocketProxySessionTest {
                     Optional.empty(),
                     Optional.of(issuedAt),
                     Optional.of(Instant.now().plusSeconds(60)),
-                    MessageRateLimitHandler.noOp(),
+                    WebSocketProxySession::allowMessage,
                     () -> {});
 
             assertTrue(session.shouldCloseFor(new RevocationEvent.UserRevoked(

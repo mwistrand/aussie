@@ -6,7 +6,9 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 
+import io.smallrye.mutiny.Uni;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
@@ -20,7 +22,6 @@ import org.jboss.logging.Logger;
 import aussie.core.config.WebSocketConfig;
 import aussie.core.model.auth.RevocationEvent;
 import aussie.core.model.session.SessionInvalidatedEvent;
-import aussie.core.service.ratelimit.MessageRateLimitHandler;
 import aussie.core.util.SafeLogging;
 
 /**
@@ -52,7 +53,7 @@ public class WebSocketProxySession {
     private final Optional<String> tokenId;
     private final Optional<Instant> identityIssuedAt;
     private final Optional<Instant> identityExpiresAt;
-    private final MessageRateLimitHandler messageRateLimitHandler;
+    private final Function<Runnable, Uni<Void>> messageRateLimitHandler;
     private final Runnable closeListener;
 
     private final AtomicBoolean closing = new AtomicBoolean();
@@ -85,7 +86,7 @@ public class WebSocketProxySession {
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
-                MessageRateLimitHandler.noOp(),
+                WebSocketProxySession::allowMessage,
                 () -> {});
     }
 
@@ -108,7 +109,7 @@ public class WebSocketProxySession {
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
-                MessageRateLimitHandler.noOp(),
+                WebSocketProxySession::allowMessage,
                 () -> {});
     }
 
@@ -120,7 +121,7 @@ public class WebSocketProxySession {
             WebSocketConfig config,
             Optional<String> authSessionId,
             Optional<String> userId,
-            MessageRateLimitHandler messageRateLimitHandler) {
+            Function<Runnable, Uni<Void>> messageRateLimitHandler) {
         this(
                 sessionId,
                 clientSocket,
@@ -145,7 +146,7 @@ public class WebSocketProxySession {
             Optional<String> authSessionId,
             Optional<String> userId,
             Optional<Instant> identityExpiresAt,
-            MessageRateLimitHandler messageRateLimitHandler,
+            Function<Runnable, Uni<Void>> messageRateLimitHandler,
             Runnable closeListener) {
         this(
                 sessionId,
@@ -173,7 +174,7 @@ public class WebSocketProxySession {
             Optional<String> tokenId,
             Optional<Instant> identityIssuedAt,
             Optional<Instant> identityExpiresAt,
-            MessageRateLimitHandler messageRateLimitHandler,
+            Function<Runnable, Uni<Void>> messageRateLimitHandler,
             Runnable closeListener) {
         this.sessionId = sessionId;
         this.clientSocket = clientSocket;
@@ -258,11 +259,16 @@ public class WebSocketProxySession {
             return;
         }
 
-        messageRateLimitHandler.checkAndProceed(forward).subscribe().with(ignored -> {}, error -> {
+        messageRateLimitHandler.apply(forward).subscribe().with(ignored -> {}, error -> {
             rateLimitedMessages.incrementAndGet();
             // 4429 mirrors HTTP 429 (Too Many Requests).
             closeWithReason((short) 4429, "Message rate limit exceeded");
         });
+    }
+
+    static Uni<Void> allowMessage(Runnable onAllowed) {
+        onAllowed.run();
+        return Uni.createFrom().voidItem();
     }
 
     private boolean acceptFrame(FrameState state, WebSocketFrame frame) {
