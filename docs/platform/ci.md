@@ -12,8 +12,9 @@ mutable release inputs. CLI release archives use the source commit timestamp
 and normalized ownership/ordering so repeated builds of the same tag have
 stable archive contents.
 Pull requests run dependency review, while the scheduled `Security` workflow
-scans source dependencies and the built JVM image. Release publishing calls
-that same workflow before pushing an image; see
+scans source dependencies, secrets, and the built JVM image, and runs the
+Java/Go/JavaScript static checks. Release publishing calls that same workflow
+before pushing an image; see
 [Vulnerability management](vulnerability-management.md) for thresholds and
 time-limited exceptions.
 The Java job provisions pinned Redis and Cassandra service containers, so tests

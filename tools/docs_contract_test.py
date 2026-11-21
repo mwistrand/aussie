@@ -2,10 +2,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from docs_contract import broken_links
+from docs_contract import broken_links, prometheus_metric_violations
 
 
 class DocumentationContractTest(unittest.TestCase):
+
+    def write_metric_fixture(self, root, source, rules):
+        java_source = root / "api/src/main/java/aussie/Metrics.java"
+        java_source.parent.mkdir(parents=True, exist_ok=True)
+        java_source.write_text(source)
+        prometheus_rules = root / "monitoring/prometheus/alerts/aussie.yaml"
+        prometheus_rules.parent.mkdir(parents=True, exist_ok=True)
+        prometheus_rules.write_text(rules)
 
     def test_existing_local_link_is_accepted(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -65,6 +73,83 @@ class DocumentationContractTest(unittest.TestCase):
             (root / "guide.md").write_text("[missing](missing.md)\n")
 
             self.assertEqual(broken_links(root), ["guide.md:1: missing.md"])
+
+    def test_declared_prometheus_metric_is_accepted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_metric_fixture(
+                root,
+                'Counter.builder("aussie.requests.total").register(registry);\n',
+                "expr: sum(rate(aussie_requests_total[5m]))\n",
+            )
+
+            self.assertEqual(prometheus_metric_violations(root), [])
+
+    def test_counter_base_name_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_metric_fixture(
+                root,
+                'Counter.builder("aussie.gateway.results").register(registry);\n',
+                "expr: aussie_gateway_results > 0\n",
+            )
+
+            self.assertEqual(
+                prometheus_metric_violations(root),
+                ["monitoring/prometheus/alerts/aussie.yaml:1: aussie_gateway_results"],
+            )
+
+    def test_timer_max_is_accepted_but_non_histogram_bucket_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_metric_fixture(
+                root,
+                'Timer.builder("aussie.dns.lookup.latency").register(registry);\n',
+                "expr: aussie_dns_lookup_latency_seconds_max > 0\n"
+                "other: aussie_dns_lookup_latency_seconds_bucket > 0\n",
+            )
+
+            self.assertEqual(
+                prometheus_metric_violations(root),
+                ["monitoring/prometheus/alerts/aussie.yaml:2: aussie_dns_lookup_latency_seconds_bucket"],
+            )
+
+    def test_timer_quantile_series_is_conditional(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_metric_fixture(
+                root,
+                'Timer.builder("aussie.request.latency").register(registry);\n',
+                "expr: aussie_request_latency_seconds > 0\n",
+            )
+
+            self.assertEqual(
+                prometheus_metric_violations(root),
+                ["monitoring/prometheus/alerts/aussie.yaml:1: aussie_request_latency_seconds"],
+            )
+
+            self.write_metric_fixture(
+                root,
+                'Timer.builder("aussie.request.latency")'
+                '.publishPercentiles(0.95)'
+                '.register(registry);\n',
+                "expr: aussie_request_latency_seconds > 0\n",
+            )
+
+            self.assertEqual(prometheus_metric_violations(root), [])
+
+    def test_histogram_bucket_is_accepted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.write_metric_fixture(
+                root,
+                'Timer.builder("aussie.proxy.latency")'
+                '.publishPercentileHistogram()'
+                '.register(registry);\n',
+                "expr: histogram_quantile(0.99, aussie_proxy_latency_seconds_bucket)\n",
+            )
+
+            self.assertEqual(prometheus_metric_violations(root), [])
 
 
 if __name__ == "__main__":
