@@ -267,8 +267,50 @@ jobs:
             aussie-${{ github.ref_name }}.sha256
             aussie-${{ github.ref_name }}.evidence.json
 
-  qualification:
+  vulnerability:
     needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      DIGEST: ${{ needs.image.outputs.digest }}
+      TRIVY_IMAGE: ghcr.io/aquasecurity/trivy:0.69.3@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Validate vulnerability exceptions
+        run: |
+          mkdir -p "$RUNNER_TEMP/vulnerability-policy"
+          python3 tools/vulnerability_exceptions.py \
+            --source-ignorefile "$RUNNER_TEMP/vulnerability-policy/source.ignore" \
+            --image-ignorefile "$RUNNER_TEMP/vulnerability-policy/image.ignore"
+
+      - name: Pull the exact released image
+        run: docker pull "$IMAGE@$DIGEST"
+
+      - name: Scan the exact released image
+        run: |
+          set -euo pipefail
+          docker save "$IMAGE@$DIGEST" --output "$RUNNER_TEMP/aussie-release.tar"
+          docker run --rm \
+            --volume "$RUNNER_TEMP:/scan:ro" \
+            --volume "$RUNNER_TEMP/vulnerability-policy:/policy:ro" \
+            "$TRIVY_IMAGE" image --input /scan/aussie-release.tar \
+            --severity HIGH,CRITICAL \
+            --ignorefile /policy/image.ignore \
+            --exit-code 1
+
+  qualification:
+    needs: [image, vulnerability]
     runs-on: ubuntu-latest
     permissions:
       contents: read
