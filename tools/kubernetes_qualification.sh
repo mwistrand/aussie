@@ -23,6 +23,11 @@ redis_recovery="not run"
 redis_recovery_seconds="not measured"
 cassandra_recovery="not run"
 cassandra_recovery_seconds="not measured"
+dns_stall="not run"
+dns_stall_seconds="not measured"
+dns_stall_output="not run"
+dns_policy_enforcement="not run"
+dns_policy_enforcement_output="not run"
 pod_recovery="not run"
 pod_recovery_seconds="not measured"
 node_drain="not run"
@@ -78,6 +83,9 @@ write_report() {
     echo "- Redis recovery time: $redis_recovery_seconds"
     echo "- Cassandra recovery: $cassandra_recovery"
     echo "- Cassandra recovery time: $cassandra_recovery_seconds"
+    echo "- DNS resolver stall: $dns_stall"
+    echo "- DNS resolver stall check time: $dns_stall_seconds"
+    echo "- DNS NetworkPolicy enforcement: $dns_policy_enforcement"
     echo "- Gateway pod-loss recovery: $pod_recovery"
     echo "- Gateway pod-loss recovery time: $pod_recovery_seconds"
     echo "- Node drain: $node_drain"
@@ -117,6 +125,18 @@ write_report() {
     echo '```text'
     echo "$websocket_capacity_output"
     echo '```'
+    echo
+    echo "## DNS resolver stall"
+    echo
+    echo '```text'
+    echo "$dns_stall_output"
+    echo '```'
+    echo
+    echo "## DNS NetworkPolicy enforcement"
+    echo
+    echo '```text'
+    echo "$dns_policy_enforcement_output"
+    echo '```'
   } > "$report_file"; then
     echo "Unable to write qualification report: $report_file" >&2
     return 1
@@ -129,6 +149,8 @@ cleanup() {
   local report_status=0
   [[ "$redis_recovery" == "running" ]] && redis_recovery="failed"
   [[ "$cassandra_recovery" == "running" ]] && cassandra_recovery="failed"
+  [[ "$dns_stall" == "running" ]] && dns_stall="failed"
+  [[ "$dns_policy_enforcement" == "running" ]] && dns_policy_enforcement="failed"
   [[ "$pod_recovery" == "running" ]] && pod_recovery="failed"
   [[ "$node_drain" == "running" ]] && node_drain="failed"
   [[ "$rolling_deployment" == "running" ]] && rolling_deployment="failed"
@@ -222,6 +244,13 @@ qualification_stage="creating kind cluster"
 kind create cluster --name "$cluster" --config="$repo_root/tools/kind-qualification.yaml"
 kind load docker-image "$qualification_image" --name "$cluster"
 
+qualification_stage="installing policy-enforcing CNI"
+kubectl --context "kind-$cluster" apply -f \
+  https://raw.githubusercontent.com/projectcalico/calico/v3.33.0/manifests/calico.yaml >/dev/null
+kubectl --context "kind-$cluster" -n kube-system rollout status daemonset/calico-node --timeout=10m
+kubectl --context "kind-$cluster" -n kube-system rollout status deployment/calico-kube-controllers --timeout=10m
+kubectl --context "kind-$cluster" wait --for=condition=Ready nodes --all --timeout=10m
+
 kubectl --context "kind-$cluster" create namespace "$namespace"
 kubectl --context "kind-$cluster" label namespace "$namespace" \
   aussie.network/ingress=true \
@@ -268,6 +297,18 @@ apiVersion: v1
 kind: Service
 metadata:
   name: qualification-upstream
+spec:
+  selector:
+    app: qualification-upstream
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qualification-dns-stall-upstream
 spec:
   selector:
     app: qualification-upstream
@@ -515,7 +556,7 @@ kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=15m
 qualification_stage="applying steady-state production configuration"
 render_qualification_manifests | kubectl $context -n "$namespace" apply -f -
 kubectl $context -n "$namespace" patch configmap aussie --type=merge --patch-file=/dev/stdin <<'JSON'
-{"data":{"AUSSIE_GATEWAY_SECURITY_ALLOW_PRIVATE_UPSTREAMS":"true","AUSSIE_GATEWAY_SECURITY_ALLOWED_UPSTREAM_HOSTS":"qualification-upstream","AUSSIE_TELEMETRY_TRACING_SAMPLING_RATE":"1.0"}}
+{"data":{"AUSSIE_GATEWAY_SECURITY_ALLOW_PRIVATE_UPSTREAMS":"true","AUSSIE_GATEWAY_SECURITY_ALLOWED_UPSTREAM_HOSTS":"qualification-upstream,qualification-dns-stall-upstream","AUSSIE_TELEMETRY_TRACING_SAMPLING_RATE":"1.0"}}
 JSON
 kubectl $context -n "$namespace" patch deployment aussie --type=strategic --patch-file=/dev/stdin <<'YAML'
 spec:
@@ -561,6 +602,11 @@ spec:
           -H "Authorization: Bearer $BOOTSTRAP_KEY"
           -H "Content-Type: application/json"
           --data '{"version":1,"serviceId":"qualification-upstream","baseUrl":"http://qualification-upstream:3000","routePrefix":"/qualification-upstream","defaultVisibility":"PUBLIC","defaultAuthRequired":false,"endpoints":[{"path":"/health","methods":["GET"],"visibility":"PUBLIC","authRequired":false},{"path":"/ws/echo","methods":[],"visibility":"PUBLIC","authRequired":false,"type":"WEBSOCKET"}]}'
+          http://aussie:8080/admin/services &&
+          curl --fail --silent --show-error --max-time 10
+          -H "Authorization: Bearer $BOOTSTRAP_KEY"
+          -H "Content-Type: application/json"
+          --data '{"version":1,"serviceId":"qualification-dns-stall-upstream","baseUrl":"http://qualification-dns-stall-upstream:3000","routePrefix":"/qualification-dns-stall","defaultVisibility":"PUBLIC","defaultAuthRequired":false,"endpoints":[{"path":"/health","methods":["GET"],"visibility":"PUBLIC","authRequired":false}]}'
           http://aussie:8080/admin/services
 YAML
 kubectl $context -n "$namespace" wait --for=jsonpath='{.status.phase}'=Succeeded \
@@ -1124,6 +1170,82 @@ cassandra_recovery_seconds="${recovery_elapsed_seconds}s"
 test "$recovery_elapsed_seconds" -le "$recovery_max_seconds"
 cassandra_recovery="passed"
 
+qualification_stage="DNS resolver stall"
+dns_stall="running"
+dns_stall_started_at="$(date +%s)"
+dns_stall_gateway_pod="$(kubectl $context -n "$namespace" get pods \
+  -l app.kubernetes.io/name=aussie -o jsonpath='{.items[0].metadata.name}')"
+dns_stall_gateway_ip="$(kubectl $context -n "$namespace" get pod "$dns_stall_gateway_pod" \
+  -o jsonpath='{.status.podIP}')"
+test -n "$dns_stall_gateway_pod"
+test -n "$dns_stall_gateway_ip"
+kubectl $context -n "$namespace" patch networkpolicy aussie --type=json -p='[{"op":"remove","path":"/spec/egress/0"}]'
+dns_policy_enforcement="running"
+kubectl $context -n "$namespace" run qualification-dns-policy \
+  --image=curlimages/curl:8.10.1 --restart=Never --attach=false \
+  --labels=app.kubernetes.io/name=aussie --command -- sh -ec '
+    if curl --noproxy "*" --max-time 3 --silent --show-error \
+      http://qualification-dns-stall-upstream:3000/health >/dev/null; then
+      echo "DNS egress unexpectedly remained available"
+      exit 1
+    fi
+    echo "DNS egress blocked by the enforced NetworkPolicy"
+  '
+kubectl $context -n "$namespace" wait --for=jsonpath='{.status.phase}'=Succeeded \
+  pod/qualification-dns-policy --timeout=30s
+dns_policy_enforcement_output="$(kubectl $context -n "$namespace" logs qualification-dns-policy)"
+kubectl $context -n "$namespace" delete pod qualification-dns-policy --wait=true
+dns_policy_enforcement="passed"
+kubectl $context -n "$namespace" run qualification-dns-stall \
+  --image=curlimages/curl:8.10.1 --restart=Never --attach=false \
+  --env="GATEWAY_IP=$dns_stall_gateway_ip" --command -- sh -ec '
+    route_result=/tmp/route-result
+    route_body=/tmp/route-body
+    rm -f "$route_result"
+    rm -f "$route_body"
+    route_exit=0
+    dns_timeout_before="$(curl --fail --silent --show-error --noproxy '*' \
+      http://$GATEWAY_IP:8080/q/metrics \
+      | awk "\$1 == \"aussie_dns_lookup_timeouts_total\" { print \$2; exit }")"
+    test -n "$dns_timeout_before"
+    curl --max-time 8 --silent --show-error --noproxy '*' \
+      --write-out "%{http_code} %{time_total}" \
+      --output "$route_body" \
+      "http://$GATEWAY_IP:8080/qualification-dns-stall-upstream/health" > "$route_result" 2>/tmp/route-error &
+    route_pid=$!
+    sleep 1
+    kill -0 "$route_pid"
+    test ! -s "$route_result"
+    curl --fail --silent --show-error --noproxy '*' --max-time 3 \
+      "http://$GATEWAY_IP:8080/q/health/live" >/dev/null
+    curl --fail --silent --show-error --noproxy '*' --max-time 3 \
+      "http://$GATEWAY_IP:8080/q/metrics" >/dev/null
+    kill -0 "$route_pid"
+    test ! -s "$route_result"
+    wait "$route_pid" || route_exit=$?
+    set -- $(cat "$route_result" 2>/dev/null || true)
+    route_code="${1:-000}"
+    route_time="${2:-8}"
+    dns_timeout_after="$(curl --fail --silent --show-error --noproxy '*' \
+      "http://$GATEWAY_IP:8080/q/metrics" \
+      | awk "\$1 == \"aussie_dns_lookup_timeouts_total\" { print \$2; exit }")"
+    test "$route_exit" -eq 0
+    test "$route_code" = 502
+    grep -Eq "\"code\"[[:space:]]*:[[:space:]]*\"bad_gateway\"" "$route_body"
+    awk -v before="$dns_timeout_before" -v after="$dns_timeout_after" \
+      "BEGIN { exit !(after > before) }"
+    awk -v actual="$route_time" "BEGIN { exit !(actual < 7) }"
+    printf "Routed request during DNS stall: exit=%s status=%s duration=%ss DNS timeouts=%s->%s\n" \
+      "$route_exit" "$route_code" "$route_time" "$dns_timeout_before" "$dns_timeout_after"
+  '
+kubectl $context -n "$namespace" wait --for=jsonpath='{.status.phase}'=Succeeded \
+  pod/qualification-dns-stall --timeout=30s
+dns_stall_output="$(kubectl $context -n "$namespace" logs qualification-dns-stall)"
+kubectl $context -n "$namespace" delete pod qualification-dns-stall --wait=true
+kubectl $context -n "$namespace" patch networkpolicy aussie --type=json -p='[{"op":"add","path":"/spec/egress/0","value":{"to":[{"namespaceSelector":{"matchLabels":{"kubernetes.io/metadata.name":"kube-system"}},"podSelector":{"matchLabels":{"k8s-app":"kube-dns"}}}],"ports":[{"protocol":"UDP","port":53},{"protocol":"TCP","port":53}]}}]'
+dns_stall_seconds="$(( $(date +%s) - dns_stall_started_at ))s"
+dns_stall="passed"
+
 qualification_stage="telemetry exporter stall"
 telemetry_stall="running"
 telemetry_started_at="$(date +%s)"
@@ -1211,4 +1333,4 @@ ready_replicas="$(kubectl $context -n "$namespace" get deployment aussie -o json
 test "$ready_replicas" = 3
 qualification_stage="completed"
 
-echo "Kubernetes qualification passed: four-worker kind cluster, production readiness, HTTP/WebSocket routing and drain, telemetry exporter stall, PDB/node-drain validation, Redis/Cassandra recovery, and pod-loss traffic recovery"
+echo "Kubernetes qualification passed: four-worker kind cluster, production readiness, HTTP/WebSocket routing and drain, DNS resolver stall, telemetry exporter stall, PDB/node-drain validation, Redis/Cassandra recovery, and pod-loss traffic recovery"

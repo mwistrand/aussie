@@ -95,7 +95,8 @@ kubectl get pods -l app.kubernetes.io/name=aussie
 ```
 
 The repository also includes an opt-in disposable qualification. It creates a
-four-worker kind cluster with one spare schedulable zone, forms a three-member
+four-worker kind cluster with one spare schedulable zone, installs the pinned
+Calico CNI so Kubernetes NetworkPolicies are enforced, forms a three-member
 Cassandra cluster, provisions Redis, runs the reviewed migration path once to
 bootstrap the operator-created keyspace, reapplies the steady-state base with
 migrations disabled, and then waits for production readiness. It performs a
@@ -142,6 +143,11 @@ durations are recorded from dependency loss through restored gateway readiness.
 The default recovery bound is 120 seconds for Redis, Cassandra, and gateway
 pod loss; set `AUSSIE_QUALIFICATION_RECOVERY_MAX_SECONDS` to change it. A run
 fails when any measured recovery exceeds that bound.
+The harness also temporarily blocks only the gateway's DNS egress, sends a
+routed request whose upstream requires DNS, and requires the gateway's local
+liveness and metrics endpoints to remain responsive while the resolver stalls.
+The DNS rule is restored before the remaining fault checks, and the report
+records the bounded request result and duration.
 The same registered service also exposes a disposable WebSocket endpoint. The
 harness performs a production-profile WebSocket upgrade through the gateway
 before the load, then pins a second long-lived connection to one gateway pod,
