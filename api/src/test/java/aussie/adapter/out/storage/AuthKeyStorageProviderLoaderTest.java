@@ -22,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.out.ProviderSelection;
 import aussie.core.port.out.ApiKeyRepository;
 import aussie.core.port.out.AuthKeyCache;
 import aussie.core.port.out.StorageHealthIndicator;
@@ -84,17 +85,26 @@ class AuthKeyStorageProviderLoaderTest {
     private Object invokeSelectProvider(
             AuthKeyStorageProviderLoader loader, java.util.List<?> providers, String configured, String type)
             throws Exception {
-        final var method = AuthKeyStorageProviderLoader.class.getDeclaredMethod(
-                "selectProvider", java.util.List.class, String.class, String.class);
-        method.setAccessible(true);
-        try {
-            return method.invoke(loader, providers, configured, type);
-        } catch (java.lang.reflect.InvocationTargetException e) {
-            if (e.getCause() instanceof RuntimeException re) {
-                throw re;
-            }
-            throw e;
+        if ("storage".equals(type)) {
+            @SuppressWarnings("unchecked")
+            final var storageProviders = (java.util.List<AuthKeyStorageProvider>) providers;
+            return ProviderSelection.select(
+                    storageProviders,
+                    configured,
+                    type,
+                    AuthKeyStorageProvider::name,
+                    AuthKeyStorageProvider::priority,
+                    AuthKeyStorageProvider::isAvailable);
         }
+        @SuppressWarnings("unchecked")
+        final var cacheProviders = (java.util.List<AuthKeyCacheProvider>) providers;
+        return ProviderSelection.select(
+                cacheProviders,
+                configured,
+                type,
+                AuthKeyCacheProvider::name,
+                AuthKeyCacheProvider::priority,
+                AuthKeyCacheProvider::isAvailable);
     }
 
     @Nested

@@ -18,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import aussie.adapter.out.ProviderSelection;
 import aussie.core.port.out.RoleRepository;
 import aussie.core.port.out.StorageHealthIndicator;
 import aussie.spi.RoleStorageProvider;
@@ -39,10 +40,13 @@ class RoleStorageProviderLoaderTest {
 
     private RoleStorageProvider invokeSelectProvider(
             RoleStorageProviderLoader loader, List<RoleStorageProvider> providers) throws Exception {
-        final var method =
-                RoleStorageProviderLoader.class.getDeclaredMethod("selectProvider", List.class, String.class);
-        method.setAccessible(true);
-        return (RoleStorageProvider) method.invoke(loader, providers, null);
+        return ProviderSelection.select(
+                providers,
+                null,
+                "role storage",
+                RoleStorageProvider::name,
+                RoleStorageProvider::priority,
+                RoleStorageProvider::isAvailable);
     }
 
     @Nested

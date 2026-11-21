@@ -167,7 +167,13 @@ public class TranslationConfigStorageLoader {
                 providers.size(),
                 providers.stream().map(TranslationConfigStorageProvider::name).toList());
 
-        storageProvider = selectProvider(providers, configuredStorageProvider.orElse(null), "storage");
+        storageProvider = ProviderSelection.select(
+                providers,
+                configuredStorageProvider.orElse(null),
+                "translation config storage",
+                TranslationConfigStorageProvider::name,
+                TranslationConfigStorageProvider::priority,
+                TranslationConfigStorageProvider::isAvailable);
         return storageProvider;
     }
 
@@ -191,7 +197,13 @@ public class TranslationConfigStorageLoader {
                 providers.stream().map(TranslationConfigCacheProvider::name).toList());
 
         try {
-            cacheProvider = selectProvider(providers, configuredCacheProvider.orElse(null), "cache");
+            cacheProvider = ProviderSelection.select(
+                    providers,
+                    configuredCacheProvider.orElse(null),
+                    "translation config cache",
+                    TranslationConfigCacheProvider::name,
+                    TranslationConfigCacheProvider::priority,
+                    TranslationConfigCacheProvider::isAvailable);
 
             // Inject Redis data source if available
             if (cacheProvider instanceof RedisTranslationConfigCacheProvider redisCacheProvider) {
@@ -210,21 +222,5 @@ public class TranslationConfigStorageLoader {
             cacheProviderResolved = true;
             return Optional.empty();
         }
-    }
-
-    private <T> T selectProvider(List<? extends T> providers, String configured, String type) {
-        return ProviderSelection.select(
-                providers,
-                configured,
-                "translation config " + type,
-                provider -> provider instanceof TranslationConfigStorageProvider p
-                        ? p.name()
-                        : ((TranslationConfigCacheProvider) provider).name(),
-                provider -> provider instanceof TranslationConfigStorageProvider p
-                        ? p.priority()
-                        : ((TranslationConfigCacheProvider) provider).priority(),
-                provider -> provider instanceof TranslationConfigStorageProvider p
-                        ? p.isAvailable()
-                        : ((TranslationConfigCacheProvider) provider).isAvailable());
     }
 }

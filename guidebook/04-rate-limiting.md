@@ -279,16 +279,7 @@ The message key format is `aussie:ratelimit:ws:msg:{serviceId}:{clientId}:{conne
 
 The defaults for message rate limiting are aggressive: 100 messages per 1 second with a burst capacity of 50. The 1-second window (line 195 of `RateLimitingConfig.java`) is much shorter than the 60-second window for HTTP traffic. This reflects the reality of WebSocket usage: message rates are measured in messages-per-second, not messages-per-minute.
 
-When a message exceeds the rate limit, `WebSocketProxySession` closes the connection with code `4429` (line 259), which mirrors HTTP 429 in the WebSocket close code space (4000-4999 is the application-defined range). The `MessageRateLimitHandler` functional interface (line 12 of `api/src/main/java/aussie/core/service/ratelimit/MessageRateLimitHandler.java`) provides a callback-based API:
-
-```java
-@FunctionalInterface
-public interface MessageRateLimitHandler {
-    Uni<Void> checkAndProceed(Runnable onAllowed);
-}
-```
-
-This design avoids blocking. The handler checks the rate limit reactively, and if allowed, invokes the `onAllowed` callback to forward the message to the upstream service.
+When a message exceeds the rate limit, `WebSocketProxySession` closes the connection with code `4429`, which mirrors HTTP 429 in the WebSocket close code space (4000-4999 is the application-defined range). The gateway wires `WebSocketRateLimitService.checkMessageLimit` into each session. The session pauses the source socket, performs the check reactively, and forwards the frame only after the check succeeds; a failed check closes the session with `4429`.
 
 ### Connection Cleanup
 

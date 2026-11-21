@@ -97,18 +97,14 @@ public class RoleStorageProviderLoader {
                 providers.size(),
                 providers.stream().map(RoleStorageProvider::name).toList());
 
-        storageProvider = selectProvider(providers, configuredStorageProvider.orElse(null));
-
-        return storageProvider;
-    }
-
-    private RoleStorageProvider selectProvider(List<RoleStorageProvider> providers, String configured) {
-        return ProviderSelection.select(
+        storageProvider = ProviderSelection.select(
                 providers,
-                configured,
+                configuredStorageProvider.orElse(null),
                 "role storage",
                 RoleStorageProvider::name,
                 RoleStorageProvider::priority,
                 RoleStorageProvider::isAvailable);
+
+        return storageProvider;
     }
 }
