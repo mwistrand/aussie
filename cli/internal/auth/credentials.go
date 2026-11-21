@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -57,6 +58,108 @@ func CredentialsPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "credentials"), nil
+}
+
+type storedAPIKey struct {
+	ServerOrigin string `json:"server_origin"`
+	APIKey       string `json:"api_key"`
+}
+
+func apiKeyPath(origin string) (string, error) {
+	dir, err := CredentialsDir()
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256([]byte(origin))
+	return filepath.Join(dir, "api-keys", fmt.Sprintf("%x.json", digest)), nil
+}
+
+// StoreAPIKey stores a legacy API key in the private, origin-bound credential area.
+func StoreAPIKey(apiKey, host string) error {
+	if apiKey == "" {
+		return fmt.Errorf("API key must not be empty")
+	}
+	origin, err := CanonicalOrigin(host)
+	if err != nil {
+		return err
+	}
+	path, err := apiKeyPath(origin)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return fmt.Errorf("failed to create API key directory: %w", err)
+	}
+	data, err := json.Marshal(storedAPIKey{ServerOrigin: origin, APIKey: apiKey})
+	if err != nil {
+		return fmt.Errorf("failed to marshal API key: %w", err)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".api-key-*")
+	if err != nil {
+		return fmt.Errorf("failed to create API key file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(0600); err != nil {
+		tmp.Close()
+		return fmt.Errorf("failed to secure API key file: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("failed to write API key: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("failed to close API key file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("failed to install API key: %w", err)
+	}
+	return nil
+}
+
+func loadAPIKey(host string) (string, error) {
+	origin, err := CanonicalOrigin(host)
+	if err != nil {
+		return "", err
+	}
+	path, err := apiKeyPath(origin)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	var stored storedAPIKey
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return "", fmt.Errorf("failed to parse API key: %w", err)
+	}
+	if stored.ServerOrigin != origin || stored.APIKey == "" {
+		return "", fmt.Errorf("stored API key is not bound to this server")
+	}
+	return stored.APIKey, nil
+}
+
+// HasAPIKeyForHost reports whether a private API key is stored for the origin.
+func HasAPIKeyForHost(host string) bool {
+	_, err := loadAPIKey(host)
+	return err == nil
+}
+
+// ClearAPIKey removes the origin-bound API key, if present.
+func ClearAPIKey(host string) error {
+	origin, err := CanonicalOrigin(host)
+	if err != nil {
+		return err
+	}
+	path, err := apiKeyPath(origin)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove API key: %w", err)
+	}
+	return nil
 }
 
 // StoreCredentials saves the credentials to the local file system.
@@ -189,14 +292,26 @@ func GetAuthTokenForHost(apiKey, host string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if creds, err := LoadCredentials(); err == nil {
+	creds, credsErr := LoadCredentials()
+	if credsErr == nil {
 		if creds.ServerOrigin != origin {
 			return "", fmt.Errorf("stored credentials belong to a different server; run 'aussie login'")
+		}
+		if apiKey != "" {
+			if err := StoreAPIKey(apiKey, host); err != nil {
+				return "", err
+			}
 		}
 		return creds.Token, nil
 	}
 	if apiKey != "" {
+		if err := StoreAPIKey(apiKey, host); err != nil {
+			return "", err
+		}
 		return apiKey, nil
+	}
+	if stored, err := loadAPIKey(host); err == nil {
+		return stored, nil
 	}
 	return "", fmt.Errorf("not authenticated: run 'aussie login' to authenticate")
 }

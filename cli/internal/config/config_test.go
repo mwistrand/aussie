@@ -297,8 +297,8 @@ func TestSave(t *testing.T) {
 	if loadedCfg.Host != cfg.Host {
 		t.Errorf("Loaded Host = %q, want %q", loadedCfg.Host, cfg.Host)
 	}
-	if loadedCfg.ApiKey != cfg.ApiKey {
-		t.Errorf("Loaded ApiKey = %q, want %q", loadedCfg.ApiKey, cfg.ApiKey)
+	if loadedCfg.ApiKey != "" {
+		t.Errorf("Loaded ApiKey = %q, want it omitted from general config", loadedCfg.ApiKey)
 	}
 }
 
@@ -346,6 +346,34 @@ func TestClearApiKey(t *testing.T) {
 	// Host should be preserved
 	if loadedCfg.Host != "http://test-server:8080" {
 		t.Errorf("Loaded Host after ClearApiKey = %q, want %q", loadedCfg.Host, "http://test-server:8080")
+	}
+}
+
+func TestClearApiKeyPreservesGlobalHost(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	globalPath := filepath.Join(os.Getenv("HOME"), ".aussierc")
+	if err := os.WriteFile(globalPath, []byte("host = \"https://trusted.example\"\napi_key = \"legacy-key\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Host = "https://temporary.example"
+	if err := cfg.ClearApiKey(); err != nil {
+		t.Fatal(err)
+	}
+
+	globalCfg, err := LoadFromFile(globalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if globalCfg.Host != "https://trusted.example" {
+		t.Fatalf("global host = %q, want https://trusted.example", globalCfg.Host)
+	}
+	if globalCfg.ApiKey != "" {
+		t.Fatalf("global API key = %q, want empty", globalCfg.ApiKey)
 	}
 }
 
@@ -625,7 +653,7 @@ func TestSave_WithAuthConfig(t *testing.T) {
 	}
 }
 
-func TestLoad_LocalConfigOverridesGlobalAuth(t *testing.T) {
+func TestLoad_LocalConfigCannotOverrideGlobalAuthEndpoints(t *testing.T) {
 	origDir, _ := os.Getwd()
 	origHome := os.Getenv("HOME")
 
@@ -668,9 +696,9 @@ mode = "device_code"`
 		t.Errorf("Auth.GetMode() = %q, want %q (local override)", cfg.Auth.GetMode(), AuthModeDeviceCode)
 	}
 
-	// Local login_url should override global (entire section is replaced)
-	if cfg.Auth.LoginURL != "https://local.example.com/login" {
-		t.Errorf("Auth.LoginURL = %q, want %q (from local)", cfg.Auth.LoginURL, "https://local.example.com/login")
+	// Local auth destinations must not override the trusted global config.
+	if cfg.Auth.LoginURL != "https://global.example.com/login" {
+		t.Errorf("Auth.LoginURL = %q, want %q (from global)", cfg.Auth.LoginURL, "https://global.example.com/login")
 	}
 
 	// Host should still be from global since local doesn't override it

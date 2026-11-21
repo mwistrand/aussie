@@ -53,6 +53,11 @@ func runTranslationConfigTest(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if cfg.ApiKey != "" {
+		if err := cfg.ClearApiKey(); err != nil {
+			return fmt.Errorf("failed to migrate API key to private storage: %w", err)
+		}
+	}
 
 	// Parse claims
 	var claims map[string]interface{}

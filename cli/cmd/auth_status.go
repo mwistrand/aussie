@@ -20,7 +20,7 @@ var statusCmd = &cobra.Command{
 
 This command checks for:
   1. JWT token credentials (from 'aussie login')
-  2. API key (fallback, if configured in .aussierc)
+  2. API key (fallback, if configured in trusted global ~/.aussierc)
 
 The active authentication method is validated against the Aussie API gateway.
 
@@ -47,7 +47,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Fall back to API key (if configured)
-	if cfg.IsAuthenticated() {
+	if cfg.IsAuthenticated() || auth.HasAPIKeyForHost(cfg.Host) {
 		return showAPIKeyStatus(cfg)
 	}
 
@@ -57,7 +57,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Println("To authenticate, run:")
 	fmt.Println("  aussie login")
 	fmt.Println()
-	fmt.Println("Or configure an API key in .aussierc (if enabled by your platform team).")
+	fmt.Println("Or configure an API key in trusted global ~/.aussierc (if enabled by your platform team).")
 
 	return nil
 }
@@ -96,8 +96,17 @@ func showAPIKeyStatus(cfg *config.Config) error {
 	fmt.Println("Authentication: API Key (fallback)")
 	fmt.Println()
 
-	// Validate key against server
-	return validateWithServer(cfg, cfg.ApiKey)
+	// Validate and migrate the legacy key against its bound server.
+	token, err := auth.GetAuthTokenForHost(cfg.ApiKey, cfg.Host)
+	if err != nil {
+		return err
+	}
+	if cfg.ApiKey != "" {
+		if err := cfg.ClearApiKey(); err != nil {
+			return fmt.Errorf("failed to migrate API key to private storage: %w", err)
+		}
+	}
+	return validateWithServer(cfg, token)
 }
 
 // validateWithServer validates the token/key against the server and displays details.

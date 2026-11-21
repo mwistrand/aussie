@@ -1,5 +1,5 @@
 # Aussie CLI full configuration reference
-# Copy this to ~/.aussierc (global) or .aussierc (project-local)
+# Copy this to ~/.aussierc (trusted global configuration)
 
 # =============================================================================
 # Server Configuration

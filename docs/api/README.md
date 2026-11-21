@@ -102,7 +102,9 @@ Waiting for authentication...
 
 If your organization has API keys enabled, add the key to your configuration:
 
-Store API keys only in **~/.aussierc** (global). Project-local `.aussierc` files may select a host but cannot supply credentials:
+Store API keys only in the CLI's origin-bound private credential store. A legacy
+key in **~/.aussierc** (global) is migrated on first use; project-local
+`.aussierc` files may select a host but cannot supply credentials:
 ```toml
 host = "http://localhost:1234"
 api_key = "your-api-key"
@@ -123,7 +125,7 @@ api_key = "your-api-key"
 
 When both IdP credentials and API key are available, the CLI uses this precedence:
 1. JWT token from `aussie login` (stored in `~/.aussie/credentials`)
-2. API key from `~/.aussierc`, only when the project-local configuration has not changed its host
+2. API key from origin-bound private storage (legacy `~/.aussierc` keys migrate on first use)
 
 ### Checking Credentials
 Verify your credentials using the CLI:
@@ -165,7 +167,9 @@ go build -o aussie
 ```
 
 ### Configuration
-The CLI uses configuration files for the server URL and authentication settings. Secrets such as API keys belong only in the global file.
+The CLI uses configuration files for the server URL and non-secret authentication
+preferences. Identity-provider URLs and API keys belong only to trusted global
+configuration; legacy API keys migrate to origin-bound private storage on first use.
 
 **Configuration locations (in order of precedence):**
 1. Local `.aussierc` non-secret settings in the current directory
@@ -506,7 +510,9 @@ Setting a field to an empty string (`""`) suppresses that header entirely for th
 ### Authentication Commands
 
 #### Configuration
-Configure login settings in `~/.aussierc` (global) or `.aussierc` (project-local). Store API keys and the token-bearing `auth.logout_url` only in `~/.aussierc`:
+Configure login destinations and token-bearing `auth.logout_url` only in the
+trusted global `~/.aussierc`; project-local files may select the host and auth
+mode but cannot redirect authentication:
 
 **For IdP authentication:**
 ```toml

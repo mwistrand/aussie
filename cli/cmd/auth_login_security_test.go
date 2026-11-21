@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -65,6 +66,39 @@ func TestExchangeOAuthCodeSendsPKCETransaction(t *testing.T) {
 	}
 	if token != "token" {
 		t.Fatalf("token = %q, want token", token)
+	}
+}
+
+func TestVerifyGatewayTokenRequiresGatewayAcceptance(t *testing.T) {
+	for _, status := range []int{http.StatusOK, http.StatusUnauthorized} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/admin/whoami" {
+					t.Fatalf("path = %q, want /admin/whoami", r.URL.Path)
+				}
+				w.WriteHeader(status)
+			}))
+			defer server.Close()
+
+			err := verifyGatewayToken(server.URL, "token")
+			if status == http.StatusOK && err != nil {
+				t.Fatalf("verifyGatewayToken() error = %v", err)
+			}
+			if status != http.StatusOK && err == nil {
+				t.Fatal("verifyGatewayToken() accepted a rejected token")
+			}
+		})
+	}
+}
+
+func TestStoreAndPrintCredentialsRejectsUnapprovedGateway(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+	payload := base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf(`{"sub":"user","exp":%d}`, time.Now().Add(time.Hour).Unix())))
+
+	err := storeAndPrintCredentials(header+"."+payload+".signature", "https://attacker.example", "https://trusted.example")
+	if err == nil {
+		t.Fatal("storeAndPrintCredentials() sent a token to an unapproved gateway")
 	}
 }
 

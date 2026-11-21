@@ -1,5 +1,5 @@
 # Aussie CLI configuration for headless/CI environments
-# Copy this to ~/.aussierc or .aussierc in your project
+# Copy this to ~/.aussierc (trusted global configuration)
 
 # Gateway host
 host = "https://aussie.yourcompany.com"
