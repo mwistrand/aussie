@@ -70,6 +70,8 @@ jobs:
         run: |
           python3 tools/kubernetes_contract_test.py
           python3 tools/kubernetes_contract.py
+      - name: Check documentation contract
+        run: make docs-contract
       - name: Check immutable workflow actions
         run: python3 tools/workflow_contract.py
       - name: Check immutable container inputs

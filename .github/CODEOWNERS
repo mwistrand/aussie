@@ -5,3 +5,9 @@
 /.github/ @mwistrand
 /security/vulnerability-exceptions.json @mwistrand
 /Dockerfile* @mwistrand
+
+# Operational, API, security, and release documentation are reviewed with the
+# code and configuration contracts they describe.
+/docs/platform/ @mwistrand
+/docs/api/ @mwistrand
+/guidebook/ @mwistrand
