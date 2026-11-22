@@ -76,6 +76,8 @@ jobs:
         run: python3 tools/workflow_contract.py
       - name: Check immutable container inputs
         run: python3 tools/container_contract.py
+      - name: Check release artifact contract
+        run: make release-workflow-contract
       - name: Reject local Maven resolution
         run: test -z "$(rg -n 'mavenLocal[[:space:]]*[({]' api --glob '*.gradle*')"
       - name: Review dependency changes
