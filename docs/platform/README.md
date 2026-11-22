@@ -87,12 +87,6 @@ Aussie requires authentication for all admin endpoints (`/admin/*`). Gateway and
 ### Configuration
 Authentication is enabled by default. Configure it with environment variables:
 ```bash
-# Enable/disable authentication (default: true)
-export AUSSIE_AUTH_ENABLED=true
-
-# Only require auth for admin paths (default: true)
-export AUSSIE_AUTH_ADMIN_PATHS_ONLY=true
-
 # DANGEROUS: Disable authentication entirely (NEVER use in production!)
 # This is only for local development
 export AUSSIE_AUTH_DANGEROUS_NOOP=false
@@ -357,12 +351,9 @@ aussie.auth.route-auth.jws.token-ttl=PT5M
 
 ### API Key Fallback
 
-API key authentication can be enabled as a fallback for emergencies or teams without IdP integration:
+API key authentication is available as a fallback for emergencies or teams without IdP integration:
 
 ```bash
-# Enable API key authentication (disabled by default)
-export AUSSIE_API_KEYS_ENABLED=true
-
 # Maximum TTL for API keys
 export AUSSIE_AUTH_API_KEYS_MAX_TTL=P365D
 ```
@@ -681,7 +672,7 @@ export AUSSIE_AUTH_ROUTE_AUTH_JWS_TOKEN_TTL=PT5M
 export AUSSIE_AUTH_ROUTE_AUTH_JWS_FORWARDED_CLAIMS=sub,email,name,groups,roles
 
 # RSA signing key (base64-encoded PKCS#8 PEM)
-export AUSSIE_JWS_SIGNING_KEY=<base64-encoded-key>
+export AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY=<base64-encoded-key>
 ```
 
 ### How It Works
@@ -1127,10 +1118,7 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AUSSIE_AUTH_ENABLED` | `true` | Enable/disable authentication |
-| `AUSSIE_AUTH_ADMIN_PATHS_ONLY` | `true` | Only require auth for admin paths |
 | `AUSSIE_AUTH_DANGEROUS_NOOP` | `false` | Disable authentication (NEVER use in production) |
-| `AUSSIE_API_KEYS_ENABLED` | `false` | Enable API key authentication (fallback) |
 | `AUSSIE_AUTH_API_KEYS_MAX_TTL` | `P365D` | Maximum TTL for API keys |
 | `AUSSIE_AUTH_ENCRYPTION_KEY` | - | Base64-encoded 256-bit AES key for encrypting API key records at rest |
 | `AUSSIE_AUTH_ENCRYPTION_KEY_ID` | `v1` | Version identifier for the encryption key (update when rotating) |
@@ -1148,7 +1136,7 @@ If the Redis connection is lost, event delivery stops but the gateway continues 
 | `AUSSIE_AUTH_ROUTE_AUTH_JWS_FORWARDED_CLAIMS` | `sub,email,name,groups,roles,effective_permissions` | Claims forwarded from upstream token |
 | `AUSSIE_AUTH_ROUTE_AUTH_JWS_DEFAULT_AUDIENCE` | - | Default audience claim for issued tokens |
 | `AUSSIE_AUTH_ROUTE_AUTH_JWS_REQUIRE_AUDIENCE` | `false` | Require audience claim in all tokens |
-| `AUSSIE_JWS_SIGNING_KEY` | - | RSA signing key (base64-encoded PKCS#8 PEM) |
+| `AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY` | - | RSA signing key (base64-encoded PKCS#8 PEM) |
 
 ### Bootstrap Configuration
 
@@ -1264,7 +1252,6 @@ See [Token Revocation](token-revocation.md) for implementation details.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `AUSSIE_AUTH_PKCE_ENABLED` | `true` | Enable PKCE support |
-| `AUSSIE_AUTH_PKCE_REQUIRED` | `true` | Require PKCE for authorization requests |
 | `AUSSIE_AUTH_PKCE_CHALLENGE_TTL` | `PT10M` | Challenge TTL (time-to-live) |
 | `AUSSIE_AUTH_PKCE_STORAGE_PROVIDER` | `redis` | Storage provider: redis, memory |
 | `AUSSIE_AUTH_PKCE_STORAGE_REDIS_KEY_PREFIX` | `aussie:pkce:` | Redis key prefix |

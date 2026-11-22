@@ -6,7 +6,7 @@ The optional `.env` file in the repository root contains demo keys for local dev
 
 | Secret | Env Variable | Format | Purpose | Rotation Cadence |
 |--------|-------------|--------|---------|------------------|
-| JWS Signing Key | `AUSSIE_JWS_SIGNING_KEY` | RSA PKCS#8 PEM | Signs session JWS tokens | Quarterly (see [Key Rotation](#key-rotation)) |
+| JWS Signing Key | `AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY` | RSA PKCS#8 PEM | Signs route-auth JWS tokens | Quarterly (see [Key Rotation](#key-rotation)) |
 | Bootstrap Key | `AUSSIE_BOOTSTRAP_KEY` | `aussie_v1_` plus 43 Base64URL characters | First-time admin setup | Single-use; disable after bootstrap |
 | Encryption Key | `AUTH_ENCRYPTION_KEY` | Base64-encoded 256-bit | Encrypts API key records at rest | Annually |
 | Cassandra Credentials | `CASSANDRA_USERNAME`, `CASSANDRA_PASSWORD` | String | Database authentication | Per org policy |
@@ -39,7 +39,7 @@ metadata:
   name: aussie-secrets
 type: Opaque
 stringData:
-  AUSSIE_JWS_SIGNING_KEY: |
+  AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY: |
     -----BEGIN PRIVATE KEY-----
     ...
     -----END PRIVATE KEY-----
@@ -100,7 +100,7 @@ Store secrets as pipeline variables, never in code:
 **GitHub Actions:**
 ```yaml
 env:
-  AUSSIE_JWS_SIGNING_KEY: ${{ secrets.AUSSIE_JWS_SIGNING_KEY }}
+  AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY: ${{ secrets.AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY }}
   AUTH_ENCRYPTION_KEY: ${{ secrets.AUTH_ENCRYPTION_KEY }}
   CASSANDRA_PASSWORD: ${{ secrets.CASSANDRA_PASSWORD }}
 ```

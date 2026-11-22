@@ -215,7 +215,7 @@ Every variable includes the exact environment variable name, its default value, 
 
 | Secret | Env Variable | Format | Purpose | Rotation Cadence |
 |--------|-------------|--------|---------|------------------|
-| JWS Signing Key | `AUSSIE_JWS_SIGNING_KEY` | RSA PKCS#8 PEM | Signs session JWS tokens | Quarterly |
+| JWS Signing Key | `AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY` | RSA PKCS#8 PEM | Signs route-auth JWS tokens | Quarterly |
 | Bootstrap Key | `AUSSIE_BOOTSTRAP_KEY` | `aussie_v1_` plus 43 Base64URL characters | First-time admin setup | Single-use |
 | Encryption Key | `AUTH_ENCRYPTION_KEY` | Base64-encoded 256-bit | Encrypts API key records at rest | Annually |
 ```
@@ -589,7 +589,7 @@ The secrets inventory is not a paragraph of prose. It is a table:
 ```
 | Secret | Env Variable | Format | Purpose | Rotation Cadence |
 |--------|-------------|--------|---------|------------------|
-| JWS Signing Key | `AUSSIE_JWS_SIGNING_KEY` | RSA PKCS#8 PEM | Signs session JWS tokens | Quarterly |
+| JWS Signing Key | `AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY` | RSA PKCS#8 PEM | Signs route-auth JWS tokens | Quarterly |
 | Bootstrap Key | `AUSSIE_BOOTSTRAP_KEY` | `aussie_v1_` plus 43 Base64URL characters | First-time admin setup | Single-use |
 | Encryption Key | `AUTH_ENCRYPTION_KEY` | Base64-encoded 256-bit | Encrypts API key records at rest | Annually |
 | Cassandra Credentials | `CASSANDRA_USERNAME`, `CASSANDRA_PASSWORD` | String | Database authentication | Per org policy |

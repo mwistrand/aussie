@@ -2,7 +2,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from docs_contract import broken_links, prometheus_metric_violations, toolchain_violations
+from docs_contract import (
+    broken_links,
+    configuration_violations,
+    prometheus_metric_violations,
+    toolchain_violations,
+)
 
 
 class DocumentationContractTest(unittest.TestCase):
@@ -191,6 +196,37 @@ class DocumentationContractTest(unittest.TestCase):
             self.assertTrue(any("Java versions" in violation for violation in violations))
             self.assertTrue(any("Node.js versions" in violation for violation in violations))
             self.assertTrue(any("README.md: missing Java 25" in violation for violation in violations))
+
+    def test_configuration_names_are_checked_against_inventory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "guidebook").mkdir()
+            (root / "docs/platform").mkdir(parents=True)
+            (root / "api/src/main/resources").mkdir(parents=True)
+            (root / "guidebook/appendix-b-configuration-inventory.md").write_text(
+                "| `aussie.gateway.limits.max-body-size` | `int` | `1` | `AUSSIE_GATEWAY_LIMITS_MAX_BODY_SIZE` | no | source |\n"
+                "| `aussie.auth.route-auth.providers.*.issuer` | `String` | _(not set)_ | `AUSSIE_AUTH_ROUTE_AUTH_PROVIDERS_<NAME>_ISSUER` | no | source |\n"
+            )
+            (root / "guidebook/appendix-b-configuration-reference.md").write_text(
+                "| `aussie.gateway.limits.max-body-size` | `int` | `1` | `AUSSIE_GATEWAY_LIMITS_MAX_BODY_SIZE` |\n"
+                "| `aussie.auth.route-auth.providers.demo.issuer` | `String` | - | `AUSSIE_AUTH_ROUTE_AUTH_PROVIDERS_DEMO_ISSUER` |\n"
+                "| `aussie.gateway.limits.removed` | `int` | `1` | `AUSSIE_REMOVED` |\n"
+                "| `aussie.gateway.limits.max-body-size.bytes` | `int` | `1` | `AUSSIE_REMOVED_BYTES` |\n"
+                "| `aussie.auth.route-auth.providers.demo.issuer` | `String` | - | `AUSSIE_AUTH_ROUTE_AUTH_PROVIDERS_DEMO_ISSUER_TYPO` |\n"
+            )
+
+            violations = configuration_violations(root)
+
+            self.assertEqual(
+                violations,
+                [
+                    "guidebook/appendix-b-configuration-reference.md:3: aussie.gateway.limits.removed",
+                    "guidebook/appendix-b-configuration-reference.md:4: aussie.gateway.limits.max-body-size.bytes",
+                    "guidebook/appendix-b-configuration-reference.md:3: AUSSIE_REMOVED",
+                    "guidebook/appendix-b-configuration-reference.md:4: AUSSIE_REMOVED_BYTES",
+                    "guidebook/appendix-b-configuration-reference.md:5: AUSSIE_AUTH_ROUTE_AUTH_PROVIDERS_DEMO_ISSUER_TYPO",
+                ],
+            )
 
 
 if __name__ == "__main__":
