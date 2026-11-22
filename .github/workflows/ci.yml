@@ -72,6 +72,8 @@ jobs:
           python3 tools/kubernetes_contract.py
       - name: Check documentation contract
         run: make docs-contract
+      - name: Check qualification report contract
+        run: make qualification-contract
       - name: Check immutable workflow actions
         run: python3 tools/workflow_contract.py
       - name: Check immutable container inputs
