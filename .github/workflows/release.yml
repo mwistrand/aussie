@@ -126,6 +126,18 @@ jobs:
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             "$sbom"
 
+      - name: Smoke test packaged CLI archive
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum --check "aussie-${RELEASE_VERSION}.sha256")
+          extract_dir="$(mktemp -d)"
+          trap 'rm -rf "$extract_dir"' EXIT
+          archive="dist/aussie-${RELEASE_VERSION}-linux-amd64.tar.gz"
+          tar -xzf "$archive" -C "$extract_dir"
+          "$extract_dir/aussie-${RELEASE_VERSION}-linux-amd64/aussie" --help >/dev/null
+
       - name: Attest CLI build provenance
         uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1.4.4
         with:

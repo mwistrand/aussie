@@ -44,6 +44,12 @@ Known deployment and product limits are listed in
 
 ## Setup
 
+### Prerequisites
+
+- Java 25 for the API
+- Go 1.23+ for the CLI
+- Node.js 24 for the demo and packaged E2E suite
+
 ### Running in dev mode
 ```shell
 make up

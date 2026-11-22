@@ -132,8 +132,48 @@ def prometheus_metric_violations(root: Path = ROOT) -> list[str]:
     return violations
 
 
+def toolchain_violations(root: Path = ROOT) -> list[str]:
+    """Keep public prerequisites and CI tool versions aligned with source metadata."""
+    root = root.resolve()
+    go_mod = root / "cli/go.mod"
+    tool_versions = root / "cli/.tool-versions"
+    workflows = root / ".github/workflows"
+    errors = []
+
+    go_match = re.search(r"^go\s+(\d+(?:\.\d+)?)\s*$", go_mod.read_text(), re.MULTILINE)
+    java_match = re.search(r"^java\s+openjdk-(\d+)\s*$", tool_versions.read_text(), re.MULTILINE)
+    if go_match is None or java_match is None:
+        return ["toolchain metadata must declare Go and Java versions"]
+
+    go_version = go_match.group(1)
+    java_version = java_match.group(1)
+    java_versions = set()
+    node_versions = set()
+    for workflow in (*workflows.glob("*.yml"), *workflows.glob("*.yaml")):
+        source = workflow.read_text()
+        java_versions.update(re.findall(r"java-version:\s*['\"]?(\d+)", source))
+        node_versions.update(re.findall(r"node-version:\s*['\"]?(\d+)", source))
+
+    if java_versions != {java_version}:
+        errors.append(f"CI Java versions {sorted(java_versions)} do not match Java {java_version}")
+    if node_versions != {"24"}:
+        errors.append(f"CI Node.js versions {sorted(node_versions)} do not match Node.js 24")
+
+    required = {
+        root / "README.md": (f"Java {java_version}", f"Go {go_version}+", "Node.js 24"),
+        root / "docs/platform/README.md": (f"Java {java_version}", f"Go {go_version}+", "Node.js 24"),
+        root / "docs/platform/e2e-tests.md": (f"Java {java_version}", "Node.js 24"),
+    }
+    for path, snippets in required.items():
+        source = path.read_text()
+        for snippet in snippets:
+            if snippet not in source:
+                errors.append(f"{path.relative_to(root)}: missing {snippet}")
+    return errors
+
+
 def main() -> int:
-    violations = [*broken_links(), *prometheus_metric_violations()]
+    violations = [*broken_links(), *prometheus_metric_violations(), *toolchain_violations()]
     if violations:
         print("Documentation contract violations found:", file=sys.stderr)
         print("\n".join(violations), file=sys.stderr)

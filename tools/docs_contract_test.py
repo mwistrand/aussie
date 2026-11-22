@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from docs_contract import broken_links, prometheus_metric_violations
+from docs_contract import broken_links, prometheus_metric_violations, toolchain_violations
 
 
 class DocumentationContractTest(unittest.TestCase):
@@ -150,6 +150,47 @@ class DocumentationContractTest(unittest.TestCase):
             )
 
             self.assertEqual(prometheus_metric_violations(root), [])
+
+    def test_toolchain_versions_and_public_prerequisites_are_aligned(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "cli").mkdir()
+            (root / ".github/workflows").mkdir(parents=True)
+            (root / "docs/platform").mkdir(parents=True)
+            (root / "cli/go.mod").write_text("module example\n\ngo 1.23\n")
+            (root / "cli/.tool-versions").write_text("java openjdk-25\n")
+            (root / ".github/workflows/ci.yml").write_text(
+                "java-version: '25'\nnode-version: '24'\n"
+            )
+            (root / "README.md").write_text("Java 25 Go 1.23+ Node.js 24")
+            (root / "docs/platform/README.md").write_text("Java 25 Go 1.23+ Node.js 24")
+            (root / "docs/platform/e2e-tests.md").write_text("Java 25 Node.js 24")
+
+            self.assertEqual(toolchain_violations(root), [])
+
+    def test_toolchain_drift_is_reported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "cli").mkdir()
+            (root / ".github/workflows").mkdir(parents=True)
+            (root / "docs/platform").mkdir(parents=True)
+            (root / "cli/go.mod").write_text("module example\n\ngo 1.23\n")
+            (root / "cli/.tool-versions").write_text("java openjdk-25\n")
+            (root / ".github/workflows/ci.yml").write_text(
+                "java-version: '21'\nnode-version: '22'\n"
+            )
+            for path in (
+                root / "README.md",
+                root / "docs/platform/README.md",
+                root / "docs/platform/e2e-tests.md",
+            ):
+                path.write_text("")
+
+            violations = toolchain_violations(root)
+
+            self.assertTrue(any("Java versions" in violation for violation in violations))
+            self.assertTrue(any("Node.js versions" in violation for violation in violations))
+            self.assertTrue(any("README.md: missing Java 25" in violation for violation in violations))
 
 
 if __name__ == "__main__":

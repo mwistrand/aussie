@@ -8,6 +8,8 @@ from `:check` because container boot is slow and requires Docker.
 ## Prerequisites
 
 - Docker daemon reachable (Docker Desktop, Colima, etc.)
+- Java 25 (the API build and E2E test runtime)
+- Node.js 24 (used by the demo container and dependency setup)
 - `npm` on `PATH` (used by the `demo-deps` target to install the demo's
   dependencies the first time)
 
