@@ -336,7 +336,7 @@ JWKS refresh is controlled centrally by `aussie.resiliency.jwks.cache-ttl`; ther
 | `aussie.auth.route-auth.jws.token-ttl` | `Duration` | `PT5M` | `AUSSIE_AUTH_ROUTE_AUTH_JWS_TOKEN_TTL` | Default TTL for issued JWS tokens. |
 | `aussie.auth.route-auth.jws.max-token-ttl` | `Duration` | `PT24H` | `AUSSIE_AUTH_ROUTE_AUTH_JWS_MAX_TOKEN_TTL` | Maximum allowed TTL. Tokens with longer IdP expiry are clamped. |
 | `aussie.auth.route-auth.jws.forwarded-claims` | `Set<String>` | `sub,email,name,groups,roles,effective_permissions` | `AUSSIE_AUTH_ROUTE_AUTH_JWS_FORWARDED_CLAIMS` | Claims to forward from original token to downstream services. |
-| `aussie.auth.route-auth.jws.signing-key` | `Optional<String>` | _(not set)_ | `AUSSIE_JWS_SIGNING_KEY` | RSA private key for signing (PKCS#8 PEM format). Required when route-auth is enabled. |
+| `aussie.auth.route-auth.jws.signing-key` | `Optional<String>` | _(not set)_ | `AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY` | RSA private key for signing (PKCS#8 PEM format). Required when route-auth is enabled. |
 | `aussie.auth.route-auth.jws.default-audience` | `Optional<String>` | _(not set)_ | `AUSSIE_AUTH_ROUTE_AUTH_JWS_DEFAULT_AUDIENCE` | Default audience claim for issued tokens. |
 | `aussie.auth.route-auth.jws.require-audience` | `boolean` | `true` | `AUSSIE_AUTH_ROUTE_AUTH_JWS_REQUIRE_AUDIENCE` | Require audience claim in all issued tokens. |
 
@@ -350,7 +350,7 @@ JWKS refresh is controlled centrally by `aussie.resiliency.jwks.cache-ttl`; ther
 | `%dev` | `aussie.auth.route-auth.providers.demo.audiences` | `aussie-gateway` |
 | `%dev` | `aussie.auth.route-auth.jws.signing-key` | `${AUSSIE_JWS_SIGNING_KEY}` |
 
-**Security considerations:** `signing-key` **must never appear in version control**. This is an RSA private key in PKCS#8 PEM format. Generate with `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`. Store in a secrets manager and inject via `AUSSIE_JWS_SIGNING_KEY`. Compromise of this key allows forging authentication tokens for all downstream services.
+**Security considerations:** `signing-key` **must never appear in version control**. This is an RSA private key in PKCS#8 PEM format. Generate with `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`. Store in a secrets manager and inject via `AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY`. Compromise of this key allows forging authentication tokens for all downstream services.
 
 ## 8. Signing Key Rotation
 
@@ -1049,7 +1049,7 @@ The following values must be injected at runtime from a secrets manager or secur
 
 | Secret | Env Variable | Format | Purpose | Rotation Cadence |
 |--------|-------------|--------|---------|------------------|
-| JWS Signing Key | `AUSSIE_JWS_SIGNING_KEY` | RSA PKCS#8 PEM | Signs session and route-auth JWS tokens | Quarterly (or automated via key rotation) |
+| JWS Signing Key | `AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY` | RSA PKCS#8 PEM | Signs route-auth JWS tokens | Quarterly (or automated via key rotation) |
 | API Key Encryption Key | `AUTH_ENCRYPTION_KEY` | Base64-encoded 256-bit | Encrypts API key records at rest | Annually |
 | Bootstrap Key | `AUSSIE_BOOTSTRAP_KEY` | `aussie_v1_` plus 43 Base64URL characters | First-time admin setup | Single-use |
 | OIDC Client Secret | `OIDC_CLIENT_SECRET` | String | OAuth2 client authentication | Per IdP policy |

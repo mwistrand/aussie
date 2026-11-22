@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that documented repository references and monitoring names stay valid."""
+"""Check that documented repository references and contract names stay valid."""
 
 from __future__ import annotations
 
@@ -12,11 +12,14 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 JAVA_SOURCE = ROOT / "api/src/main/java"
 PROMETHEUS = ROOT / "monitoring/prometheus"
+CONFIGURATION_INVENTORY = ROOT / "guidebook/appendix-b-configuration-inventory.md"
+CONFIGURATION_REFERENCE = ROOT / "guidebook/appendix-b-configuration-reference.md"
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 REFERENCE_DEFINITION = re.compile(r"^[ \t]{0,3}\[[^\]]+\]:[ \t]*(<[^>\n]+>|[^\s]+)")
 FENCE = re.compile(r"^[ ]{0,3}(?P<marker>`{3,}|~{3,})")
 INLINE_CODE = re.compile(r"(`+)(?:(?!`).)*?\1")
 IGNORED_DIRECTORIES = {".git", "build", "node_modules", "dist"}
+EXTERNAL_ENVIRONMENT_PREFIXES = ("AUSSIE_QUALIFICATION_",)
 
 
 def markdown_files(root: Path = ROOT) -> list[Path]:
@@ -132,6 +135,85 @@ def prometheus_metric_violations(root: Path = ROOT) -> list[str]:
     return violations
 
 
+def _configuration_inventory(root: Path) -> tuple[set[str], set[str]]:
+    inventory = root / CONFIGURATION_INVENTORY.relative_to(ROOT)
+    properties: set[str] = set()
+    environment = set()
+    row = re.compile(r"^\| `([^`]+)` \| .*? \| .*? \| `([^`]+)` \|")
+    for line in inventory.read_text().splitlines() if inventory.exists() else ():
+        match = row.match(line)
+        if match is None:
+            continue
+        properties.add(match.group(1))
+        environment.add(match.group(2))
+    return properties, environment
+
+
+def _property_matches(pattern: str, value: str) -> bool:
+    pattern_parts = pattern.split(".")
+    value_parts = value.split(".")
+    if len(pattern_parts) == len(value_parts) and any(part == "*" for part in pattern_parts):
+        return all(
+            expected == "*" or expected == actual
+            for expected, actual in zip(pattern_parts, value_parts)
+        )
+    return value == pattern
+
+
+def _environment_matches(pattern: str, value: str) -> bool:
+    if "<" not in pattern or ">" not in pattern:
+        return value == pattern
+    prefix, placeholder_and_suffix = pattern.split("<", 1)
+    _, suffix = placeholder_and_suffix.split(">", 1)
+    return (
+        value.startswith(prefix)
+        and value.endswith(suffix)
+        and len(value) > len(prefix) + len(suffix)
+    )
+
+
+def configuration_violations(root: Path = ROOT) -> list[str]:
+    """Keep operator-facing configuration names aligned with the generated inventory."""
+    root = root.resolve()
+    properties, environment = _configuration_inventory(root)
+    if not properties:
+        return []
+
+    # Environment aliases used by application.properties are valid documented inputs too.
+    for path in sorted((root / "api/src/main/resources").glob("application*.properties")):
+        environment.update(re.findall(r"\$\{([A-Z][A-Z0-9_]*)(?::[^}]*)?\}", path.read_text()))
+    paths = [root / CONFIGURATION_REFERENCE.relative_to(ROOT)]
+    environment_paths = [*sorted((root / "docs/platform").glob("*.md")), *paths]
+    violations: list[str] = []
+    property_token = re.compile(r"`(aussie\.[a-z0-9-]+(?:\.[a-z0-9-]+)+)`")
+    environment_token = re.compile(r"\b(AUSSIE_[A-Z0-9_]+)\b")
+    for path in paths:
+        if not path.exists():
+            continue
+        for line_number, line in enumerate(path.read_text().splitlines(), 1):
+            if "|" in line:
+                for value in sorted(set(property_token.findall(line))):
+                    if not any(_property_matches(pattern, value) for pattern in properties):
+                        violations.append(f"{path.relative_to(root)}:{line_number}: {value}")
+    for path in environment_paths:
+        if not path.exists():
+            continue
+        for line_number, line in enumerate(path.read_text().splitlines(), 1):
+            for value in sorted(set(environment_token.findall(line))):
+                if (
+                    any(_environment_matches(pattern, value) for pattern in environment)
+                    or (
+                        value.endswith("_")
+                        and any(item.startswith(value) for item in environment)
+                    )
+                ):
+                    continue
+                if value.startswith(EXTERNAL_ENVIRONMENT_PREFIXES):
+                    continue
+                violations.append(f"{path.relative_to(root)}:{line_number}: {value}")
+    return violations
+
+
 def toolchain_violations(root: Path = ROOT) -> list[str]:
     """Keep public prerequisites and CI tool versions aligned with source metadata."""
     root = root.resolve()
@@ -173,7 +255,12 @@ def toolchain_violations(root: Path = ROOT) -> list[str]:
 
 
 def main() -> int:
-    violations = [*broken_links(), *prometheus_metric_violations(), *toolchain_violations()]
+    violations = [
+        *broken_links(),
+        *prometheus_metric_violations(),
+        *configuration_violations(),
+        *toolchain_violations(),
+    ]
     if violations:
         print("Documentation contract violations found:", file=sys.stderr)
         print("\n".join(violations), file=sys.stderr)
