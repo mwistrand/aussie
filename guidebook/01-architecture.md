@@ -2,7 +2,7 @@
 
 ## The Core Bet
 
-The Aussie API Gateway makes an architectural bet that most projects never make: the entire domain model and business logic compile, run, and test without Quarkus, Jakarta, Vert.x, Cassandra, or Redis on the classpath. This is hexagonal architecture applied with discipline, not as a diagram on a wiki page but as a set of enforced package boundaries and compilation rules.
+The Aussie API Gateway makes an architectural bet that most projects never make: its domain models and pure hot-path logic compile, run, and test without Quarkus, Jakarta, Vert.x, Cassandra, or Redis on the classpath. Some core services and ports intentionally use Mutiny and CDI to keep the reactive runtime contract direct. This is hexagonal architecture applied with discipline, not as a diagram on a wiki page but as a set of enforced package boundaries and compilation rules.
 
 This chapter explains what was done, why it matters, what alternatives exist, and where the trade-offs bite.
 
@@ -58,11 +58,11 @@ aussie/
     filter/      # Cross-cutting JAX-RS filters (rate limit, auth, access control)
 ```
 
-The key structural insight is the separation of `core/model` from `core/port` from `core/service`. Models are pure data: records, sealed interfaces, value objects. Ports are contracts: interfaces that declare what the domain needs from the outside world. Services implement business logic by composing models and ports. None of them know what framework hosts them.
+The key structural insight is the separation of `core/model` from `core/port` from `core/service`. Models are pure data: records, sealed interfaces, value objects. Ports are contracts: interfaces that declare what the domain needs from the outside world. Services implement business logic by composing models and ports. The pure model layer stays framework-free; reactive ports and CDI-managed services make the runtime boundary explicit where portability would otherwise add boilerplate.
 
 ### Why This Matters
 
-A gateway is infrastructure that outlives any single framework choice. Quarkus is excellent today; something else may be excellent in three years. By keeping the domain layer framework-free, the codebase can migrate frameworks without rewriting business logic. More immediately, it means domain services can be unit tested with plain JUnit and Mockito, no `@QuarkusTest` annotation needed, no container startup, no 5-second test feedback loops.
+A gateway is infrastructure that outlives any single framework choice. Quarkus is excellent today; something else may be excellent in three years. By keeping the models and pure domain logic framework-free, the codebase can migrate frameworks without rewriting those parts. More immediately, those units can be tested with plain JUnit and Mockito, with no `@QuarkusTest` annotation or container startup.
 
 ### What a Senior Engineer Might Have Done Instead
 

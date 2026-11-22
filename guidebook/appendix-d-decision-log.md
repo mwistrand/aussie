@@ -279,12 +279,12 @@ These are not hypothetical decisions. Every one of them is enforced by running c
 
 **Status:** Accepted
 
-**Context:** Quarkus uses `@ConfigMapping` interfaces to bind configuration properties to typed interfaces. The gateway's adapter layer defines `GatewayConfig` with nested sub-interfaces (`LimitsConfig`, `AccessControlConfig`, `SecurityConfig`, etc.). The core layer defines its own configuration interfaces (e.g., `GatewaySecurityConfig`, `AccessControlConfig`) that are framework-free. They do not import `@ConfigMapping` or any Quarkus annotation. The core layer cannot depend on the adapter layer (enforced by ArchUnit), so core services cannot inject the adapter's `GatewayConfig` directly.
+**Context:** Quarkus uses `@ConfigMapping` interfaces to bind configuration properties to typed interfaces. The gateway's adapter layer defines `GatewayConfig` with nested sub-interfaces (`LimitsConfig`, `AccessControlConfig`, `SecurityConfig`, etc.). The core layer defines focused configuration interfaces, but some core configuration and reactive service types intentionally use SmallRye, Mutiny, or CDI to match the runtime contract. The core layer cannot depend on the adapter layer (enforced by ArchUnit), so core services cannot inject the adapter's `GatewayConfig` directly.
 
 **Decision:** Create a `ConfigProducer` in the adapter layer that takes the adapter's `GatewayConfig` via constructor injection and produces individual core-layer configuration beans via `@Produces` methods. Each method unwraps a nested config sub-interface and exposes it as a CDI bean typed to the core interface.
 
 **Consequences:**
-- Core services inject their configuration interfaces (`LimitsConfig`, `AccessControlConfig`, `GatewaySecurityConfig`) without knowing those interfaces are backed by Quarkus `@ConfigMapping`. The core layer remains framework-free.
+- Core services inject their configuration interfaces (`LimitsConfig`, `AccessControlConfig`, `GatewaySecurityConfig`) without knowing those interfaces are backed by Quarkus `@ConfigMapping`. The model and pure-logic portions remain framework-free; the runtime-facing portions keep their deliberately documented framework contracts.
 - Configuration is produced once at startup (`@ApplicationScoped`) and shared across all consumers. There is no per-injection overhead.
 - This works because the adapter's config sub-interfaces extend the core interfaces. For example, `SecurityConfig extends GatewaySecurityConfig` and adds the `@WithDefault("false")` annotation. CDI produces the adapter implementation, but consumers see only the core type.
 - Adding a new configuration concern requires three changes: (1) define the core interface, (2) extend it in the adapter config, (3) add a `@Produces` method in `ConfigProducer`. This is more ceremony than direct `@ConfigMapping` injection, but the indirection keeps the core layer clean.

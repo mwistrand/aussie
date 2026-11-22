@@ -28,10 +28,10 @@ The first sentence of each document declares its audience. This is deliberate, a
 
 ### Why the Same Feature Needs Different Documentation
 
-Consider rate limiting. The platform team documentation in `docs/platform/rate-limiting.md` covers algorithm selection, platform-wide maximums, storage backends, monitoring metrics, alert configuration, and debug logging:
+Consider rate limiting. The platform team documentation in `docs/platform/rate-limiting.md` covers the supported token-bucket behavior, platform-wide maximums, storage backends, monitoring metrics, alert configuration, and debug logging:
 
 ```
-### Algorithm Selection
+### Supported Algorithm
 
 | Algorithm | Best For | Behavior |
 |-----------|----------|----------|
@@ -85,7 +85,7 @@ The same split appears with WebSocket support. Platform teams get `docs/platform
 
 ### What a Junior or Mid-Level Engineer Might Do Instead
 
-Write a single "Rate Limiting" page that mixes algorithm selection advice with client retry code. The result is a document that overwhelms consumers with infrastructure details they cannot act on, and buries the operational knobs that platform engineers need in the middle of client-side code samples. Neither audience reads the whole thing. Both miss the parts relevant to them. Audience segmentation is not a staff insight; it is a senior skill. The staff contribution is the discipline to maintain parallel documentation trees and the structural approach to routing information to the right consumer.
+Write a single "Rate Limiting" page that mixes platform algorithm details with client retry code. The result is a document that overwhelms consumers with infrastructure details they cannot act on, and buries the operational knobs that platform engineers need in the middle of client-side code samples. Neither audience reads the whole thing. Both miss the parts relevant to them. Audience segmentation is not a staff insight; it is a senior skill. The staff contribution is the discipline to maintain parallel documentation trees and the structural approach to routing information to the right consumer.
 
 ### Trade-offs
 

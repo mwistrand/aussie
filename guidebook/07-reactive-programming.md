@@ -620,7 +620,7 @@ private void handleFrame(/* ... */ WebSocketFrame frame, boolean rateLimited) {
         forward.run();
         return;
     }
-    messageRateLimitHandler.checkAndProceed(forward).subscribe().with(
+    messageRateLimitHandler.apply(forward).subscribe().with(
             ignored -> {},
             error -> closeWithReason((short) 4429, "Message rate limit exceeded"));
 }
