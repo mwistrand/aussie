@@ -145,7 +145,7 @@ network-level admission limit.
 ## Limitations
 
 - Rate limits are per-client per-service
-- Platform teams control the algorithm selection
+- Aussie currently supports the token-bucket algorithm only
 - Your limits cannot exceed the platform maximum
 - Rate limit state is shared across all gateway instances (when using Redis)
 

@@ -80,7 +80,7 @@ This structure is intentional. Staff-level thinking is not about knowing the rig
 | 1 | Architecture | How hexagonal design enforces dependency discipline and keeps the core domain free of infrastructure concerns. |
 | 2 | Security in Depth | Layered security controls that compound, each assuming the previous layer might fail. |
 | 3 | Token Revocation | Using Bloom filters and distributed event propagation to revoke tokens at scale without per-request database lookups. |
-| 4 | Rate Limiting | Algorithm selection between token bucket and sliding window, multi-layer client identification through proxy chains, and per-service platform guardrails. |
+| 4 | Rate Limiting | The token-bucket implementation, canonical client identification through proxy chains, and per-service platform guardrails. |
 | 5 | Caching and Thundering Herd Prevention | Request coalescing, cache stampede prevention, and cache-aside patterns that protect backend services during cold starts and invalidation storms. |
 | 6 | Resilience Engineering | Timeout configuration, connection pool sizing, and graceful degradation strategies that keep the gateway available when its dependencies are not. |
 | 7 | Reactive Programming | Non-blocking I/O as an architectural constraint enforced through the Mutiny reactive API, and why "never block" is a structural rule, not a performance optimization. |

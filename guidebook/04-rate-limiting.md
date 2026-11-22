@@ -114,21 +114,14 @@ At 1.667 tokens/second, `Retry-After` is 1 second. At 1 token per 60 seconds, it
 
 **Trade-offs.** The token bucket is the best general-purpose algorithm for an API gateway because it handles bursty traffic gracefully. A mobile app that sends 10 requests in quick succession at startup and then goes quiet for a minute should not be penalized. The bucket absorbs the burst and refills during the quiet period. The downside is that burst capacity must be tuned. Set it too high and you effectively have no rate limit during bursts. Set it too low and legitimate usage patterns trigger 429s. The default of 100 (matching `defaultRequestsPerWindow`) is a reasonable starting point.
 
-## 3. Algorithm Comparison
+## 3. Algorithm Contract
 
-Although only the token bucket is currently implemented, the other approaches are useful comparison points for a future product requirement. They are not currently selectable configuration values:
-
-| Characteristic | Token Bucket | Fixed Window | Sliding Window |
-|---|---|---|---|
-| **Burst handling** | Allows controlled bursts up to bucket capacity | No burst control; limit is per window | Smooths bursts across boundaries |
-| **Boundary behavior** | No boundary issues; tokens refill continuously | Can allow 2x the limit at window boundaries (last second of one window + first second of next) | Weighted average eliminates boundary spikes |
-| **Memory per key** | 2 values (tokens, lastRefillMillis) | 2 values (count, windowStart) | 3-4 values (current count, previous count, current window start, previous window start) |
-| **Computational complexity** | O(1) per check | O(1) per check | O(1) per check (weighted average, not per-request timestamps) |
-| **Best for** | General-purpose API rate limiting; traffic with natural bursts | Strict per-window accounting; billing or quota enforcement | Even rate enforcement; public APIs where boundary abuse is a concern |
-| **Predictability for clients** | Less predictable (remaining tokens depend on refill timing) | Highly predictable (clear window boundaries) | Moderately predictable (smooth but harder to reason about) |
-| **Implementation status** | Implemented (`BucketAlgorithm.java`) | Not implemented | Not implemented |
-
-The fixed window's boundary problem is worth understanding concretely. If the limit is 100 requests per 60 seconds and the window resets at :00, a client can send 100 requests at :59 and 100 more at :01 (200 requests in 2 seconds). The sliding window solves this by weighting the previous window's count: if the current position is 20% into the new window, the effective count is `(current_count) + (previous_count * 0.8)`. This prevents the boundary spike at the cost of slightly more state.
+The token bucket is the only supported algorithm. It is intentionally called
+directly by the in-memory limiter, while the Redis limiter implements the same
+state transition atomically in Lua. There is no algorithm-selection registry or
+configuration value: add another algorithm only when a concrete product
+requirement exists and both backends can preserve the same client-visible
+semantics.
 
 ## 4. Pre-Authentication Client Identification
 
@@ -312,7 +305,7 @@ The `checkAndConsume` method (line 98) uses `ConcurrentHashMap.compute` for atom
 ```java
 private RateLimitDecision computeDecision(
         String cacheKey,
-        BucketAlgorithm handler,
+        BucketAlgorithm algorithm,
         EffectiveRateLimit limit,
         long nowMillis) {
 
@@ -320,7 +313,7 @@ private RateLimitDecision computeDecision(
 
     states.compute(cacheKey, (k, current) -> {
         final var currentState = current != null ? current.state() : null;
-        final var decision = handler.checkAndConsume(currentState, limit, nowMillis);
+        final var decision = algorithm.checkAndConsume(currentState, limit, nowMillis);
         result[0] = decision;
         return new TimestampedState(decision.newState(), nowMillis);
     });
@@ -606,7 +599,7 @@ The `endpointId` parameter is nullable (wrapped in `Optional.ofNullable`), but `
 
 The rate limiting system in Aussie layers multiple concerns on top of a straightforward algorithm:
 
-1. **Algorithm selection** is abstracted behind a strategy interface, making it possible to change algorithms without touching filter or storage code.
+1. **The token-bucket contract** is shared by the in-memory and Redis implementations, while algorithm selection remains intentionally absent until a second algorithm is required.
 2. **Client identification** uses the canonical network identity before authentication, so unverified credentials cannot select a fresh bucket.
 3. **The platform maximum** prevents service teams from configuring limits that could endanger the shared infrastructure, while the hierarchical resolution (endpoint > service > platform) gives service teams flexibility within that boundary.
 4. **WebSocket traffic** is handled with two independent dimensions (connection rate and message rate) because the resource consumption model is fundamentally different from HTTP.
@@ -614,4 +607,4 @@ The rate limiting system in Aussie layers multiple concerns on top of a straight
 6. **Filter ordering** ensures cheap rejection happens before expensive authentication.
 7. **Telemetry** treats rate limiting as expected behavior (`StatusCode.OK`), not an error, preventing false alarms while maintaining full observability through custom span attributes.
 
-The design is deliberately opinionated in areas where flexibility creates risk (client identification, platform maximums) and deliberately extensible in areas where requirements are likely to change (algorithm selection, storage backends). This balance between rigidity where safety matters and flexibility where operational needs evolve is the mark of infrastructure code that survives contact with production.
+The design is deliberately opinionated in areas where flexibility creates risk (client identification, platform maximums, and the supported algorithm) while retaining extension points where the product already has multiple implementations (storage backends). This keeps the current state machine small without closing the door on a justified future requirement.
