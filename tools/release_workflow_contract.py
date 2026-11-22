@@ -19,6 +19,8 @@ REQUIRED_SNIPPETS = (
     ("CLI checksums", 'sha256sum *.tar.gz *.zip > "aussie-${RELEASE_VERSION}.sha256"'),
     ("CLI signatures", "cosign sign-blob --yes"),
     ("CLI signature verification", "cosign verify-blob"),
+    ("CLI archive checksum verification", 'sha256sum --check "aussie-${RELEASE_VERSION}.sha256"'),
+    ("CLI archive smoke test", 'aussie-${RELEASE_VERSION}-linux-amd64/aussie" --help'),
     ("CLI provenance subjects", "subject-path: |\n            dist/*.tar.gz\n            dist/*.zip"),
     ("CLI SBOM checksum", 'sha256sum "aussie-cli-${RELEASE_VERSION}.cdx.json"'),
     ("CLI SBOM signing target", 'sbom="aussie-cli-${RELEASE_VERSION}.cdx.json"'),
