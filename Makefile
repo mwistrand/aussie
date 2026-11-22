@@ -1,6 +1,6 @@
 COMPOSE=docker compose
 
-.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage config-contract docs-contract deployment-contract deployment-qualification workflow-contract container-contract release-contract release-workflow-contract vulnerability-contract reset demo-deps e2e e2e-soak e2e-logs
+.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage config-contract docs-contract deployment-contract deployment-qualification qualification-contract workflow-contract container-contract release-contract release-workflow-contract vulnerability-contract reset demo-deps e2e e2e-soak e2e-logs
 
 SOAK_RUNS ?= 3
 
@@ -88,6 +88,9 @@ vulnerability-contract:
 # pre-release testing may opt into the explicitly experimental local image mode.
 deployment-qualification:
 	bash tools/kubernetes_qualification.sh
+
+qualification-contract:
+	python3 tools/qualification_report_contract_test.py
 
 # Generate coverage reports for API (JaCoCo) and CLI (Go)
 coverage:

@@ -39,7 +39,9 @@ deployment, qualification, and release-hardening evidence is complete.
   `make deployment-contract` and the production deployment runbook.
 - [ ] The exact released image passes sustained production-profile load,
   dependency loss/recovery, rolling restart, rollback, and WebSocket evidence.
-  The qualification workflow must publish the report with the image digest.
+  The qualification workflow must publish the report with the image digest;
+  `tools/qualification_report_contract.py` rejects incomplete or mismatched
+  evidence.
 - [ ] The release input and vulnerability policy is complete for all shipped
   artifacts, including the CLI. Run `make workflow-contract`,
   `make container-contract`, and `make vulnerability-contract`.
