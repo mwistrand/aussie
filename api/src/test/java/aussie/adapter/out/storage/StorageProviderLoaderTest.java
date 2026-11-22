@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -150,6 +151,19 @@ class StorageProviderLoaderTest {
 
             var exception = assertThrows(StorageProviderException.class, loader::repository);
             assertTrue(exception.getMessage().contains("Configured repository provider not found: nonexistent"));
+        }
+
+        @Test
+        @DisplayName("should retain an explicitly configured provider when unavailable")
+        void shouldRetainExplicitlyConfiguredUnavailableProvider() throws Exception {
+            var loader = createLoader(Optional.empty(), Optional.empty(), false);
+            var provider = mock(StorageRepositoryProvider.class);
+            when(provider.name()).thenReturn("configured");
+
+            var result = invokeSelectProvider(loader, List.of(provider), "configured", "repository");
+
+            assertEquals(provider, result);
+            verify(provider, never()).isAvailable();
         }
 
         @Test
