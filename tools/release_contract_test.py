@@ -12,6 +12,8 @@ class ReleaseContractTest(unittest.TestCase):
     def write_fixture(self, root: Path, **changes: object) -> Path:
         sbom = root / "aussie.cdx.json"
         sbom.write_text('{"bomFormat":"CycloneDX"}\n')
+        (root / "aussie.cdx.json.sig").write_text("signature\n")
+        (root / "aussie.cdx.json.pem").write_text("certificate\n")
         evidence = {
             "version": "v1.2.3",
             "commit": "a" * 40,
@@ -19,6 +21,8 @@ class ReleaseContractTest(unittest.TestCase):
             "digest": "sha256:" + "b" * 64,
             "sbom": sbom.name,
             "sbom_sha256": hashlib.sha256(sbom.read_bytes()).hexdigest(),
+            "sbom_signature": "aussie.cdx.json.sig",
+            "sbom_certificate": "aussie.cdx.json.pem",
         }
         evidence.update(changes)
         path = root / "evidence.json"
@@ -58,6 +62,24 @@ class ReleaseContractTest(unittest.TestCase):
                     "commit must be a 40-character hexadecimal SHA",
                     "digest must be a sha256 image digest",
                 ],
+            )
+
+    def test_missing_sbom_signature_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence = self.write_fixture(root, sbom_signature="missing.sig")
+            self.assertEqual(
+                validate_evidence(evidence, root),
+                ["sbom_signature does not exist: missing.sig"],
+            )
+
+    def test_sbom_signature_path_escape_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence = self.write_fixture(root, sbom_certificate="../certificate.pem")
+            self.assertEqual(
+                validate_evidence(evidence, root),
+                ["sbom_certificate must remain within the evidence root"],
             )
 
 

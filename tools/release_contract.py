@@ -13,7 +13,16 @@ from pathlib import Path
 
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
-REQUIRED_FIELDS = {"version", "commit", "image", "digest", "sbom", "sbom_sha256"}
+REQUIRED_FIELDS = {
+    "version",
+    "commit",
+    "image",
+    "digest",
+    "sbom",
+    "sbom_sha256",
+    "sbom_signature",
+    "sbom_certificate",
+}
 
 
 def validate_evidence(evidence_path: Path, root: Path | None = None) -> list[str]:
@@ -30,7 +39,14 @@ def validate_evidence(evidence_path: Path, root: Path | None = None) -> list[str
     if missing:
         return [f"missing evidence fields: {', '.join(missing)}"]
 
-    for field in ("version", "image", "sbom", "sbom_sha256"):
+    for field in (
+        "version",
+        "image",
+        "sbom",
+        "sbom_sha256",
+        "sbom_signature",
+        "sbom_certificate",
+    ):
         if not isinstance(evidence[field], str) or not evidence[field].strip():
             errors.append(f"{field} must be a non-empty string")
     if not isinstance(evidence["commit"], str) or COMMIT.fullmatch(evidence["commit"]) is None:
@@ -50,6 +66,15 @@ def validate_evidence(evidence_path: Path, root: Path | None = None) -> list[str
             actual = hashlib.sha256(sbom.read_bytes()).hexdigest()
             if actual != evidence["sbom_sha256"]:
                 errors.append("sbom_sha256 does not match the referenced SBOM")
+
+    for field in ("sbom_signature", "sbom_certificate"):
+        if not isinstance(evidence[field], str):
+            continue
+        artifact = (root / evidence[field]).resolve()
+        if not artifact.is_relative_to(root):
+            errors.append(f"{field} must remain within the evidence root")
+        elif not artifact.is_file():
+            errors.append(f"{field} does not exist: {evidence[field]}")
     return errors
 
 

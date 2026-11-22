@@ -15,7 +15,7 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
             workflow.write_text("\n".join(snippet for _, snippet in REQUIRED_SNIPPETS[:-1]))
             problems = violations(workflow)
             self.assertEqual(len(problems), 1)
-            self.assertIn("missing CLI SBOM certificate upload", problems[0])
+            self.assertIn("missing source SBOM evidence uploads", problems[0])
 
     def test_removing_sbom_signing_block_is_rejected(self):
         source = WORKFLOW.read_text()
@@ -49,6 +49,19 @@ class ReleaseWorkflowContractTest(unittest.TestCase):
                 problems = violations(workflow)
 
             self.assertTrue(any(description in problem for problem in problems))
+
+    def test_removing_source_sbom_signature_is_rejected(self):
+        source = WORKFLOW.read_text()
+        start = source.index("      - name: Sign and verify source SBOM")
+        end = source.index("\n\n      - name: Attach SBOM attestation", start)
+
+        with tempfile.TemporaryDirectory() as directory:
+            workflow = Path(directory) / "release.yml"
+            workflow.write_text(source[:start] + source[end:])
+            problems = violations(workflow)
+
+        self.assertTrue(any("source SBOM signing" in problem for problem in problems))
+        self.assertTrue(any("source SBOM signature verification" in problem for problem in problems))
 
 
 if __name__ == "__main__":

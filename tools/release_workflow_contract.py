@@ -42,6 +42,14 @@ REQUIRED_SNIPPETS = (
         "CLI SBOM certificate upload",
         '"aussie-cli-${RELEASE_VERSION}.cdx.json.sig" \\\n            "aussie-cli-${RELEASE_VERSION}.cdx.json.pem" \\\n            --clobber',
     ),
+    ("source SBOM signing", 'sbom="aussie-${RELEASE_VERSION}.cdx.json"'),
+    ("source SBOM signature verification", '--signature "${sbom}.sig"'),
+    ("source SBOM evidence signature", "sbom_signature: $sbomSignature"),
+    ("source SBOM evidence certificate", "sbom_certificate: $sbomCertificate"),
+    (
+        "source SBOM evidence uploads",
+        "aussie-${{ github.ref_name }}.cdx.json.pem\n            aussie-${{ github.ref_name }}.evidence.json",
+    ),
 )
 
 

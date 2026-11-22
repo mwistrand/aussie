@@ -10,9 +10,10 @@ verification metadata are enforced by CI; Go and npm dependency locks are
 also verified on every change.
 
 The successful job publishes the JVM image to GHCR, emits BuildKit provenance
-and an SBOM, signs the image with keyless Cosign, attaches a CycloneDX SBOM
-attestation, verifies both signatures, and uploads an evidence manifest with the
-image digest, SBOM checksum, compatibility note, and rollback instructions.
+and an SBOM, signs the image and source SBOM with keyless Cosign, attaches a
+CycloneDX SBOM attestation, verifies the signatures, and uploads an evidence
+manifest with the image digest, SBOM checksum, signed-SBOM files, compatibility
+note, and rollback instructions.
 It also tests and cross-builds the CLI for Linux and macOS on amd64 and arm64,
 plus Windows amd64. Each archive has a SHA-256 checksum, a keyless Cosign blob
 signature, and GitHub build provenance; the CLI dependency SBOM has its own
@@ -71,8 +72,9 @@ successful hosted run is required before the plan's rollback checklist item is
 closed.
 
 The uploaded `*.evidence.json` manifest is the release handoff. Verify its
-`digest` against the registry image and its `sbom_sha256` against the uploaded
-CycloneDX file before deployment.
+`digest` against the registry image, its `sbom_sha256` against the uploaded
+CycloneDX file, and the `sbom_signature`/`sbom_certificate` files with Cosign
+before deployment.
 
 ## Revocation and rollback
 

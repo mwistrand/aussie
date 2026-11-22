@@ -240,6 +240,23 @@ jobs:
           --certificate-oidc-issuer https://token.actions.githubusercontent.com
           "${IMAGE}@${DIGEST}"
 
+      - name: Sign and verify source SBOM
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          sbom="aussie-${RELEASE_VERSION}.cdx.json"
+          cosign sign-blob --yes \
+            --output-signature "$sbom.sig" \
+            --output-certificate "$sbom.pem" \
+            "$sbom"
+          cosign verify-blob \
+            --signature "${sbom}.sig" \
+            --certificate "${sbom}.pem" \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${RELEASE_VERSION}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$sbom"
+
       - name: Attach SBOM attestation
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
@@ -279,8 +296,11 @@ jobs:
             --arg digest "${DIGEST}" \
             --arg sbom "aussie-${GITHUB_REF_NAME}.cdx.json" \
             --arg sbomSha256 "${SBOM_SHA256}" \
+            --arg sbomSignature "aussie-${GITHUB_REF_NAME}.cdx.json.sig" \
+            --arg sbomCertificate "aussie-${GITHUB_REF_NAME}.cdx.json.pem" \
             '{version: $version, commit: $commit, image: $image, digest: $digest,
               sbom: $sbom, sbom_sha256: $sbomSha256,
+              sbom_signature: $sbomSignature, sbom_certificate: $sbomCertificate,
               compatibility: "docs/platform/release.md", rollback: "docs/platform/release.md"}' \
             > "aussie-${GITHUB_REF_NAME}.evidence.json"
 
@@ -298,6 +318,8 @@ jobs:
           path: |
             aussie-${{ github.ref_name }}.cdx.json
             aussie-${{ github.ref_name }}.sha256
+            aussie-${{ github.ref_name }}.cdx.json.sig
+            aussie-${{ github.ref_name }}.cdx.json.pem
             aussie-${{ github.ref_name }}.evidence.json
 
   vulnerability:
