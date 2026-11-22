@@ -11,9 +11,9 @@ images, and CI service images are pinned to digests too; run
 `make container-contract` to reject mutable release inputs. CLI release archives use the source commit timestamp
 and normalized ownership/ordering so repeated builds of the same tag have
 stable archive contents.
-The release job validates that its evidence manifest names a full image digest
-and that the recorded SBOM checksum matches the uploaded SBOM; run
-`make release-contract` for the local unit check.
+The release job validates that its evidence manifest names a full image digest,
+that the recorded SBOM checksum matches the uploaded SBOM, and that the signed
+SBOM evidence files exist; run `make release-contract` for the local unit check.
 Pull requests run dependency review, while the scheduled `Security` workflow
 scans source dependencies, secrets, and the built JVM image, and runs the
 Java/Go/JavaScript static checks. Release publishing calls that same workflow
