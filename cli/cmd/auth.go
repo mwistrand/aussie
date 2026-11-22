@@ -15,10 +15,11 @@ Authentication Methods:
      identity provider. Tokens are short-lived and automatically managed.
 
   2. API Key (fallback):
-     Configure an API key in .aussierc. This is disabled by default
+     Legacy API keys in the trusted global ~/.aussierc are migrated to
+     origin-bound private storage on first use. This is disabled by default
      and must be enabled by your platform team.
 
-Configuration (.aussierc):
+Configuration (trusted global ~/.aussierc):
   host = "https://aussie.yourcompany.com"
 
   [auth]

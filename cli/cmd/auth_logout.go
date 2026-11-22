@@ -47,6 +47,9 @@ func runLogout(cmd *cobra.Command, args []string) error {
 	if err := auth.ClearCredentials(); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to clear credentials: %w", err)
 	}
+	if err := auth.ClearAPIKey(cfg.Host); err != nil {
+		return fmt.Errorf("failed to clear API key: %w", err)
+	}
 
 	fmt.Println("Local credentials cleared.")
 

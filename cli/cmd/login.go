@@ -18,13 +18,13 @@ Authentication Modes:
   device_code  Uses device code flow for headless environments
   cli_callback Starts a local server to receive the callback
 
-The default mode can be configured in .aussierc:
+The default mode can be configured in the project .aussierc:
 
   [auth]
   mode = "device_code"  # For headless environments
 
-Configuration:
-  Set auth.login_url in .aussierc to point to your organization's
+Configuration (trusted global ~/.aussierc):
+  Set auth.login_url in the global file to point to your organization's
   authorization endpoint. Set auth.token_url when code exchange uses a
   separate endpoint; otherwise it defaults to auth.login_url.
 

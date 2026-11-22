@@ -127,6 +127,12 @@ jobs:
           npm run build
       - name: Verify builds did not mutate tracked files
         run: git diff --exit-code
+      - name: Reject generated CLI executable
+        run: |
+          if git ls-files --error-unmatch cli/aussie >/dev/null 2>&1; then
+            echo "cli/aussie must be built from release artifacts, not committed" >&2
+            exit 1
+          fi
 
   e2e:
     if: github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_call'

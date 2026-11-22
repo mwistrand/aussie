@@ -19,6 +19,11 @@ func newAuthenticatedAPIClient(cmd *cobra.Command) (*api.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	if cfg.ApiKey != "" {
+		if err := cfg.ClearApiKey(); err != nil {
+			return nil, fmt.Errorf("failed to migrate API key to private storage: %w", err)
+		}
+	}
 	return api.New(cfg.Host, token)
 }
 

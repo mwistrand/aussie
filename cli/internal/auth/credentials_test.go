@@ -366,6 +366,63 @@ func TestGetAuthTokenForHostFallsBackToAPIKey(t *testing.T) {
 	if token != "fallback-key" {
 		t.Fatalf("GetAuthTokenForHost() = %q, want fallback-key", token)
 	}
+	if stored, err := loadAPIKey("https://trusted.example"); err != nil || stored != "fallback-key" {
+		t.Fatalf("migrated API key = %q, error = %v", stored, err)
+	}
+}
+
+func TestGetAuthTokenForHostPersistsReplacementAPIKeyWhenJWTWins(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	if err := StoreCredentials(StoredCredentials{
+		Token:        "trusted-token",
+		ServerOrigin: "https://trusted.example",
+		ExpiresAt:    time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	token, err := GetAuthTokenForHost("replacement-key", "https://trusted.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token != "trusted-token" {
+		t.Fatalf("GetAuthTokenForHost() = %q, want trusted-token", token)
+	}
+	if stored, err := loadAPIKey("https://trusted.example"); err != nil || stored != "replacement-key" {
+		t.Fatalf("stored replacement API key = %q, error = %v", stored, err)
+	}
+}
+
+func TestGetAuthTokenForHostPrefersReplacementAPIKey(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	if err := StoreAPIKey("old-key", "https://trusted.example"); err != nil {
+		t.Fatal(err)
+	}
+
+	token, err := GetAuthTokenForHost("replacement-key", "https://trusted.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token != "replacement-key" {
+		t.Fatalf("GetAuthTokenForHost() = %q, want replacement-key", token)
+	}
+	if stored, err := loadAPIKey("https://trusted.example"); err != nil || stored != "replacement-key" {
+		t.Fatalf("stored replacement API key = %q, error = %v", stored, err)
+	}
+}
+
+func TestStoreAPIKeyIsOriginBound(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	if err := StoreAPIKey("secret", "https://trusted.example"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := loadAPIKey("https://trusted.example:443/"); err != nil || got != "secret" {
+		t.Fatalf("trusted API key = %q, error = %v", got, err)
+	}
+	if _, err := loadAPIKey("https://evil.example"); err == nil {
+		t.Fatal("API key was available for a different origin")
+	}
 }
 
 func TestCanonicalOriginRejectsInsecureRemoteServer(t *testing.T) {

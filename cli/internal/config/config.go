@@ -75,6 +75,8 @@ type Config struct {
 
 	// Auth contains authentication configuration for IdP-based auth.
 	Auth AuthConfig `toml:"auth,omitempty"`
+
+	globalHost string
 }
 
 // DefaultConfig returns a config with default values
@@ -89,6 +91,11 @@ func (c *Config) IsAuthenticated() bool {
 	return c.ApiKey != ""
 }
 
+// TrustedHost returns the host selected by the trusted global configuration.
+func (c *Config) TrustedHost() string {
+	return c.globalHost
+}
+
 // Load loads global credentials and project-local non-secret configuration.
 func Load() (*Config, error) {
 	cfg := DefaultConfig()
@@ -100,19 +107,25 @@ func Load() (*Config, error) {
 			if err := toml.Unmarshal(data, cfg); err != nil {
 				return nil, err
 			}
+			cfg.globalHost = cfg.Host
 		}
 	}
 
-	// Project files may select the server and login flow, but never credential destinations.
+	// Project files may select the server and UX, but never credential destinations.
 	localPath := LocalConfigPath()
 	if data, err := os.ReadFile(localPath); err == nil {
 		apiKey := cfg.ApiKey
 		apiKeyHost := cfg.Host
-		logoutURL := cfg.Auth.LogoutURL
-		if err := toml.Unmarshal(data, cfg); err != nil {
+		var project projectConfig
+		if err := toml.Unmarshal(data, &project); err != nil {
 			return nil, err
 		}
-		cfg.Auth.LogoutURL = logoutURL
+		if project.Host != "" {
+			cfg.Host = project.Host
+		}
+		if project.Auth.Mode != "" {
+			cfg.Auth.Mode = project.Auth.Mode
+		}
 		if cfg.Host == apiKeyHost {
 			cfg.ApiKey = apiKey
 		} else {
@@ -121,6 +134,14 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// projectConfig is the subset that an untrusted checkout may control.
+type projectConfig struct {
+	Host string `toml:"host"`
+	Auth struct {
+		Mode AuthMode `toml:"mode,omitempty"`
+	} `toml:"auth,omitempty"`
 }
 
 // LocalConfigPath returns the path to the local config file
@@ -162,7 +183,7 @@ func (c *Config) Save() error {
 		return err
 	}
 
-	data, err := toml.Marshal(c)
+	data, err := toml.Marshal(persistedConfig{Host: c.Host, Auth: c.Auth})
 	if err != nil {
 		return err
 	}
@@ -170,8 +191,31 @@ func (c *Config) Save() error {
 	return os.WriteFile(path, data, 0600)
 }
 
+type persistedConfig struct {
+	Host string     `toml:"host"`
+	Auth AuthConfig `toml:"auth,omitempty"`
+}
+
 // ClearApiKey removes the API key from the configuration and saves it
 func (c *Config) ClearApiKey() error {
+	globalPath, err := GlobalConfigPath()
+	if err != nil {
+		return err
+	}
+
+	globalCfg, err := LoadFromFile(globalPath)
+	if err == nil {
+		if err := globalCfg.Save(); err != nil {
+			return err
+		}
+	} else if os.IsNotExist(err) {
+		if err := c.Save(); err != nil {
+			return err
+		}
+	} else {
+		return err
+	}
+
 	c.ApiKey = ""
-	return c.Save()
+	return nil
 }

@@ -17,7 +17,7 @@ Configuration is loaded from (in order of precedence):
   2. Local .aussierc non-secret settings (current directory)
   3. Global ~/.aussierc config file
 
-Example global config file (~/.aussierc):
+Example trusted global config file (~/.aussierc):
   host = "http://localhost:1234"
   api_key = "your-api-key"`,
 }

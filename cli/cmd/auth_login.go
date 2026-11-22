@@ -56,13 +56,13 @@ Authentication Modes:
   device_code  Uses device code flow for headless environments
   cli_callback Starts a local server to receive the callback
 
-The default mode can be configured in .aussierc:
+The default mode can be configured in the project .aussierc:
 
   [auth]
   mode = "device_code"  # For headless environments
 
-Configuration:
-  Set auth.login_url in .aussierc to point to your organization's
+Configuration (trusted global ~/.aussierc):
+  Set auth.login_url in the global file to point to your organization's
   authorization endpoint. Set auth.token_url when code exchange uses a
   separate endpoint; otherwise it defaults to auth.login_url.
 
@@ -82,9 +82,14 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
+	approvedHost := cfg.TrustedHost()
+	if serverFlag, _ := cmd.Flags().GetString("server"); serverFlag != "" {
+		cfg.Host = serverFlag
+		approvedHost = serverFlag
+	}
 
 	if cfg.Auth.LoginURL == "" {
-		return fmt.Errorf(`auth.login_url not configured in .aussierc
+		return fmt.Errorf(`auth.login_url not configured in trusted global ~/.aussierc
 
 Please configure your organization's authentication endpoint:
 
@@ -105,23 +110,23 @@ login_url = "https://your-org.example.com/auth/aussie/login"`)
 
 	switch mode {
 	case config.AuthModeBrowser:
-		return browserLogin(cfg)
+		return browserLogin(cfg, approvedHost)
 	case config.AuthModeDeviceCode:
-		return deviceCodeLogin(cfg)
+		return deviceCodeLogin(cfg, approvedHost)
 	case config.AuthModeCLICallback:
-		return callbackLogin(cfg)
+		return callbackLogin(cfg, approvedHost)
 	default:
 		return fmt.Errorf("unknown auth mode: %s", mode)
 	}
 }
 
 // browserLogin opens the browser and completes an authorization-code callback.
-func browserLogin(cfg *config.Config) error {
-	return oauthCallbackLogin(cfg, true)
+func browserLogin(cfg *config.Config, approvedHost string) error {
+	return oauthCallbackLogin(cfg, true, approvedHost)
 }
 
 // deviceCodeLogin uses device code flow for headless environments.
-func deviceCodeLogin(cfg *config.Config) error {
+func deviceCodeLogin(cfg *config.Config, approvedHost string) error {
 	deviceURL, err := url.Parse(cfg.Auth.LoginURL)
 	if err != nil {
 		return fmt.Errorf("invalid login URL: %w", err)
@@ -215,7 +220,7 @@ func deviceCodeLogin(cfg *config.Config) error {
 			return err
 		}
 
-		return storeAndPrintCredentials(token, cfg.Host)
+		return storeAndPrintCredentials(token, cfg.Host, approvedHost)
 	}
 }
 
@@ -249,8 +254,8 @@ func waitForDevicePoll(ctx context.Context, interval time.Duration) error {
 }
 
 // callbackLogin starts a local server and waits for callback (similar to browser but no browser open).
-func callbackLogin(cfg *config.Config) error {
-	return oauthCallbackLogin(cfg, false)
+func callbackLogin(cfg *config.Config, approvedHost string) error {
+	return oauthCallbackLogin(cfg, false, approvedHost)
 }
 
 type callbackResult struct {
@@ -258,7 +263,7 @@ type callbackResult struct {
 	err  string
 }
 
-func oauthCallbackLogin(cfg *config.Config, open bool) error {
+func oauthCallbackLogin(cfg *config.Config, open bool, approvedHost string) error {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("failed to start callback server: %w", err)
@@ -341,7 +346,7 @@ func oauthCallbackLogin(cfg *config.Config, open bool) error {
 	if err != nil {
 		return err
 	}
-	return storeAndPrintCredentials(token, cfg.Host)
+	return storeAndPrintCredentials(token, cfg.Host, approvedHost)
 }
 
 func parseOAuthCallback(r *http.Request, expectedHost, expectedState string) (callbackResult, bool) {
@@ -486,7 +491,7 @@ func oauthDeviceError(resp *http.Response, fallback string) error {
 }
 
 // storeAndPrintCredentials parses the token, stores credentials, and prints status.
-func storeAndPrintCredentials(token, host string) error {
+func storeAndPrintCredentials(token, host, approvedHost string) error {
 	claims, err := auth.ParseTokenClaims(token)
 	if err != nil {
 		return fmt.Errorf("failed to parse token: %w", err)
@@ -494,6 +499,12 @@ func storeAndPrintCredentials(token, host string) error {
 
 	if claims.IsExpired() {
 		return fmt.Errorf("received token is already expired")
+	}
+	if !sameOrigin(host, approvedHost) {
+		return fmt.Errorf("refusing to send the newly acquired token to an unapproved gateway; set the trusted global host or pass --server explicitly")
+	}
+	if err := verifyGatewayToken(host, token); err != nil {
+		return err
 	}
 
 	creds := claims.ToStoredCredentials(token)
@@ -515,6 +526,27 @@ func storeAndPrintCredentials(token, host string) error {
 	}
 	fmt.Printf("  Expires: %s\n", claims.ExpiryTime().Format(time.RFC3339))
 
+	return nil
+}
+
+func sameOrigin(left, right string) bool {
+	leftOrigin, leftErr := auth.CanonicalOrigin(left)
+	rightOrigin, rightErr := auth.CanonicalOrigin(right)
+	return leftErr == nil && rightErr == nil && leftOrigin == rightOrigin
+}
+
+func verifyGatewayToken(host, token string) error {
+	client, err := api.New(host, token)
+	if err != nil {
+		return fmt.Errorf("failed to bind login to gateway: %w", err)
+	}
+	response, err := client.DoJSON(http.MethodGet, "/admin/whoami", nil)
+	if err != nil {
+		return fmt.Errorf("failed to verify token with gateway: %w", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("gateway rejected the received token (HTTP %d)", response.StatusCode)
+	}
 	return nil
 }
 

@@ -90,6 +90,11 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("authentication required: %w\nRun 'aussie login' to authenticate", err)
 	}
+	if cfg.ApiKey != "" {
+		if err := cfg.ClearApiKey(); err != nil {
+			return fmt.Errorf("failed to migrate API key to private storage: %w", err)
+		}
+	}
 	client, err := api.New(cfg.Host, token)
 	if err != nil {
 		return err
