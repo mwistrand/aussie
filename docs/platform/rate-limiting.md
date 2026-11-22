@@ -2,7 +2,7 @@
 
 ## Overview
 
-Rate limiting protects the Aussie API Gateway from abuse and ensures fair resource allocation across all services. Platform teams control the rate limiting algorithm and can set a maximum ceiling that service teams cannot exceed.
+Rate limiting protects the Aussie API Gateway from abuse and ensures fair resource allocation across all services. Aussie currently uses one token-bucket algorithm; platform teams set the ceilings that service teams cannot exceed.
 
 ## Configuration
 
@@ -19,14 +19,15 @@ Rate limiting protects the Aussie API Gateway from abuse and ensures fair resour
 | `AUSSIE_RATE_LIMITING_REDIS_ENABLED` | Require Redis for distributed rate limiting | `false` |
 | `AUSSIE_RATE_LIMITING_FALLBACK_BEHAVIOR` | Runtime Redis failure policy: `DENY`, `LOCAL_BUCKET`, or `ALLOW` | `DENY` |
 
-### Algorithm Selection
+### Algorithm
 
 | Algorithm | Best For | Behavior |
 |-----------|----------|----------|
 | `BUCKET` | General use | Allows controlled bursts, smooth refill |
 
-`BUCKET` is the only supported algorithm. Add another algorithm only with matching
-in-memory and Redis semantics.
+The token bucket is the only supported algorithm. It is implemented directly by
+the in-memory limiter and atomically by the Redis limiter. Add another algorithm
+only with matching semantics in both backends and a concrete product requirement.
 
 ### Setting the Platform Maximum
 

@@ -116,7 +116,7 @@ At 1.667 tokens/second, `Retry-After` is 1 second. At 1 token per 60 seconds, it
 
 ## 3. Algorithm Comparison
 
-Although only the token bucket is currently implemented, the enum and interface are designed for all three. Here is how they compare:
+Although only the token bucket is currently implemented, the other approaches are useful comparison points for a future product requirement. They are not currently selectable configuration values:
 
 | Characteristic | Token Bucket | Fixed Window | Sliding Window |
 |---|---|---|---|
@@ -126,7 +126,7 @@ Although only the token bucket is currently implemented, the enum and interface 
 | **Computational complexity** | O(1) per check | O(1) per check | O(1) per check (weighted average, not per-request timestamps) |
 | **Best for** | General-purpose API rate limiting; traffic with natural bursts | Strict per-window accounting; billing or quota enforcement | Even rate enforcement; public APIs where boundary abuse is a concern |
 | **Predictability for clients** | Less predictable (remaining tokens depend on refill timing) | Highly predictable (clear window boundaries) | Moderately predictable (smooth but harder to reason about) |
-| **Implementation status** | Implemented (`BucketAlgorithm.java`) | Planned (enum defined, handler not registered) | Planned (enum defined, handler not registered) |
+| **Implementation status** | Implemented (`BucketAlgorithm.java`) | Not implemented | Not implemented |
 
 The fixed window's boundary problem is worth understanding concretely. If the limit is 100 requests per 60 seconds and the window resets at :00, a client can send 100 requests at :59 and 100 more at :01 (200 requests in 2 seconds). The sliding window solves this by weighting the previous window's count: if the current position is 20% into the new window, the effective count is `(current_count) + (previous_count * 0.8)`. This prevents the boundary spike at the cost of slightly more state.
 

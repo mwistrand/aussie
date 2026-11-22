@@ -22,10 +22,35 @@ GitHub Release and attaches these files as durable release assets.
 Verify a published image with:
 
 ```sh
-cosign verify ghcr.io/mwistrand/aussie:vX.Y.Z \\
-  --certificate-identity 'https://github.com/mwistrand/aussie/.github/workflows/release.yml@refs/tags/vX.Y.Z' \\
+cosign verify ghcr.io/mwistrand/aussie:vX.Y.Z \
+  --certificate-identity 'https://github.com/mwistrand/aussie/.github/workflows/release.yml@refs/tags/vX.Y.Z' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
+
+Before applying the digest, verify the signed SBOM and build provenance as
+well. Use the exact digest recorded in the release evidence manifest; do not
+verify only the mutable tag:
+
+```sh
+IMAGE=ghcr.io/mwistrand/aussie
+DIGEST=sha256:<digest-from-evidence>
+IDENTITY=https://github.com/mwistrand/aussie/.github/workflows/release.yml@refs/tags/vX.Y.Z
+
+cosign verify-attestation --type cyclonedx \
+  --certificate-identity "$IDENTITY" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "$IMAGE@$DIGEST"
+gh attestation verify "oci://$IMAGE@$DIGEST" \
+  --repo mwistrand/aussie \
+  --signer-workflow mwistrand/aussie/.github/workflows/release.yml \
+  --source-ref "refs/tags/vX.Y.Z" \
+  --bundle-from-oci
+trivy image --severity HIGH,CRITICAL --exit-code 1 "$IMAGE@$DIGEST"
+```
+
+Apply the same verified digest from the evidence manifest in the deployment
+overlay. A tag-only deployment or a digest that was not scanned and attested
+by the release workflow is not a supported production rollout.
 
 Rollback by deploying the previous verified tag. Database changes require the
 migration guide and a forward-fix; do not roll back an image across an
