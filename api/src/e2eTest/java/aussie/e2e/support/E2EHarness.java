@@ -50,6 +50,16 @@ import org.testcontainers.utility.MountableFile;
 public final class E2EHarness {
 
     private static final Logger LOG = LoggerFactory.getLogger(E2EHarness.class);
+    private static final String CASSANDRA_IMAGE =
+            "cassandra:4.1.4@sha256:ff549dfa84dddd83e426d6e13d2d18a3aa00dd3c7fcff5c2529e6d6fda6b7207";
+    private static final String REDIS_IMAGE =
+            "redis:7.2.5-alpine@sha256:6aaf3f5e6bc8a592fbfe2cccf19eb36d27c39d12dab4f4b01556b7449e7b1f44";
+    private static final String NODE_IMAGE =
+            "node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5";
+    private static final String PROMETHEUS_IMAGE =
+            "prom/prometheus:v2.48.0@sha256:b440bc0e8aa5bab44a782952c09516b6a50f9d7b2325c1ffafac7bc833298e2e";
+    private static final String ALERTMANAGER_IMAGE =
+            "prom/alertmanager:v0.26.0@sha256:361db356b33041437517f1cd298462055580585f26555c317df1a3caf2868552";
     private static final String BOOTSTRAP_KEY = "aussie_v1_" + generateRandomSecret(32);
     private static final String JWS_SIGNING_KEY = generateSigningKey();
     // Per-run shared secret expected by the demo's /__test__/* endpoints in the
@@ -97,7 +107,8 @@ public final class E2EHarness {
 
         this.network = Network.newNetwork();
 
-        this.cassandra = new CassandraContainer(DockerImageName.parse("cassandra:4.1"))
+        this.cassandra = new CassandraContainer(
+                        DockerImageName.parse(CASSANDRA_IMAGE).asCompatibleSubstituteFor("cassandra"))
                 .withNetwork(network)
                 .withNetworkAliases("cassandra")
                 .withEnv("CASSANDRA_DC", "datacenter1")
@@ -107,7 +118,7 @@ public final class E2EHarness {
                 .withStartupTimeout(Duration.ofMinutes(3))
                 .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("e2e.cassandra")));
 
-        this.redis = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
+        this.redis = new GenericContainer<>(DockerImageName.parse(REDIS_IMAGE))
                 .withNetwork(network)
                 .withNetworkAliases("redis")
                 .withExposedPorts(6379)
@@ -115,7 +126,7 @@ public final class E2EHarness {
                 .waitingFor(Wait.forLogMessage(".*Ready to accept connections.*", 1))
                 .withLogConsumer(new Slf4jLogConsumer(LoggerFactory.getLogger("e2e.redis")));
 
-        this.demo = new GenericContainer<>(DockerImageName.parse("node:24-alpine"))
+        this.demo = new GenericContainer<>(DockerImageName.parse(NODE_IMAGE))
                 .withNetwork(network)
                 .withNetworkAliases("demo")
                 .withExposedPorts(3000)
@@ -137,7 +148,7 @@ public final class E2EHarness {
         this.replica = apiContainer(apiImage, translationConfig, "api-replica", "e2e.api.replica");
         this.alertmanagerConfig = null;
         this.alertmanager = null;
-        this.prometheus = new GenericContainer<>(DockerImageName.parse("prom/prometheus:v2.48.0"))
+        this.prometheus = new GenericContainer<>(DockerImageName.parse(PROMETHEUS_IMAGE))
                 .withNetwork(network)
                 .withNetworkAliases("prometheus")
                 .withExposedPorts(9090)
@@ -295,7 +306,7 @@ public final class E2EHarness {
             return;
         }
         this.alertmanagerConfig = createE2eAlertmanagerConfig(resolveApiProjectDir(), webhookPort);
-        this.alertmanager = new GenericContainer<>(DockerImageName.parse("prom/alertmanager:v0.26.0"))
+        this.alertmanager = new GenericContainer<>(DockerImageName.parse(ALERTMANAGER_IMAGE))
                 .withNetwork(network)
                 .withNetworkAliases("alertmanager")
                 .withExposedPorts(9093)

@@ -54,3 +54,16 @@ class ContainerContractTest(unittest.TestCase):
                 container_contract.mutable_image_refs((workflow,)),
                 [f"{workflow}:2: ghcr.io/aquasecurity/trivy:latest"],
             )
+
+    def test_mutable_java_container_image_is_rejected(self):
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "E2EHarness.java"
+            source.write_text(
+                'private static final String REDIS_IMAGE =\n'
+                '        "redis:7-alpine";\n'
+                'this.redis = new GenericContainer<>(DockerImageName.parse(REDIS_IMAGE));\n'
+            )
+            self.assertEqual(
+                container_contract.mutable_image_refs((source,)),
+                [f"{source}:1: redis:7-alpine"],
+            )

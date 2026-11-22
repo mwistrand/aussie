@@ -6,9 +6,9 @@ security, rollout, secret, probe, disruption, and dependency-egress contract;
 run the same check locally with `make deployment-contract`.
 All third-party GitHub Actions are pinned to full commit SHAs; the workflow
 contract check rejects mutable tags. Run it locally with `make workflow-contract`.
-The release JVM builder/runtime bases, packaged-E2E runtime, and CI service
-images are pinned to digests too; run `make container-contract` to reject
-mutable release inputs. CLI release archives use the source commit timestamp
+The release JVM builder/runtime bases, packaged-E2E runtime and dependency
+images, and CI service images are pinned to digests too; run
+`make container-contract` to reject mutable release inputs. CLI release archives use the source commit timestamp
 and normalized ownership/ordering so repeated builds of the same tag have
 stable archive contents.
 Pull requests run dependency review, while the scheduled `Security` workflow
