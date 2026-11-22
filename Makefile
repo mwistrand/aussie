@@ -1,6 +1,6 @@
 COMPOSE=docker compose
 
-.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage config-contract docs-contract deployment-contract deployment-qualification workflow-contract container-contract release-contract vulnerability-contract reset demo-deps e2e e2e-soak e2e-logs
+.PHONY: up down restart api api-down demo demo-down otel otel-down migrate storage storage-down test coverage config-contract docs-contract deployment-contract deployment-qualification workflow-contract container-contract release-contract release-workflow-contract vulnerability-contract reset demo-deps e2e e2e-soak e2e-logs
 
 SOAK_RUNS ?= 3
 
@@ -73,6 +73,10 @@ container-contract:
 
 release-contract:
 	python3 tools/release_contract_test.py
+
+release-workflow-contract:
+	python3 tools/release_workflow_contract_test.py
+	python3 tools/release_workflow_contract.py
 
 vulnerability-contract:
 	python3 tools/vulnerability_exceptions_test.py

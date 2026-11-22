@@ -85,6 +85,15 @@ jobs:
           output-file: aussie-cli-${{ github.ref_name }}.cdx.json
           upload-artifact: false
 
+      - name: Checksum CLI SBOM
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          sha256sum "aussie-cli-${RELEASE_VERSION}.cdx.json" \
+            > "aussie-cli-${RELEASE_VERSION}.cdx.json.sha256"
+          sha256sum --check "aussie-cli-${RELEASE_VERSION}.cdx.json.sha256"
+
       - name: Install Cosign
         uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
 
@@ -105,6 +114,17 @@ jobs:
               --certificate-oidc-issuer https://token.actions.githubusercontent.com \
               "$asset"
           done
+          sbom="aussie-cli-${RELEASE_VERSION}.cdx.json"
+          cosign sign-blob --yes \
+            --output-signature "$sbom.sig" \
+            --output-certificate "$sbom.pem" \
+            "$sbom"
+          cosign verify-blob \
+            --signature "$sbom.sig" \
+            --certificate "$sbom.pem" \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${RELEASE_VERSION}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$sbom"
 
       - name: Attest CLI build provenance
         uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v1.4.4
@@ -132,6 +152,9 @@ jobs:
             dist/*.pem \
             dist/*.sha256 \
             "aussie-cli-${RELEASE_VERSION}.cdx.json" \
+            "aussie-cli-${RELEASE_VERSION}.cdx.json.sha256" \
+            "aussie-cli-${RELEASE_VERSION}.cdx.json.sig" \
+            "aussie-cli-${RELEASE_VERSION}.cdx.json.pem" \
             --clobber
 
       - name: Archive CLI release artifacts
@@ -146,6 +169,9 @@ jobs:
             dist/*.pem
             dist/*.sha256
             aussie-cli-${{ github.ref_name }}.cdx.json
+            aussie-cli-${{ github.ref_name }}.cdx.json.sha256
+            aussie-cli-${{ github.ref_name }}.cdx.json.sig
+            aussie-cli-${{ github.ref_name }}.cdx.json.pem
 
   image:
     needs: [checks, security, cli]

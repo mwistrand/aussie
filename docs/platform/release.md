@@ -15,9 +15,9 @@ attestation, verifies both signatures, and uploads an evidence manifest with the
 image digest, SBOM checksum, compatibility note, and rollback instructions.
 It also tests and cross-builds the CLI for Linux and macOS on amd64 and arm64,
 plus Windows amd64. Each archive has a SHA-256 checksum, a keyless Cosign blob
-signature, and GitHub build provenance; the CLI dependency SBOM is uploaded
-with the release artifacts. The workflow creates or updates the matching
-GitHub Release and attaches these files as durable release assets.
+signature, and GitHub build provenance; the CLI dependency SBOM has its own
+checksum and keyless Cosign signature. The workflow creates or updates the
+matching GitHub Release and attaches these files as durable release assets.
 
 Verify a published image with:
 
@@ -101,4 +101,16 @@ cosign verify-blob \
   --certificate-identity 'https://github.com/mwistrand/aussie/.github/workflows/release.yml@refs/tags/vX.Y.Z' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   aussie-vX.Y.Z-linux-amd64.tar.gz
+```
+
+Verify the published CLI SBOM before using it as release evidence:
+
+```sh
+sha256sum --check aussie-cli-vX.Y.Z.cdx.json.sha256
+cosign verify-blob \
+  --signature aussie-cli-vX.Y.Z.cdx.json.sig \
+  --certificate aussie-cli-vX.Y.Z.cdx.json.pem \
+  --certificate-identity 'https://github.com/mwistrand/aussie/.github/workflows/release.yml@refs/tags/vX.Y.Z' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  aussie-cli-vX.Y.Z.cdx.json
 ```
