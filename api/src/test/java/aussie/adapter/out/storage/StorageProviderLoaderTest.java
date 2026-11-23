@@ -434,6 +434,8 @@ class StorageProviderLoaderTest {
 
             var cacheProviderMock = mock(ConfigurationCacheProvider.class);
             var cacheHealth = mock(StorageHealthIndicator.class);
+            var cache = mock(ConfigurationCache.class);
+            when(cacheProviderMock.createCache(config)).thenReturn(cache);
             when(cacheProviderMock.createHealthIndicator(config)).thenReturn(Optional.of(cacheHealth));
 
             var loader = createLoader(Optional.empty(), Optional.empty(), true);
@@ -445,6 +447,7 @@ class StorageProviderLoaderTest {
             assertEquals(2, indicators.size());
             assertTrue(indicators.contains(repoHealth));
             assertTrue(indicators.contains(cacheHealth));
+            verify(cacheProviderMock).createCache(config);
         }
 
         @Test

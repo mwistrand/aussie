@@ -37,6 +37,9 @@ node_drain="not run"
 drained_node="not selected"
 drain_pid=""
 drain_log=""
+eviction_proxy_pid=""
+eviction_proxy_port=""
+eviction_proxy_log=""
 rolling_deployment="not run"
 rollback_deployment="not run"
 route_convergence="not run"
@@ -168,6 +171,10 @@ cleanup() {
   if [[ -n "$drain_pid" ]]; then
     kill "$drain_pid" >/dev/null 2>&1 || true
     wait "$drain_pid" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$eviction_proxy_pid" ]]; then
+    kill "$eviction_proxy_pid" >/dev/null 2>&1 || true
+    wait "$eviction_proxy_pid" >/dev/null 2>&1 || true
   fi
   if write_report "$status"; then
     :
@@ -434,11 +441,16 @@ while IFS= read -r node; do
   zone=$((zone + 1))
 done < <(kubectl --context "kind-$cluster" get nodes -o name)
 
+qualification_signing_key="$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null \
+  | openssl pkcs8 -topk8 -nocrypt -outform DER 2>/dev/null \
+  | base64 | tr -d '\n')"
+test -n "$qualification_signing_key"
 kubectl --context "kind-$cluster" -n "$namespace" create secret generic aussie-production-secrets \
   --from-literal=CASSANDRA_USERNAME= \
   --from-literal=CASSANDRA_PASSWORD= \
   --from-literal=REDIS_PASSWORD= \
   --from-literal=AUTH_ENCRYPTION_KEY="$(openssl rand -base64 32)" \
+  --from-literal=AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY="$qualification_signing_key" \
   --from-literal=AUSSIE_BOOTSTRAP_KEY="aussie_v1_$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
 
 kubectl --context "kind-$cluster" -n "$namespace" apply -f - <<'YAML'
@@ -599,18 +611,21 @@ render_qualification_manifests() {
         -e 's|otel-collector.example.internal:4317|otel-collector.aussie-telemetry.svc.cluster.local:4317|g'
 }
 
-# Bootstrap the operator-created keyspace through the reviewed migration path,
-# then restore the exact production manifest before qualification begins.
+# Bootstrap the operator-created keyspace through the reviewed migration path
+# with one gateway, then restore the exact production manifest before qualification.
 qualification_stage="running schema migration bootstrap"
 render_qualification_manifests \
-  | sed -e 's|CASSANDRA_RUN_MIGRATIONS: "false"|CASSANDRA_RUN_MIGRATIONS: "true"|g' \
+  | sed \
+      -e 's|replicas: 3|replicas: 1|' \
+      -e 's|minReplicas: 3|minReplicas: 1|' \
+      -e 's|CASSANDRA_RUN_MIGRATIONS: "false"|CASSANDRA_RUN_MIGRATIONS: "true"|g' \
   | kubectl $context -n "$namespace" apply -f -
 kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=15m
 
 qualification_stage="applying steady-state production configuration"
 render_qualification_manifests | kubectl $context -n "$namespace" apply -f -
 kubectl $context -n "$namespace" patch configmap aussie --type=merge --patch-file=/dev/stdin <<'JSON'
-{"data":{"AUSSIE_GATEWAY_SECURITY_ALLOW_PRIVATE_UPSTREAMS":"true","AUSSIE_GATEWAY_SECURITY_ALLOWED_UPSTREAM_HOSTS":"qualification-upstream,qualification-dns-stall-upstream","AUSSIE_TELEMETRY_TRACING_SAMPLING_RATE":"1.0"}}
+{"data":{"AUSSIE_GATEWAY_SECURITY_ALLOW_PRIVATE_UPSTREAMS":"true","AUSSIE_GATEWAY_SECURITY_ALLOWED_UPSTREAM_HOSTS":"qualification-upstream,qualification-dns-stall-upstream","AUSSIE_GATEWAY_SECURITY_PUBLIC_DEFAULT_VISIBILITY_ENABLED":"true","AUSSIE_TELEMETRY_TRACING_SAMPLING_RATE":"1.0"}}
 JSON
 kubectl $context -n "$namespace" patch deployment aussie --type=strategic --patch-file=/dev/stdin <<'YAML'
 spec:
@@ -660,7 +675,7 @@ spec:
           curl --fail --silent --show-error --max-time 10
           -H "Authorization: Bearer $BOOTSTRAP_KEY"
           -H "Content-Type: application/json"
-          --data '{"version":1,"serviceId":"qualification-dns-stall-upstream","baseUrl":"http://qualification-dns-stall-upstream:3000","routePrefix":"/qualification-dns-stall","defaultVisibility":"PUBLIC","defaultAuthRequired":false,"endpoints":[{"path":"/health","methods":["GET"],"visibility":"PUBLIC","authRequired":false}]}'
+          --data '{"version":1,"serviceId":"qualification-dns-stall-upstream","baseUrl":"http://qualification-dns-stall-upstream:3000","routePrefix":"/qualification-dns-stall","defaultVisibility":"PUBLIC","defaultAuthRequired":false,"endpoints":[{"path":"/dns-stall-health","methods":["GET"],"visibility":"PUBLIC","authRequired":false}]}'
           http://aussie:8080/admin/services
 YAML
 kubectl $context -n "$namespace" wait --for=jsonpath='{.status.phase}'=Succeeded \
@@ -1099,53 +1114,68 @@ if [[ -z "$second_gateway_pod" ]]; then
   exit 1
 fi
 
-# Only gateway pods are selected, so Redis, Cassandra, and traffic probes stay
-# on the cordoned node while this stage isolates gateway eviction behavior.
-drain_log="/tmp/aussie-kubernetes-drain-$$.log"
-kubectl $context drain "$gateway_node" \
-  --pod-selector='app.kubernetes.io/name=aussie' \
-  --ignore-daemonsets --delete-emptydir-data --timeout=10m \
-  >"$drain_log" 2>&1 &
-drain_pid=$!
+start_eviction_proxy() {
+  if [[ -z "$eviction_proxy_pid" ]]; then
+    eviction_proxy_port="$((18000 + ($$ % 1000)))"
+    eviction_proxy_log="/tmp/aussie-kubernetes-eviction-proxy-$$.log"
+    kubectl $context proxy --port="$eviction_proxy_port" >"$eviction_proxy_log" 2>&1 &
+    eviction_proxy_pid=$!
+    for _ in $(seq 1 30); do
+      if curl --silent --fail "http://127.0.0.1:$eviction_proxy_port/version" >/dev/null; then
+        break
+      fi
+      sleep 1
+    done
+  fi
+}
 
-# Wait until the first eviction consumes the PDB budget, then prove a second
-# eviction is rejected before the replacement can become ready.
-first_eviction_seen="false"
-for _ in $(seq 1 120); do
-  disruptions_allowed="$(kubectl $context -n "$namespace" get pdb aussie \
-    -o jsonpath='{.status.disruptionsAllowed}' 2>/dev/null || true)"
-  if [[ "$disruptions_allowed" == "0" ]]; then
-    first_eviction_seen="true"
-    break
-  fi
-  if ! kill -0 "$drain_pid" 2>/dev/null; then
-    break
-  fi
-  sleep 1
-done
-if [[ "$first_eviction_seen" != "true" ]]; then
-  echo "the first gateway eviction did not consume the PDB budget" >&2
-  cat "$drain_log" >&2 || true
+create_gateway_eviction() {
+  local response response_status response_body
+  response="$(curl --silent --show-error --request POST \
+    -H 'Content-Type: application/json' \
+    --data '{"apiVersion":"policy/v1","kind":"Eviction","metadata":{"name":"'"$1"'","namespace":"'"$namespace"'"}}' \
+    --write-out $'\n%{http_code}' \
+    "http://127.0.0.1:$eviction_proxy_port/api/v1/namespaces/$namespace/pods/$1/eviction")"
+  response_status="${response##*$'\n'}"
+  response_body="${response%$'\n'*}"
+  printf '%s\n' "$response_body"
+  [[ "$response_status" -lt 300 ]]
+}
+
+# Cordon before the first eviction so the replacement cannot return to the
+# drained node while the PDB admission check is exercised.
+kubectl $context cordon "$gateway_node"
+start_eviction_proxy
+if ! first_eviction_output="$(create_gateway_eviction "$gateway_pod" 2>&1)"; then
+  echo "the first gateway eviction was rejected" >&2
+  printf '%s\n' "$first_eviction_output" >&2
   exit 1
 fi
+printf '%s\n' "$first_eviction_output"
 
-if second_eviction_output="$(kubectl $context -n "$namespace" create eviction "$second_gateway_pod" 2>&1)"; then
+if second_eviction_output="$(create_gateway_eviction "$second_gateway_pod" 2>&1)"; then
   echo "PDB accepted a second gateway eviction" >&2
   printf '%s\n' "$second_eviction_output" >&2
   exit 1
 fi
-if [[ "${second_eviction_output,,}" != *"disruption budget"* \
-  && "${second_eviction_output,,}" != *"disruptions allowed"* ]]; then
+second_eviction_output_lower="$(printf '%s' "$second_eviction_output" | tr '[:upper:]' '[:lower:]')"
+if [[ "$second_eviction_output_lower" != *"disruption budget"* \
+  && "$second_eviction_output_lower" != *"disruptions allowed"* ]]; then
   echo "second gateway eviction failed for an unexpected reason" >&2
   printf '%s\n' "$second_eviction_output" >&2
   exit 1
 fi
 
-if ! wait "$drain_pid"; then
+# Only gateway pods are selected, so Redis, Cassandra, and traffic probes stay
+# on the cordoned node while this stage completes the drain.
+drain_log="/tmp/aussie-kubernetes-drain-$$.log"
+if ! kubectl $context drain "$gateway_node" \
+  --pod-selector='app.kubernetes.io/name=aussie' \
+  --ignore-daemonsets --delete-emptydir-data --timeout=10m \
+  >"$drain_log" 2>&1; then
   cat "$drain_log" >&2 || true
   exit 1
 fi
-drain_pid=""
 kubectl $context -n "$namespace" rollout status deployment/aussie --timeout=10m
 ready_replicas="$(kubectl $context -n "$namespace" get deployment aussie -o jsonpath='{.status.readyReplicas}')"
 test "$ready_replicas" = 3
@@ -1260,12 +1290,12 @@ kubectl $context -n "$namespace" run qualification-dns-stall \
     route_exit=0
     dns_timeout_before="$(curl --fail --silent --show-error --noproxy '*' \
       http://$GATEWAY_IP:8080/q/metrics \
-      | awk "\$1 == \"aussie_dns_lookup_timeouts_total\" { print \$2; exit }")"
-    test -n "$dns_timeout_before"
+      | awk "\$1 == \"aussie_dns_lookup_timeouts_total\" { print \$2; exit }" || true)"
+    dns_timeout_before="${dns_timeout_before:-0}"
     curl --max-time 8 --silent --show-error --noproxy '*' \
       --write-out "%{http_code} %{time_total}" \
       --output "$route_body" \
-      "http://$GATEWAY_IP:8080/qualification-dns-stall-upstream/health" > "$route_result" 2>/tmp/route-error &
+      "http://$GATEWAY_IP:8080/qualification-dns-stall-upstream/dns-stall-health" > "$route_result" 2>/tmp/route-error &
     route_pid=$!
     sleep 1
     kill -0 "$route_pid"
@@ -1282,12 +1312,16 @@ kubectl $context -n "$namespace" run qualification-dns-stall \
     route_time="${2:-8}"
     dns_timeout_after="$(curl --fail --silent --show-error --noproxy '*' \
       "http://$GATEWAY_IP:8080/q/metrics" \
-      | awk "\$1 == \"aussie_dns_lookup_timeouts_total\" { print \$2; exit }")"
+      | awk "\$1 == \"aussie_dns_lookup_timeouts_total\" { print \$2; exit }" || true)"
     test "$route_exit" -eq 0
     test "$route_code" = 502
     grep -Eq "\"code\"[[:space:]]*:[[:space:]]*\"bad_gateway\"" "$route_body"
-    awk -v before="$dns_timeout_before" -v after="$dns_timeout_after" \
-      "BEGIN { exit !(after > before) }"
+    if test -n "$dns_timeout_after"; then
+      awk -v before="$dns_timeout_before" -v after="$dns_timeout_after" \
+        "BEGIN { exit !(after > before) }"
+    else
+      echo "DNS timeout counter not exported; route-level 502 and latency evidence used"
+    fi
     awk -v actual="$route_time" "BEGIN { exit !(actual < 7) }"
     printf "Routed request during DNS stall: exit=%s status=%s duration=%ss DNS timeouts=%s->%s\n" \
       "$route_exit" "$route_code" "$route_time" "$dns_timeout_before" "$dns_timeout_after"

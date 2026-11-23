@@ -64,9 +64,10 @@ it does not prove those provider-specific backup/restore targets.
 ## Secrets and rollout
 
 Create the external secret named `aussie-production-secrets` with
-`CASSANDRA_USERNAME`, `CASSANDRA_PASSWORD`, `REDIS_PASSWORD`, and
-`AUTH_ENCRYPTION_KEY`. Keep it out of ConfigMaps, manifests, command lines, and
-logs. The base NetworkPolicy permits the standard Kubernetes DNS pods and
+`CASSANDRA_USERNAME`, `CASSANDRA_PASSWORD`, `REDIS_PASSWORD`,
+`AUTH_ENCRYPTION_KEY`, and `AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY`. Keep it
+out of ConfigMaps, manifests, command lines, and logs. The base NetworkPolicy
+permits the standard Kubernetes DNS pods and
 in-cluster Cassandra, Redis, and OTLP gRPC telemetry only when their namespaces
 carry `aussie.network/cassandra=true`, `aussie.network/redis=true`, and
 `aussie.network/telemetry=true`, respectively. The base points
