@@ -4,6 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.net.URI;
 import java.time.Duration;
@@ -18,6 +22,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import aussie.adapter.out.storage.NoOpConfigurationCache;
 import aussie.adapter.out.storage.memory.InMemoryServiceConfigEventPublisher;
@@ -35,6 +41,7 @@ import aussie.core.model.routing.ServiceOnlyMatch;
 import aussie.core.model.service.RegistrationResult;
 import aussie.core.model.service.ServiceRegistration;
 import aussie.core.port.out.ServiceConfigEventPublisher;
+import aussie.core.port.out.ServiceRegistrationRepository;
 import aussie.core.service.auth.*;
 import aussie.core.service.routing.*;
 
@@ -44,7 +51,7 @@ class ServiceRegistryTest {
     private static final Duration TIMEOUT = Duration.ofSeconds(5);
     private ServiceRegistry registry;
     private ServiceAuthorizationService authService;
-    private InMemoryServiceRegistrationRepository repository;
+    private ServiceRegistrationRepository repository;
 
     // Permissive security config for testing
     private static final GatewaySecurityConfig PERMISSIVE_CONFIG = TestGatewaySecurityConfig.permissive();
@@ -95,6 +102,60 @@ class ServiceRegistryTest {
                 authService,
                 new InMemoryServiceConfigEventPublisher(),
                 TEST_CACHE_CONFIG);
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {127, 128, 10_000})
+    @DisplayName("Should accept a stable generation regardless of boxed Long identity")
+    void shouldAcceptStableGenerationByValue(long generation) {
+        var repository = mock(ServiceRegistrationRepository.class);
+        when(repository.currentGeneration())
+                .thenReturn(
+                        Uni.createFrom().item(Long.valueOf(generation)),
+                        Uni.createFrom().item(Long.valueOf(generation)));
+        when(repository.findAll()).thenReturn(Uni.createFrom().item(List.of()));
+
+        var registry = new ServiceRegistry(
+                repository,
+                NoOpConfigurationCache.INSTANCE,
+                new ServiceRegistrationValidator(
+                        PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG),
+                new ServiceAuthorizationService(new DefaultPermissionPolicy()),
+                new InMemoryServiceConfigEventPublisher(),
+                TEST_CACHE_CONFIG);
+
+        registry.initialize().await().atMost(TIMEOUT);
+
+        assertEquals(
+                generation, registry.routingStatus().await().atMost(TIMEOUT).activeGeneration());
+    }
+
+    @Test
+    @DisplayName("Should retry when the generation changes during a refresh")
+    void shouldRetryWhenGenerationChangesDuringRefresh() {
+        var repository = mock(ServiceRegistrationRepository.class);
+        when(repository.currentGeneration())
+                .thenReturn(
+                        Uni.createFrom().item(Long.valueOf(1)),
+                        Uni.createFrom().item(Long.valueOf(2)),
+                        Uni.createFrom().item(Long.valueOf(2)),
+                        Uni.createFrom().item(Long.valueOf(2)));
+        when(repository.findAll())
+                .thenReturn(Uni.createFrom().item(List.of()), Uni.createFrom().item(List.of()));
+
+        var registry = new ServiceRegistry(
+                repository,
+                NoOpConfigurationCache.INSTANCE,
+                new ServiceRegistrationValidator(
+                        PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG),
+                new ServiceAuthorizationService(new DefaultPermissionPolicy()),
+                new InMemoryServiceConfigEventPublisher(),
+                TEST_CACHE_CONFIG);
+
+        registry.initialize().await().atMost(TIMEOUT);
+
+        assertEquals(2L, registry.routingStatus().await().atMost(TIMEOUT).activeGeneration());
+        verify(repository, times(5)).currentGeneration();
     }
 
     @Nested

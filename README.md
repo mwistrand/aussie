@@ -4,11 +4,13 @@
   <img src="static/img/aussie.svg" alt="Aussie Logo" width="150">
 </p>
 
-Aussie is an experimental API Gateway built with Quarkus, designed for exploring modern gateway patterns and proxy architectures.
+Aussie is an experimental API gateway built with Quarkus as a hands-on learning exercise. It explores gateway patterns, proxy architectures, and the trade-offs involved in building and operating a gateway.
+
+The project is intended for learning and experimentation, not production use. Features and APIs may change as the experiments evolve.
 
 ## Overview
 
-Aussie is a lightweight API gateway for microservices. It provides two routing strategies to fit different architectural needs:
+Aussie uses microservice routing as a starting point for exploring gateway design. It implements two routing strategies:
 
 - **Pass-Through Routing** (`/{serviceId}/{path}`) - Routes requests directly to a service by its ID
 - **Gateway Routing** (`/gateway/{path}`) - Routes requests based on registered endpoint patterns, allowing multiple services to share a unified API namespace
