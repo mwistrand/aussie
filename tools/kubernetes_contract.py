@@ -210,6 +210,7 @@ def validate_deployment(deployment: dict[str, Any]) -> None:
         "CASSANDRA_PASSWORD",
         "REDIS_PASSWORD",
         "AUTH_ENCRYPTION_KEY",
+        "AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY",
     }
     actual_secret_keys = {
         item["name"]

@@ -47,6 +47,7 @@ public class StorageProviderLoader {
 
     private StorageRepositoryProvider repositoryProvider;
     private ConfigurationCacheProvider cacheProvider;
+    private ConfigurationCache cache;
     private boolean cacheProviderResolved = false;
 
     @Inject
@@ -79,13 +80,16 @@ public class StorageProviderLoader {
      */
     @Produces
     @ApplicationScoped
-    public ConfigurationCache cache() {
+    public synchronized ConfigurationCache cache() {
         if (!cacheEnabled) {
             LOG.info("Caching disabled (aussie.storage.cache.enabled=false)");
             return NoOpConfigurationCache.INSTANCE;
         }
+        if (cache != null) {
+            return cache;
+        }
 
-        return getCacheProvider()
+        cache = getCacheProvider()
                 .map(provider -> {
                     LOG.infof("Creating cache from provider: %s (%s)", provider.name(), provider.description());
                     return provider.createCache(config);
@@ -94,6 +98,7 @@ public class StorageProviderLoader {
                     LOG.info("No cache provider available, using no-op cache");
                     return NoOpConfigurationCache.INSTANCE;
                 });
+        return cache;
     }
 
     @Produces
@@ -104,6 +109,7 @@ public class StorageProviderLoader {
         getRepositoryProvider().createHealthIndicator(config).ifPresent(indicators::add);
 
         if (cacheEnabled) {
+            cache();
             getCacheProvider().flatMap(p -> p.createHealthIndicator(config)).ifPresent(indicators::add);
         }
 

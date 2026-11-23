@@ -63,6 +63,11 @@ spec:
                 secretKeyRef:
                   name: aussie-production-secrets
                   key: AUTH_ENCRYPTION_KEY
+            - name: AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aussie-production-secrets
+                  key: AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

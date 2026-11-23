@@ -2,6 +2,7 @@ import copy
 import unittest
 
 from kubernetes_contract import (
+    ROOT,
     parse_yaml_documents,
     rollback_container_default,
     validate_config_map,
@@ -61,6 +62,11 @@ spec:
                 secretKeyRef:
                   name: aussie-production-secrets
                   key: AUTH_ENCRYPTION_KEY
+            - name: AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aussie-production-secrets
+                  key: AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -235,6 +241,14 @@ spec:
 
         with self.assertRaises(AssertionError):
             validate_deployment(deployment)
+
+    def test_qualification_bootstrap_serializes_schema_migrations(self):
+        script = (ROOT / "tools/kubernetes_qualification.sh").read_text()
+
+        self.assertIn("-e 's|replicas: 3|replicas: 1|'", script)
+        self.assertIn("-e 's|minReplicas: 3|minReplicas: 1|'", script)
+        self.assertIn('CASSANDRA_RUN_MIGRATIONS: \"true\"', script)
+        self.assertIn("AUSSIE_AUTH_ROUTE_AUTH_JWS_SIGNING_KEY", script)
 
     def test_rollback_default_is_read_from_container_input(self):
         workflow = """      container:
