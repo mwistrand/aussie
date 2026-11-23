@@ -209,10 +209,10 @@ public class ServiceRegistry {
                             .currentGeneration()
                             .flatMap(after -> {
                                 durableGeneration.accumulateAndGet(after, Math::max);
-                                if (before != after && attempt < 4) {
+                                if (before.longValue() != after.longValue() && attempt < 4) {
                                     return refreshRouteCache(attempt + 1);
                                 }
-                                if (before != after) {
+                                if (before.longValue() != after.longValue()) {
                                     return Uni.createFrom()
                                             .failure(new IllegalStateException("Configuration changed during refresh"));
                                 }
