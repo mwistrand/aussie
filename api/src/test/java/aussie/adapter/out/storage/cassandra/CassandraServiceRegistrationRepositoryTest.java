@@ -1,5 +1,6 @@
 package aussie.adapter.out.storage.cassandra;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -18,6 +19,7 @@ import com.datastax.oss.driver.api.core.cql.BoundStatement;
 import com.datastax.oss.driver.api.core.cql.PreparedStatement;
 import com.datastax.oss.driver.api.core.cql.Row;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
 
 import aussie.core.model.service.ServiceRegistration;
@@ -25,6 +27,31 @@ import aussie.core.model.service.ServiceRegistration;
 class CassandraServiceRegistrationRepositoryTest {
 
     private static final Duration TIMEOUT = Duration.ofSeconds(5);
+
+    @Test
+    void shouldReleaseRouteMutationAuthorityAfterMutation() {
+        final var session = mock(CqlSession.class);
+        final var statement = mock(PreparedStatement.class);
+        final var bound = mock(BoundStatement.class);
+        final var acquired = mock(AsyncResultSet.class);
+        final var released = mock(AsyncResultSet.class);
+        when(session.prepare(anyString())).thenReturn(statement);
+        when(statement.bind(any(Object[].class))).thenReturn(bound);
+        when(acquired.wasApplied()).thenReturn(true);
+        when(session.executeAsync(bound))
+                .thenReturn(CompletableFuture.completedFuture(acquired))
+                .thenReturn(CompletableFuture.completedFuture(released));
+
+        final var repository = new CassandraServiceRegistrationRepository(new ObjectMapper(), session);
+
+        assertEquals(
+                "committed",
+                repository
+                        .withRouteMutationLock(() -> Uni.createFrom().item("committed"))
+                        .await()
+                        .atMost(TIMEOUT));
+        verify(session, times(2)).executeAsync(bound);
+    }
 
     @Test
     void shouldInitializeLegacyVersionBeforeRetryingConditionalUpdate() {

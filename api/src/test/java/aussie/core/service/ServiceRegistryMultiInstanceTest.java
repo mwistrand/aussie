@@ -328,6 +328,45 @@ class ServiceRegistryMultiInstanceTest {
     class LocalConsistency {
 
         @Test
+        @DisplayName("Concurrent overlapping registrations across instances should have one durable winner")
+        void concurrentOverlappingRegistrationsShouldHaveOneDurableWinner() {
+            final var first = serviceWithRoute("first-service", "/api/shared");
+            final var second = serviceWithRoute("second-service", "/api/shared");
+
+            final var results = registerConcurrently(first, second);
+
+            assertEquals(
+                    1,
+                    results.stream()
+                            .filter(RegistrationResult.Success.class::isInstance)
+                            .count());
+            assertEquals(
+                    409,
+                    results.stream()
+                            .filter(RegistrationResult.Failure.class::isInstance)
+                            .map(RegistrationResult.Failure.class::cast)
+                            .findFirst()
+                            .orElseThrow()
+                            .statusCode());
+            final var coldReplica = newRegistry();
+            coldReplica.initialize().await().atMost(TIMEOUT);
+            assertTrue(coldReplica.findRoute("/api/shared", "GET").isPresent());
+        }
+
+        @Test
+        @DisplayName("Concurrent disjoint registrations across instances should both commit")
+        void concurrentDisjointRegistrationsShouldBothCommit() {
+            final var results = registerConcurrently(
+                    serviceWithRoute("first-service", "/api/first"), serviceWithRoute("second-service", "/api/second"));
+
+            assertEquals(
+                    2,
+                    results.stream()
+                            .filter(RegistrationResult.Success.class::isInstance)
+                            .count());
+        }
+
+        @Test
         @DisplayName("Concurrent updates across instances should have exactly one winner")
         void concurrentUpdatesShouldHaveExactlyOneWinner() {
             var initial = ServiceRegistration.builder("cas-service")
@@ -414,6 +453,35 @@ class ServiceRegistryMultiInstanceTest {
             // Should be immediately not visible without waiting for TTL
             assertFalse(instanceA.findRoute("/api/temp", "GET").isPresent());
         }
+    }
+
+    private List<RegistrationResult> registerConcurrently(ServiceRegistration first, ServiceRegistration second) {
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            final var firstResult = CompletableFuture.supplyAsync(
+                    () -> instanceA.register(first).await().atMost(TIMEOUT), executor);
+            final var secondResult = CompletableFuture.supplyAsync(
+                    () -> instanceB.register(second).await().atMost(TIMEOUT), executor);
+            return List.of(firstResult.join(), secondResult.join());
+        }
+    }
+
+    private ServiceRegistration serviceWithRoute(String serviceId, String path) {
+        return ServiceRegistration.builder(serviceId)
+                .baseUrl("http://192.0.2.10:8080")
+                .endpoints(
+                        List.of(new EndpointConfig(path, Set.of("GET"), EndpointVisibility.PUBLIC, Optional.empty())))
+                .build();
+    }
+
+    private ServiceRegistry newRegistry() {
+        return new ServiceRegistry(
+                sharedRepository,
+                NoOpConfigurationCache.INSTANCE,
+                new ServiceRegistrationValidator(
+                        PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG),
+                new ServiceAuthorizationService(new DefaultPermissionPolicy()),
+                new InMemoryServiceConfigEventPublisher(),
+                shortTtlCacheConfig(Duration.ofMinutes(1)));
     }
 
     @Nested
@@ -597,6 +665,11 @@ class ServiceRegistryMultiInstanceTest {
         }
 
         @Override
+        public <T> Uni<T> withRouteMutationLock(java.util.function.Supplier<Uni<T>> mutation) {
+            return delegate.withRouteMutationLock(mutation);
+        }
+
+        @Override
         public Uni<ConditionalWriteResult> createIfAbsent(ServiceRegistration registration) {
             return delegate.createIfAbsent(registration);
         }
@@ -660,6 +733,11 @@ class ServiceRegistryMultiInstanceTest {
         @Override
         public Uni<Void> save(ServiceRegistration registration) {
             return delegate.save(registration);
+        }
+
+        @Override
+        public <T> Uni<T> withRouteMutationLock(java.util.function.Supplier<Uni<T>> mutation) {
+            return delegate.withRouteMutationLock(mutation);
         }
 
         @Override
