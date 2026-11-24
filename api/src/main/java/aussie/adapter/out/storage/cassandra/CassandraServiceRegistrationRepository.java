@@ -4,9 +4,11 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import com.datastax.oss.driver.api.core.CqlSession;
 import com.datastax.oss.driver.api.core.cql.AsyncResultSet;
@@ -48,6 +50,10 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     private static final Logger LOG = Logger.getLogger(CassandraServiceRegistrationRepository.class);
     private static final int MAX_GENERATION_ATTEMPTS = 8;
     private static final int MAX_GENERATION_JITTER_MILLIS = 25;
+    private static final int MAX_ROUTE_LOCK_ATTEMPTS = 100;
+    // shortcut: mutations must finish within 30 seconds; add fencing if route sets make that untrue.
+    private static final int ROUTE_LOCK_TTL_SECONDS = 30;
+    private static final Duration ROUTE_LOCK_RETRY_DELAY = Duration.ofMillis(10);
 
     private final ObjectMapper objectMapper;
     private final CqlSession session;
@@ -64,6 +70,8 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
     private final PreparedStatement selectGenerationStmt;
     private final PreparedStatement initializeGenerationStmt;
     private final PreparedStatement updateGenerationStmt;
+    private final PreparedStatement acquireRouteMutationLockStmt;
+    private final PreparedStatement releaseRouteMutationLockStmt;
     private final AtomicReference<Uni<Void>> generationReconciliation =
             new AtomicReference<>(Uni.createFrom().voidItem());
 
@@ -86,6 +94,51 @@ public class CassandraServiceRegistrationRepository implements ServiceRegistrati
                 "INSERT INTO service_config_generation (scope, generation, updated_at) VALUES ('global', 1, toTimestamp(now())) IF NOT EXISTS");
         this.updateGenerationStmt = session.prepare(
                 "UPDATE service_config_generation SET generation = ?, updated_at = toTimestamp(now()) WHERE scope = 'global' IF generation = ?");
+        this.acquireRouteMutationLockStmt = session.prepare(
+                "INSERT INTO service_route_mutation_lock (scope, owner) VALUES ('global', ?) IF NOT EXISTS USING TTL "
+                        + ROUTE_LOCK_TTL_SECONDS);
+        this.releaseRouteMutationLockStmt =
+                session.prepare("DELETE FROM service_route_mutation_lock WHERE scope = 'global' IF owner = ?");
+    }
+
+    @Override
+    public <T> Uni<T> withRouteMutationLock(Supplier<Uni<T>> mutation) {
+        final var owner = UUID.randomUUID();
+        return acquireRouteMutationLock(owner, 0)
+                .chain(ignored -> mutation.get())
+                .eventually(() -> releaseRouteMutationLock(owner));
+    }
+
+    private Uni<Void> acquireRouteMutationLock(UUID owner, int attempt) {
+        final var executor = getContextExecutor();
+        return Uni.createFrom()
+                .completionStage(() -> session.executeAsync(acquireRouteMutationLockStmt.bind(owner))
+                        .toCompletableFuture())
+                .emitOn(executor)
+                .flatMap(result -> {
+                    if (result.wasApplied()) {
+                        return Uni.createFrom().voidItem();
+                    }
+                    if (attempt == MAX_ROUTE_LOCK_ATTEMPTS) {
+                        return Uni.createFrom()
+                                .failure(new IllegalStateException("Timed out acquiring route mutation authority"));
+                    }
+                    return Uni.createFrom()
+                            .voidItem()
+                            .onItem()
+                            .delayIt()
+                            .by(ROUTE_LOCK_RETRY_DELAY)
+                            .chain(() -> acquireRouteMutationLock(owner, attempt + 1));
+                });
+    }
+
+    private Uni<Void> releaseRouteMutationLock(UUID owner) {
+        final var executor = getContextExecutor();
+        return Uni.createFrom()
+                .completionStage(() -> session.executeAsync(releaseRouteMutationLockStmt.bind(owner))
+                        .toCompletableFuture())
+                .emitOn(executor)
+                .replaceWithVoid();
     }
 
     private PreparedStatement prepareInsert() {

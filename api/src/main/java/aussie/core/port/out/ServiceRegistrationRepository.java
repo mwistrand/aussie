@@ -2,6 +2,7 @@ package aussie.core.port.out;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import io.smallrye.mutiny.Uni;
 
@@ -18,6 +19,14 @@ import aussie.core.model.service.ServiceRegistration;
  * MongoDB, file system, etc.
  */
 public interface ServiceRegistrationRepository {
+
+    /**
+     * Run a route-affecting mutation while this repository's shared route authority is held.
+     *
+     * <p>The supplied operation must read the durable registrations and persist its mutation
+     * before completing.
+     */
+    <T> Uni<T> withRouteMutationLock(Supplier<Uni<T>> mutation);
 
     /**
      * Save or update a service registration.

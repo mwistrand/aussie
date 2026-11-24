@@ -356,8 +356,11 @@ public class ServiceRegistry {
             return Uni.createFrom().item(RegistrationResult.failure(invalid.reason(), invalid.suggestedStatusCode()));
         }
 
-        // Check version constraint and authorization
-        return repository.findById(service.serviceId()).flatMap(existingOpt -> {
+        // The durable read and write must share one authority: each replica has only a partial snapshot.
+        return repository.withRouteMutationLock(() -> repository.findAll().flatMap(registrations -> {
+            final var existingOpt = registrations.stream()
+                    .filter(registration -> registration.serviceId().equals(service.serviceId()))
+                    .findFirst();
             if (existingOpt.isEmpty()) {
                 // Check create authorization if claims provided
                 if (claims != null && !authService.canCreateService(service.serviceId(), claims)) {
@@ -417,7 +420,12 @@ public class ServiceRegistry {
             }
 
             try {
-                routingState.get().snapshot().with(service);
+                GatewaySnapshot.build(java.util.stream.Stream.concat(
+                                registrations.stream()
+                                        .filter(registration ->
+                                                !registration.serviceId().equals(service.serviceId())),
+                                java.util.stream.Stream.of(service))
+                        .toList());
             } catch (IllegalArgumentException conflict) {
                 return Uni.createFrom().item(RegistrationResult.failure(conflict.getMessage(), 409));
             }
@@ -438,7 +446,7 @@ public class ServiceRegistry {
                         .call(ignored -> publishChange(service))
                         .replaceWith(RegistrationResult.committed(service));
             });
-        });
+        }));
     }
 
     private RegistrationResult versionConflict(ConditionalWriteResult result) {
@@ -642,17 +650,7 @@ public class ServiceRegistry {
      * @return Uni with the update result
      */
     public Uni<RegistrationResult> update(ServiceRegistration service) {
-        final var validationResult = validator.validate(service);
-        if (validationResult instanceof ValidationResult.Invalid invalid) {
-            return Uni.createFrom().item(RegistrationResult.failure(invalid.reason(), invalid.suggestedStatusCode()));
-        }
-        routingState.get().snapshot().with(service);
-        return repository.replaceIfVersion(service, service.version() - 1).flatMap(result -> {
-            if (!result.applied()) {
-                return Uni.createFrom().item(versionConflict(result));
-            }
-            return publishChange(service).replaceWith(RegistrationResult.committed(service));
-        });
+        return register(service);
     }
 
     private Uni<Void> publishChange(ServiceRegistration service) {

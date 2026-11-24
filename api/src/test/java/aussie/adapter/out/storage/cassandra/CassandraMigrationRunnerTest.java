@@ -94,13 +94,16 @@ class CassandraMigrationRunnerTest {
         final var claimResult = mock(ResultSet.class);
         final var rows = new ArrayList<Row>();
 
-        for (var version = 2; version <= 19; version++) {
+        for (var version = 2; version <= 20; version++) {
             final var row = mock(Row.class);
             when(row.getInt("version")).thenReturn(version);
             when(row.getString("status")).thenReturn(version == 19 ? "FAILED" : "COMPLETED");
             if (version == 19) {
                 when(row.getString("checksum"))
                         .thenReturn("ef907e5b5fd73152055ab22d0c9dd6f2c4a739267c1dbe0603751a95bd2be665");
+            } else if (version == 20) {
+                when(row.getString("checksum"))
+                        .thenReturn("89142185f75227c7efb31adac2dd263cb532eb02e27e4165fe626200cf825a9a");
             }
             rows.add(row);
         }

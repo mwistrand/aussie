@@ -3,9 +3,11 @@ package aussie.adapter.out.storage.memory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import io.smallrye.mutiny.Uni;
 
@@ -27,6 +29,24 @@ public class InMemoryServiceRegistrationRepository implements ServiceRegistratio
 
     private final ConcurrentHashMap<String, ServiceRegistration> storage = new ConcurrentHashMap<>();
     private final AtomicLong generation = new AtomicLong();
+    private final Object routeMutationLock = new Object();
+    private CompletableFuture<Void> routeMutationTail = CompletableFuture.completedFuture(null);
+
+    @Override
+    public <T> Uni<T> withRouteMutationLock(Supplier<Uni<T>> mutation) {
+        return Uni.createFrom().deferred(() -> {
+            final CompletableFuture<Void> predecessor;
+            final var completion = new CompletableFuture<Void>();
+            synchronized (routeMutationLock) {
+                predecessor = routeMutationTail;
+                routeMutationTail = completion;
+            }
+            return Uni.createFrom()
+                    .completionStage(predecessor)
+                    .chain(mutation::get)
+                    .eventually(() -> completion.complete(null));
+        });
+    }
 
     @Override
     public Uni<Void> save(ServiceRegistration registration) {
