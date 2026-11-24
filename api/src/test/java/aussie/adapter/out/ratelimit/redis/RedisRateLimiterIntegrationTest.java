@@ -1,5 +1,6 @@
 package aussie.adapter.out.ratelimit.redis;
 
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -84,10 +85,11 @@ class RedisRateLimiterIntegrationTest {
 
             local tokens_needed = capacity - tokens
             local seconds_to_full = tokens_needed / refill_rate
-            local reset_at = math.floor(now_ms / 1000) + math.ceil(seconds_to_full)
+            local reset_after = math.max(1, math.ceil(seconds_to_full))
+            local reset_at = math.floor(now_ms / 1000) + reset_after
 
             redis.call('HSET', key, 'tokens', tokens, 'last_refill_ms', now_ms)
-            redis.call('EXPIRE', key, window_seconds * 2)
+            redis.call('EXPIRE', key, reset_after)
 
             local remaining = math.floor(tokens)
             local request_count = math.floor(capacity - tokens)
@@ -605,19 +607,50 @@ class RedisRateLimiterIntegrationTest {
     class KeyExpirationTests {
 
         @Test
-        @DisplayName("should set TTL on keys")
+        @DisplayName("should retain keys until the bucket can refill")
         void shouldSetTtlOnKeys() {
             var key = "test:client-1:service-1";
-            var nowMs = System.currentTimeMillis();
 
-            executeTokenBucket(key, 10, 100.0 / 60.0, nowMs, 60);
+            for (var i = 0; i < 10; i++) {
+                executeProductionTokenBucket(key, 10, 1.0 / 60.0, 60);
+            }
 
             // Check TTL
             var ttl = RedisAPI.api(redisClient).ttl(key).await().atMost(Duration.ofSeconds(5));
 
-            // TTL should be set (window_seconds * 2 = 120)
+            // An empty ten-token bucket takes ten minutes to refill at one token/minute.
             assertTrue(ttl.toLong() > 0, "TTL should be set");
-            assertTrue(ttl.toLong() <= 120, "TTL should not exceed 2 * window_seconds");
+            assertTrue(ttl.toLong() >= 500, "TTL should cover the refill debt");
+            assertTrue(ttl.toLong() <= 600, "TTL should be rounded conservatively");
+        }
+
+        @Test
+        @DisplayName("should use refill debt for ordinary policies")
+        void shouldUseRefillDebtForOrdinaryPolicies() {
+            var key = "test:ordinary-refill-debt";
+
+            executeProductionTokenBucket(key, 10, 10.0 / 60.0, 60);
+
+            var ttl = RedisAPI.api(redisClient).ttl(key).await().atMost(Duration.ofSeconds(5));
+
+            assertTrue(ttl.toLong() >= 5, "TTL should cover one token of refill debt");
+            assertTrue(ttl.toLong() <= 7, "TTL should not use an unrelated fixed window");
+        }
+
+        @Test
+        @DisplayName("should eventually delete a fully refilled idle bucket")
+        void shouldDeleteFullyRefilledIdleBucket() {
+            var key = "test:full-idle-bucket";
+
+            executeProductionTokenBucket(key, 1, 1.0, 60);
+
+            await().atMost(Duration.ofSeconds(5))
+                    .until(() -> RedisAPI.api(redisClient)
+                                    .ttl(key)
+                                    .await()
+                                    .atMost(Duration.ofSeconds(5))
+                                    .toLong()
+                            == -2);
         }
     }
 

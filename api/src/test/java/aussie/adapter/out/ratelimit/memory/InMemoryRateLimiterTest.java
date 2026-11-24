@@ -412,7 +412,7 @@ class InMemoryRateLimiterTest {
     class StaleEntryCleanupTests {
 
         @Test
-        @DisplayName("should remove entries older than 2x window")
+        @DisplayName("should remove entries after their bucket can refill")
         void shouldRemoveStaleEntries() {
             final var now = new AtomicLong(System.currentTimeMillis());
             var limiter = new InMemoryRateLimiter(true, WINDOW_SECONDS, now::get);
@@ -423,8 +423,8 @@ class InMemoryRateLimiterTest {
                 limiter.checkAndConsume(key, limit).await().atMost(Duration.ofSeconds(1));
                 assertEquals(1, limiter.getBucketCount());
 
-                // Advance time past 2x window (120 seconds + 1ms)
-                now.addAndGet(WINDOW_SECONDS * 2 * 1000 + 1);
+                // One missing token refills in less than a second for this limit.
+                now.addAndGet(1000);
                 limiter.runCleanup();
 
                 assertEquals(0, limiter.getBucketCount());
@@ -434,18 +434,18 @@ class InMemoryRateLimiterTest {
         }
 
         @Test
-        @DisplayName("should preserve entries within 2x window")
+        @DisplayName("should retain entries while a slow bucket is still depleted")
         void shouldPreserveFreshEntries() {
             final var now = new AtomicLong(System.currentTimeMillis());
             var limiter = new InMemoryRateLimiter(true, WINDOW_SECONDS, now::get);
             try {
                 var key = RateLimitKey.http("client", "service", "/api");
-                var limit = new EffectiveRateLimit(100, 60, 10);
+                var limit = new EffectiveRateLimit(1, 600, 10);
 
                 limiter.checkAndConsume(key, limit).await().atMost(Duration.ofSeconds(1));
 
-                // Advance time to just under 2x window
-                now.addAndGet(WINDOW_SECONDS * 2 * 1000 - 1);
+                // The nine missing tokens take 5,400 seconds to refill.
+                now.addAndGet(WINDOW_SECONDS * 2 * 1000);
                 limiter.runCleanup();
 
                 assertEquals(1, limiter.getBucketCount());
