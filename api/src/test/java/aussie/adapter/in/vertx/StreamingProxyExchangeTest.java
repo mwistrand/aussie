@@ -23,6 +23,7 @@ import io.opentelemetry.api.trace.Tracer;
 import io.quarkiverse.httpproblem.HttpProblem;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.mutiny.core.buffer.Buffer;
 import io.vertx.mutiny.core.http.HttpClientResponse;
 import io.vertx.mutiny.core.http.HttpServerRequest;
@@ -92,6 +93,7 @@ class StreamingProxyExchangeTest {
         final var request = mock(HttpServerRequest.class);
         when(request.pause()).thenReturn(request);
         when(request.resume()).thenReturn(request);
+        when(request.method()).thenReturn(HttpMethod.GET);
         final var resiliency = resiliency();
         final var exchange = new StreamingProxyExchange(
                 clients,
@@ -118,6 +120,7 @@ class StreamingProxyExchangeTest {
         verify(request).pause();
         verify(request).resume();
         verify(metrics).recordGatewayResult(null, result);
+        verify(metrics).recordRequest(null, "GET", 404);
     }
 
     @Test

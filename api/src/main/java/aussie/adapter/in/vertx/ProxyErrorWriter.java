@@ -11,6 +11,7 @@ import org.jboss.logging.Logger;
 import aussie.adapter.in.problem.ProblemDetail;
 import aussie.adapter.in.problem.ProblemJson;
 import aussie.adapter.out.telemetry.GatewayMetrics;
+import aussie.common.context.PlatformPaths;
 
 /**
  * Write an RFC 9457 problem response to a Vert.x {@link RoutingContext}.
@@ -52,6 +53,7 @@ public class ProxyErrorWriter {
             return;
         }
         recordMetric(serviceId, problem);
+        recordRequestMetric(ctx, serviceId, problem.status());
         logIfServerError(ctx, problem);
         response.setStatusCode(problem.status())
                 .putHeader(HttpHeaders.CONTENT_TYPE, (CharSequence) ProblemJson.CONTENT_TYPE)
@@ -75,6 +77,7 @@ public class ProxyErrorWriter {
             return;
         }
         recordMetric(serviceId, problem);
+        recordRequestMetric(ctx, serviceId, problem.status());
         response.setStatusCode(problem.status())
                 .putHeader(HttpHeaders.CONTENT_TYPE, (CharSequence) ProblemJson.CONTENT_TYPE)
                 .putHeader(HttpHeaders.RETRY_AFTER, (CharSequence) Long.toString(retryAfterSeconds))
@@ -98,6 +101,16 @@ public class ProxyErrorWriter {
         if (metrics.isEnabled()) {
             metrics.recordError(serviceId != null ? serviceId : "unknown", problem.code());
         }
+    }
+
+    private void recordRequestMetric(RoutingContext ctx, String serviceId, int statusCode) {
+        if (metrics.isEnabled() && !PlatformPaths.owns(ctx.request().path()) && !isWebSocketUpgrade(ctx)) {
+            metrics.recordRequest(serviceId, ctx.request().method().name(), statusCode);
+        }
+    }
+
+    private boolean isWebSocketUpgrade(RoutingContext ctx) {
+        return "websocket".equalsIgnoreCase(ctx.request().getHeader("Upgrade"));
     }
 
     private void logIfServerError(RoutingContext ctx, ProblemDetail problem) {
