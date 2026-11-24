@@ -76,8 +76,11 @@ public class ProxyRequestPreparer {
         var targetUri = route.targetUri(query);
         var headers = buildHeaders(request, targetUri);
 
-        // Set Authorization header with Aussie token if present
-        token.ifPresent(t -> headers.put("Authorization", List.of("Bearer " + t.jws())));
+        // Replacing credentials must account for HTTP header names being case-insensitive.
+        token.ifPresent(t -> {
+            headers.entrySet().removeIf(entry -> "authorization".equalsIgnoreCase(entry.getKey()));
+            headers.put("Authorization", List.of("Bearer " + t.jws()));
+        });
 
         // Add X-Forwarded-Prefix to inform backend of the path prefix that was stripped
         var routePrefix = route.service().routePrefix();

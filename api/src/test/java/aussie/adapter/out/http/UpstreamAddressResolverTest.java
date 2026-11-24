@@ -11,6 +11,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -204,6 +205,72 @@ class UpstreamAddressResolverTest {
 
         release.countDown();
         first.toCompletableFuture().get(5, TimeUnit.SECONDS);
+    }
+
+    @Test
+    @DisplayName("rejects new work while a timed-out lookup is still running")
+    void rejectsWorkAfterCallerTimeoutWhileLookupIsStillRunning() throws Exception {
+        final var entered = new CountDownLatch(1);
+        final var release = new CountDownLatch(1);
+        final var finished = new CountDownLatch(1);
+        final var calls = new AtomicInteger();
+        final var authorizedAddress = address("93.184.216.34");
+        final var resolver = new UpstreamAddressResolver(vertx, false, Duration.ofMillis(20), 1, ignored -> {
+            if (calls.incrementAndGet() == 1) {
+                entered.countDown();
+                try {
+                    release.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    try {
+                        release.await();
+                    } catch (InterruptedException ignoredAgain) {
+                        Thread.currentThread().interrupt();
+                    }
+                } finally {
+                    finished.countDown();
+                }
+            }
+            return List.of(authorizedAddress);
+        });
+
+        final var first = resolver.resolve(URI.create("https://example.com")).subscribeAsCompletionStage();
+        assertTrue(entered.await(5, TimeUnit.SECONDS));
+        final var timeout = assertThrows(
+                ExecutionException.class, () -> first.toCompletableFuture().get(5, TimeUnit.SECONDS));
+        assertTrue(timeout.getCause() instanceof EgressPolicyException);
+
+        assertThrows(EgressPolicyException.class, () -> resolver.resolve(URI.create("https://other.example"))
+                .await()
+                .atMost(Duration.ofSeconds(1)));
+
+        release.countDown();
+        assertTrue(finished.await(5, TimeUnit.SECONDS));
+        assertEquals(
+                "93.184.216.34",
+                resolver.resolve(URI.create("https://recovered.example"))
+                        .await()
+                        .atMost(Duration.ofSeconds(5))
+                        .hostAddress());
+    }
+
+    @Test
+    @DisplayName("does not reject healthy sequential lookups")
+    void doesNotRejectHealthySequentialLookups() throws Exception {
+        final var authorizedAddress = address("93.184.216.34");
+        final var resolver = new UpstreamAddressResolver(vertx, false, Duration.ofSeconds(5), 1, ignored -> {
+            Thread.yield();
+            return List.of(authorizedAddress);
+        });
+
+        for (var i = 0; i < 10_000; i++) {
+            assertEquals(
+                    "93.184.216.34",
+                    resolver.resolve(URI.create("https://sequential.example"))
+                            .await()
+                            .atMost(Duration.ofSeconds(5))
+                            .hostAddress());
+        }
     }
 
     private UpstreamAddressResolver resolver(boolean allowPrivate, InetAddress... addresses) {

@@ -6,12 +6,14 @@ import java.net.UnknownHostException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import jakarta.annotation.PreDestroy;
@@ -40,7 +42,7 @@ public class UpstreamAddressResolver {
 
     private final boolean allowPrivateUpstreams;
     private final ExecutorService blockingExecutor;
-    private final Function<String, Uni<List<InetAddress>>> lookup;
+    private final Function<String, List<InetAddress>> lookup;
     private final Duration lookupTimeout;
     private final Semaphore permits;
     private final Timer lookupLatency;
@@ -85,10 +87,18 @@ public class UpstreamAddressResolver {
             Function<String, List<InetAddress>> lookup,
             MeterRegistry meterRegistry) {
         this.allowPrivateUpstreams = allowPrivateUpstreams;
-        this.blockingExecutor = Executors.newFixedThreadPool(maxConcurrentLookups, daemonThreadFactory());
+        this.blockingExecutor = new ThreadPoolExecutor(
+                maxConcurrentLookups,
+                maxConcurrentLookups,
+                0L,
+                TimeUnit.MILLISECONDS,
+                // A bounded handoff absorbs worker completion races without creating an unbounded timeout queue.
+                new ArrayBlockingQueue<>(maxConcurrentLookups),
+                daemonThreadFactory(),
+                new ThreadPoolExecutor.AbortPolicy());
         this.lookupTimeout = lookupTimeout;
         this.permits = new Semaphore(maxConcurrentLookups);
-        this.lookup = host -> Uni.createFrom().item(() -> lookup.apply(host)).runSubscriptionOn(blockingExecutor);
+        this.lookup = lookup;
         this.lookupLatency = Timer.builder("aussie.dns.lookup.latency").register(meterRegistry);
         this.lookupTimeouts = Counter.builder("aussie.dns.lookup.timeouts").register(meterRegistry);
         this.lookupRejections = Counter.builder("aussie.dns.lookup.rejections").register(meterRegistry);
@@ -113,7 +123,21 @@ public class UpstreamAddressResolver {
                                         new RejectedExecutionException("DNS resolver capacity exhausted")));
                     }
                     final var startedAt = System.nanoTime();
-                    return lookup.apply(host)
+                    final var released = new AtomicBoolean();
+                    final Runnable release = () -> {
+                        if (released.compareAndSet(false, true)) {
+                            permits.release();
+                            lookupLatency.record(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS);
+                        }
+                    };
+                    return submitLookup(host, release)
+                            .onFailure(RejectedExecutionException.class)
+                            .invoke(ignored -> {
+                                lookupRejections.increment();
+                                release.run();
+                            })
+                            .onFailure(RejectedExecutionException.class)
+                            .transform(failure -> new EgressPolicyException("DNS resolver capacity exhausted", failure))
                             .ifNoItem()
                             .after(lookupTimeout)
                             .failWith(DnsLookupTimeoutException::new)
@@ -124,13 +148,21 @@ public class UpstreamAddressResolver {
                                 if (!(failure instanceof DnsLookupTimeoutException)) {
                                     lookupFailures.increment();
                                 }
-                            })
-                            .eventually(() -> {
-                                permits.release();
-                                lookupLatency.record(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS);
                             });
                 })
                 .map(addresses -> authorize(uri, addresses));
+    }
+
+    private Uni<List<InetAddress>> submitLookup(String host, Runnable onWorkerComplete) {
+        return Uni.createFrom()
+                .item(() -> {
+                    try {
+                        return lookup.apply(host);
+                    } finally {
+                        onWorkerComplete.run();
+                    }
+                })
+                .runSubscriptionOn(blockingExecutor);
     }
 
     private SocketAddress authorize(URI uri, List<InetAddress> addresses) {
