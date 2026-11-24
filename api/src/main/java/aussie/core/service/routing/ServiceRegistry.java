@@ -23,6 +23,8 @@ import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import io.quarkus.scheduler.Scheduled;
+import io.quarkus.scheduler.Scheduled.ConcurrentExecution;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.subscription.Cancellable;
 import org.jboss.logging.Logger;
@@ -71,6 +73,8 @@ public class ServiceRegistry {
 
     private static final Logger LOG = Logger.getLogger(ServiceRegistry.class);
     private static final int MAX_RECONCILIATION_BACKLOG = 1_000;
+    private static final Duration PROPAGATION_RETRY_BASE_DELAY = Duration.ofSeconds(1);
+    private static final Duration PROPAGATION_RETRY_MAX_DELAY = Duration.ofSeconds(30);
 
     private final ServiceRegistrationRepository repository;
     private final ConfigurationCache cache;
@@ -88,6 +92,8 @@ public class ServiceRegistry {
     private final AtomicReference<String> lastPropagationErrorClass = new AtomicReference<>();
     private final AtomicInteger reconciliationBacklog = new AtomicInteger();
     private final ConcurrentHashMap<String, PendingPropagation> pendingPropagations = new ConcurrentHashMap<>();
+    private final AtomicBoolean propagationRunning = new AtomicBoolean();
+    private final AtomicLong propagationSequence = new AtomicLong();
 
     // TTL tracking for multi-instance cache refresh
     private final AtomicReference<Instant> lastRefreshed = new AtomicReference<>(Instant.MIN);
@@ -226,7 +232,6 @@ public class ServiceRegistry {
                                         candidateState,
                                         (current, next) -> next.generation() < current.generation() ? current : next);
                                 lastRefreshed.set(Instant.now());
-                                retryPendingPropagations();
                                 return Uni.createFrom().voidItem();
                             }));
                 })
@@ -260,7 +265,6 @@ public class ServiceRegistry {
      */
     private Uni<Void> ensureCacheFresh() {
         if (!isCacheStale()) {
-            retryPendingPropagations();
             return Uni.createFrom().voidItem();
         }
 
@@ -670,7 +674,7 @@ public class ServiceRegistry {
     }
 
     private void schedulePropagation(String serviceId, long version, Supplier<Uni<Void>> propagation) {
-        var pending = new PendingPropagation(serviceId, version, propagation);
+        var pending = new PendingPropagation(serviceId, version, propagation, propagationSequence.getAndIncrement());
         var previous = pendingPropagations.put(serviceId, pending);
         if (previous != null) {
             previous.cancel();
@@ -679,32 +683,54 @@ public class ServiceRegistry {
         startPropagation(pending);
     }
 
-    private void retryPendingPropagations() {
-        pendingPropagations.values().forEach(this::startPropagation);
+    @Scheduled(every = "1s", concurrentExecution = ConcurrentExecution.SKIP)
+    void reconcilePendingPropagations() {
+        pendingPropagations.values().stream()
+                .filter(PendingPropagation::eligible)
+                .sorted(Comparator.comparing(PendingPropagation::nextAttemptAt)
+                        .thenComparingLong(PendingPropagation::sequence))
+                .findFirst()
+                .ifPresent(this::startPropagation);
     }
 
     private void startPropagation(PendingPropagation pending) {
-        if (!pending.start()) {
+        if (pendingPropagations.get(pending.serviceId()) != pending || !pending.eligible()) {
             return;
         }
-        pending.operation()
-                .get()
+        if (!propagationRunning.compareAndSet(false, true)) {
+            return;
+        }
+        if (!pending.start()) {
+            propagationRunning.set(false);
+            return;
+        }
+        Uni.createFrom()
+                .deferred(() -> pending.operation().get())
                 .subscribe()
                 .with(
                         ignored -> {
-                            pendingPropagations.remove(pending.serviceId(), pending);
-                            updateReconciliationBacklog();
-                            pending.finish();
+                            try {
+                                pendingPropagations.remove(pending.serviceId(), pending);
+                                updateReconciliationBacklog();
+                            } finally {
+                                pending.finish();
+                                propagationRunning.set(false);
+                            }
                         },
                         error -> {
-                            pending.finish();
-                            lastPropagationErrorClass.set(error.getClass().getSimpleName());
-                            LOG.warnf(
-                                    error,
-                                    "Service propagation remains pending: service_id=%s version=%d error_type=%s",
-                                    pending.serviceId(),
-                                    pending.version(),
-                                    error.getClass().getSimpleName());
+                            try {
+                                pending.failed();
+                                lastPropagationErrorClass.set(error.getClass().getSimpleName());
+                                LOG.warnf(
+                                        error,
+                                        "Service propagation remains pending: service_id=%s version=%d error_type=%s",
+                                        pending.serviceId(),
+                                        pending.version(),
+                                        error.getClass().getSimpleName());
+                            } finally {
+                                pending.finish();
+                                propagationRunning.set(false);
+                            }
                         });
     }
 
@@ -716,12 +742,16 @@ public class ServiceRegistry {
         private final String serviceId;
         private final long version;
         private final Supplier<Uni<Void>> operation;
+        private final long sequence;
         private final AtomicBoolean running = new AtomicBoolean();
+        private final AtomicInteger failures = new AtomicInteger();
+        private volatile Instant nextAttemptAt = Instant.MIN;
 
-        private PendingPropagation(String serviceId, long version, Supplier<Uni<Void>> operation) {
+        private PendingPropagation(String serviceId, long version, Supplier<Uni<Void>> operation, long sequence) {
             this.serviceId = serviceId;
             this.version = version;
             this.operation = operation;
+            this.sequence = sequence;
         }
 
         private String serviceId() {
@@ -736,8 +766,27 @@ public class ServiceRegistry {
             return operation;
         }
 
+        private long sequence() {
+            return sequence;
+        }
+
         private boolean start() {
             return running.compareAndSet(false, true);
+        }
+
+        private boolean eligible() {
+            return !nextAttemptAt.isAfter(Instant.now());
+        }
+
+        private Instant nextAttemptAt() {
+            return nextAttemptAt;
+        }
+
+        private void failed() {
+            final var failure = Math.min(failures.incrementAndGet(), 6);
+            final var delay = Math.min(
+                    PROPAGATION_RETRY_MAX_DELAY.toSeconds(), PROPAGATION_RETRY_BASE_DELAY.toSeconds() << (failure - 1));
+            nextAttemptAt = Instant.now().plusSeconds(delay);
         }
 
         private void finish() {
@@ -751,7 +800,6 @@ public class ServiceRegistry {
 
     /** Return local routing state together with the latest durable generation. */
     public Uni<RoutingSnapshotStatus> routingStatus() {
-        retryPendingPropagations();
         return repository.currentGeneration().map(generation -> {
             durableGeneration.accumulateAndGet(generation, Math::max);
             return localRoutingStatus();

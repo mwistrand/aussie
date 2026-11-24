@@ -15,6 +15,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
@@ -1091,6 +1094,91 @@ class ServiceRegistryTest {
         assertEquals(
                 List.of(new RoutingSnapshotStatus.PendingPropagation("propagation-service", 1L)),
                 status.pendingPropagations());
+    }
+
+    @Test
+    @DisplayName("Retries failed propagation independently of route traffic")
+    void retriesFailedPropagationWithoutAnotherRouteRequest() throws Exception {
+        final var publishAttempts = new AtomicInteger();
+        var recoveringPublisher = new ServiceConfigEventPublisher() {
+            @Override
+            public Uni<Void> publishServiceChanged(String serviceId) {
+                return publishAttempts.incrementAndGet() == 1
+                        ? Uni.createFrom().failure(new IllegalStateException("pub/sub unavailable"))
+                        : Uni.createFrom().voidItem();
+            }
+
+            @Override
+            public Uni<Void> publishServiceRemoved(String serviceId) {
+                return Uni.createFrom().voidItem();
+            }
+
+            @Override
+            public Multi<aussie.core.model.service.ServiceConfigEvent> subscribe() {
+                return Multi.createFrom().empty();
+            }
+        };
+        var propagationRegistry = new ServiceRegistry(
+                repository,
+                NoOpConfigurationCache.INSTANCE,
+                new ServiceRegistrationValidator(
+                        PERMISSIVE_CONFIG, PERMISSIVE_RATE_LIMIT_CONFIG, PERMISSIVE_RESILIENCY_CONFIG),
+                authService,
+                recoveringPublisher,
+                TEST_CACHE_CONFIG);
+
+        assertInstanceOf(
+                RegistrationResult.Success.class,
+                propagationRegistry
+                        .register(createService("retry-service", "http://192.0.2.10:8080"))
+                        .await()
+                        .atMost(TIMEOUT));
+        assertEquals(1, publishAttempts.get());
+
+        propagationRegistry.getService("retry-service").await().atMost(TIMEOUT);
+        assertEquals(1, publishAttempts.get());
+
+        var reconcile = ServiceRegistry.class.getDeclaredMethod("reconcilePendingPropagations");
+        reconcile.setAccessible(true);
+        org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(3)).untilAsserted(() -> {
+            reconcile.invoke(propagationRegistry);
+            assertEquals(2, publishAttempts.get());
+        });
+    }
+
+    @Test
+    @DisplayName("Does not starve later pending propagations behind failed entries")
+    void retriesPendingPropagationsFairly() throws Exception {
+        var schedule = ServiceRegistry.class.getDeclaredMethod(
+                "schedulePropagation", String.class, long.class, Supplier.class);
+        schedule.setAccessible(true);
+        var reconcile = ServiceRegistry.class.getDeclaredMethod("reconcilePendingPropagations");
+        reconcile.setAccessible(true);
+
+        Supplier<Uni<Void>> failedPropagation =
+                () -> Uni.createFrom().failure(new IllegalStateException("temporary failure"));
+        for (var index = 0; index < 31; index++) {
+            schedule.invoke(registry, "early-%02d".formatted(index), 1L, failedPropagation);
+        }
+
+        var blocker = new CompletableFuture<Void>();
+        schedule.invoke(registry, "blocker", 1L, (Supplier<Uni<Void>>)
+                () -> Uni.createFrom().completionStage(blocker));
+
+        var laterAttempts = new AtomicInteger();
+        schedule.invoke(registry, "later-service", 1L, (Supplier<Uni<Void>>) () -> {
+            laterAttempts.incrementAndGet();
+            return Uni.createFrom().voidItem();
+        });
+        blocker.complete(null);
+
+        org.awaitility.Awaitility.await()
+                .pollDelay(Duration.ofMillis(1_100))
+                .atMost(Duration.ofSeconds(3))
+                .untilAsserted(() -> {
+                    reconcile.invoke(registry);
+                    assertEquals(1, laterAttempts.get());
+                });
     }
 
     private ServiceRegistration createService(String serviceId, String baseUrl) {
