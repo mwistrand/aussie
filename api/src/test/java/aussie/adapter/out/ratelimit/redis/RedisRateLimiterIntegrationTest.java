@@ -188,14 +188,25 @@ class RedisRateLimiterIntegrationTest {
     }
 
     private Response executeProductionTokenBucket(
+            String key, long capacity, double refillRate, long windowSeconds, long recoveryGeneration) {
+        return executeProductionTokenBucket(redisClient, key, capacity, refillRate, windowSeconds, recoveryGeneration);
+    }
+
+    private Response executeProductionTokenBucket(
             Redis client, String key, long capacity, double refillRate, long windowSeconds) {
+        return executeProductionTokenBucket(client, key, capacity, refillRate, windowSeconds, 0);
+    }
+
+    private Response executeProductionTokenBucket(
+            Redis client, String key, long capacity, double refillRate, long windowSeconds, long recoveryGeneration) {
         return client.send(Request.cmd(Command.EVAL)
                         .arg(RedisRateLimiter.TOKEN_BUCKET_SCRIPT)
                         .arg("1")
                         .arg(key)
                         .arg(String.valueOf(capacity))
                         .arg(String.valueOf(refillRate))
-                        .arg(String.valueOf(windowSeconds)))
+                        .arg(String.valueOf(windowSeconds))
+                        .arg(String.valueOf(recoveryGeneration)))
                 .await()
                 .atMost(Duration.ofSeconds(5));
     }
@@ -206,13 +217,19 @@ class RedisRateLimiterIntegrationTest {
 
     private Response executeProductionStatus(
             Redis client, String key, long capacity, double refillRate, long windowSeconds) {
+        return executeProductionStatus(client, key, capacity, refillRate, windowSeconds, 0);
+    }
+
+    private Response executeProductionStatus(
+            Redis client, String key, long capacity, double refillRate, long windowSeconds, long recoveryGeneration) {
         return client.send(Request.cmd(Command.EVAL)
                         .arg(RedisRateLimiter.STATUS_SCRIPT)
                         .arg("1")
                         .arg(key)
                         .arg(String.valueOf(capacity))
                         .arg(String.valueOf(refillRate))
-                        .arg(String.valueOf(windowSeconds)))
+                        .arg(String.valueOf(windowSeconds))
+                        .arg(String.valueOf(recoveryGeneration)))
                 .await()
                 .atMost(Duration.ofSeconds(5));
     }
@@ -571,6 +588,34 @@ class RedisRateLimiterIntegrationTest {
 
             assertFalse(isAllowed(response));
             assertEquals(1, response.get(4).toLong());
+        }
+
+        @Test
+        @DisplayName("recovery generation fences a bucket before it can replay a burst")
+        void recoveryGenerationFencesBucketBeforeBurstReplay() {
+            final var key = "aussie:ratelimit:recovery-generation";
+
+            assertTrue(isAllowed(executeProductionTokenBucket(redisClient, key, 3, 3.0, 60)));
+            assertTrue(isAllowed(executeProductionTokenBucket(redisClient, key, 3, 3.0, 60)));
+
+            final var firstAfterRecovery = executeProductionTokenBucket(secondRedisClient, key, 3, 3.0, 60, 1);
+            final var secondAfterRecovery = executeProductionTokenBucket(redisClient, key, 3, 3.0, 60, 1);
+
+            assertFalse(isAllowed(firstAfterRecovery));
+            assertFalse(isAllowed(secondAfterRecovery));
+            assertEquals(0, getRemaining(secondAfterRecovery));
+        }
+
+        @Test
+        @DisplayName("recovery generation fences status without consuming a token")
+        void recoveryGenerationFencesStatus() {
+            final var key = "aussie:ratelimit:recovery-status";
+            assertTrue(isAllowed(executeProductionTokenBucket(key, 3, 3.0, 60)));
+
+            final var status = executeProductionStatus(redisClient, key, 3, 3.0, 60, 1);
+
+            assertEquals(0, getRemaining(status));
+            assertFalse(isAllowed(executeProductionTokenBucket(key, 3, 3.0, 60, 1)));
         }
 
         @Test

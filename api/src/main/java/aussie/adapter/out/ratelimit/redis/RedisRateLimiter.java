@@ -2,7 +2,11 @@ package aussie.adapter.out.ratelimit.redis;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import io.quarkus.redis.datasource.keys.KeyScanArgs;
@@ -51,6 +55,7 @@ public final class RedisRateLimiter implements RateLimiter {
      *   <li>ARGV[1] - bucket capacity (max tokens)</li>
      *   <li>ARGV[2] - refill rate (tokens per second)</li>
      *   <li>ARGV[3] - window duration in seconds (for TTL)</li>
+     *   <li>ARGV[4] - local Redis-recovery generation</li>
      * </ol>
      *
      * <p>Returns array: [allowed (0/1), remaining, tokens_used, reset_at_epoch_seconds, retry_after_seconds]
@@ -60,13 +65,21 @@ public final class RedisRateLimiter implements RateLimiter {
             local capacity = tonumber(ARGV[1])
             local refill_rate = tonumber(ARGV[2])
             local window_seconds = tonumber(ARGV[3])
+            local recovery_generation = ARGV[4]
             local redis_time = redis.call('TIME')
             local now_ms = (redis_time[1] * 1000) + math.floor(redis_time[2] / 1000)
 
             -- Get current state
-            local data = redis.call('HMGET', key, 'tokens', 'last_refill_ms')
+            local data = redis.call('HMGET', key, 'tokens', 'last_refill_ms', 'recovery_generation')
             local tokens = tonumber(data[1])
             local last_refill_ms = tonumber(data[2])
+            local stored_recovery_generation = data[3] or '0'
+
+            -- Fence a bucket once during recovery so Redis cannot replay its old burst.
+            if recovery_generation ~= '0' and recovery_generation ~= stored_recovery_generation then
+                tokens = 0
+                last_refill_ms = now_ms
+            end
 
             -- Initialize if new key
             if tokens == nil then
@@ -95,7 +108,9 @@ public final class RedisRateLimiter implements RateLimiter {
             local retry_after = allowed == 1 and 0 or (refill_rate > 0 and math.max(1, math.ceil((1 - tokens) / refill_rate)) or window_seconds)
 
             -- Save state with TTL
-            redis.call('HSET', key, 'tokens', tokens, 'last_refill_ms', now_ms)
+            redis.call(
+                    'HSET', key, 'tokens', tokens, 'last_refill_ms', now_ms,
+                    'recovery_generation', recovery_generation ~= '0' and recovery_generation or stored_recovery_generation)
             redis.call('EXPIRE', key, reset_after)
 
             -- Return: allowed, remaining, request_count (capacity - remaining), reset_at
@@ -112,15 +127,24 @@ public final class RedisRateLimiter implements RateLimiter {
             local capacity = tonumber(ARGV[1])
             local refill_rate = tonumber(ARGV[2])
             local window_seconds = tonumber(ARGV[3])
+            local recovery_generation = ARGV[4]
             local redis_time = redis.call('TIME')
             local now_ms = (redis_time[1] * 1000) + math.floor(redis_time[2] / 1000)
 
-            local data = redis.call('HMGET', key, 'tokens', 'last_refill_ms')
+            local data = redis.call('HMGET', key, 'tokens', 'last_refill_ms', 'recovery_generation')
             local tokens = tonumber(data[1])
             local last_refill_ms = tonumber(data[2])
+            local stored_recovery_generation = data[3] or '0'
 
             if tokens == nil then
+                if recovery_generation ~= '0' then
+                    return {1, 0, capacity, math.floor(now_ms / 1000) + window_seconds, window_seconds}
+                end
                 return {1, capacity, 0, math.floor(now_ms / 1000) + window_seconds, 0}
+            end
+
+            if recovery_generation ~= '0' and recovery_generation ~= stored_recovery_generation then
+                return {1, 0, capacity, math.floor(now_ms / 1000) + window_seconds, window_seconds}
             end
 
             local elapsed_ms = math.max(0, now_ms - last_refill_ms)
@@ -144,6 +168,8 @@ public final class RedisRateLimiter implements RateLimiter {
     private final RateLimitFallbackBehavior fallbackBehavior;
     private final Metrics metrics;
     private final AtomicBoolean fallbackClosed = new AtomicBoolean();
+    private final AtomicReference<String> recoveryGeneration = new AtomicReference<>("0");
+    private final Set<String> recoveryPendingKeys = ConcurrentHashMap.newKeySet();
 
     public RedisRateLimiter(ReactiveRedisDataSource redisDataSource, boolean enabled) {
         this(redisDataSource, enabled, null, RateLimitFallbackBehavior.DENY, null);
@@ -174,9 +200,11 @@ public final class RedisRateLimiter implements RateLimiter {
         final var capacity = limit.burstCapacity();
         final var refillRate = limit.refillRatePerSecond();
         final var windowSeconds = limit.windowSeconds();
+        final var generation = recoveryGenerationFor(cacheKey);
 
-        return executeTokenBucketScript(cacheKey, capacity, refillRate, windowSeconds)
+        return executeTokenBucketScript(cacheKey, capacity, refillRate, windowSeconds, generation)
                 .map(result -> parseDecision(result, limit))
+                .invoke(ignored -> markBucketRecovered(cacheKey, generation))
                 .onFailure()
                 .recoverWithUni(error -> handleBackendFailure(key, limit, error, true));
     }
@@ -191,8 +219,9 @@ public final class RedisRateLimiter implements RateLimiter {
         final var cacheKey = cacheKey(key);
         final var capacity = limit.burstCapacity();
         final var refillRate = limit.refillRatePerSecond();
+        final var generation = recoveryGenerationFor(cacheKey);
 
-        return executeStatusScript(cacheKey, capacity, refillRate, limit.windowSeconds())
+        return executeStatusScript(cacheKey, capacity, refillRate, limit.windowSeconds(), generation)
                 .map(result -> parseDecision(result, limit))
                 .onFailure()
                 .recoverWithUni(error -> handleBackendFailure(key, limit, error, false));
@@ -217,6 +246,7 @@ public final class RedisRateLimiter implements RateLimiter {
         return switch (fallbackBehavior) {
             case LOCAL_BUCKET -> {
                 if (fallback != null) {
+                    markBucketUnavailable(cacheKey(key));
                     LOG.warnv(
                             error,
                             "Redis rate limit unavailable; routing through local fallback bucket for service={0}",
@@ -257,6 +287,27 @@ public final class RedisRateLimiter implements RateLimiter {
     private void recordFallback(String serviceId, String mode) {
         if (metrics != null) {
             metrics.recordRateLimitFallback(serviceId, mode);
+        }
+    }
+
+    private String recoveryGenerationFor(String cacheKey) {
+        return recoveryPendingKeys.contains(cacheKey) ? recoveryGeneration.get() : "0";
+    }
+
+    private synchronized void markBucketUnavailable(String cacheKey) {
+        if (recoveryPendingKeys.isEmpty()) {
+            recoveryGeneration.set(UUID.randomUUID().toString());
+        }
+        recoveryPendingKeys.add(cacheKey);
+    }
+
+    private synchronized void markBucketRecovered(String cacheKey, String generation) {
+        if ("0".equals(generation) || !generation.equals(recoveryGeneration.get())) {
+            return;
+        }
+        recoveryPendingKeys.remove(cacheKey);
+        if (recoveryPendingKeys.isEmpty()) {
+            recoveryGeneration.set("0");
         }
     }
 
@@ -345,7 +396,7 @@ public final class RedisRateLimiter implements RateLimiter {
     }
 
     private Uni<List<Object>> executeTokenBucketScript(
-            String key, long capacity, double refillRate, long windowSeconds) {
+            String key, long capacity, double refillRate, long windowSeconds, String generation) {
 
         // EVAL script numkeys key [key...] arg [arg...]
         return redisDataSource
@@ -356,12 +407,14 @@ public final class RedisRateLimiter implements RateLimiter {
                         key, // KEYS[1]
                         String.valueOf(capacity), // ARGV[1]
                         String.valueOf(refillRate), // ARGV[2]
-                        String.valueOf(windowSeconds) // ARGV[3]
+                        String.valueOf(windowSeconds), // ARGV[3]
+                        String.valueOf(generation) // ARGV[4]
                         )
                 .map(this::parseArrayResponse);
     }
 
-    private Uni<List<Object>> executeStatusScript(String key, long capacity, double refillRate, long windowSeconds) {
+    private Uni<List<Object>> executeStatusScript(
+            String key, long capacity, double refillRate, long windowSeconds, String generation) {
 
         // EVAL script numkeys key [key...] arg [arg...]
         return redisDataSource
@@ -372,7 +425,8 @@ public final class RedisRateLimiter implements RateLimiter {
                         key, // KEYS[1]
                         String.valueOf(capacity), // ARGV[1]
                         String.valueOf(refillRate), // ARGV[2]
-                        String.valueOf(windowSeconds) // ARGV[3]
+                        String.valueOf(windowSeconds), // ARGV[3]
+                        String.valueOf(generation) // ARGV[4]
                         )
                 .map(this::parseArrayResponse);
     }

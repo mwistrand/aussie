@@ -131,6 +131,8 @@ one-request, one-second limit; zero request or burst quotas remain zero. `ALLOW`
 is intended only for development.
 When Redis is configured but cannot be constructed, startup fails instead of
 silently switching the cluster to independent in-memory quotas.
+After a `LOCAL_BUCKET` outage, a bucket observed during Redis recovery is
+fenced once so its pre-outage distributed burst cannot be replayed immediately.
 
 Pre-authentication HTTP and WebSocket buckets use only the canonical network
 identity. Service quotas use the resolved route's service ID, including
