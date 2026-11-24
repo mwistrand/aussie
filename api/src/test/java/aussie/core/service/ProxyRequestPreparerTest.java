@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import aussie.core.model.auth.AussieToken;
 import aussie.core.model.gateway.GatewayRequest;
 import aussie.core.model.routing.EndpointConfig;
 import aussie.core.model.routing.EndpointType;
@@ -151,6 +153,38 @@ class ProxyRequestPreparerTest {
             assertEquals(List.of("application/json"), prepared.headers().get("Accept"));
             assertEquals(List.of("Bearer token"), prepared.headers().get("Authorization"));
             assertEquals(List.of("custom-value"), prepared.headers().get("X-Custom-Header"));
+        }
+
+        @Test
+        @DisplayName("Should replace authorization headers case-insensitively when translating a token")
+        void shouldReplaceAuthorizationHeadersCaseInsensitively() {
+            Map<String, List<String>> headers = new HashMap<>();
+            headers.put("authorization", List.of("Bearer inbound-lowercase"));
+            headers.put("AUTHORIZATION", List.of("Bearer inbound-uppercase"));
+
+            var request = createRequest(headers);
+            var route = createRoute("http://backend:9090");
+            var token =
+                    new AussieToken("translated-token", "subject", Instant.now().plusSeconds(60), Map.of());
+
+            var prepared = preparer.prepare(request, route, Optional.of(token));
+
+            assertEquals(List.of("Bearer translated-token"), prepared.headers().get("Authorization"));
+            assertEquals(
+                    1,
+                    prepared.headers().keySet().stream()
+                            .filter(name -> "authorization".equalsIgnoreCase(name))
+                            .count());
+        }
+
+        @Test
+        @DisplayName("Should preserve lower-case authorization when no token is translated")
+        void shouldPreserveAuthorizationWithoutTranslation() {
+            var request = createRequest(Map.of("authorization", List.of("Bearer inbound")));
+
+            var prepared = preparer.prepare(request, createRoute("http://backend:9090"));
+
+            assertEquals(List.of("Bearer inbound"), prepared.headers().get("authorization"));
         }
 
         @Test
