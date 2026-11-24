@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import java.util.LinkedHashMap;
 
 import io.vertx.core.http.HttpHeaders;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.ext.web.RoutingContext;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import aussie.adapter.in.problem.ProblemDetail;
@@ -57,6 +59,7 @@ class ProxyErrorWriterTest {
         when(ctx.response()).thenReturn(response);
         when(ctx.request()).thenReturn(request);
         when(request.path()).thenReturn("/some/path");
+        Mockito.lenient().when(request.method()).thenReturn(HttpMethod.GET);
         when(response.setStatusCode(anyInt())).thenReturn(response);
         when(response.putHeader(any(CharSequence.class), any(CharSequence.class)))
                 .thenReturn(response);
@@ -78,6 +81,7 @@ class ProxyErrorWriterTest {
             verify(response).setStatusCode(404);
             verify(response).putHeader(HttpHeaders.CONTENT_TYPE, (CharSequence) ProblemJson.CONTENT_TYPE);
             verify(metrics).recordError("my-service", "service_not_found");
+            verify(metrics).recordRequest("my-service", "GET", 404);
             var bodyCaptor = ArgumentCaptor.forClass(String.class);
             verify(response).end(bodyCaptor.capture());
             assertEquals(ProblemJson.serialize(problem, "/some/path"), bodyCaptor.getValue());
@@ -92,6 +96,18 @@ class ProxyErrorWriterTest {
             writer.write(ctx, ProblemDetail.routeNotFound("/missing"));
 
             verify(metrics).recordError(eq("unknown"), anyString());
+        }
+
+        @Test
+        @DisplayName("does not count rejected management requests as data-plane traffic")
+        void excludesManagementRequestFromRequestMetrics() {
+            stubChain();
+            when(request.path()).thenReturn("/admin/services");
+            when(metrics.isEnabled()).thenReturn(true);
+
+            writer.write(ctx, ProblemDetail.headerTooLarge("header too large"));
+
+            verify(metrics, never()).recordRequest(anyString(), anyString(), anyInt());
         }
 
         @Test

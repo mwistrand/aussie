@@ -113,7 +113,10 @@ public class StreamingProxyExchange {
                     return prepared.flatMap(plan -> {
                         if (plan instanceof ProxyPlan.Rejected rejected) {
                             metrics.recordGatewayResult(rejected.serviceId(), rejected.result());
-                            return Uni.createFrom().failure(GatewayProblem.from(rejected.result()));
+                            final var problem = GatewayProblem.from(rejected.result());
+                            metrics.recordRequest(
+                                    rejected.serviceId(), request.method().name(), problem.getStatusCode());
+                            return Uni.createFrom().failure(problem);
                         }
                         final var ready = (ProxyPlan.Ready) plan;
                         return open(
@@ -264,6 +267,7 @@ public class StreamingProxyExchange {
         span.setStatus(StatusCode.ERROR, "Upstream request failed");
         span.recordException(failure);
         span.end();
+        metrics.recordRequest(plan.serviceId(), plan.request().method(), clientStatus(failure));
 
         if (isTimeout(failure)) {
             LOG.warnv("Request timeout for upstream service {0}", plan.serviceId());
@@ -295,6 +299,13 @@ public class StreamingProxyExchange {
     private void recordUpstreamError(String serviceId) {
         metrics.recordGatewayResult(serviceId, new GatewayResult.Error("Upstream request failed"));
         metrics.recordError(serviceId, "upstream_error");
+    }
+
+    private int clientStatus(Throwable failure) {
+        if (failure instanceof HttpProblem problem) {
+            return problem.getStatusCode();
+        }
+        return isTimeout(failure) ? 504 : 502;
     }
 
     private Span startSpan(PreparedProxyRequest prepared) {

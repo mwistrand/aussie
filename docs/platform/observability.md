@@ -168,7 +168,7 @@ scrape_configs:
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `aussie.requests.total` | Counter | `service_id`, `method`, `status`, `status_class` | Total gateway requests |
+| `aussie.requests.total` | Counter | `service_id`, `method`, `status`, `status_class` | Total data-plane requests by final client-visible status |
 | `aussie.gateway.results` | Counter | `service_id`, `result_type` | Gateway results by type |
 | `aussie.proxy.latency` | Timer | `service_id`, `method`, `status_class` | Upstream proxy latency |
 | `aussie.errors.total` | Counter | `service_id`, `error_type` | Gateway errors |
@@ -225,6 +225,11 @@ The checked-in Prometheus rules publish gateway availability and p99 latency rec
 rules. The availability objective is 99.9% successful server responses; alerts use
 short- and medium-window error-budget burn so low traffic does not create a fixed-rate
 false positive. New SLO alerts carry the `owner: platform-oncall` label and a runbook URL.
+
+Data-plane request counts include upstream responses and gateway-generated responses,
+including 5xx failures. Management endpoints are excluded. A client disconnect or a
+response that fails after headers are sent has no final status to count and is retained
+in the proxy error and tracing metrics instead.
 
 Operational actions are documented in the [observability runbooks](runbooks/observability.md)
 for dependency outages, route/key failures, rate-limit fallback, traffic spikes,
