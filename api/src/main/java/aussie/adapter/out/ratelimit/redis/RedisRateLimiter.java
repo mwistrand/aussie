@@ -27,7 +27,7 @@ import aussie.core.port.out.RateLimiter;
  * <p>Features:
  * <ul>
  *   <li>Token bucket algorithm implemented atomically in Lua</li>
- *   <li>Automatic key expiration based on window duration</li>
+ *   <li>Automatic key expiration when a bucket can refill</li>
  *   <li>Shared state across all gateway instances</li>
  *   <li>Configurable fail-closed, local-bucket, or fail-open behavior on Redis failures</li>
  * </ul>
@@ -38,6 +38,7 @@ public final class RedisRateLimiter implements RateLimiter {
 
     private static final Logger LOG = Logger.getLogger(RedisRateLimiter.class);
     private static final long MAX_EXACT_REDIS_NUMBER = 9_007_199_254_740_991L;
+    private static final double MAX_SAFE_REDIS_SECONDS = MAX_EXACT_REDIS_NUMBER / 2.0;
     private static final EffectiveRateLimit LOCAL_EMERGENCY_LIMIT = new EffectiveRateLimit(1, 1, 1);
     private static final EffectiveRateLimit LOCAL_EMERGENCY_ZERO_LIMIT = new EffectiveRateLimit(0, 1, 0);
 
@@ -87,13 +88,15 @@ public final class RedisRateLimiter implements RateLimiter {
 
             -- Calculate reset time (when bucket would be full again)
             local tokens_needed = capacity - tokens
+            -- A zero-refill policy resets on its configured window.
             local seconds_to_full = refill_rate > 0 and (tokens_needed / refill_rate) or window_seconds
-            local reset_at = math.floor(now_ms / 1000) + math.ceil(seconds_to_full)
+            local reset_after = math.max(1, math.ceil(seconds_to_full))
+            local reset_at = math.floor(now_ms / 1000) + reset_after
             local retry_after = allowed == 1 and 0 or (refill_rate > 0 and math.max(1, math.ceil((1 - tokens) / refill_rate)) or window_seconds)
 
             -- Save state with TTL
             redis.call('HSET', key, 'tokens', tokens, 'last_refill_ms', now_ms)
-            redis.call('EXPIRE', key, window_seconds * 2)
+            redis.call('EXPIRE', key, reset_after)
 
             -- Return: allowed, remaining, request_count (capacity - remaining), reset_at
             local remaining = math.floor(tokens)
@@ -128,7 +131,8 @@ public final class RedisRateLimiter implements RateLimiter {
             local request_count = math.floor(capacity - tokens)
             local tokens_needed = capacity - tokens
             local seconds_to_full = refill_rate > 0 and (tokens_needed / refill_rate) or window_seconds
-            local reset_at = math.floor(now_ms / 1000) + math.ceil(seconds_to_full)
+            local reset_after = math.max(1, math.ceil(seconds_to_full))
+            local reset_at = math.floor(now_ms / 1000) + reset_after
 
             return {1, remaining, request_count, reset_at, 0}
             """;
@@ -327,9 +331,17 @@ public final class RedisRateLimiter implements RateLimiter {
     private void validateLimit(EffectiveRateLimit limit) {
         if (limit.requestsPerWindow() > MAX_EXACT_REDIS_NUMBER
                 || limit.burstCapacity() > MAX_EXACT_REDIS_NUMBER
-                || limit.windowSeconds() > MAX_EXACT_REDIS_NUMBER / 2) {
+                || limit.windowSeconds() > MAX_SAFE_REDIS_SECONDS
+                || fullRefillSeconds(limit) > MAX_SAFE_REDIS_SECONDS) {
             throw new IllegalArgumentException("Rate limit exceeds Redis numeric bounds");
         }
+    }
+
+    private double fullRefillSeconds(EffectiveRateLimit limit) {
+        if (limit.requestsPerWindow() == 0) {
+            return limit.windowSeconds();
+        }
+        return ((double) limit.burstCapacity() * limit.windowSeconds()) / limit.requestsPerWindow();
     }
 
     private Uni<List<Object>> executeTokenBucketScript(

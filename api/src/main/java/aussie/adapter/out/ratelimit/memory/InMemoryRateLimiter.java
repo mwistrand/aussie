@@ -29,9 +29,9 @@ import aussie.core.port.out.RateLimiter;
  *   <li>State is lost on restart</li>
  * </ul>
  *
- * <p>Stale entries are automatically cleaned up after 2x the window duration
- * to prevent unbounded memory growth. Staleness is based on last access time,
- * not the algorithm's internal timestamp.
+ * <p>Idle entries are automatically cleaned up once their bucket could have
+ * refilled to capacity. A zero-refill policy uses its configured window as the
+ * cleanup interval.
  *
  * <p>For production multi-instance deployments, use Redis-based rate limiting.
  */
@@ -42,7 +42,6 @@ public final class InMemoryRateLimiter implements RateLimiter {
 
     private final ConcurrentMap<String, TimestampedState> states;
     private final boolean enabled;
-    private final long windowMillis;
     private final LongSupplier clock;
     private final ScheduledExecutorService cleanupExecutor;
 
@@ -66,7 +65,6 @@ public final class InMemoryRateLimiter implements RateLimiter {
     InMemoryRateLimiter(boolean enabled, long windowSeconds, LongSupplier clock) {
         this.states = new ConcurrentHashMap<>();
         this.enabled = enabled;
-        this.windowMillis = windowSeconds * 1000;
         this.clock = clock;
 
         this.cleanupExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -176,10 +174,9 @@ public final class InMemoryRateLimiter implements RateLimiter {
 
     private void cleanupStaleEntries() {
         final var now = clock.getAsLong();
-        final var staleThreshold = now - (windowMillis * 2);
         final var sizeBefore = states.size();
 
-        states.entrySet().removeIf(entry -> entry.getValue().lastAccessMillis() < staleThreshold);
+        states.entrySet().removeIf(entry -> isExpired(entry.getValue(), now));
 
         final var removed = sizeBefore - states.size();
         if (removed > 0) {
@@ -196,7 +193,7 @@ public final class InMemoryRateLimiter implements RateLimiter {
             final var currentState = current != null ? current.state() : null;
             final var decision = handler.checkAndConsume(currentState, limit, nowMillis);
             result[0] = decision;
-            return new TimestampedState(decision.newState(), nowMillis);
+            return new TimestampedState(decision.newState(), nowMillis, limit);
         });
 
         return result[0];
@@ -205,5 +202,21 @@ public final class InMemoryRateLimiter implements RateLimiter {
     /**
      * Wraps rate limit state with a last-access timestamp for stale entry detection.
      */
-    record TimestampedState(BucketState state, long lastAccessMillis) {}
+    private boolean isExpired(TimestampedState entry, long nowMillis) {
+        final var limit = entry.limit();
+        final var missingTokens = limit.burstCapacity() - entry.state().tokens();
+        if (missingTokens <= 0) {
+            return true;
+        }
+        final var refillRate = limit.refillRatePerSecond();
+        if (refillRate <= 0) {
+            return nowMillis - entry.lastAccessMillis() >= TimeUnit.SECONDS.toMillis(limit.windowSeconds());
+        }
+        // Round up one extra millisecond so cleanup never precedes token availability.
+        final var refillMillis = Math.ceil((missingTokens / refillRate) * 1000.0) + 1;
+        return Double.isFinite(refillMillis)
+                && nowMillis - entry.state().lastRefillMillis() >= Math.min(Long.MAX_VALUE, (long) refillMillis);
+    }
+
+    record TimestampedState(BucketState state, long lastAccessMillis, EffectiveRateLimit limit) {}
 }
