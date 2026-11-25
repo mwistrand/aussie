@@ -15,10 +15,12 @@ import static org.mockito.Mockito.when;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.quarkus.redis.datasource.ReactiveRedisDataSource;
 import io.quarkus.redis.datasource.keys.ReactiveKeyCommands;
 import io.smallrye.mutiny.Uni;
+import io.vertx.mutiny.redis.client.Response;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -81,6 +83,42 @@ class RedisRateLimiterFallbackTest {
 
         metrics = mock(Metrics.class);
         return new RedisRateLimiter(redisDataSource, true, fallback, behavior, metrics);
+    }
+
+    private RedisRateLimiter newRecoveringLimiter(
+            RateLimiter fallback, AtomicBoolean redisAvailable, List<String> generations) {
+        redisDataSource = mock(ReactiveRedisDataSource.class, invocation -> {
+            if ("execute".equals(invocation.getMethod().getName())) {
+                final var arguments = invocation.getArguments();
+                final var lastArgument = arguments[arguments.length - 1];
+                if (lastArgument instanceof String[] commandArguments) {
+                    generations.add(commandArguments[commandArguments.length - 1]);
+                } else {
+                    generations.add((String) lastArgument);
+                }
+                return redisAvailable.get()
+                        ? Uni.createFrom().item(redisResponse())
+                        : Uni.createFrom().failure(new RuntimeException("Redis unreachable"));
+            }
+            return org.mockito.Answers.RETURNS_DEFAULTS.answer(invocation);
+        });
+
+        @SuppressWarnings("unchecked")
+        var keyCommands = (ReactiveKeyCommands<String>) mock(ReactiveKeyCommands.class);
+        when(redisDataSource.key(String.class)).thenReturn(keyCommands);
+        metrics = mock(Metrics.class);
+        return new RedisRateLimiter(redisDataSource, true, fallback, RateLimitFallbackBehavior.LOCAL_BUCKET, metrics);
+    }
+
+    private static Response redisResponse() {
+        final var response = mock(Response.class);
+        when(response.size()).thenReturn(5);
+        for (var i = 0; i < 5; i++) {
+            final var value = mock(Response.class);
+            when(value.toLong()).thenReturn(i == 0 ? 1L : i == 1 ? 9L : i == 3 ? 1_000L : 0L);
+            when(response.get(i)).thenReturn(value);
+        }
+        return response;
     }
 
     @Nested
@@ -150,6 +188,48 @@ class RedisRateLimiterFallbackTest {
             limiter.close();
 
             verify(localFallback, times(1)).close();
+        }
+
+        @Test
+        @DisplayName("keeps fencing pending independently for each affected bucket")
+        void fencesEachAffectedBucketUntilItsFirstSuccessfulConsume() {
+            final var secondKey = RateLimitKey.http("client-2", "service-a", "endpoint-1");
+            final var available = new AtomicBoolean();
+            final var generations = new java.util.ArrayList<String>();
+            localFallback = mock(RateLimiter.class);
+            when(localFallback.checkAndConsume(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                    .thenReturn(Uni.createFrom().item(RateLimitDecision.allow()));
+            final var limiter = newRecoveringLimiter(localFallback, available, generations);
+
+            limiter.checkAndConsume(KEY, LIMIT).await().atMost(Duration.ofSeconds(1));
+            limiter.checkAndConsume(secondKey, LIMIT).await().atMost(Duration.ofSeconds(1));
+            available.set(true);
+            limiter.checkAndConsume(KEY, LIMIT).await().atMost(Duration.ofSeconds(1));
+            limiter.checkAndConsume(secondKey, LIMIT).await().atMost(Duration.ofSeconds(1));
+
+            assertFalse("0".equals(generations.get(2)));
+            assertFalse("0".equals(generations.get(3)));
+            assertEquals(generations.get(2), generations.get(3));
+        }
+
+        @Test
+        @DisplayName("keeps fencing pending after a recovery status check")
+        void statusDoesNotClearPendingFence() {
+            final var available = new AtomicBoolean();
+            final var generations = new java.util.ArrayList<String>();
+            localFallback = mock(RateLimiter.class);
+            when(localFallback.checkAndConsume(KEY, EMERGENCY_LIMIT))
+                    .thenReturn(Uni.createFrom().item(RateLimitDecision.allow()));
+            when(localFallback.getStatus(KEY, EMERGENCY_LIMIT))
+                    .thenReturn(Uni.createFrom().item(RateLimitDecision.allow()));
+            final var limiter = newRecoveringLimiter(localFallback, available, generations);
+
+            limiter.checkAndConsume(KEY, LIMIT).await().atMost(Duration.ofSeconds(1));
+            available.set(true);
+            limiter.getStatus(KEY, LIMIT).await().atMost(Duration.ofSeconds(1));
+            limiter.checkAndConsume(KEY, LIMIT).await().atMost(Duration.ofSeconds(1));
+
+            assertFalse("0".equals(generations.get(2)));
         }
 
         @Test

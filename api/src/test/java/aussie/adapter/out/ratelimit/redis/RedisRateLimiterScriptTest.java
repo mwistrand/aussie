@@ -16,7 +16,10 @@ class RedisRateLimiterScriptTest {
         assertTrue(status.contains("redis.call('TIME')"));
         assertTrue(consume.contains("math.max(0, now_ms - last_refill_ms)"));
         assertTrue(consume.contains("math.ceil((1 - tokens) / refill_rate)"));
+        assertTrue(consume.contains("recovery_generation"));
+        assertTrue(status.contains("recovery_generation"));
         assertTrue(consume.contains("redis.call('EXPIRE', key, reset_after)"));
+        assertTrue(consume.contains("local recovery_generation = ARGV[4]"));
         assertFalse(consume.contains("tonumber(ARGV[4])"));
     }
 }
